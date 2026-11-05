@@ -2,13 +2,12 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, Plus } from 'lucide-react'
 import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
-import { CONNECTION_COPY, SYNC_COPY } from './connectionCopy'
+import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, selectedOfDiscovered } from './connectionCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
-import { Num } from '@/components/ui/Num'
 import { platformColor } from '@/features/analytics/components'
 import { adAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
@@ -110,11 +109,15 @@ export function ConnectionHub({ onConnect, onOpen, onAction, onRemove }: {
         purpose={ar
           ? 'كل مصدر بيانات مربوط، ومن صرّح به، وما يُزامَن منه.'
           : 'Every connected source, who authorised it, and what it reads.'}
-        actions={
+        /*
+          ONE connect entry on the surface, never two. With nothing connected the empty state below
+          carries it (`hub-connect-empty`), so the head does not repeat the same button above it.
+        */
+        actions={connections.length === 0 ? undefined : (
           <Button onClick={onConnect} data-testid="hub-connect">
             <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
           </Button>
-        }
+        )}
         kpis={connections.length === 0 ? undefined : (
           <>
             <StatCard
@@ -132,7 +135,7 @@ export function ConnectionHub({ onConnect, onOpen, onAction, onRemove }: {
               testid="hub-kpi-reauth"
             />
             <StatCard
-              label={ar ? 'الحسابات المختارة' : 'Selected accounts'}
+              label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}
               value={selectedAccounts.toLocaleString('en-US')}
               hint={`${ar ? 'من' : 'of'} ${adAccounts(discoveredAccounts, locale)}`}
               tone="neutral"
@@ -282,11 +285,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove }: {
         data-testid={`hub-accounts-${connection.id}`}
         className="inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-text-primary underline-offset-4 hover:bg-surface-secondary hover:underline"
       >
-        {ar ? (
-          <><Num>{connection.selected_accounts}</Num> من <Num>{connection.discovered_accounts}</Num> حساب</>
-        ) : (
-          <><Num>{connection.selected_accounts}</Num> of <Num>{connection.discovered_accounts}</Num> accounts</>
-        )}
+        <span className="tnum">{selectedOfDiscovered(connection.selected_accounts, connection.discovered_accounts, ar)}</span>
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -303,7 +302,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove }: {
         */}
         {gone && (
           <Badge tone="neutral" data-testid={`hub-removed-${connection.id}`}>
-            {(connection.removed_at ?? null) !== null ? (ar ? 'مُزال' : 'Removed') : (ar ? 'أُلغيت المصادقة' : 'Revoked')}
+            {(connection.removed_at ?? null) !== null ? (ar ? 'مُزال' : 'Removed') : (ar ? CONNECTION_COPY.REVOKED.ar : CONNECTION_COPY.REVOKED.en)}
           </Badge>
         )}
 

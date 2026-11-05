@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom'
 import { useInAdvertiserPortal, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
+import { accountHealthLabel, accountHealthTone } from './accountHealth'
+import { ACCOUNT_SET_COPY, selectedOfDiscovered } from './connectionCopy'
 
 /**
  * ORCH-100 §3 §5 §6 — choosing what to connect, after the provider has said what exists.
@@ -41,51 +43,6 @@ import { accounts as countedAccounts } from '@/lib/counted'
  */
 
 type Step = 'parent' | 'accounts' | 'project' | 'review' | 'done'
-
-/**
- * An account's state in one phrase — RUNTIME-100 §31.
- *
- * Each of these names a different next action, which is the only reason to tell them apart. «مربوط
- * بمشروع» said all of them at once, so an account whose access had been withdrawn and one syncing
- * happily read identically.
- */
-function accountHealthLabel(health: DiscoveredAccount['health'], ar: boolean): string {
-  switch (health) {
-    case 'healthy': return ar ? 'تعمل' : 'Healthy'
-    case 'pending_first_sync': return ar ? 'بانتظار أول مزامنة' : 'First sync pending'
-    case 'delayed': return ar ? 'متأخرة' : 'Delayed'
-    case 'failed': return ar ? 'فشلت آخر محاولة' : 'Last attempt failed'
-    /*
-      META-INSIGHTS-GRANT-001 — an ASSET grant, named on the account it is missing from.
-      «(#200) Ad account owner has NOT grant ads_management or ads_read permission» is decided per ad
-      account in Business Manager, so one authorisation can hold this account refused and its
-      siblings fine. «فشلت آخر محاولة» sent a reader to the logs; this sends them to the grant.
-      `ads_read` alone: it is sufficient for insights, and naming `business_management` would ask
-      for a capability this product does not need.
-    */
-    case 'insights_not_authorised': return ar ? 'لم تُمنح صلاحية ads_read لهذا الحساب' : 'ads_read is not granted on this account'
-    // MONEY-CURRENCY-NEVER-ASSUMED-001 — the money is withheld, not shown in a guessed currency.
-    case 'currency_unknown': return ar ? 'العملة غير معروفة — المبالغ محجوبة' : 'Currency unknown — money withheld'
-    case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
-    case 'revoked': return ar ? 'الربط ملغى' : 'Connection revoked'
-    // Assigned but the server did not say — an older response, not a state worth inventing a word for.
-    default: return ar ? 'مربوط بمشروع' : 'Connected'
-  }
-}
-
-/** Colour carries the same distinction the words do, so the state survives a glance. */
-function accountHealthTone(health: DiscoveredAccount['health']): string {
-  switch (health) {
-    case 'healthy': return 'text-success'
-    case 'delayed': return 'text-warning'
-    case 'failed':
-    case 'insights_not_authorised':
-    case 'currency_unknown':
-    case 'access_lost':
-    case 'revoked': return 'text-danger'
-    default: return 'text-text-muted'
-  }
-}
 
 interface Props {
   connectionId: string
@@ -524,6 +481,32 @@ export function ConnectionWizard({
             </p>
           )}
 
+          {/*
+            INTEGRATIONS-CENTRE-001 — re-reading the catalogue lives HERE, where accounts are searched
+            and chosen, and not in the connection drawer: discovery belongs to connecting and to editing
+            the selection, and nowhere else in the centre.
+          */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-text-muted">
+              {ar ? 'لا يُزامَن إلا ما تحدّده هنا.' : 'Only what you tick here is ever synced.'}
+            </p>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+              data-testid="wizard-refresh-catalogue"
+            >
+              {refresh.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {ar ? 'تحديث الحسابات المتاحة' : 'Refresh available accounts'}
+            </Button>
+          </div>
+
+          {refresh.isError && (
+            <p className="text-sm text-danger" data-testid="wizard-refresh-catalogue-error">
+              {toApiError(refresh.error).message}
+            </p>
+          )}
+
           <label className="relative flex items-center">
             <Search className="pointer-events-none absolute mx-3 h-4 w-4 text-text-muted" aria-hidden />
             <input
@@ -615,43 +598,15 @@ export function ConnectionWizard({
               </ul>
 
               {/*
-                Select-all applies to the PAGE, and says so.
-                A control that ticked all three hundred accounts behind one press would commit a
-                decision nobody could review — and on a plan with room for five it would fail at the
-                confirm step having looked like it worked.
+                INTEGRATIONS-CENTRE-001 §3 — every tick is one account, chosen by name.
+                There is no «select all» and no «select this page»: a control that ticked twenty-five
+                accounts behind one press commits a decision nobody reviewed, and on a plan with room
+                for five it fails at the confirm step having looked like it worked. The count below is
+                the whole feedback: what is chosen, out of what this authorisation can see.
               */}
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Button
-                  variant="secondary" size="sm"
-                  data-testid="wizard-select-page"
-                  onClick={() => setSelected((prev) => {
-                    const next = new Set(prev)
-                    for (const a of accounts.data?.accounts ?? []) {
-                      if (!(a.assigned && !(managing && a.assigned_project_id === manageProjectId))) next.add(a.id)
-                    }
-                    return next
-                  })}
-                >
-                  {ar ? 'تحديد هذه الصفحة' : 'Select this page'}
-                </Button>
-                <Button
-                  variant="ghost" size="sm"
-                  data-testid="wizard-clear-page"
-                  onClick={() => setSelected((prev) => {
-                    const next = new Set(prev)
-                    for (const a of accounts.data?.accounts ?? []) next.delete(a.id)
-                    return next
-                  })}
-                >
-                  {ar ? 'إلغاء تحديد الصفحة' : 'Clear this page'}
-                </Button>
-              </div>
-
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span data-testid="wizard-selected-count">
-                  {ar
-                    ? `تم اختيار ${selected.size} من ${accounts.data?.meta.total ?? 0}`
-                    : `${selected.size} of ${accounts.data?.meta.total ?? 0} selected`}
+                  {selectedOfDiscovered(selected.size, accounts.data?.meta.total ?? 0, ar)}
                 </span>
                 {(accounts.data?.meta.last_page ?? 1) > 1 && (
                   <span className="flex items-center gap-2">
@@ -788,7 +743,7 @@ export function ConnectionWizard({
               </div>
             )}
             <div className="flex justify-between gap-3">
-              <dt className="text-text-muted">{ar ? 'الحسابات المختارة' : 'Accounts'}</dt>
+              <dt className="text-text-muted">{ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}</dt>
               <dd className="font-medium">{selected.size}</dd>
             </div>
             <div className="flex justify-between gap-3">

@@ -112,29 +112,22 @@ test.describe('the integrations surface', () => {
   })
 
   /**
-   * «Everything we can see» stays reachable, and stays closed until it is asked for (§11 §28).
+   * INTEGRATIONS-CENTRE-001 — the tenant-wide discovered inventory is gone from the page.
    *
-   * Three hundred discovered rows under the things somebody came for is the page this replaced. The
-   * drawer answers the narrower question — which of THIS authorisation's accounts are ours — and
-   * this control answers the tenant-wide one for whoever genuinely wants it.
+   * It used to sit behind a «show the list» toggle. An account nobody selected is not shown in the
+   * centre at all now; searching and paging the rest belongs to the connection wizard. The page also
+   * draws exactly ONE connect entry, whichever of the two states it is in.
    */
-  test('the discovered inventory is reachable and is not rendered until it is asked for', async ({ page }) => {
+  test('the page has no discovered-accounts section and exactly one connect entry', async ({ page }) => {
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-    const toggle = page.getByTestId('toggle-account-inventory')
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('toggle-account-inventory')).toHaveCount(0)
     await expect(page.locator('[data-testid="inventory-row"]')).toHaveCount(0)
+    expect(await page.locator('main').innerText()).not.toMatch(/جميع الحسابات المكتشفة|Every discovered account/)
 
-    await expect(async () => {
-      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-      expect(await toggle.getAttribute('aria-expanded')).toBe('true')
-    }).toPass({ timeout: 20000 })
-
-    await expect(
-      page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
-      'the accounts panel never resolved',
-    ).toBeVisible({ timeout: 30000 })
+    const connects = await page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]').count()
+    expect(connects, 'the hub must draw one connect button, never two').toBe(1)
   })
 })
 
