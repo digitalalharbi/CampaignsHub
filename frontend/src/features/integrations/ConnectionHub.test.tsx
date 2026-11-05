@@ -98,12 +98,14 @@ describe('the Connection Hub', () => {
     expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 of 17 selected')
   })
 
-  it('names who added it (the workspace user) as the secondary line', async () => {
+  /** INTEG-UNIFIED-002 — by NAME. The workspace email is not an identity of the source and is not on the row. */
+  it('names who added it (the workspace user) by name, never by workspace email', async () => {
     hub.data = { connections: [connection()], connectable: [] }
 
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('hub-open-c-1')).toHaveTextContent('owner@agency.test')
+    expect(await screen.findByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: Owner')
+    expect(screen.getByTestId('hub-row-c-1')).not.toHaveTextContent('owner@agency.test')
   })
 
   /** The identity this product actually holds, or an honest absence — never an invented email. */
@@ -347,18 +349,23 @@ describe('the connection flow', () => {
     expect(await screen.findByTestId('provider-pick-meta')).toBeInTheDocument()
   })
 
+  /**
+   * Project-First (INTEG-UNIFIED-002): the client is settled in the picker, BEFORE the platform, and
+   * rides into the flow. Clearing it there still holds the provider's door shut.
+   */
   it('will not leave for the provider until a client is chosen', async () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    // The workspace's only project is preselected: a question with one answer is not asked.
+    await waitFor(() => expect(screen.getByTestId('picker-project')).toHaveValue('p-1'))
+    fireEvent.click(screen.getByTestId('provider-pick-meta'))
 
-    const authorise = await screen.findByTestId('flow-authorise')
-    expect(authorise).toBeDisabled()
-
-    // The client list is a request of its own; the control does not exist until it lands.
-    fireEvent.change(await screen.findByTestId('flow-destination'), { target: { value: 'p-1' } })
+    await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-1'))
     await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeEnabled())
+
+    fireEvent.change(screen.getByTestId('flow-destination'), { target: { value: '' } })
+    await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeDisabled())
   })
 
   /** The destination rides the OAuth state, which is why it is asked before the provider. */

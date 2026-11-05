@@ -76,12 +76,14 @@ describe('the Connection Hub: provider identity', () => {
     removals.calls = []
   })
 
-  it('names the provider login first and keeps the workspace user as the secondary line', async () => {
+  it('names the provider login first and keeps the workspace user, by name, as the secondary line', async () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
     expect(await screen.findByTestId('hub-platform-account-c-1')).toHaveTextContent('Platform account: snap@person.test')
-    expect(screen.getByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: agency@campaignshub.io')
+    expect(screen.getByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: Agency')
+    // INTEG-UNIFIED-002 — the workspace email is nowhere on the centre.
+    expect(screen.getByTestId('connection-hub')).not.toHaveTextContent('agency@campaignshub.io')
   })
 
   it('falls back to the provider display name when the provider gave no email', async () => {

@@ -91,10 +91,20 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
               <h2 className="truncate text-base font-bold text-text-primary">
                 {ar ? connection.label_ar : connection.label}
               </h2>
-              <p className="truncate text-xs text-text-secondary">
+              {/*
+                INTEG-UNIFIED-002 — the same identity the hub row states: the PLATFORM account the grant
+                was made with. The workspace user is named by name; a CampaignsHub email is never shown
+                as, or beside, the identity of a source.
+              */}
+              <p className="truncate text-xs text-text-secondary" data-testid="drawer-platform-account">
+                {(connection.provider_account?.email ?? connection.provider_account?.label ?? null) === null
+                  ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')
+                  : `${ar ? 'حساب المنصة' : 'Platform account'}: ${connection.provider_account?.email ?? connection.provider_account?.label}`}
+              </p>
+              <p className="truncate text-[11px] text-text-muted" data-testid="drawer-added-by">
                 {connection.authorised_by === null
-                  ? (ar ? 'لم يُسجَّل من صرّح بالربط' : 'Authoriser not recorded')
-                  : connection.authorised_by.email}
+                  ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
+                  : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.name}`}
               </p>
             </div>
             <button
