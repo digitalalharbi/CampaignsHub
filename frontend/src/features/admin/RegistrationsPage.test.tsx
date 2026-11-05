@@ -14,11 +14,13 @@ vi.mock('./api', async (orig) => {
     rejectRegistration: vi.fn(),
     requestRegistrationInfo: vi.fn(),
     updateRegistrationTerms: vi.fn(),
+    reevaluateRegistrationVerification: vi.fn(),
   }
 })
 
 import {
-  approveRegistration, fetchRegistration, fetchRegistrations, rejectRegistration, updateRegistrationTerms,
+  approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
+  updateRegistrationTerms,
 } from './api'
 
 const application = (over: Partial<AdminRegistration> = {}): AdminRegistration => ({
@@ -57,12 +59,33 @@ describe('RegistrationsPage', () => {
   })
   afterEach(() => signOut())
 
+  it.each([
+    ['ar', { rejected: 'مرفوض', mobile_verification_required: 'بانتظار تأكيد الجوال', email_verification_required: 'بانتظار تأكيد البريد', approved_awaiting_payment: 'معتمد — بانتظار الدفع' }],
+    ['en', { rejected: 'Rejected', mobile_verification_required: 'Awaiting mobile verification', email_verification_required: 'Awaiting email verification', approved_awaiting_payment: 'Approved — awaiting payment' }],
+  ] as const)('names the queue chips in words, in %s, and keeps the key in the data', async (locale, words) => {
+    vi.mocked(fetchRegistrations).mockResolvedValue({
+      registrations: [application()],
+      meta: { total: 1, per_page: 25, current_page: 1 },
+      counts: { rejected: 2, mobile_verification_required: 3, email_verification_required: 4, approved_awaiting_payment: 1 },
+    })
+    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale })
+
+    await screen.findByTestId('registration-row')
+    for (const [key, word] of Object.entries(words)) {
+      const chip = screen.getByTestId(`registrations-count-${key}`)
+      expect(chip).toHaveTextContent(word)
+      expect(chip).not.toHaveTextContent(key)
+      expect(chip).toHaveAttribute('data-state', key)
+    }
+  })
+
   it('lists what is waiting and where each application is held', async () => {
     renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
 
     const row = await screen.findByTestId('registration-row')
     expect(row).toHaveAttribute('data-state', 'pending_approval')
     expect(screen.getByTestId('registrations-count-pending_approval')).toHaveTextContent('1')
+    expect(screen.getByTestId('registrations-count-pending_approval')).not.toHaveTextContent('pending_approval')
   })
 
   /** The negative claim: nothing here says "activate". */
@@ -128,6 +151,16 @@ describe('RegistrationsPage', () => {
     prompt.mockRestore()
   })
 
+  it('no longer offers payment as a gate to switch off', async () => {
+    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('registration-row'))
+    await screen.findByTestId('registration-gate-requires_approval')
+
+    expect(screen.queryByTestId('registration-gate-requires_payment')).not.toBeInTheDocument()
+    expect(screen.getByTestId('registration-decision')).toBeInTheDocument()
+  })
+
   it('carries a reason with a gate change that does go through', async () => {
     const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Paid off-platform under an annual contract.')
     vi.mocked(updateRegistrationTerms).mockResolvedValue({
@@ -167,5 +200,33 @@ describe('RegistrationsPage', () => {
     fireEvent.click(await screen.findByTestId('registration-row'))
 
     expect(await screen.findByTestId('registration-history')).toHaveTextContent('registration.started')
+  })
+
+  /* SIGNUP-VERIFY-POLICY-001 */
+  it('says an unasked verification is unverified, and moves one application only with a reason', async () => {
+    vi.mocked(fetchRegistrations).mockResolvedValue({
+      registrations: [application()], meta: { total: 1, per_page: 25, current_page: 1 }, counts: {},
+    })
+    vi.mocked(fetchRegistration).mockResolvedValue(detail({
+      email_verified: false, verification: { email: 'not_required_by_policy', mobile: 'required' },
+    }))
+    vi.mocked(reevaluateRegistrationVerification).mockResolvedValue({
+      registration: application(), policy: { requires_mobile: false, requires_approval: true, requires_payment: false },
+    })
+
+    renderWithProviders(<RegistrationsPage />)
+    fireEvent.click(await screen.findByTestId('registration-row'))
+
+    const standing = await screen.findByTestId('registration-standing-email')
+    expect(standing).toHaveAttribute('data-done', 'false')
+    expect(standing).toHaveAttribute('data-standing', 'not_required_by_policy')
+
+    fireEvent.click(screen.getByTestId('registration-reevaluate-open'))
+    fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
+    expect(reevaluateRegistrationVerification).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Why|سبب/), { target: { value: 'Mail provider outage' } })
+    fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
+    await waitFor(() => expect(reevaluateRegistrationVerification).toHaveBeenCalledWith('reg-1', 'Mail provider outage'))
   })
 })

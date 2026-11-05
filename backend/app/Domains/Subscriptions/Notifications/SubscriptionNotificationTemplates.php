@@ -184,6 +184,64 @@ final class SubscriptionNotificationTemplates
                     .$url,
             ],
 
+            /*
+             * SIGNUP-DECISION-001 — four different things that all begin with «approved», told apart, because each one
+             * asks something different of the reader or asks nothing.
+             */
+            'registration_approved_steps_remain' => $ar ? [
+                'subject' => 'تم اعتماد طلبك، وبقيت خطوات للتفعيل',
+                'body' => "اعتمدنا طلبك، ولم يُفعَّل الحساب بعد. أكمل الخطوات المتبقية من صفحة حالة الطلب.\n".$url,
+            ] : [
+                'subject' => 'Your application is approved, with steps left',
+                'body' => "We approved your application. The account is not active yet: finish the remaining steps from your status page.\n".$url,
+            ],
+
+            'registration_approved_discount' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بخصم، وبانتظار سداد المبلغ المتبقي',
+                'body' => "اعتمدنا طلبك بخصم {$days}% على الفترة الأولى. المبلغ المتبقي {$amount}.\n"
+                    ."لن يُفعَّل الحساب قبل تأكيد الدفع.\n".$url,
+            ] : [
+                'subject' => 'Approved with a discount: the remainder is awaiting payment',
+                'body' => "We approved your application with {$days}% off the first period. The remainder is {$amount}.\n"
+                    ."The account activates once that payment is confirmed.\n".$url,
+            ],
+
+            'registration_approved_waived' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بإعفاء من رسوم الفترة الأولى، وحسابك نشط',
+                'body' => "أعفيناك من رسوم الفترة الأولى، وحسابك نشط الآن. لم يُخصم منك أي مبلغ.\n"
+                    ."ينتهي الإعفاء في {$date}، ويصبح الاشتراك بعدها مستحقًا بقيمة {$amount}.\n".$url,
+            ] : [
+                'subject' => 'Approved with the first period waived: your account is active',
+                'body' => "We waived the first period's fee and your account is active. Nothing was charged.\n"
+                    ."The waiver ends on {$date}. After that the subscription is due at {$amount}.\n".$url,
+            ],
+
+            'registration_approved_complimentary' => $ar ? [
+                'subject' => 'تمت الموافقة على طلبك: دخول مباشر دون دفع، وحسابك نشط',
+                'body' => "حسابك نشط الآن بدخول مباشر دون دفع، بلا تاريخ انتهاء ولا فاتورة. لم يُخصم منك أي مبلغ.\n".$url,
+            ] : [
+                'subject' => 'Approved: direct entry with no payment, and your account is active',
+                'body' => "Your account is active with direct entry and no payment, with no end date and no invoice. Nothing was charged.\n".$url,
+            ],
+
+            'registration_approved_trial' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بفترة تجربة، وحسابك نشط',
+                'body' => "حسابك نشط بفترة تجربة تنتهي في {$date}. لن يُخصم منك أي مبلغ تلقائيًا.\n"
+                    ."بعد انتهائها يصبح الدفع مستحقًا بقيمة {$amount} لمواصلة الخدمة.\n".$url,
+            ] : [
+                'subject' => 'Approved with a trial: your account is active',
+                'body' => "Your account is active on a trial ending {$date}. Nothing is charged automatically.\n"
+                    ."After it ends, {$amount} is due to continue.\n".$url,
+            ],
+
+            'admin_trial_ending' => $ar ? [
+                'subject' => "تنتهي فترة تجربتك في {$date}",
+                'body' => "تنتهي فترة تجربتك في {$date}، وبعدها يصبح الدفع مستحقًا لمواصلة الخدمة. لن يُخصم أي مبلغ تلقائيًا.\n".$url,
+            ] : [
+                'subject' => "Your trial ends on {$date}",
+                'body' => "Your trial ends on {$date}. After that, payment is due to continue. Nothing is charged automatically.\n".$url,
+            ],
+
             // A refusal always carries its reason: "rejected" with no explanation is a support ticket
             // nobody can answer either.
             'registration_rejected' => $ar ? [
@@ -222,6 +280,8 @@ final class SubscriptionNotificationTemplates
             'renewal_failed', 'past_due', 'suspended', 'reactivated',
             'plan_changed', 'plan_change_scheduled',
             'registration_approved', 'registration_rejected', 'registration_information_requested',
+            'registration_approved_steps_remain', 'registration_approved_discount', 'registration_approved_waived',
+            'registration_approved_trial', 'registration_approved_complimentary', 'admin_trial_ending',
         ];
     }
 }

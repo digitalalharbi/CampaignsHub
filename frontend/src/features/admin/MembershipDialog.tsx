@@ -23,10 +23,14 @@ export function MembershipDialog({ tenantId, person, roles, ar, onClose }: {
   const [action, setAction] = useState<MembershipAction>('change_role')
   const [role, setRole] = useState(person.roles?.[0] ?? roles[0]?.slug ?? '')
   const [reason, setReason] = useState('')
+  const [confirmOwner, setConfirmOwner] = useState(false)
 
+  // Nobody becomes accountable for a workspace as a side effect of a dropdown.
+  const makingOwner = action === 'change_role' && role === 'tenant-owner' && !(person.roles ?? []).includes('tenant-owner')
   const act = useMutation({
     mutationFn: () => actOnMembership(tenantId, person.user_uuid ?? '', {
       action, role: action === 'change_role' ? role : undefined, reason: reason.trim(),
+      ...(makingOwner ? { confirm_owner: confirmOwner } : {}),
     }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['admin', 'tenant', tenantId] }),
   })
@@ -61,8 +65,14 @@ export function MembershipDialog({ tenantId, person, roles, ar, onClose }: {
             {ar ? 'الدور في هذه المساحة' : 'Role in this workspace'}
             <select data-testid="membership-role" value={role} onChange={(e) => setRole(e.target.value)}
               className="h-10 min-w-0 rounded-lg border border-border bg-surface px-3 text-sm font-normal text-text-primary">
-              {roles.map((r) => <option key={r.slug} value={r.slug}>{r.name}</option>)}
+              {roles.filter((r) => !['platform-admin', 'super-admin'].includes(r.slug)).map((r) => <option key={r.slug} value={r.slug}>{r.name}</option>)}
             </select>
+          </label>
+        )}
+        {makingOwner && (
+          <label className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm font-semibold text-text-primary">
+            <input data-testid="membership-confirm-owner" type="checkbox" className="mt-0.5" checked={confirmOwner} onChange={(e) => setConfirmOwner(e.target.checked)} />
+            <span className="min-w-0">{ar ? 'أؤكد جعل هذا الشخص مالكًا لهذه المساحة، بكل صلاحياتها.' : 'I confirm making this person an owner of this workspace, with everything that gives them.'}</span>
           </label>
         )}
         <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
@@ -81,7 +91,7 @@ export function MembershipDialog({ tenantId, person, roles, ar, onClose }: {
         <div className="flex justify-end gap-2">
           <Button type="button" size="sm" variant="secondary" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>
           <Button data-testid="membership-submit" type="submit" size="sm" variant={action === 'remove' ? 'danger' : 'primary'}
-            disabled={act.isPending || !person.user_uuid || reason.trim().length < 5 || (action === 'change_role' && role === '')}>
+            disabled={act.isPending || !person.user_uuid || reason.trim().length < 5 || (action === 'change_role' && role === '') || (makingOwner && !confirmOwner)}>
             {ar ? 'تنفيذ' : 'Apply'}
           </Button>
         </div>

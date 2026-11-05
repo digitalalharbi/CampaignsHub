@@ -129,15 +129,35 @@ final class ReportingCurrency
      * The returned array is the currency half of a `daily_metrics` row. `value` is null exactly when
      * no trustworthy rate existed — the caller writes it as-is rather than substituting anything.
      *
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — `$from` is nullable ON PURPOSE. A figure whose currency nobody stated
+     * (not the row, not the ad account, not the provider when asked) is not «already in dollars»: it is
+     * withheld exactly like a figure with no rate, with `original_currency` left NULL so the row says what
+     * is missing. Callers resolve `$from` with {@see SourceCurrency} and never substitute the reporting
+     * currency for an unknown one — that substitution is how a riyal spend was once stored as dollars at 1.0.
+     *
      * @return array{
-     *     value: ?float, original_amount: float, original_currency: string, project_currency: string,
+     *     value: ?float, original_amount: float, original_currency: ?string, project_currency: string,
      *     converted_amount: ?float, exchange_rate: ?float, rate_date: ?string, rate_source: ?string
      * }
      */
-    public function normalise(float $amount, string $from, string $to, Carbon $date): array
+    public function normalise(float $amount, ?string $from, string $to, Carbon $date): array
     {
-        $from = strtoupper($from);
         $to = strtoupper($to);
+        $from = SourceCurrency::clean($from);
+
+        if ($from === null) {
+            return [
+                // Withheld: the unit is unknown. The amount survives; the currency is not invented.
+                'value' => null,
+                'original_amount' => $amount,
+                'original_currency' => null,
+                'project_currency' => $to,
+                'converted_amount' => null,
+                'exchange_rate' => null,
+                'rate_date' => null,
+                'rate_source' => null,
+            ];
+        }
 
         $resolved = $this->rates->resolve($from, $to, $date);
 

@@ -45,6 +45,7 @@ use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
 use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
+use App\Domains\Reports\Http\Controllers\ReportVersionController;
 use App\Domains\Reports\Http\Controllers\ResultEventsController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -459,6 +460,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // REPORT-DUPLICATE-001 — an independent copy; the controller adds reports.share for the link it makes.
     Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware(['project.can:reports.manage', EnsureWithinPlanLimit::class.':reports_per_month'])->name('reports.duplicate');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
+    // REPORT-SNAPSHOT-PROTECT-001 — the copies a rebuild replaced, and putting one back.
+    Route::get('reports/{report}/versions', [ReportVersionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.versions');
+    Route::post('reports/{report}/versions/{version}/restore', [ReportVersionController::class, 'restore'])->middleware('project.can:reports.manage')->name('reports.versions.restore');
     // REPORT-DRILLDOWN-001 — the optional drill-down sections a report's PDF carries (off by default).
     Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');

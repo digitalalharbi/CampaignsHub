@@ -12,6 +12,7 @@ use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
@@ -22,9 +23,11 @@ use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -99,6 +102,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
         // SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace.
         Route::post('/tenants/{tenant}/members/{user}', [PlatformMembershipController::class, 'act'])->middleware('throttle:20,1')->name('tenants.members');
+        // ADMIN-FULL-CONTROL-001 — add a person with a role; a fresh link for an invitation that went nowhere; the subscription with no money moving.
+        Route::post('/tenants/{tenant}/members', [PlatformMembershipController::class, 'add'])->middleware('throttle:20,1')->name('tenants.members.add');
+        Route::post('/tenants/{tenant}/invitations/{invitation}/reissue', [PlatformMembershipController::class, 'reissue'])->middleware('throttle:20,1')->name('tenants.invitations.reissue');
+        Route::get('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'show'])->name('tenants.subscription');
+        Route::post('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'act'])->middleware('throttle:30,1')->name('tenants.subscription.act');
 
         /*
          * GRANT-001 — one account's administrative exceptions.
@@ -128,6 +136,26 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.show');
         Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
             ->name('registrations.terms');
+        Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
+            ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
+        Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
+            ->name('registration-verification-policy.show');
+        Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
+            ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not on it.
+        Route::get('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'show'])->name('auth-code-switches.show');
+        Route::put('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'update'])
+            ->middleware('throttle:30,1')->name('auth-code-switches.update');
+        // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
+        Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
+            ->name('tenants.decision-targets');
+        Route::post('/registrations/{registration}/decision/preview', [PlatformRegistrationController::class, 'previewDecision'])
+            ->middleware('throttle:60,1')->name('registrations.decision.preview');
+        Route::post('/registrations/{registration}/decision', [PlatformRegistrationController::class, 'decide'])
+            ->middleware('throttle:30,1')->name('registrations.decision');
+        Route::post('/registrations/{registration}/decisions/{decision}/verify-settlement', [PlatformRegistrationController::class, 'verifySettlement'])
+            ->whereUuid('decision')->middleware('throttle:30,1')->name('registrations.decision.verify-settlement');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])

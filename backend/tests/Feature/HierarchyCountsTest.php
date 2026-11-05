@@ -782,6 +782,27 @@ final class HierarchyCountsTest extends TestCase
             ->assertSuccessful();
     }
 
+    /** CONTENT-PREVIEW-COVERAGE-001 — the census reads per provider and format: drawable, playable, expired, no expiry, not https, no size, and the stored reason. */
+    public function test_the_preview_coverage_reads_expiry_scheme_size_and_the_stored_reason(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        $ok = $this->creativeWith($campaign, 'cr-ok', 'https://cdn.example/still.jpg');
+        $ok->forceFill(['format' => 'image', 'asset_expires_at' => now()->subHour(), 'width' => 100, 'height' => 100])->save();
+
+        $plain = $this->creativeWith($campaign, 'cr-plain', 'http://cdn.example/other.jpg');
+        $plain->forceFill(['format' => 'image'])->save();
+
+        $blank = $this->creativeWith($campaign, 'cr-blank', null);
+        $blank->forceFill(['format' => 'video', 'raw' => ['media_reason' => 'video_info_missing']])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('PREVIEW COVERAGE')
+            ->expectsOutputToContain('image               : 2/2 · 0 · 1 · 1 · 1 · 1')
+            ->expectsOutputToContain('video_info_missing')
+            ->assertSuccessful();
+    }
+
     /**
      * CONTENT-COLLECTION-TILES-001 — a card list is not a cover, and the census said it was.
      *
