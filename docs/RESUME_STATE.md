@@ -1,4 +1,12 @@
-# CURRENT STATE — 2026-11-05 (midday) — report source isolation deployed and read on Production; ChatGPT Ads currency fix at the head of the queue
+# CURRENT STATE — 2026-11-05 (evening) — reconciliation adopted; #962, #963, #965, #966 on main; #968 at the Lander head
+
+- **Governing index:** `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md`. Per-item record: matrix section `Cumulative execution record 2026-11-05`, rows EXEC-REC-001 to 018. No second inventory, no competing branches.
+- **Order:** security, money, isolation and integrations, filters and Duplicate, Smart Code and email, integrations UI, GA4 and the rest.
+- **Queue (one Lander):** #968, `feat/admin-full-control`, #967, `feat/email-test-send`, webhooks, sources removal, status model, capability, this docs branch, filters, Duplicate, version history, live-last-confirmed, sync-isolation-2, meta-diagnostics, store-attribution.
+- **Next action on #968 deploying:** the Owner-authorised one-period waiver for registration 904ac4d5 only, through `RegistrationDecisionService`, preview first.
+- **Waiting on the Owner, held and not blocking:** TikTok e0414015 resync, razzahavenu key, closing #964, `FX_RATE_DRIVER` and an EGP rate, Meta `email` permission, shared resources, isolated test accounts, `REPORTS_LIVE_CACHE_ENABLED`, `INTEGRATIONS_ABANDONED_SWEEP_ENABLED`, `WEBHOOK_RECONCILE_ENABLED`.
+
+## Earlier state — 2026-11-05 (midday)
 
 - **Binding contract:** `docs/CampaignsHub_P0_Master_Execution_Report_Source_Isolation_2026-11-04.md` (the share token in it is withheld), on top of the 2026-11-03 requirements file and the permanent guard. Order: security first, then the seven P0s, then the rest.
 - **Landed and deployed 2026-11-04 → 11-05, in order:** #950 `3174b6ea` · #951 `30d0bdad` · #952 `7bdabe9e` · #953 `c3c9bec4` · #954 `046a9b35` · #955 `6435b2f3` · #956 `c8d58c18` · #957 `a1dd01ab` · #958 `11ec953a` (stored report copies are kept) · #959 `9dc13107` · #960 `18b6cca9` · #961 `bd7d0426` · #962 `0abb2b9f` (report source isolation).

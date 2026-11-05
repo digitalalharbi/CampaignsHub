@@ -11,7 +11,7 @@ in `CLAUDE.md` stands: Git outranks
 [`docs/RESUME_STATE.md`](RESUME_STATE.md), which outranks this file. Where this file and Git
 disagree, **Git is right and this file is stale.**
 
-Updated 2026-11-05.
+Updated 2026-11-05. The per-item record is the section `Cumulative execution record 2026-11-05` of the matrix; `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md` governs priority.
 
 ## Last verified commit
 
@@ -19,10 +19,9 @@ Updated 2026-11-05.
 |---|---|
 | Repository | `digitalalharbi/CampaignsHub` |
 | Branch | `main` |
-| Commit | `0abb2b9f8` — fix(reports): a report's chosen ad accounts bound its content, not only its figures (REPORT-SOURCE-ISOLATION-001) (#962) |
-| Full sha | `0abb2b9f84b9e50b78b6976c7384363e3b6f9631` |
-| Committed | 2026-11-05 04:11:58 +0300 |
-| Deployed | Deploy Production run 41946845378, success, health 200 |
+| Commit | `cc27831c1` — fix(money): a currency is never assumed (#966) |
+| Full sha | `cc27831c19b1ffbc9f824b75aecd95a0135366c2` |
+| Deployed | Deploy Production run 42039534931, success |
 
 Verify, do not trust:
 
