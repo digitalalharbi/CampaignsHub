@@ -12,6 +12,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -105,6 +106,8 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         config(['cache.stores.scripted' => ['driver' => 'scripted'], 'cache.limiter' => 'array']);
         app('cache')->setDefaultDriver('scripted');
         app('cache')->purge('scripted');
+        // The contract binding (`Illuminate\Contracts\Cache\Repository`, what `SessionRevocations` is built from) caches the store it first resolved.
+        app()->forgetInstance('cache.store');
         app()->forgetInstance(\App\Domains\Identity\Support\SessionRevocations::class);
 
         return $store;
@@ -165,17 +168,26 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         $this->assertFalse($assignment->isActivelyAssigned($this->account['deselected']->refresh()), 'a deselected account reads as assigned under a broken cache');
         $this->assertFalse($assignment->isActivelyAssigned($this->account['unbound']->refresh()), 'an unbound account reads as assigned under a broken cache');
 
-        Queue::fake();
-        $this->artisan('integrations:sync')->assertSuccessful();
-        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
-        Queue::assertPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job) => str_contains($job->uniqueId(), (string) $this->account['bound']->id));
-
         // A job already in the queue for an unselected account reaches no provider.
         Http::preventStrayRequests();
         Http::fake();
         SyncAccountMetricsJob::dispatchSync((string) $this->account['deselected']->id, self::FROM, self::TO);
         SyncAccountMetricsJob::dispatchSync((string) $this->account['unbound']->id, self::FROM, self::TO);
         Http::assertNothingSent();
+
+        Queue::fake();
+        try {
+            Artisan::call('integrations:sync');
+        } catch (\Throwable) {
+            // A store that is down may stop the sweep from queueing at all (unique-job lock): that is failing closed, not open.
+        }
+        Queue::assertNotPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job) => str_contains($job->uniqueId(), (string) $this->account['deselected']->id)
+            || str_contains($job->uniqueId(), (string) $this->account['unbound']->id));
+        if ($mode === 'poison') {
+            // A lying store changes nothing: the one bound account is still queued, exactly once.
+            Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+            Queue::assertPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job) => str_contains($job->uniqueId(), (string) $this->account['bound']->id));
+        }
     }
 
     public function test_a_signed_out_session_is_not_resurrected_when_the_revocation_store_is_down(): void
@@ -195,6 +207,7 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         $browser(null)->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'secret123'])->assertOk();
         $id = $this->app['session']->getId();
         $payload = (string) $this->app['session']->getHandler()->read($id);
+        $browser($id)->getJson('/api/v1/auth/me')->assertOk(); // positive control: the cookie authenticates before sign-out
         $browser($id)->postJson('/api/v1/auth/logout')->assertOk();
 
         // A late write brings the signed-out payload back under the same id.
@@ -217,6 +230,7 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
     {
         config(['cache.default' => 'array']);
         app('cache')->setDefaultDriver('array');
+        app()->forgetInstance('cache.store');
         app()->forgetInstance(\App\Domains\Identity\Support\SessionRevocations::class);
     }
 

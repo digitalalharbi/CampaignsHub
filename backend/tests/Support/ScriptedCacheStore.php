@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Store;
 use RuntimeException;
 
@@ -14,7 +17,7 @@ use RuntimeException;
  * decision if anything trusted it (`true`, `1`, `['*']`), as a stale or corrupted entry does. A boundary that depends on the
  * cache must deny under the first and ignore the second; a boundary that does not depend on it must not change under either.
  */
-final class ScriptedCacheStore implements Store
+final class ScriptedCacheStore implements LockProvider, Store
 {
     public int $touched = 0;
 
@@ -90,6 +93,21 @@ final class ScriptedCacheStore implements Store
         $this->touch();
 
         return true;
+    }
+
+    /** A unique-job lock: raises when the store is down; when it lies, it simply grants the lock. */
+    public function lock($name, $seconds = 0, $owner = null): Lock
+    {
+        $this->touch();
+
+        return (new ArrayStore)->lock($name, $seconds, $owner);
+    }
+
+    public function restoreLock($name, $owner): Lock
+    {
+        $this->touch();
+
+        return (new ArrayStore)->restoreLock($name, $owner);
     }
 
     public function getPrefix(): string
