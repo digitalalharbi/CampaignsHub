@@ -8,6 +8,8 @@ use App\Domains\Commerce\Models\CommerceAbandonedCart;
 use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -263,7 +265,7 @@ final class StoreFunnelService
             'purchases' => $paid->count(),
             'add_to_cart' => $live->count() + $abandoned,
             'abandoned_carts' => $abandoned,
-            'carts_complete' => $stores->every(fn (ExternalAccount $s) => $s->provider !== 'zid'),
+            'carts_complete' => $stores->every(fn (ExternalAccount $s) => ProviderCatalogue::supports((string) $s->provider, ProviderCapability::AbandonedCarts)),
             /*
              * Every figure below is in the project's REPORTING currency (COMMERCE-FX-001).
              *
@@ -669,7 +671,7 @@ final class StoreFunnelService
                 ->values()
                 ->all(),
             'stores_without_cart_data' => $stores
-                ->filter(fn (ExternalAccount $s) => $s->provider === 'zid')
+                ->reject(fn (ExternalAccount $s) => ProviderCatalogue::supports((string) $s->provider, ProviderCapability::AbandonedCarts))
                 ->map(fn (ExternalAccount $s) => ['id' => $s->getKey(), 'name' => $s->name, 'provider' => $s->provider])
                 ->values()
                 ->all(),
