@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy } from 'lucide-react'
 import { actOnUserAccess, type TenantPerson, type UserAccessAction } from './api'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +13,11 @@ import { toApiError } from '@/lib/api/client'
  * person's password. Every action needs a reason; the two that hand back a way in ask for the operator's own password again.
  */
 
+const ACCOUNT_SWITCH: Record<'deactivate' | 'activate', { key: UserAccessAction; ar: string; en: string; hintAr: string; hintEn: string; needsPassword: boolean }> = {
+  deactivate: { key: 'deactivate', ar: 'إيقاف الحساب', en: 'Deactivate the account', hintAr: 'لا يستطيع الدخول إلى أي مساحة وتنتهي جلساته. بياناته وعضوياته تبقى كما هي.', hintEn: 'They cannot sign in to any workspace and their sessions end. Data and memberships stay as they are.', needsPassword: false },
+  activate: { key: 'activate', ar: 'تفعيل الحساب', en: 'Activate the account', hintAr: 'يعود دخوله إلى مساحاته.', hintEn: 'They can sign in to their workspaces again.', needsPassword: false },
+}
+
 const ACTIONS: { key: UserAccessAction; ar: string; en: string; hintAr: string; hintEn: string; needsPassword: boolean }[] = [
   { key: 'revoke_sessions', ar: 'إنهاء كل الجلسات', en: 'End every session', hintAr: 'يُسجَّل خروجه من كل الأجهزة فورًا.', hintEn: 'Signed out of every device now.', needsPassword: false },
   { key: 'password_link', ar: 'رابط تعيين كلمة مرور', en: 'Set-password link', hintAr: 'رابط لاستخدام واحد يُرسل بالبريد ويظهر لك مرة واحدة. كلمة المرور الحالية تبقى حتى يُستخدم.', hintEn: 'Single-use link, emailed and shown to you once. The current password stays until it is used.', needsPassword: true },
@@ -24,13 +29,16 @@ export function UserAccessDialog({ person, ar, onClose }: { person: TenantPerson
   const [reason, setReason] = useState('')
   const [password, setPassword] = useState('')
   const [copied, setCopied] = useState(false)
-  const chosen = ACTIONS.find((a) => a.key === action)!
+  // The operator's own account is not switched off from here, and the server refuses it anyway.
+  const available = [...ACTIONS, person.disabled ? ACCOUNT_SWITCH.activate : ACCOUNT_SWITCH.deactivate]
+  const chosen = available.find((a) => a.key === action)!
 
+  const client = useQueryClient()
   const act = useMutation({
     mutationFn: () => actOnUserAccess(person.user_uuid ?? '', {
       action, reason: reason.trim(), current_password: chosen.needsPassword ? password : undefined,
     }),
-    onSuccess: () => setPassword(''),
+    onSuccess: () => { setPassword(''); void client.invalidateQueries({ queryKey: ['admin', 'tenant'] }) },
   })
 
   const copy = async (link: string) => {
@@ -47,9 +55,10 @@ export function UserAccessDialog({ person, ar, onClose }: { person: TenantPerson
     <Modal open onClose={onClose} title={ar ? `إدارة وصول ${person.name ?? person.email ?? ''}` : `Access for ${person.name ?? person.email ?? ''}`}>
       <form data-testid="user-access-form" className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); act.mutate() }}>
         <p className="text-xs text-text-muted" dir="ltr">{person.email}{person.mfa_enabled ? ' · 2FA' : ''}</p>
+        {person.disabled && <p data-testid="access-disabled" className="text-xs font-semibold text-warning">{ar ? 'هذا الحساب موقوف حاليًا.' : 'This account is deactivated.'}</p>}
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-xs font-semibold text-text-secondary">{ar ? 'الإجراء' : 'Action'}</legend>
-          {ACTIONS.map((a) => (
+          {available.map((a) => (
             <label key={a.key} className="flex items-start gap-2 text-sm text-text-primary">
               <input data-testid={`access-action-${a.key}`} type="radio" name="access-action" className="mt-1" checked={action === a.key}
                 onChange={() => { setAction(a.key); act.reset() }} disabled={a.key === 'reset_mfa' && !person.mfa_enabled} />

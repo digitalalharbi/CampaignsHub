@@ -530,6 +530,9 @@ final class SubscriptionLifecycle
             // start never advances makes every later change look as though almost none of it is left.
             'current_period_start' => Carbon::now(),
             'current_period_end' => $this->nextPeriodEnd($subscription, Carbon::now()),
+            // Money arrived, so whatever explained a period with no money no longer describes this one, and a discount is spent.
+            'commercial_basis' => null,
+            'next_charge_discount_percent' => null,
         ])->save();
 
         $tenant = $this->tenantOf($subscription);

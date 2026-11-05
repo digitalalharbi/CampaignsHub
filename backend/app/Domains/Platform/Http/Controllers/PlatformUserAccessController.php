@@ -7,11 +7,13 @@ namespace App\Domains\Platform\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\PasswordResetService;
 use App\Domains\Identity\Support\UserSessions;
+use App\Domains\Platform\Support\WorkspaceOwners;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -22,6 +24,8 @@ use Illuminate\Validation\ValidationException;
  * - `password_link`: a single-use, expiring set-password link, emailed AND handed to the operator once (mail can be down); the old
  *   password keeps working until the person uses it. The link is never logged or audited.
  * - `reset_mfa`: turns two-factor off so a person who lost their device can sign in and enrol again; their sessions end too.
+ * - `deactivate` / `activate` (ADMIN-FULL-CONTROL-001): the account itself, everywhere, and its sessions end. It keeps its data and
+ *   memberships. The operator's own account cannot be switched off, and neither can a workspace's only remaining owner.
  *
  * Every action needs a reason, which goes to the audit trail with who did it. The two that hand back a way in (`password_link`,
  * `reset_mfa`) also need the operator's own current password — a re-check at the moment of the sensitive act, not only at sign-in. No
@@ -29,7 +33,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class PlatformUserAccessController extends Controller
 {
-    private const ACTIONS = ['revoke_sessions', 'password_link', 'reset_mfa'];
+    private const ACTIONS = ['revoke_sessions', 'password_link', 'reset_mfa', 'deactivate', 'activate'];
 
     private const NEEDS_PASSWORD = ['password_link', 'reset_mfa'];
 
@@ -37,6 +41,7 @@ final class PlatformUserAccessController extends Controller
         private readonly UserSessions $sessions,
         private readonly PasswordResetService $resets,
         private readonly AuditLogger $audit,
+        private readonly WorkspaceOwners $owners,
     ) {}
 
     /** POST /api/v1/admin/users/{user}/access */
@@ -58,9 +63,13 @@ final class PlatformUserAccessController extends Controller
             throw ValidationException::withMessages(['current_password' => __('The current password is incorrect.')]);
         }
 
+        $disabledBefore = $this->disabledAt($user);
+
         $result = match ((string) $data['action']) {
             'revoke_sessions' => $this->revokeSessions($user),
             'password_link' => $this->passwordLink($user),
+            'deactivate' => $this->deactivate($user, $operator),
+            'activate' => $this->activate($user),
             default => $this->resetMfa($user),
         };
 
@@ -68,13 +77,45 @@ final class PlatformUserAccessController extends Controller
             action: 'platform.user.'.$data['action'],
             entityType: User::class,
             entityId: (string) $user->getKey(),
+            before: in_array($data['action'], ['deactivate', 'activate'], true) ? ['disabled_at' => $disabledBefore] : null,
             // The reason and the outcome; a link is a credential and is never written here.
-            after: ['email' => $user->email, 'delivery' => $result['delivery'] ?? null],
+            after: ['email' => $user->email, 'delivery' => $result['delivery'] ?? null]
+                + (in_array($data['action'], ['deactivate', 'activate'], true) ? ['disabled_at' => $this->disabledAt($user)] : []),
             reason: $data['reason'],
             userId: (int) $operator->getKey(),
         );
 
         return ApiResponse::success($result, 'Done.');
+    }
+
+    private function disabledAt(User $user): ?string
+    {
+        return $user->disabled_at === null ? null : Carbon::parse($user->disabled_at)->toIso8601String();
+    }
+
+    /** @return array<string, mixed> */
+    private function deactivate(User $user, User $operator): array
+    {
+        if ($user->getKey() === $operator->getKey()) {
+            throw ValidationException::withMessages(['action' => __('You cannot deactivate your own account.')]);
+        }
+
+        if ($this->owners->soleOwnerOf($user->getKey()) !== []) {
+            throw ValidationException::withMessages(['action' => __('A workspace must keep at least one active owner.')]);
+        }
+
+        $user->forceFill(['disabled_at' => now()])->save();
+        $this->sessions->revokeAll($user);
+
+        return ['action' => 'deactivate', 'disabled' => true, 'sessions_revoked' => true];
+    }
+
+    /** @return array<string, mixed> */
+    private function activate(User $user): array
+    {
+        $user->forceFill(['disabled_at' => null])->save();
+
+        return ['action' => 'activate', 'disabled' => false];
     }
 
     /** @return array<string, mixed> */

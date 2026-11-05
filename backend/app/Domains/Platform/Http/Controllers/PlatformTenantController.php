@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -90,7 +91,8 @@ final class PlatformTenantController extends Controller
 
         $data = $request->validate([
             'status' => ['required', Rule::in(['active', 'suspended'])],
-            'reason' => ['required_if:status,suspended', 'nullable', 'string', 'max:500'],
+            // Either way it decides who can get in, so either way the record says why (ADMIN-FULL-CONTROL-001).
+            'reason' => ['required', 'string', 'max:500'],
         ]);
 
         /** @var Tenant|null $model */
@@ -166,9 +168,18 @@ final class PlatformTenantController extends Controller
                 'role' => $m->role,
                 'roles' => $held[$m->user_id] ?? [],
                 'is_platform_admin' => $m->user instanceof User && (bool) $m->user->is_platform_admin,
+                // The account itself, separate from this membership's status (ADMIN-FULL-CONTROL-001).
+                'disabled' => $m->user instanceof User && $m->user->disabled_at !== null,
                 'status' => $m->status,
             ])->values()->all(),
             'available_roles' => $roles->map(fn (Role $r) => ['slug' => $r->slug, 'name' => $r->name])->values()->all(),
+            // Who has been asked and has not answered. Never the token or its hash.
+            'pending_invitations' => DB::table('workspace_invitations')->where('tenant_id', $model->getKey())->whereNull('accepted_at')
+                ->orderBy('created_at')->get(['id', 'email', 'role_slug', 'delivery_status', 'expires_at'])
+                ->map(fn ($i) => [
+                    'id' => (string) $i->id, 'email' => $i->email, 'role' => $i->role_slug, 'delivery_status' => $i->delivery_status,
+                    'expires_at' => $i->expires_at === null ? null : Carbon::parse((string) $i->expires_at)->toIso8601String(),
+                ])->values()->all(),
             'client_workspaces' => ClientWorkspace::query()
                 ->where('tenant_id', $model->getKey())->whereNull('archived_at')->count(),
         ], 'Tenant.');
@@ -189,10 +200,10 @@ final class PlatformTenantController extends Controller
      * @var array<string, list<string>>
      */
     private const CATEGORIES = [
-        'subscriptions' => ['subscription.', 'plan.'],
+        'subscriptions' => ['subscription.', 'plan.', 'platform.subscription.'],
         'payments' => ['payment.'],
         'approvals' => ['registration.', 'account.state.', 'request.status_changed', 'request.converted'],
-        'permissions' => ['settings.team.', 'project.member.', 'client.team_access', 'access.'],
+        'permissions' => ['settings.team.', 'project.member.', 'client.team_access', 'access.', 'platform.member.', 'platform.user.'],
     ];
 
     /**
