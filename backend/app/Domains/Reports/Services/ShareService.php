@@ -232,7 +232,8 @@ final class ShareService
     {
         // LIVE-FILE-PARITY-001 — a live link's file is the page's payload, not the empty stored copy.
         $report = app(LiveReportService::class)->materialise($report, $share);
-        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
+        // REPORT-SOURCE-ISOLATION-001 — the file is made from the same contained document the page is.
+        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($report->data ?? [], $report)), $share);
 
         /*
          * RESULT-EVENTS-001 (Owner 2026-10-29) — the link's Results, not the saved report's: its own events, its «none», its label, read

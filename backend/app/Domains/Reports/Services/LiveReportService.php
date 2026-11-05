@@ -282,7 +282,16 @@ final class LiveReportService
             'campaign_ids' => AccountCampaignCeiling::campaigns(
                 $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
                 array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+                $scope['project_id'],
             ),
+            /*
+             * REPORT-SOURCE-ISOLATION-001 — the account axis itself, beside the campaigns it resolved to.
+             *
+             * The campaign ceiling above admits a creative whose campaign the account spent on; this refuses a creative that
+             * belongs to ANOTHER account of the project, whatever campaign it is filed under. The same axis the snapshot
+             * generator applies, so a live link and a stored copy of one report list one set.
+             */
+            'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
             /*
              * The operator's content choices on the link — which creatives or groups it names, which it
              * excludes, and the objective/path axes the metrics are already bound by. `SharedCreativeView`
@@ -1735,7 +1744,7 @@ final class LiveReportService
          * resolves to the fail-closed «nothing», which the page states as «no data yet» rather than as zeros.
          */
         if (($scope['dynamic_campaigns'] ?? false) === true && $campaignIds === []) {
-            $campaignIds = AccountCampaignCeiling::campaigns([], array_values(array_filter((array) ($scope['account_ids'] ?? []))));
+            $campaignIds = AccountCampaignCeiling::campaigns([], array_values(array_filter((array) ($scope['account_ids'] ?? []))), (string) ($scope['project_id'] ?? ''));
         }
 
         return [

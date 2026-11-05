@@ -159,6 +159,35 @@ final class CreativeRows
     }
 
     /**
+     * REPORT-SOURCE-ISOLATION-001 — keep the creatives that ran under one of these ad accounts. One statement of the rule, for the
+     * listing filter and for the guard that reads a stored report back.
+     *
+     * The account is the creative's own column, else its external campaign's. A creative that names neither is admitted only through a
+     * campaign one of the accounts spent on, in the creative's own project. No account evidence at all is refused.
+     *
+     * @param  list<string>  $accountIds  never empty: an empty axis is «no bound», which the caller decides, not this predicate
+     */
+    public static function whereRanUnderAccounts(mixed $query, array $accountIds): void
+    {
+        $query->where(function ($outer) use ($accountIds): void {
+            $outer
+                ->whereIn(DB::raw('COALESCE(external_creatives.external_account_id, (select src_c.external_account_id from external_campaigns as src_c where src_c.id = external_creatives.external_campaign_id))'), $accountIds)
+                ->orWhere(function ($viaMetrics) use ($accountIds): void {
+                    $viaMetrics
+                        ->whereNull('external_creatives.external_account_id')
+                        ->whereNull('external_creatives.external_campaign_id')
+                        ->whereExists(function ($sub) use ($accountIds): void {
+                            $sub->selectRaw('1')
+                                ->from('daily_metrics as src_dm')
+                                ->whereColumn('src_dm.unified_campaign_id', 'external_creatives.campaign_id')
+                                ->whereColumn('src_dm.project_id', 'external_creatives.project_id')
+                                ->whereIn('src_dm.external_account_id', $accountIds);
+                        });
+                });
+        });
+    }
+
+    /**
      * The filters, from a plain array rather than a request.
      *
      * An array because the client's report supplies filters that have already been intersected with
@@ -204,6 +233,36 @@ final class CreativeRows
             if (($ids = $list($param)) !== []) {
                 $query->whereIn($column, $ids);
             }
+        }
+
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — a project bound is a bound on the creative's CAMPAIGN as well.
+         *
+         * `project_id` above is the creative's own filing. A creative filed under this project whose campaign belongs to
+         * another one is content of that other project wearing this project's label, and listing it names that project's
+         * campaign on a document about this one. Refused here, at the one entry every listing passes through.
+         */
+        if (($projects = $list('project_ids')) !== []) {
+            $query->whereNotExists(function ($sub) use ($projects): void {
+                $sub->selectRaw('1')
+                    ->from('unified_campaigns as src_uc')
+                    ->whereColumn('src_uc.id', 'external_creatives.campaign_id')
+                    ->whereNotIn('src_uc.project_id', $projects);
+            });
+        }
+
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — the ad ACCOUNT axis, which this filter never had.
+         *
+         * A report whose sources name accounts was bounded to them in every figure (`MetricsAggregator::forAccounts`) and in no
+         * content list: the ads section carried every creative of the project, so a client's stored report showed the work of
+         * an account the operator had not chosen. The account a creative ran under is its own column, else its external
+         * campaign's; a creative with neither is admitted only through a campaign the account actually spent on, in the
+         * creative's own project (the identifier space the live link's ceiling is resolved in). No account evidence at all is
+         * refused: deny by default, as `BoundAccountVisibility` reads the same rows.
+         */
+        if (($accountIds = $list('account_ids')) !== []) {
+            self::whereRanUnderAccounts($query, array_map(strval(...), $accountIds));
         }
 
         /*
