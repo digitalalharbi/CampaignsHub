@@ -125,9 +125,9 @@ final class IntegrationBoundaryRevokedConnectionTest extends TestCase
             ->all();
     }
 
-    private function hubRow(ProviderConnection $connection, bool $mustBeListed = true): ?array
+    private function hubRow(ProviderConnection $connection, bool $mustBeListed = true, bool $includeRemoved = false): ?array
     {
-        $rows = $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/integrations/hub')->assertOk()->json('data');
+        $rows = $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/integrations/hub'.($includeRemoved ? '?include_removed=1' : ''))->assertOk()->json('data');
         $rows = $rows['connections'] ?? $rows;
         $row = collect($rows)->firstWhere('id', (string) $connection->id);
         if ($mustBeListed) {
@@ -174,8 +174,10 @@ final class IntegrationBoundaryRevokedConnectionTest extends TestCase
         if ($truth === null) {
             $this->assertNull($this->hubRow($this->c1, false), 'a removed connection is still listed as an authorisation');
         } else {
-            $this->assertSame($truth, $this->hubRow($this->c1)['connection_state']);
-            $this->assertNull($this->hubRow($this->c1)['next_sync_at'], 'a withdrawn connection promises a next sync');
+            // INTEG-SOURCE-REMOVAL-001 — a revoked source leaves the default list; under «show removed» it still says so.
+            $this->assertNull($this->hubRow($this->c1, false), 'a revoked connection is still in the default hub list');
+            $this->assertSame($truth, $this->hubRow($this->c1, includeRemoved: true)['connection_state']);
+            $this->assertNull($this->hubRow($this->c1, includeRemoved: true)['next_sync_at'], 'a withdrawn connection promises a next sync');
         }
         $this->assertSame(IntegrationTruth::CONNECTED, $this->hubRow($this->c2)['connection_state']);
     }
