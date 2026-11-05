@@ -54,6 +54,16 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS6"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'acct' as q, a.id, a.currency, a.status, a.last_synced_at, a.access_lost_at, a.provider_connection_id from external_accounts a where a.id::text like 'e0414015%'; ROLLBACK;
+            BEGIN READ ONLY; select 'bind' as q, b.project_id, b.is_active, b.updated_at from project_integration_bindings b join external_accounts a on a.id=b.external_account_id where a.id::text like 'e0414015%'; ROLLBACK;
+            BEGIN READ ONLY; select 'rows' as q, m.original_currency, m.project_currency, m.metric_key, count(*) n, min(m.metric_date), max(m.metric_date), round(sum(m.original_amount)::numeric,2) orig, round(sum(m.value)::numeric,2) usd, min(m.exchange_rate) from daily_metrics m join external_accounts a on a.id=m.external_account_id where a.id::text like 'e0414015%' and m.metric_key in ('spend') group by 2,3,4 order by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'runs' as q, status, count(*), max(created_at) from metric_sync_runs r join external_accounts a on a.id=r.external_account_id where a.id::text like 'e0414015%' group by 2; ROLLBACK;
+            SQL
+            echo "== END FACTS6"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
