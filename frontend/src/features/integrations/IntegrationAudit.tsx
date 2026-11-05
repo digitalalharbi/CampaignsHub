@@ -27,8 +27,10 @@ import { useUi } from '@/stores/ui'
  * It is a reading surface. Every control on it opens something that already exists — the
  * re-authorise flow, the selection editor, the source's own drawer.
  */
-export function IntegrationAudit({ connections, onReauthorise, onManage, onOpen }: {
+export function IntegrationAudit({ connections, loading = false, onReauthorise, onManage, onOpen }: {
   connections: HubConnection[]
+  /** The sources are still being read: «nothing needs action» would be a claim nobody has checked yet. */
+  loading?: boolean
   onReauthorise: (connection: HubConnection) => void
   onManage: (connection: HubConnection) => void
   onOpen: (connection: HubConnection) => void
@@ -50,7 +52,9 @@ export function IntegrationAudit({ connections, onReauthorise, onManage, onOpen 
       <div className="flex min-w-0 flex-col gap-2" data-testid="audit-attention">
         <h3 className="text-sm font-bold text-text-primary">{ar ? 'ما يحتاج إجراءً' : 'What needs action'}</h3>
 
-        {findings.length === 0 ? (
+        {loading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : findings.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="audit-attention-empty">
             {connections.length === 0
               ? (ar ? 'لا مصدر مرتبط بعد، فلا شيء يُدقَّق.' : 'Nothing is linked yet, so there is nothing to audit.')
@@ -150,6 +154,7 @@ function FindingRow({ finding, ar, onReauthorise, onManage, onOpen }: {
           <span className="min-w-0 truncate text-sm font-bold text-text-primary">{ar ? connection.label_ar : connection.label}</span>
           <Badge tone={statusTone(dimension, status.state)}>
             <span className="font-semibold opacity-80">{ar ? DIMENSION_COPY[dimension].ar : DIMENSION_COPY[dimension].en}:</span>
+            {' '}
             <span>{ar ? status.label_ar : status.label_en}</span>
           </Badge>
         </p>

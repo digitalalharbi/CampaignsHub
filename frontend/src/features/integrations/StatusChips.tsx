@@ -65,6 +65,7 @@ export function StatusChips({ statuses, ar, id, legacyIds = {} }: {
           <li key={dimension} className="min-w-0" data-testid={legacyIds[dimension]} title={action ?? undefined}>
             <Badge tone={statusTone(dimension, status.state)} data-testid={`status-${dimension}-${id}`} className="max-w-full">
               <span className="font-semibold opacity-80">{ar ? DIMENSION_COPY[dimension].ar : DIMENSION_COPY[dimension].en}:</span>
+              {' '}
               <span className="truncate" data-state={status.state}>{ar ? status.label_ar : status.label_en}</span>
             </Badge>
           </li>

@@ -233,6 +233,7 @@ export function IntegrationsPage() {
       {/* 3 — «التدقيق». Reads the same hub rows the sources section draws, so the two cannot disagree. */}
       <IntegrationAudit
         connections={live}
+        loading={hub.isLoading}
         onReauthorise={reauthorise}
         onManage={manage}
         onOpen={(connection) => setDrawer({ id: connection.id, tab: 'overview' })}
