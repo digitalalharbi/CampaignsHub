@@ -436,6 +436,34 @@ final class ProjectFirstLinkJourneyTest extends TestCase
         $this->assertSame('converted', $this->link($this->projectA, $connection)->json('data.accounts.0.money.state'));
     }
 
+    // ── the old estate: counted, never deleted ───────────────────────────────────────────────────
+
+    public function test_the_unbound_estate_report_counts_what_was_never_linked_and_changes_nothing(): void
+    {
+        Queue::fake();
+        $connection = $this->connection($this->tenant, 'meta');
+        $bound = $this->account($connection, 'act_bound', 'Bound', 'USD');
+        $this->account($connection, 'act_never_1', 'Never 1', 'USD');
+        $this->account($connection, 'act_never_2', 'Never 2', 'USD');
+        // Linked once and later removed: its history belongs to the project, so it is NOT prunable.
+        $once = $this->account($connection, 'act_once', 'Once', 'USD');
+        $this->confirm($this->projectA, $connection, [$bound->id, $once->id])->assertCreated();
+        $this->actingAs($this->owner, 'sanctum')->withHeader('X-Project-Id', $this->projectA->id)
+            ->postJson("/api/v1/projects/{$this->projectA->id}/integrations/accounts/{$once->id}/unlink")->assertOk();
+
+        $before = [ExternalAccount::withoutGlobalScopes()->count(), ProjectIntegrationBinding::withoutGlobalScopes()->count()];
+
+        $this->artisan('integrations:unbound-estate')
+            ->expectsOutputToContain('TOTAL discovered=4 bound=1 prunable=2')
+            ->expectsOutputToContain('Nothing was changed')
+            ->assertSuccessful();
+
+        // `--apply` exists only to refuse.
+        $this->artisan('integrations:unbound-estate', ['--apply' => true])->assertFailed();
+
+        $this->assertSame($before, [ExternalAccount::withoutGlobalScopes()->count(), ProjectIntegrationBinding::withoutGlobalScopes()->count()]);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 
     private function link(Project $project, ProviderConnection $connection, ?User $as = null)
