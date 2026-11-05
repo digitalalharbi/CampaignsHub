@@ -54,6 +54,15 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS3"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'acct' as q, a.id, a.currency, a.provider_connection_id, b.project_id, b.is_active from external_accounts a left join project_integration_bindings b on b.external_account_id=a.id where a.provider='openai_ads'; ROLLBACK;
+            BEGIN READ ONLY; select 'share' as q, s.id share_id, s.report_id, s.mode, r.project_id, r.status, r.generated_at, r.period_start, r.period_end, r.type from report_shares s join reports r on r.id=s.report_id where s.token_hash='ab2fb15a52278590e8dfdd1d7d02cbc91be4d6046ec83eb9ed58cdb859a5199f'; ROLLBACK;
+            BEGIN READ ONLY; select 'versions' as q, count(*) from report_versions v join report_shares s on s.report_id=v.report_id where s.token_hash='ab2fb15a52278590e8dfdd1d7d02cbc91be4d6046ec83eb9ed58cdb859a5199f'; ROLLBACK;
+            SQL
+            echo "== END FACTS3"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
