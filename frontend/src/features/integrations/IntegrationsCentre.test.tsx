@@ -195,7 +195,9 @@ describe('the Integrations Centre: three sections, Arabic and RTL', () => {
     await screen.findByTestId('hub-row-c-1')
     await screen.findByTestId('estate-attention')
     expect(screen.getByTestId('connection-hub').textContent).not.toMatch(/[٠-٩]/)
-    expect(screen.getByTestId('hub-accounts-c-1')).toHaveTextContent('اختير 2 من 321')
+    // Linked accounts only: the 321 the sign-in could see are not counted anywhere on the centre.
+    expect(screen.getByTestId('hub-accounts-c-1')).toHaveTextContent('حسابان مربوطان')
+    expect(screen.getByTestId('connection-hub')).not.toHaveTextContent('321')
   })
 })
 

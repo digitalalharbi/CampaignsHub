@@ -89,13 +89,14 @@ describe('the Connection Hub', () => {
     expect(screen.getByTestId('hub-connect-empty')).toBeInTheDocument()
   })
 
-  /** «1 of 17 accounts» — ACCOUNT-SCOPE-ISOLATION-001 in four words, on the row. */
+  /** INTEG-PROJECT-LINK-001 — the row counts LINKED accounts; the 17 the sign-in could see are not on the centre. */
   it('states the chosen accounts out of the reachable ones', async () => {
     hub.data = { connections: [connection()], connectable: [] }
 
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 of 17 selected')
+    expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 account connected')
+    expect(screen.getByTestId('connection-hub')).not.toHaveTextContent('17')
   })
 
   /** INTEG-UNIFIED-002 — by NAME. The workspace email is not an identity of the source and is not on the row. */

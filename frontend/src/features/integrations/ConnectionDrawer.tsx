@@ -175,9 +175,8 @@ function Overview({ connection, ar }: { connection: HubConnection; ar: boolean }
   return (
     <dl className="flex flex-col gap-3 text-sm" data-testid="drawer-overview">
       <Fact label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}>
-        {ar
-          ? <><Num>{connection.selected_accounts}</Num> من <Num>{connection.discovered_accounts}</Num></>
-          : <><Num>{connection.selected_accounts}</Num> of <Num>{connection.discovered_accounts}</Num></>}
+        {/* Linked accounts only: the unchosen part of what a sign-in can see is not counted (INTEG-PROJECT-LINK-001). */}
+        <Num>{connection.selected_accounts}</Num>
       </Fact>
 
       <Fact label={ar ? 'يغذّي العملاء' : 'Feeds'}>

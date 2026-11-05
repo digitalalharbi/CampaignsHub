@@ -191,7 +191,7 @@ describe('the project link journey: platform and authorisation', () => {
     await screen.findByTestId('link-step-authorisation-body')
 
     fireEvent.click(screen.getByTestId('link-back'))
-    expect(await screen.findByTestId('link-platform-meta')).toBeChecked()
+    await waitFor(() => expect(screen.getByTestId('link-platform-meta')).toBeChecked())
   })
 
   it('asks an API-key platform for its key instead of a sign-in, for the same fixed project', async () => {

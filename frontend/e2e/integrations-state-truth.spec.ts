@@ -41,8 +41,9 @@ test('the hub says which state every authorisation is in, on both axes', async (
     // BOTH, always. Either alone is the collapse that hid a Reconnect button on Production.
     await expect(page.getByTestId(`hub-auth-${id}`), `«${id}» has no authorisation state`).toBeVisible()
     await expect(page.getByTestId(`hub-sync-${id}`), `«${id}» has no data state`).toBeVisible()
-    // «1 of 17» — chosen over reachable, which is the sentence that stops «everything syncs».
-    await expect(page.getByTestId(`hub-accounts-${id}`)).toContainText(/of|من/)
+    // INTEG-PROJECT-LINK-001 — the row counts LINKED accounts only; what was merely discovered is not on the centre.
+    await expect(page.getByTestId(`hub-accounts-${id}`)).toContainText(/\d/)
+    await expect(page.getByTestId(`hub-accounts-${id}`)).not.toContainText(/ of | من /)
   }
 })
 

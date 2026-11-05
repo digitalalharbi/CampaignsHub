@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
 import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
-import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, needsReauthorising, selectedOfDiscovered } from './connectionCopy'
+import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { StatusChips } from './StatusChips'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { platformColor } from '@/features/analytics/components'
-import { adAccounts } from '@/lib/counted'
+import { connectedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
 
@@ -326,7 +326,12 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
           data-testid={`hub-accounts-${connection.id}`}
           className="inline-flex w-fit shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-text-primary underline-offset-4 hover:bg-surface-secondary hover:underline"
         >
-          <span className="tnum">{selectedOfDiscovered(connection.selected_accounts, connection.discovered_accounts, ar)}</span>
+          {/*
+            INTEG-PROJECT-LINK-001 — LINKED accounts only. What a sign-in could see but nobody chose is
+            not a source of this workspace and is not counted on the centre: «1 of 309» read as 309
+            accounts being synced, which they never were.
+          */}
+          <span className="tnum">{connectedAccounts(connection.selected_accounts, ar ? 'ar' : 'en')}</span>
         </button>
 
         {/*
@@ -479,7 +484,6 @@ export function HubSummary({ connections }: { connections: HubConnection[] }) {
 
   const needReauth = live.filter((c) => needsReauthorising(c.connection_state)).length
   const selectedAccounts = live.reduce((n, c) => n + c.selected_accounts, 0)
-  const discoveredAccounts = live.reduce((n, c) => n + c.discovered_accounts, 0)
 
   return (
     <section className="flex min-w-0 flex-col gap-3" data-testid="hub-summary" aria-labelledby="hub-summary-title">
@@ -503,7 +507,6 @@ export function HubSummary({ connections }: { connections: HubConnection[] }) {
           <StatCard
             label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}
             value={selectedAccounts.toLocaleString('en-US')}
-            hint={`${ar ? 'من' : 'of'} ${adAccounts(discoveredAccounts, locale)}`}
             tone="neutral"
             dot
             testid="hub-kpi-accounts"
