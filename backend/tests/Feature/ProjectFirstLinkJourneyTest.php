@@ -116,12 +116,12 @@ final class ProjectFirstLinkJourneyTest extends TestCase
 
     public function test_a_refusal_at_the_provider_returns_to_the_project_with_nothing_opened(): void
     {
-        $this->configure('google_ads');
+        $this->configure('snapchat');
         Http::fake();
 
-        $state = $this->start('google_ads', ['project_id' => $this->projectA->id, 'return_portal' => 'agency']);
+        $state = $this->start('snapchat', ['project_id' => $this->projectA->id, 'return_portal' => 'agency']);
 
-        $this->get("/api/v1/oauth/ads/google_ads/callback?error=access_denied&state={$state}")
+        $this->get("/api/v1/oauth/ads/snapchat/callback?error=access_denied&state={$state}")
             ->assertRedirectContains("/agency/projects/{$this->projectA->id}/integrations?")
             ->assertRedirectContains('outcome=denied');
 
@@ -130,7 +130,7 @@ final class ProjectFirstLinkJourneyTest extends TestCase
         Http::assertNothingSent();
 
         // The state was spent by the refusal: replaying it with a code opens nothing either.
-        $this->get("/api/v1/oauth/ads/google_ads/callback?code=abc&state={$state}")->assertRedirectContains('outcome=invalid_state');
+        $this->get("/api/v1/oauth/ads/snapchat/callback?code=abc&state={$state}")->assertRedirectContains('outcome=invalid_state');
         $this->assertSame(0, ProviderConnection::withoutGlobalScopes()->count());
     }
 

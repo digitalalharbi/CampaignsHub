@@ -196,7 +196,7 @@ final class AdPlatformOAuthFlowTest extends TestCase
         Http::assertNotSent(fn (HttpRequest $request): bool => str_contains($request->url(), '/campaigns'));
         Http::assertNotSent(fn (HttpRequest $request): bool => (bool) preg_match('#/act_\d+#', $request->url()));
         foreach (Http::recorded() as [$request]) {
-            $this->assertMatchesRegularExpression('#/oauth/access_token|/me/adaccounts|/me/businesses#', $request->url());
+            $this->assertMatchesRegularExpression('#/oauth/access_token|/me/adaccounts|/me/businesses|/me\\?fields=#', $request->url());
         }
     }
 
