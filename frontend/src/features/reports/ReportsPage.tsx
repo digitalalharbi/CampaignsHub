@@ -3,7 +3,7 @@ import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
 import { PageIntro } from '@/components/ui/PageIntro'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
@@ -33,13 +33,17 @@ import {
   revokeShare,
   pauseShare,
   convertShare,
-  duplicateReport,
+  startDuplicate,
+  getReportDraft,
+  saveReportDraft,
+  publishReportDraft,
+  previewReportDraft,
   getCurrentShareLink,
   renameReport,
   resumeShare,
   shareLogs,
 } from './api'
-import type { CreatedShare, GenericNameKind, ReportDetail, ReportFormat, ReportRow, ShareRow } from './api'
+import type { CreatedShare, GenericNameKind, ReportDetail, ReportEditorState, ReportFormat, ReportRow, SharePreferences, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -174,7 +178,51 @@ export function ReportsPage() {
   const regen = useMutation({ mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
   /* REPORT-LIFECYCLE-MENU-001 — rename in place; duplicate to an independent report. Neither touches the original's link. */
   const rename = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => renameReport(currentProjectId!, id, name), onSuccess: invalidate })
-  const duplicate = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => duplicateReport(currentProjectId!, id, { name }), onSuccess: invalidate })
+  /*
+   * REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — «تكرار» opens the report EDITOR on an independent draft.
+   *
+   * It used to ask for a name in a browser prompt and make a report and a link at once. Now the server stores nothing when
+   * the action is pressed: it answers with the original's settings, and the same builder that creates a report opens
+   * filled with them. «حفظ كمسودة», «نشر التقرير» and «إلغاء» are the editor's own buttons. A saved draft reopens the same way.
+   */
+  const [editorSeed, setEditorSeed] = useState<BuilderSeed | null>(null)
+  const [rowNote, setRowNote] = useState<string | null>(null)
+  const [editOriginal, setEditOriginal] = useState<ReportRow | null>(null)
+  const refusal = (e: unknown) => setRowNote(toApiError(e).message || (ar ? 'تعذّر تنفيذ الإجراء.' : 'The action could not be completed.'))
+  const duplicate = useMutation({
+    mutationFn: (id: string) => startDuplicate(currentProjectId!, id),
+    onSuccess: (d) => {
+      setRowNote(null)
+      setEditorSeed({ state: d.draft, suggestedName: ar ? d.suggested_name.ar : d.suggested_name.en, sourceId: d.source.id, sourceName: d.source.name })
+    },
+    onError: refusal,
+  })
+  const openDraft = useMutation({
+    mutationFn: (id: string) => getReportDraft(currentProjectId!, id),
+    onSuccess: (d) => { setRowNote(null); setEditorSeed({ state: d.draft }) },
+    onError: refusal,
+  })
+  /* «نسخ الرابط» — the link as it is. Nothing is created, and with several links the person picks which in the links dialog. */
+  const copyLink = useMutation({
+    mutationFn: async (id: string): Promise<'copied' | 'none' | 'many' | 'unrecoverable'> => {
+      const usable = (await listShares(currentProjectId!, id)).filter((x) => !x.revoked_at)
+      if (usable.length === 0) return 'none'
+      if (usable.length > 1) return 'many'
+      const link = await getCurrentShareLink(currentProjectId!, id, usable[0].id)
+      if (!link.available || !link.url) return link.reason === 'revoked' ? 'none' : 'unrecoverable'
+      await navigator.clipboard.writeText(link.url)
+      return 'copied'
+    },
+    onSuccess: (result, id) => {
+      if (result === 'many') { setRowNote(null); setShareId(id); return }
+      setRowNote({
+        copied: ar ? 'نُسخ الرابط الحالي كما هو — لم يُنشأ رابط جديد ولم يتغير التقرير.' : 'The current link was copied as it is — no new link was made and the report did not change.',
+        none: ar ? 'لا يوجد رابط فعّال لهذا التقرير لنسخه.' : 'This report has no active link to copy.',
+        unrecoverable: ar ? 'أُنشئ هذا الرابط قبل دعم النسخ ولا يمكن استرجاع عنوانه؛ استخدم العنوان الذي أُرسل سابقًا.' : 'This link predates copy support, so its address cannot be recovered; use the address you sent earlier.',
+      }[result])
+    },
+    onError: refusal,
+  })
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
   const drill = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => setReportPdfBreakdowns(currentProjectId!, id, { platform_drilldown: on }), onSuccess: invalidate })
   const exp = useMutation({
@@ -184,6 +232,12 @@ export function ReportsPage() {
   })
 
   const allRows = list.data?.reports ?? []
+  /* A draft has no document to preview: opening it opens the editor it is being written in. */
+  const openRow = (r: ReportRow | undefined) => {
+    if (!r) return
+    if (r.is_draft) openDraft.mutate(r.id)
+    else setPreviewId(r.id)
+  }
   const presentTypes = [...new Set(allRows.map((r) => r.type))]
   const rows = typeFilter ? allRows.filter((r) => r.type === typeFilter) : allRows
 
@@ -428,6 +482,7 @@ export function ReportsPage() {
             { value: 'completed', label: statusLabel('completed', ar) },
             { value: 'processing', label: statusLabel('processing', ar) },
             { value: 'failed', label: statusLabel('failed', ar) },
+            { value: 'draft', label: statusLabel('draft', ar) },
           ]}
           onChange={setStatus}
         />
@@ -446,6 +501,9 @@ export function ReportsPage() {
         )}
       </FilterBar>
 
+      {rowNote && (
+        <p role="status" data-testid="reports-row-note" className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-sm text-text-secondary">{rowNote}</p>
+      )}
       {/* List */}
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
         {list.isLoading ? (
@@ -463,7 +521,7 @@ export function ReportsPage() {
             </p>
           </div>
         ) : view === 'cards' ? (
-          <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
+          <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={(id) => openRow(rows.find((r) => r.id === id))} onEditOriginal={setEditOriginal} onDuplicate={(id) => duplicate.mutate(id)} onCopyLink={(id) => copyLink.mutate(id)} />
         ) : (
           <>
             {/*
@@ -478,7 +536,7 @@ export function ReportsPage() {
               names — and the toggle still does what it says the moment there is width for it.
             */}
             <div className="sm:hidden" data-testid="reports-phone-cards">
-              <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={setPreviewId} />
+              <ReportCards rows={rows} ar={ar} typeLabel={typeLabel} onOpen={(id) => openRow(rows.find((r) => r.id === id))} onEditOriginal={setEditOriginal} onDuplicate={(id) => duplicate.mutate(id)} onCopyLink={(id) => copyLink.mutate(id)} />
             </div>
 
           {picked.length > 0 && (
@@ -567,19 +625,11 @@ export function ReportsPage() {
                     key={r.id}
                     report={r}
                     typeLabel={typeLabel(r.type)}
-                    onPreview={() => setPreviewId(r.id)}
+                    onPreview={() => openRow(r)}
+                    onEditOriginal={() => setEditOriginal(r)}
+                    onCopyLink={() => copyLink.mutate(r.id)}
                     onShare={() => setShareId(r.id)}
-                    onScope={() => setScopeId(r.id)}
-                    onNames={() => setNamesId(r.id)}
-                    onRename={() => {
-                      const name = window.prompt(ar ? 'اسم التقرير:' : 'Report name:', r.name)?.trim()
-                      if (name && name !== r.name) rename.mutate({ id: r.id, name })
-                    }}
-                    onDuplicate={() => {
-                      const name = window.prompt(ar ? 'اسم النسخة (تقرير ورابط جديدان، والأصل لا يتغير):' : 'Name of the copy (a new report and link; the original does not change):', `${r.name} ${ar ? '(نسخة)' : '(copy)'}`)?.trim()
-                      if (name) duplicate.mutate({ id: r.id, name })
-                    }}
-                    onSections={() => setSectionsId(r.id)}
+                    onDuplicate={() => duplicate.mutate(r.id)}
                     onRegenerate={() => (r.status === 'completed' ? setRegenAsk({ id: r.id, name: r.name }) : regen.mutate(r.id))}
                     onExport={(f) => exp.mutate({ id: r.id, format: f })}
                     onTogglePdfDrilldown={(on) => drill.mutate({ id: r.id, on })}
@@ -634,6 +684,39 @@ export function ReportsPage() {
         ) : (
           <ScopeLostDialog ar={ar} onClose={() => setBuilderOpen(false)} />
         )
+      )}
+      {editorSeed && (
+        currentProjectId ? (
+          <ReportBuilder
+            key={editorSeed.state.id ?? `copy-of-${editorSeed.sourceId}`}
+            projectId={currentProjectId}
+            seed={editorSeed}
+            onClose={() => { setEditorSeed(null); invalidate() }}
+            onCreated={() => {
+              setEditorSeed(null)
+              setRowNote(ar ? 'نُشر التقرير كتقرير مستقل وهو قيد التوليد. لم يُنشأ له رابط؛ أنشئ رابطه من «مشاركة» عند اكتماله.' : 'The report was published as an independent report and is being generated. No link was made for it; create one from “Share” once it completes.')
+              invalidate()
+            }}
+          />
+        ) : (
+          <ScopeLostDialog ar={ar} onClose={() => setEditorSeed(null)} />
+        )
+      )}
+      {editOriginal && (
+        <EditOriginalDialog
+          ar={ar}
+          report={editOriginal}
+          onClose={() => setEditOriginal(null)}
+          onRename={() => {
+            const r = editOriginal
+            setEditOriginal(null)
+            const name = window.prompt(ar ? 'اسم التقرير:' : 'Report name:', r.name)?.trim()
+            if (name && name !== r.name) rename.mutate({ id: r.id, name })
+          }}
+          onNames={() => { setNamesId(editOriginal.id); setEditOriginal(null) }}
+          onScope={() => { setScopeId(editOriginal.id); setEditOriginal(null) }}
+          onSections={() => { setSectionsId(editOriginal.id); setEditOriginal(null) }}
+        />
       )}
       {previewId && (
         currentProjectId
@@ -743,12 +826,10 @@ function ReportRowView({
   report,
   typeLabel,
   onPreview,
+  onEditOriginal,
+  onCopyLink,
   onShare,
-  onScope,
-  onNames,
-  onRename,
   onDuplicate,
-  onSections,
   onRegenerate,
   onExport,
   onTogglePdfDrilldown,
@@ -763,14 +844,12 @@ function ReportRowView({
   typeLabel: string
   onPreview: () => void
   onShare: () => void
-  onScope: () => void
-  /** REPORT-IDENTITY-NAMES-001 — «prepared for / by» of an existing report. */
-  onNames: () => void
-  /** REPORT-LIFECYCLE-MENU-001 — rename; every actual change is audited server-side. */
-  onRename: () => void
-  /** REPORT-DUPLICATE-001 — an independent copy. */
+  /** REPORT-DUPLICATE-001 — opens the editor on an independent draft; nothing is made until it is saved or published. */
   onDuplicate: () => void
-  onSections: () => void
+  /** «تعديل الأصل» — the edits that are saved on THIS report and keep its link. */
+  onEditOriginal: () => void
+  /** «نسخ الرابط» — the current link, as it is. */
+  onCopyLink: () => void
   onRegenerate: () => void
   onExport: (f: ReportFormat) => void
   /** REPORT-DRILLDOWN-001 — the PDF's optional per-platform section; off by default. */
@@ -851,16 +930,109 @@ function ReportRowView({
               <IconBtn title={ar ? 'الإرسال بالبريد غير متاح' : 'Email sending is not available'} onClick={onSend}><Send size={15} /></IconBtn>
             </>
           )}
-          <IconBtn title={ar ? 'إعادة تسمية' : 'Rename'} onClick={onRename}><Type size={15} /></IconBtn>
-          <IconBtn title={ar ? 'نسخ التقرير (تقرير ورابط جديدان)' : 'Duplicate (new report and link)'} onClick={onDuplicate}><CopyPlus size={15} /></IconBtn>
-          <IconBtn title={ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'} onClick={onNames}><Pencil size={15} /></IconBtn>
-          <IconBtn title={ar ? 'نطاق التقرير' : 'Report scope'} onClick={onScope}><SlidersHorizontal size={15} /></IconBtn>
-          <IconBtn title={ar ? 'أقسام التقرير' : 'Report sections'} onClick={onSections}><ListChecks size={15} /></IconBtn>
-          <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
+          {report.is_draft ? (
+            /* A draft has one thing to do with it: carry on in the editor, where it is saved again or published. */
+            <button type="button" data-testid={`report-draft-continue-${report.id}`} onClick={onPreview} className={ROW_ACTION}>
+              <Pencil size={13} /> {ar ? 'متابعة تحرير المسودة' : 'Continue editing draft'}
+            </button>
+          ) : (
+            <>
+              <RowActions ar={ar} id={report.id} onEditOriginal={onEditOriginal} onDuplicate={onDuplicate} onCopyLink={onCopyLink} />
+              {/* The name, the identity names, the scope and the sections are under «تعديل الأصل»: four icons beside «تكرار» is how the two were confused. */}
+              <IconBtn title={ar ? 'إعادة الإنشاء' : 'Regenerate'} onClick={onRegenerate}><RefreshCw size={15} /></IconBtn>
+            </>
+          )}
           <IconBtn title={ar ? 'حذف' : 'Delete'} onClick={onDelete} danger><Trash2 size={15} /></IconBtn>
         </div>
       </td>
     </tr>
+  )
+}
+
+const ROW_ACTION = 'inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+
+/**
+ * REPORT-DUPLICATE-001 — three actions that were easy to mistake for one another, each said in words.
+ *
+ * «تعديل الأصل» changes THIS report and keeps the link already sent. «تكرار» starts a different report from this one's
+ * settings, as a draft, and touches neither this report nor its link. «نسخ الرابط» copies the link as it is and changes
+ * nothing. The table row and the phone card draw the same three, in the same order, from this one component.
+ */
+function RowActions({ ar, id, onEditOriginal, onDuplicate, onCopyLink }: { ar: boolean; id: string; onEditOriginal: () => void; onDuplicate: () => void; onCopyLink: () => void }) {
+  return (
+    <>
+      <button type="button" data-testid={`report-edit-original-${id}`} onClick={onEditOriginal} className={ROW_ACTION} title={ar ? 'تعديل هذا التقرير نفسه — رابطه المُرسَل يبقى كما هو' : 'Edit this same report — the link already sent stays the same'}>
+        <Pencil size={13} /> {ar ? 'تعديل الأصل' : 'Edit original'}
+      </button>
+      <button type="button" data-testid={`report-duplicate-${id}`} onClick={onDuplicate} className={ROW_ACTION} title={ar ? 'نسخة مستقلة تُفتح كمسودة في محرر التقرير — لا يُنشر شيء ولا يُنشأ رابط حتى تقرر' : 'An independent copy, opened as a draft in the report editor — nothing is published and no link is made until you decide'}>
+        <CopyPlus size={13} /> {ar ? 'تكرار' : 'Duplicate'}
+      </button>
+      <button type="button" data-testid={`report-copy-link-${id}`} onClick={onCopyLink} className={ROW_ACTION} title={ar ? 'نسخ الرابط الحالي كما هو — لا يُنشأ رابط جديد' : 'Copy the current link as it is — no new link is made'}>
+        <Copy size={13} /> {ar ? 'نسخ الرابط' : 'Copy link'}
+      </button>
+    </>
+  )
+}
+
+/**
+ * «تعديل الأصل» — where the edits that stay on this report are.
+ *
+ * Not a second editor: it names the four edits this page already had (name, identity names, scope, sections) and opens the
+ * one chosen. Each is saved on the report itself, so the address already with the client goes on answering.
+ */
+function EditOriginalDialog({ ar, report, onClose, onRename, onNames, onScope, onSections }: {
+  ar: boolean
+  report: ReportRow
+  onClose: () => void
+  onRename: () => void
+  onNames: () => void
+  onScope: () => void
+  onSections: () => void
+}) {
+  const item = 'flex w-full items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-start text-sm font-semibold text-text-primary hover:border-brand-400'
+  return (
+    <Modal open onClose={onClose} title={ar ? `تعديل الأصل: ${report.name}` : `Edit original: ${report.name}`} footer={<Button variant="secondary" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</Button>}>
+      <div className="space-y-2" data-testid="edit-original-dialog">
+        <p className="text-sm text-text-secondary">
+          {ar
+            ? 'هذه التعديلات تُحفظ على التقرير نفسه، ورابطه المُرسَل يبقى كما هو. لإنشاء تقرير مختلف دون المساس بهذا استخدم «تكرار».'
+            : 'These edits are saved on this same report, and the link already sent stays the same. To make a different report without touching this one, use “Duplicate”.'}
+        </p>
+        <button type="button" className={item} onClick={onRename} data-testid="edit-original-rename"><Type size={15} /> {ar ? 'الاسم' : 'Name'}</button>
+        <button type="button" className={item} onClick={onNames} data-testid="edit-original-names"><Pencil size={15} /> {ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'}</button>
+        <button type="button" className={item} onClick={onScope} data-testid="edit-original-scope"><SlidersHorizontal size={15} /> {ar ? 'النطاق: الحسابات والحملات' : 'Scope: accounts and campaigns'}</button>
+        <button type="button" className={item} onClick={onSections} data-testid="edit-original-sections"><ListChecks size={15} /> {ar ? 'الأقسام' : 'Sections'}</button>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * REPORT-DUPLICATE-001 — the original link's switches, said in words, wherever a copy carries them.
+ *
+ * The editor and the share dialog both show it, so the person sees the same list before the copy exists and when they share
+ * it. It names what is ON, says the password and the expiry were not copied, and never shows anything of the link itself.
+ */
+function SharePreferencesNote({ ar, prefs, testid, children }: { ar: boolean; prefs: SharePreferences; testid: string; children: React.ReactNode }) {
+  const on: string[] = [
+    ...(prefs.hide_spend ? [ar ? 'إخفاء الإنفاق' : 'Hide spend'] : []),
+    ...(prefs.hide_revenue ? [ar ? 'إخفاء الإيرادات' : 'Hide revenue'] : []),
+    ...(prefs.hide_campaign_names ? [ar ? 'إخفاء أسماء الحملات' : 'Hide campaign names'] : []),
+    ...(prefs.generic_names.length > 0 ? [ar ? 'أسماء عامة بدل الأسماء الحقيقية' : 'Generic names instead of real names'] : []),
+    ...(prefs.watermark ? [ar ? 'علامة مائية' : 'Watermark'] : []),
+    ...(prefs.allow_download === false ? [ar ? 'التنزيل غير مسموح' : 'Download not allowed'] : []),
+    ...(prefs.mode === 'live' ? [ar ? 'رابط لحظي' : 'Live link'] : []),
+  ]
+  return (
+    <div role="note" data-testid={testid} className="min-w-0 space-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs leading-relaxed text-text-secondary">
+      <p>{children}</p>
+      {on.length > 0 && <p className="font-semibold text-text-primary">{on.join(ar ? '، ' : ', ')}</p>}
+      <p>
+        {prefs.was_locked
+          ? (ar ? 'رابط الأصل كان محميًا بكلمة مرور. كلمة المرور وتاريخ الانتهاء لا يُنسخان: اكتب كلمة مرور جديدة عند المشاركة إن أردت الحماية نفسها.' : 'The original link was protected by a password. The password and the expiry date are never copied: type a new password when you share if you want the same protection.')
+          : (ar ? 'كلمة المرور وتاريخ الانتهاء لا يُنسخان من رابط الأصل.' : 'The password and the expiry date are never copied from the original link.')}
+      </p>
+    </div>
   )
 }
 
@@ -1014,11 +1186,39 @@ function ScopeLostDialog({ ar, onClose }: { ar: boolean; onClose: () => void }) 
   )
 }
 
-export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
+/**
+ * REPORT-DUPLICATE-001 — what the builder opens with when it is editing a draft rather than starting empty.
+ *
+ * `state` is the server's account of a report as the builder's own fields. With a `sourceId` it is the unsaved copy «تكرار»
+ * started (nothing exists yet); with `state.id` it is a draft that was saved earlier.
+ */
+export interface BuilderSeed {
+  state: ReportEditorState
+  suggestedName?: string
+  sourceId?: string
+  sourceName?: string
+}
+
+/** The editor's settings as a reader names them, each with the fields of the request it is made of. */
+const DIFF_GROUPS: Array<{ keys: string[]; ar: string; en: string }> = [
+  { keys: ['description'], ar: 'الوصف', en: 'description' },
+  { keys: ['type'], ar: 'نوع التقرير', en: 'report type' },
+  { keys: ['mode'], ar: 'نوع الرابط (لحظي أو ثابت)', en: 'report mode (live or fixed)' },
+  { keys: ['detail_level'], ar: 'مستوى التفصيل', en: 'detail level' },
+  { keys: ['period_start', 'period_end'], ar: 'الفترة', en: 'period' },
+  { keys: ['scope'], ar: 'مصادر البيانات', en: 'data sources' },
+  { keys: ['section_settings'], ar: 'الأقسام', en: 'sections' },
+  { keys: ['config'], ar: 'أعمدة الجداول', en: 'table columns' },
+  { keys: ['branding_identity', 'prepared_for_name', 'prepared_by_name'], ar: 'الهوية', en: 'identity' },
+  { keys: ['audience'], ar: 'الجمهور', en: 'audience' },
+]
+
+export function ReportBuilder({ projectId, onClose, onCreated, seed }: { projectId: string; onClose: () => void; onCreated: () => void; seed?: BuilderSeed }) {
   const ar = useAr()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [type, setType] = useState<string | null>('executive')
+  const start = seed?.state
+  const [name, setName] = useState(start ? (start.name ?? seed?.suggestedName ?? '') : '')
+  const [description, setDescription] = useState(start?.description ?? '')
+  const [type, setType] = useState<string | null>(start?.type ?? 'executive')
   /*
    * What the report IS — a decision-length summary, or the full account (REPORT-LINKS-13).
    *
@@ -1027,10 +1227,10 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * is the one somebody sends a client; the full report is what you open when the summary raises a
    * question.
    */
-  const [level, setLevel] = useState<DetailLevelKey>('summary')
+  const [level, setLevel] = useState<DetailLevelKey>(start?.detail_level ?? 'summary')
   const form = formOf(level)
   /* Snapshot stays the default: it is what every report made before this chooser existed was. */
-  const [mode, setMode] = useState<'snapshot' | 'live'>('snapshot')
+  const [mode, setMode] = useState<'snapshot' | 'live'>(start?.mode ?? 'snapshot')
   /*
    * WHOSE identity the report carries — REPORT-CREATION-UX-001's last clause.
    *
@@ -1038,19 +1238,19 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * what most client reports should keep doing. It is a deliberate third state rather than a
    * default of «client»: sending a choice nobody made would freeze a decision on every report.
    */
-  const [brandingIdentity, setBrandingIdentity] = useState<'client' | 'agency' | null>(null)
+  const [brandingIdentity, setBrandingIdentity] = useState<'client' | 'agency' | null>(start?.branding_identity ?? null)
   // REPORT-IDENTITY-NAMES-001 — the two printed names; null = the stored names.
-  const [names, setNames] = useState<IdentityNames>({ for: null, by: null })
-  const [audience, setAudience] = useState<string | null>('client')
+  const [names, setNames] = useState<IdentityNames>({ for: start?.prepared_for_name ?? null, by: start?.prepared_by_name ?? null })
+  const [audience, setAudience] = useState<string | null>(start?.audience ?? 'client')
   /*
    * What the report COVERS (§14.5) — chosen here, before it is generated.
    *
    * Empty means «the whole project», which is what every report was before this existed, so an
    * operator who skips this step gets exactly what they used to.
    */
-  const [scope, setScope] = useState<ReportScopeShape>({})
-  const [from, setFrom] = useState(daysAgo(29))
-  const [to, setTo] = useState(today())
+  const [scope, setScope] = useState<ReportScopeShape>(start?.scope ?? {})
+  const [from, setFrom] = useState(start?.period_start ?? daysAgo(29))
+  const [to, setTo] = useState(start?.period_end ?? today())
   // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so
   // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
   const types = useTaxonomyOptions('report.type')
@@ -1072,7 +1272,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * Each starts where the detail level and the audience put it, and what the Owner switches is sent
    * as `section_settings`, so the report that is generated carries exactly this set.
    */
-  const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>({})
+  const [sectionChoice, setSectionChoice] = useState<Record<string, boolean>>(start?.sections ?? {})
   /*
    * REPORT-TABLES-OWNER-COLUMNS-001 — the Owner's column choice per table, SAVED with the report.
    *
@@ -1080,7 +1280,7 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
    * files were the surfaces the Owner could not restrict. Null per table means «every column»;
    * only restricted tables travel, under `config.columns`, the shape a link stores.
    */
-  const [columnChoice, setColumnChoice] = useState<Record<string, string[] | null>>({})
+  const [columnChoice, setColumnChoice] = useState<Record<string, string[] | null>>(start?.columns ?? {})
   const chosenColumns = Object.fromEntries(Object.entries(columnChoice).filter(([, v]) => v !== null)) as Record<string, string[]>
   const startingSections = levelSections(level)
   const sectionPreview = (sectionRegistry.data?.sections ?? []).map((x) => ({
@@ -1111,27 +1311,172 @@ export function ReportBuilder({ projectId, onClose, onCreated }: { projectId: st
       }),
     onSuccess: onCreated,
   })
+  /*
+   * REPORT-DUPLICATE-001 — the draft's three ways out, and what «unsaved» means.
+   *
+   * In draft mode the builder sends EVERY field it shows, including the ones left empty, so what is stored is exactly what
+   * is on screen: a column restriction that was cleared is cleared, «تلقائي» clears an identity choice the copy began with.
+   * The period keeps the original's rolling or fixed reading until a date is changed, and from then it is the dates typed.
+   *
+   * Nothing exists on the server until «حفظ كمسودة» or «نشر التقرير» is pressed, so «إلغاء» has nothing to undo. A save or a
+   * publish that is refused leaves this dialog open with everything in it.
+   */
+  const drafting = seed !== undefined
+  const [draftId, setDraftId] = useState<string | null>(start?.id ?? null)
+  const draftBody: Record<string, unknown> = {
+    name: name.trim(),
+    description: description.trim() === '' ? null : description.trim(),
+    type: type ?? 'executive',
+    mode,
+    form,
+    detail_level: level,
+    section_settings: { sections: sectionChoice },
+    branding_identity: brandingIdentity,
+    prepared_for_name: (names.for ?? '').trim(),
+    prepared_by_name: (names.by ?? '').trim(),
+    config: { columns: chosenColumns },
+    audience: audience ?? 'client',
+    period_start: from,
+    period_end: to,
+    period_mode: start && from === start.period_start && to === start.period_end ? start.period_mode : 'fixed',
+    period_kind: start && from === start.period_start && to === start.period_end ? start.period_kind : 'custom',
+    scope,
+  }
+  const draftJson = JSON.stringify(draftBody)
+  /*
+   * How the copy differs from its original, for the preview (§8.3: «توضح الفرق عن التقرير الأصلي»).
+   *
+   * An unsaved copy opens on the original's own settings, so what the editor held when it opened IS the original; the
+   * settings that no longer match are named. The name is left out: a copy always has its own. A saved draft that is
+   * reopened has no original to compare with here, so it says nothing rather than comparing the draft with itself.
+   */
+  const [openedWith] = useState(draftBody)
+  const differs = seed?.sourceId === undefined ? null : DIFF_GROUPS
+    .filter((g) => g.keys.some((k) => JSON.stringify(draftBody[k]) !== JSON.stringify(openedWith[k])))
+    .map((g) => (ar ? g.ar : g.en))
+  const [savedJson, setSavedJson] = useState(draftJson)
+  const dirty = drafting && draftJson !== savedJson
+  const [leaveAsk, setLeaveAsk] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  /* Escape reaches every open dialog; while the preview is on top it closes the preview and nothing underneath. */
+  const requestClose = () => {
+    if (previewOpen) return
+    if (dirty) setLeaveAsk(true)
+    else onClose()
+  }
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const saveDraft = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      draftId ? saveReportDraft(projectId, draftId, body) : createReport(projectId, { ...body, draft: true, ...(seed?.sourceId ? { source_report_id: seed.sourceId } : {}) }),
+    onSuccess: (row, body) => {
+      setDraftId(row.id)
+      setSavedJson(JSON.stringify(body))
+      setLeaveAsk(false)
+    },
+  })
+  const publish = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      draftId ? publishReportDraft(projectId, draftId, body) : createReport(projectId, { ...body, ...(seed?.sourceId ? { source_report_id: seed.sourceId } : {}) }),
+    onSuccess: onCreated,
+  })
+  const preview = useMutation({
+    mutationFn: (body: Record<string, unknown>) => {
+      const from = draftId ?? seed?.sourceId
+      return previewReportDraft(projectId, { ...body, ...(from ? { source_report_id: from } : {}) })
+    },
+    onSuccess: () => setPreviewOpen(true),
+  })
+  const incomplete = name.trim() === '' || (scope.account_ids ?? []).length === 0
+  const busy = saveDraft.isPending || publish.isPending
+  const failed = drafting ? [publish, saveDraft, preview].find((m) => m.isError)?.error : (create.isError ? create.error : undefined)
+
   const RB_FIELD_IDS: Record<string, string> = { name: 'rb-name', period_start: 'rb-from', period_end: 'rb-to' }
-  const summaryErrors: FieldError[] = create.isError
-    ? (() => { const api = toApiError(create.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: RB_FIELD_IDS[f] ?? f, message: m[0] }] : [])) : [] })()
+  const summaryErrors: FieldError[] = failed !== undefined && failed !== null
+    ? (() => { const api = toApiError(failed); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: RB_FIELD_IDS[f] ?? f, message: m[0] }] : [])) : [] })()
     : []
+  /* A refusal that names no field (no permission, an account that left the project) is still said, in the server's words. */
+  const refusalNote = failed !== undefined && failed !== null && summaryErrors.length === 0 ? (toApiError(failed).message || (ar ? 'تعذّر تنفيذ الطلب.' : 'The request could not be completed.')) : null
   return (
     <Modal
       open
-      onClose={onClose}
-      title={ar ? 'منشئ التقرير' : 'Report builder'}
+      onClose={requestClose}
+      title={!drafting ? (ar ? 'منشئ التقرير' : 'Report builder') : draftId ? (ar ? 'محرر التقرير — مسودة' : 'Report editor — draft') : (ar ? 'محرر التقرير — نسخة مستقلة' : 'Report editor — independent copy')}
       /*
         Pinned, because the scope picker below fills in from two queries and used to carry these
         buttons down the screen with it — CLICK-STABLE-001.
       */
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
-          <Button loading={create.isPending} disabled={name.trim() === '' || (scope.account_ids ?? []).length === 0} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
-        </>
+        !drafting ? (
+          <>
+            <Button variant="secondary" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</Button>
+            <Button loading={create.isPending} disabled={name.trim() === '' || (scope.account_ids ?? []).length === 0} onClick={() => create.mutate()}>{ar ? 'إنشاء وتوليد' : 'Create and generate'}</Button>
+          </>
+        ) : leaveAsk ? (
+          <div role="alertdialog" aria-label={ar ? 'تعديلات غير محفوظة' : 'Unsaved changes'} data-testid="rb-unsaved" className="flex w-full flex-wrap items-center justify-end gap-2">
+            <span className="min-w-0 flex-1 text-sm text-text-secondary">
+              {ar ? 'لديك تعديلات غير محفوظة. إن أغلقت الآن فلن تُحفظ.' : 'You have unsaved changes. If you close now they will not be saved.'}
+            </span>
+            <Button variant="secondary" onClick={() => setLeaveAsk(false)} data-testid="rb-unsaved-stay">{ar ? 'متابعة التحرير' : 'Keep editing'}</Button>
+            <Button variant="secondary" onClick={onClose} data-testid="rb-unsaved-discard">{ar ? 'إغلاق دون حفظ' : 'Close without saving'}</Button>
+          </div>
+        ) : (
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={requestClose} data-testid="rb-cancel">{ar ? 'إلغاء' : 'Cancel'}</Button>
+            <Button variant="secondary" loading={preview.isPending} disabled={incomplete || busy} onClick={() => preview.mutate(draftBody)} data-testid="rb-preview">{ar ? 'معاينة' : 'Preview'}</Button>
+            <Button variant="secondary" loading={saveDraft.isPending} disabled={incomplete || busy} onClick={() => saveDraft.mutate(draftBody)} data-testid="rb-save-draft">{ar ? 'حفظ كمسودة' : 'Save as draft'}</Button>
+            <Button loading={publish.isPending} disabled={incomplete || busy} onClick={() => publish.mutate(draftBody)} data-testid="rb-publish">{ar ? 'نشر التقرير' : 'Publish report'}</Button>
+          </div>
+        )
       }
     >
+      {previewOpen && preview.data && (
+        <Modal open onClose={() => setPreviewOpen(false)} title={ar ? `معاينة: ${preview.data.name}` : `Preview: ${preview.data.name}`} size="xl">
+          <div className="max-h-[76vh] space-y-3 overflow-y-auto" data-testid="rb-preview-body">
+            <p role="status" className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+              {ar
+                ? 'معاينة بمحرك التقرير المنشور نفسه وبإعداداتك الحالية. لم يُحفظ شيء، ولا يوجد رابط، والتقرير الأصلي لم يتغير.'
+                : 'A preview through the published report’s own engine, with your current settings. Nothing was saved, no link exists, and the original report did not change.'}
+            </p>
+            {differs !== null && (
+              <p role="status" data-testid="rb-preview-diff" className="rounded-xl border border-border px-3 py-2 text-xs text-text-secondary">
+                {differs.length === 0
+                  ? (ar ? `هذه النسخة مطابقة لإعدادات التقرير الأصلي «${seed?.sourceName ?? ''}» عدا الاسم.` : `This copy matches the settings of the original report “${seed?.sourceName ?? ''}”, apart from its name.`)
+                  : (ar ? `هذه النسخة تختلف عن التقرير الأصلي «${seed?.sourceName ?? ''}» في: ${differs.join('، ')}.` : `This copy differs from the original report “${seed?.sourceName ?? ''}” in: ${differs.join(', ')}.`)}
+              </p>
+            )}
+            <InteractiveReport
+              data={preview.data.data as never}
+              meta={{ reportName: preview.data.name, platforms: preview.data.platforms, isDemo: false, agencyName: productName(ar ? 'ar' : 'en') }}
+            />
+          </div>
+        </Modal>
+      )}
       <div className="space-y-4">
+        {drafting && (
+          <div role="status" data-testid="rb-draft-banner" className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs leading-relaxed text-text-secondary">
+            {draftId
+              ? (ar
+                ? `مسودة محفوظة وغير منشورة: لا رابط لها ولا يراها العميل.${dirty ? ' فيها تعديلات لم تُحفظ بعد.' : ''}`
+                : `A saved draft, not published: it has no link and no client can see it.${dirty ? ' It has changes that are not saved yet.' : ''}`)
+              : (ar
+                ? `نسخة مستقلة من «${seed?.sourceName ?? ''}». لم يُنشأ شيء بعد: لا تقرير ولا رابط. احفظها كمسودة أو انشرها أو ألغِ. التقرير الأصلي ورابطه لا يتغيران في كل الأحوال.`
+                : `An independent copy of “${seed?.sourceName ?? ''}”. Nothing has been created yet: no report and no link. Save it as a draft, publish it, or cancel. The original report and its link do not change either way.`)}
+          </div>
+        )}
+        {drafting && start?.share_preferences && (
+          <SharePreferencesNote ar={ar} prefs={start.share_preferences} testid="rb-share-preferences">
+            {ar
+              ? 'إعدادات رابط التقرير الأصلي محفوظة مع هذه النسخة كتفضيلات فقط. لا يُنشأ رابط الآن ولا عند النشر: ستجدها معبأة في نافذة «روابط العميل» عندما تشارك النسخة، ويمكنك تغييرها هناك.'
+              : 'The original report’s link settings are kept with this copy as preferences only. No link is made now or on publishing: you will find them filled in under “Client links” when you share the copy, and you can change them there.'}
+          </SharePreferencesNote>
+        )}
+        {refusalNote && <p role="alert" data-testid="rb-refusal" className="rounded-xl border border-danger px-3 py-2 text-sm text-danger">{refusalNote}</p>}
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={ar ? 'يرجى تصحيح الأخطاء التالية' : 'Please correct the following'} />}
         <Field label={ar ? 'اسم التقرير' : 'Report name'} htmlFor="rb-name">
           <input id="rb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: التقرير الشهري — يوليو' : 'e.g. Monthly report — July'} className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
@@ -1407,6 +1752,31 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
   const [logsFor, setLogsFor] = useState<string | null>(null)
   const [editing, setEditing] = useState<ShareRow | null>(null)
 
+  /*
+   * REPORT-DUPLICATE-001 — a copy opens this form filled from its original link's switches, once, when the report arrives.
+   *
+   * Filled, not applied: nothing is sent until «إنشاء رابط آمن», and every field can still be changed. The password and the
+   * expiry are not among them, so they are asked again here. A report that was not copied keeps the defaults above.
+   */
+  const prefs = detail.data?.share_preferences ?? null
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null)
+  if (prefs !== null && prefilledFor !== reportId) {
+    setPrefilledFor(reportId)
+    setOpts((o) => ({
+      ...o,
+      allow_download: prefs.allow_download ?? o.allow_download,
+      hide_spend: prefs.hide_spend ?? o.hide_spend,
+      hide_revenue: prefs.hide_revenue ?? o.hide_revenue,
+      hide_campaign_names: prefs.hide_campaign_names ?? o.hide_campaign_names,
+      watermark: prefs.watermark ?? o.watermark,
+    }))
+    setGenericNames(prefs.generic_names)
+    setForm(prefs.form ?? '')
+    setLive(prefs.mode === 'live')
+    setShowAttribution(prefs.sections.attribution === true)
+    setCreatives((c) => ({ ...c, permissions: { ...c.permissions, ...prefs.creatives } }))
+  }
+
   const create = useMutation({
     mutationFn: () =>
       createShare(projectId, reportId, {
@@ -1524,6 +1894,13 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
           </div>
         ) : (
           <div className="space-y-3">
+            {prefs !== null && (
+              <SharePreferencesNote ar={ar} prefs={prefs} testid="share-prefilled-note">
+                {ar
+                  ? 'هذا التقرير نسخة، والخيارات أدناه معبأة من إعدادات رابط التقرير الأصلي. لم يُنشأ رابط بعد: راجعها وغيّر ما تشاء ثم اضغط «إنشاء رابط آمن».'
+                  : 'This report is a copy, and the options below are filled from the original report’s link settings. No link has been made yet: review them, change what you like, then press “Create a secure link”.'}
+              </SharePreferencesNote>
+            )}
             {/*
               Live or fixed, chosen first, because it changes what the rest of this form means.
               A fixed link shares the document that was signed off; a live one shares a dashboard the
@@ -1829,33 +2206,43 @@ function ShareAccessHistory({
  * a reader switching orientation would find a different list of facts about the same report.
  */
 function ReportCards({
-  rows, ar, typeLabel, onOpen,
+  rows, ar, typeLabel, onOpen, onEditOriginal, onDuplicate, onCopyLink,
 }: {
   rows: ReportRow[]
   ar: boolean
   typeLabel: (type: string) => string
   onOpen: (id: string) => void
+  onEditOriginal: (r: ReportRow) => void
+  onDuplicate: (id: string) => void
+  onCopyLink: (id: string) => void
 }) {
   return (
-    <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
       {rows.map((r) => (
-        <button
-          key={r.id}
-          onClick={() => onOpen(r.id)}
-          data-testid="report-card"
-          className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-start transition-colors hover:border-brand-400"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <span className="line-clamp-2 font-bold text-text-primary">{r.name}</span>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>
-              {statusLabel(r.status, ar)}
+        <div key={r.id} className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-brand-400">
+          <button
+            onClick={() => onOpen(r.id)}
+            data-testid="report-card"
+            className="flex min-w-0 flex-col gap-2 text-start"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="line-clamp-2 min-w-0 font-bold text-text-primary">{r.name}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[r.status] ?? ''}`}>
+                {statusLabel(r.status, ar)}
+              </span>
+            </div>
+            <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
+            <span className="tnum text-[11px] text-text-muted" dir="ltr">
+              {r.period.from ?? '…'} → {r.period.to ?? '…'}
             </span>
-          </div>
-          <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
-          <span className="tnum text-[11px] text-text-muted" dir="ltr">
-            {r.period.from ?? '…'} → {r.period.to ?? '…'}
-          </span>
-        </button>
+          </button>
+          {/* The same three actions as the table row, so a phone can tell them apart too. A draft is opened by its card. */}
+          {!r.is_draft && (
+            <div className="flex flex-wrap gap-1.5 border-t border-border pt-2" data-testid={`report-card-actions-${r.id}`}>
+              <RowActions ar={ar} id={`card-${r.id}`} onEditOriginal={() => onEditOriginal(r)} onDuplicate={() => onDuplicate(r.id)} onCopyLink={() => onCopyLink(r.id)} />
+            </div>
+          )}
+        </div>
       ))}
     </div>
   )

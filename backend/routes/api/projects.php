@@ -457,8 +457,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
-    // REPORT-DUPLICATE-001 — an independent copy; the controller adds reports.share for the link it makes.
-    Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware(['project.can:reports.manage', EnsureWithinPlanLimit::class.':reports_per_month'])->name('reports.duplicate');
+    // REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — «تكرار» stores nothing: it hands the editor a pre-filled draft.
+    Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware('project.can:reports.manage')->name('reports.duplicate')->whereUuid('report');
+    // The editor's preview (stores nothing), a saved draft reopened and edited, and the one way a draft is published.
+    Route::post('reports/draft-preview', [ReportController::class, 'previewDraft'])->middleware(['project.can:reports.manage', 'throttle:20,1'])->name('reports.draft.preview');
+    Route::get('reports/{report}/draft', [ReportController::class, 'draft'])->middleware('project.can:reports.view')->name('reports.draft.show')->whereUuid('report');
+    Route::put('reports/{report}/draft', [ReportController::class, 'updateDraft'])->middleware('project.can:reports.manage')->name('reports.draft.update')->whereUuid('report');
+    Route::post('reports/{report}/publish', [ReportController::class, 'publish'])->middleware('project.can:reports.manage')->name('reports.publish')->whereUuid('report');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
     // REPORT-SNAPSHOT-PROTECT-001 — the copies a rebuild replaced, and putting one back.
     Route::get('reports/{report}/versions', [ReportVersionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.versions');

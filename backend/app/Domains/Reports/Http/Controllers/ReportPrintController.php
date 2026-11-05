@@ -14,6 +14,7 @@ use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
@@ -82,7 +83,8 @@ final class ReportPrintController extends Controller
         // Backend audience transform — the print route receives client-safe data for a client report;
         // internal fields (checksum/tenant/project) are removed from the BODY, so CSS can never be the
         // only thing hiding them. Provenance stays only in the response envelope for PDF /Title metadata.
-        $body = $report->data ?? [];
+        // REPORT-SOURCE-ISOLATION-001 — the printed copy is contained like the page (a link's own document is contained in `downloadDocument`).
+        $body = app(ReportSourceContainment::class)->apply($report->data ?? [], $report);
         $share = null;
 
         /*

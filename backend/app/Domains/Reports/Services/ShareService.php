@@ -9,9 +9,11 @@ use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
+use App\Domains\Reports\Support\ClientAccountRows;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Widgets\Services\SharedWidgetData;
 use App\Support\Frontend;
@@ -77,6 +79,8 @@ final class ShareService
     /** @return array{0: ReportShare, 1: string} the share + the raw token (show once) */
     public function create(Report $report, array $opts, ?int $userId): array
     {
+        // REPORT-DUPLICATE-001 — every door that makes a link comes through here, and none of them opens for a draft.
+        abort_if($report->isDraft(), 409, __('api.report_is_draft'));
         $raw = Str::random(self::TOKEN_LENGTH);
         $share = ReportShare::create([
             'tenant_id' => $report->tenant_id,
@@ -232,7 +236,8 @@ final class ShareService
     {
         // LIVE-FILE-PARITY-001 — a live link's file is the page's payload, not the empty stored copy.
         $report = app(LiveReportService::class)->materialise($report, $share);
-        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh($report->data ?? []), $share);
+        // REPORT-SOURCE-ISOLATION-001 — the file is made from the same contained document the page is.
+        $data = $this->sanitize(app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($report->data ?? [], $report)), $share);
 
         /*
          * RESULT-EVENTS-001 (Owner 2026-10-29) — the link's Results, not the saved report's: its own events, its «none», its label, read
@@ -514,6 +519,21 @@ final class ShareService
                 ? AttentionAudience::redact($data['attention'], (bool) $share->hide_spend, (bool) $share->hide_revenue)
                 : null;
             $data = ReportStructure::refresh($data, 'recommendations');
+        }
+
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — two switches the LIVE payload honoured and a stored copy did not.
+         *
+         * «Compared with the previous period» off: the stored `previous`, `delta` and the comparison slide go (see
+         * {@see PreviousComparison}). Ad-account names not disclosed: the accounts table is named by platform and ordinal and
+         * carries no technical id (see {@see ClientAccountRows}). Applied here because the page, the print document and the files
+         * of a link all pass through this method, and the stored copy itself is never written.
+         */
+        if (! $share->sectionVisibility()->previous_comparison) {
+            $data = PreviousComparison::strip($data);
+        }
+        if (is_array($data['accounts'] ?? null) && $data['accounts'] !== []) {
+            $data['accounts'] = ClientAccountRows::for(array_values($data['accounts']), $share, Report::withoutGlobalScopes()->find($share->report_id));
         }
 
         // SHARED-PDF-HIDE-FLAGS-001 — the one definition, at any depth, and the prose that states it.

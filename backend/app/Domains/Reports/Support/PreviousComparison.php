@@ -1,0 +1,66 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Reports\Support;
+
+/**
+ * REPORT-FILTERS-FUNCTIONAL-001 — «compared with the previous period», switched off, leaves the document.
+ *
+ * The switch (`sections.previous_comparison`, off on every client link the builder makes since REPORT-CLIENT-NO-DELTAS-001)
+ * emptied the live payload's `deltas` and nothing else. A stored copy served through a link kept `previous` (the totals of the
+ * window before) and `delta` (each KPI's movement) in the page, the print document and the PDF; the live payload kept every
+ * platform's own `movement`, which the page drew. A ratio beside the figure it is a ratio of returns the figure it was
+ * compared with, so removing one and leaving the other removes nothing.
+ *
+ * One list of where the comparison travels, read by the live payload and the stored one. Each key keeps the empty value its own
+ * shape takes (the pages read these keys), the figures of the period itself are never touched, and the stored copy is not written.
+ */
+final class PreviousComparison
+{
+    /** The keys that ARE the comparison, each with the empty value its own readers expect: a list stays a list, a block becomes null. */
+    private const OWNED = [
+        'delta' => [],
+        'deltas' => [],
+        'previous' => null,
+        'objective_performance_previous' => null,
+    ];
+
+    /** Row lists whose rows carry their own movement against the window before. */
+    private const ROWS_WITH_MOVEMENT = ['platforms', 'accounts'];
+
+    /**
+     * @param  array<string, mixed>  $payload  a live payload or a stored document
+     * @return array<string, mixed>
+     */
+    public static function strip(array $payload): array
+    {
+        foreach (self::OWNED as $key => $empty) {
+            if (array_key_exists($key, $payload)) {
+                $payload[$key] = $empty;
+            }
+        }
+
+        foreach (self::ROWS_WITH_MOVEMENT as $list) {
+            if (is_array($payload[$list] ?? null)) {
+                $payload[$list] = array_map(static function ($row) {
+                    if (is_array($row)) {
+                        unset($row['movement']);
+                    }
+
+                    return $row;
+                }, $payload[$list]);
+            }
+        }
+
+        // The deck's «this period against the last» slide has nothing left to draw.
+        if (is_array($payload['slides'] ?? null)) {
+            $payload['slides'] = array_values(array_filter(
+                $payload['slides'],
+                static fn ($slide): bool => ! (is_array($slide) && ($slide['type'] ?? null) === 'comparison'),
+            ));
+        }
+
+        return $payload;
+    }
+}

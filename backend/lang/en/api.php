@@ -16,6 +16,8 @@ return [
     'workspace_changed' => 'Your workspace was changed in another tab. Nothing was done here. Choose the workspace to continue in.',
     'portal_unavailable' => 'This service is not available yet. We will announce it when it opens.',
     'report_send_unavailable' => 'The report was not sent: email sending is not available, and nothing reached any recipient. Use a secure link or export the file instead.',
+    'report_is_draft' => 'This report is a draft that has not been published. Publish it from the report editor first.',
+    'report_not_a_draft' => 'This report is published, not a draft; edit it from the report\'s own actions.',
     'report_regenerate_needs_confirmation' => 'This replaces the stored copy of the report. Confirm to keep the current copy in the report\'s history and build a new one.',
     'report_restore_needs_confirmation' => 'This puts the older copy back in place of the current one. Confirm to keep the current copy in the report\'s history.',
     'report_is_rebuilding' => 'This report is being rebuilt right now. Wait for it to finish, then restore the copy.',

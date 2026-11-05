@@ -357,7 +357,8 @@ final class ReportExporter
      */
     private function audienceData(Report $report, ?ReportShare $share = null): array
     {
-        $data = $report->data ?? [];
+        // REPORT-SOURCE-ISOLATION-001 — an operator's own export of an older copy stays inside the report's accounts too.
+        $data = app(ReportSourceContainment::class)->apply($report->data ?? [], $report);
         $audience = $report->audience ?? 'client';
         if (in_array($audience, ['client', 'executive'], true)) {
             // REPORT-PARITY-FOUR-SURFACES-001 — the same method the link's page and the print route use; a link's own form counts.

@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Jobs\GenerateReportExportJob;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
@@ -16,14 +17,16 @@ use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
+use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ReportTemplateEngine;
-use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
+use App\Domains\Reports\Support\SharePreferences;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +34,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 /**
  * Reports for the active project (project + tenant scoped). Generation and export run on the queue;
@@ -73,6 +77,8 @@ final class ReportController extends Controller
                 'completed' => (int) ($counts['completed'] ?? 0),
                 'processing' => (int) ($counts['processing'] ?? 0),
                 'failed' => (int) ($counts['failed'] ?? 0),
+                // REPORT-DUPLICATE-001 — saved and not published; counted apart so «total» is never read as «published».
+                'draft' => Report::query()->where('status', 'draft')->where('config->'.Report::DRAFT_MARK, true)->count(),
             ],
         ], 'Reports retrieved.');
     }
@@ -140,10 +146,14 @@ final class ReportController extends Controller
         return $config === [] ? null : $config;
     }
 
-    public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
+    /**
+     * The builder's fields — one rule set for creating, saving a draft, editing a draft, publishing it and previewing it.
+     *
+     * @return array<string, mixed>
+     */
+    private function builderInput(Request $request): array
     {
-        abort_unless($request->user()->hasPermission('reports.view'), 403);
-        $data = $request->validate([
+        return $request->validate([
             'name' => ['required', 'string', 'max:160'],
             // REPORT-SETUP-001 — shown only if the Owner wrote one.
             'description' => ['nullable', 'string', 'max:500'],
@@ -178,7 +188,48 @@ final class ReportController extends Controller
             'prepared_for_name' => ['nullable', 'string', 'max:120'],
             'prepared_by_name' => ['nullable', 'string', 'max:120'],
             'scope' => ['nullable', 'array'],
+            // REPORT-DUPLICATE-001 — «حفظ كمسودة»: stored unpublished, nothing queued. And the report this one was started from.
+            'draft' => ['nullable', 'boolean'],
+            'source_report_id' => ['nullable', 'uuid'],
         ]);
+    }
+
+    /** What the editor owns outright in `config`: never carried over from the original, always what the editor sent. */
+    private const EDITOR_OWNED_CONFIG = ['columns', 'detail_level', 'period_kind', 'period_mode', 'live', 'metrics', Report::DRAFT_MARK];
+
+    /** The slide layout the generator authors for a report's form, objective and platforms ({@see ReportTemplateEngine::defaultConfig()}). */
+    private const AUTHORED_LAYOUT = ['version', 'objective', 'metric_set', 'platform_order', 'slides'];
+
+    /**
+     * The report row the builder's fields describe — everything but its status and its author.
+     *
+     * `$from` is the report a copy was started from (or the draft being edited). Its config travels: the settings the editor
+     * does not show (name switches, hidden slides) stay exactly as they were, so a copy is never more open than its original,
+     * and everything the editor does show is what the editor sent. The one exception is the slide layout when the FORM was
+     * changed in the editor: a layout is authored for a form, so a summary's layout on a detailed report (or the reverse)
+     * would be the wrong document, and the generator authors it again. The scope is verified against the PROJECT here, so
+     * every path that stores or publishes a report checks it again.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function builderAttributes(array $data, string $project, ?Report $from = null): array
+    {
+        if ($from !== null) {
+            $carried = array_diff_key((array) ($from->config ?? []), array_flip(self::EDITOR_OWNED_CONFIG));
+            $form = DetailLevel::fromInput($data['detail_level'] ?? null)?->form() ?? $data['form'] ?? 'detailed';
+            if ($form !== $from->form) {
+                $carried = array_diff_key($carried, array_flip(self::AUTHORED_LAYOUT));
+            }
+            if (array_key_exists('branding_identity', $data) && $data['branding_identity'] === null && is_array($carried['branding'] ?? null)) {
+                // «تلقائي» chosen in the editor: the identity choice the copy started with is cleared, not kept silently.
+                unset($carried['branding']['prefer']);
+                if ($carried['branding'] === []) {
+                    unset($carried['branding']);
+                }
+            }
+            $data['config'] = (array) ($data['config'] ?? []) + $carried;
+        }
 
         $level = DetailLevel::fromInput($data['detail_level'] ?? null);
 
@@ -192,7 +243,7 @@ final class ReportController extends Controller
             $data['period_end'] = $window['to']->toDateString();
         }
 
-        $report = Report::create([
+        $attributes = [
             'name' => $data['name'],
             'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => $data['type'],
@@ -202,7 +253,6 @@ final class ReportController extends Controller
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
             'campaign_objective' => $data['campaign_objective'] ?? ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplate(),
-            'status' => 'processing',
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
             /*
@@ -213,8 +263,8 @@ final class ReportController extends Controller
             'currency' => ReportingCurrency::DEFAULT,
             // REPORT-TABLES-OWNER-COLUMNS-001 — `config['columns']` is cut to the known tables and keys on the way in.
             'config' => ($periodKind === 'custom')
-                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level))
-                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'] ?? null, array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
+                ? ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'], array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level))
+                : array_merge((array) ReportColumns::normaliseConfig(self::withDetailLevel(self::withBrandingChoice(self::withPreparedNames($data['config'], array_intersect_key($data, array_flip(['prepared_for_name', 'prepared_by_name']))), $data['branding_identity'] ?? null), $level)), ['period_kind' => $periodKind]),
             // The level's starting sections, with whatever the Owner switched explicitly laid over them.
             'section_settings' => $level === null && ! is_array($data['section_settings'] ?? null)
                 ? null
@@ -238,13 +288,81 @@ final class ReportController extends Controller
             // SEC-3 — `project_ids` is not the caller's to choose: `verifyFlat` hands unknown keys back untouched, and a stored
             // project id lifted the generator's project scope onto another project's rows. The report's own project, or none.
             'scope' => ($scope = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? [])))))->isUnbounded() ? null : $scope->toArray(),
+        ];
+
+        // The link preferences a copy carries are cut to the known switches on every write, whoever wrote them.
+        $config = (array) $attributes['config'];
+        if (array_key_exists(SharePreferences::KEY, $config)) {
+            $attributes['config'] = self::withSharePreferences($config, SharePreferences::normalise($config[SharePreferences::KEY]));
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>|null  $preferences
+     * @return array<string, mixed>
+     */
+    private static function withSharePreferences(array $config, ?array $preferences): array
+    {
+        unset($config[SharePreferences::KEY]);
+
+        return $preferences === null ? $config : $config + [SharePreferences::KEY => $preferences];
+    }
+
+    public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.view'), 403);
+        $data = $this->builderInput($request);
+        $asDraft = (bool) ($data['draft'] ?? false);
+        // The report a copy was started from: found inside THIS project and tenant, or not at all (404).
+        $source = empty($data['source_report_id']) ? null : $this->find((string) $data['source_report_id']);
+        if ($asDraft || $source !== null) {
+            abort_unless($request->user()->hasPermission('reports.create'), 403);
+        }
+
+        $attributes = self::builderAttributes($data, $project, $source);
+        if ($source !== null) {
+            // The measurement template the original was built on, unless the scope the editor sent names one of its own.
+            $attributes['campaign_objective'] ??= $source->campaign_objective;
+            // What a report is measured with, never what it was shared with: no link, token, password, export or stored document.
+            $attributes += array_filter([
+                'campaign_id' => $source->campaign_id,
+                'timezone' => $source->timezone,
+                'attribution_window' => $source->attribution_window,
+                'data_source' => $source->data_source,
+                'is_demo' => $source->is_demo,
+            ], static fn ($v): bool => $v !== null);
+            // The original link's switches, as preferences for the share dialog. No link is made here or anywhere before a share.
+            $attributes['config'] = self::withSharePreferences((array) $attributes['config'], SharePreferences::forCopyOf($source));
+        }
+
+        if ($asDraft) {
+            $attributes['config'] = (array) ($attributes['config'] ?? []) + [Report::DRAFT_MARK => true];
+        }
+        $report = Report::create($attributes + [
+            'status' => $asDraft ? 'draft' : 'processing',
             'created_by' => $request->user()->id,
         ]);
 
-        GenerateReportJob::dispatch((string) $report->id);
-        $audit->log(action: 'report.created', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type, 'form' => $report->form]);
+        if (! $asDraft) {
+            GenerateReportJob::dispatch((string) $report->id);
+            $audit->log(action: 'report.created', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type, 'form' => $report->form]);
+        }
+        if ($source !== null) {
+            $audit->log(
+                action: 'report.duplicated',
+                entityType: Report::class,
+                entityId: (string) $report->getKey(),
+                before: ['source_report_id' => (string) $source->getKey()],
+                after: ['report_id' => (string) $report->getKey(), 'status' => $report->status, 'share_id' => null],
+            );
+        } elseif ($asDraft) {
+            $audit->log(action: 'report.draft_saved', entityType: Report::class, entityId: (string) $report->id, after: ['type' => $report->type, 'form' => $report->form]);
+        }
 
-        return ApiResponse::success($this->shape($report), 'Report queued for generation.', status: 201);
+        return ApiResponse::success($this->shape($report), $asDraft ? 'Draft saved.' : 'Report queued for generation.', status: 201);
     }
 
     /**
@@ -343,112 +461,186 @@ final class ReportController extends Controller
     }
 
     /**
-     * POST …/reports/{report}/duplicate — REPORT-DUPLICATE-001: an independent copy with its own report row and link.
+     * POST …/reports/{report}/duplicate — REPORT-DUPLICATE-001, as corrected by the Owner on 2026-11-04 (§8.3).
      *
-     * Copied: the indicators and settings (`config`, which carries the identity choice), the sections, the period and the
-     * stored document. Not shared with the original: the id, the token, the access history, the exports and the schedules.
-     * The original, its link and its history are never written. The scope is re-verified for the PROJECT it is saved in
-     * (a foreign account is refused, 422) and re-pinned to it, so a copy can name nothing the original could not. A link is
-     * made only for someone who may share; it starts from the chosen source link's own restrictions (never more open than
-     * that link) or, with none chosen, closed: spend, revenue and campaign names hidden.
+     * «تكرار» starts a copy; it does not make one. Nothing is stored here: no report, no link, no token, no job. What comes
+     * back is the editor's starting state — the original's settings with the suggested name «نسخة من …» — and the person
+     * then chooses «حفظ كمسودة», «نشر التقرير» or «إلغاء» in the report editor ({@see store()}, {@see publish()}).
+     *
+     * The scope is verified for the PROJECT before it is handed to the editor (a foreign account is refused, 422), and it
+     * is verified again when the draft is saved and when it is published. Nothing of the original's access travels: no
+     * link, token, password, grant, export or stored document. The original is never written.
      */
-    public function duplicate(Request $request, AuditLogger $audit, ShareService $shares, string $project, string $report): JsonResponse
+    public function duplicate(Request $request, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.create'), 403);
         $source = $this->find($report);
-        $data = $request->validate([
-            'name' => ['nullable', 'string', 'max:160'],
-            'share_id' => ['nullable', 'uuid'],
-            'with_link' => ['nullable', 'boolean'],
-        ]);
+        $name = mb_substr((string) $source->name, 0, 150);
 
-        $sourceLink = null;
-        if (! empty($data['share_id'])) {
-            $sourceLink = ReportShare::query()->where('report_id', $source->getKey())->findOrFail($data['share_id']);
+        return ApiResponse::success([
+            'source' => ['id' => (string) $source->getKey(), 'name' => $source->name, 'status' => $source->status],
+            'suggested_name' => ['ar' => 'نسخة من '.$name, 'en' => 'Copy of '.$name],
+            'draft' => $this->editorState($source, $project, stored: false),
+        ], 'Duplicate started. Nothing is saved until you save or publish it.');
+    }
+
+    /** GET …/reports/{report}/draft — a saved draft, as the editor's state, to carry on editing it. */
+    public function draft(Request $request, string $project, string $report): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.view'), 403);
+        $model = $this->draftOrRefuse($report);
+
+        return ApiResponse::success(['draft' => $this->editorState($model, $project, stored: true)], 'Draft retrieved.');
+    }
+
+    /** PUT …/reports/{report}/draft — «حفظ كمسودة» on a draft that already exists. Stays a draft; the scope is verified again. */
+    public function updateDraft(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.create'), 403);
+        $model = $this->draftOrRefuse($report);
+        // Validation and the scope check both answer before anything is written, so a refusal leaves the draft as it was.
+        $attributes = self::builderAttributes($this->builderInput($request), $project, $model);
+        $attributes['campaign_objective'] ??= $model->campaign_objective;
+        $attributes['config'] = (array) ($attributes['config'] ?? []) + [Report::DRAFT_MARK => true];
+        $model->update($attributes);
+        $audit->log(action: 'report.draft_updated', entityType: Report::class, entityId: (string) $model->getKey(), after: ['name' => $model->name]);
+
+        return ApiResponse::success($this->shape($model->fresh()), 'Draft saved.');
+    }
+
+    /**
+     * POST …/reports/{report}/publish — «نشر التقرير»: the one way a draft becomes a report.
+     *
+     * The editor's fields are validated and the scope is verified against the project AGAIN, here, whatever was true when
+     * the draft was saved. Only then does the row leave `draft` and the generation queue hear of it. A refusal writes
+     * nothing, so the draft is neither lost nor half-published. No link is made: publishing a report needs none, and the
+     * link an operator sends is made afterwards, by someone who may share, with its own new token.
+     */
+    public function publish(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.create'), 403);
+        $model = $this->draftOrRefuse($report);
+        $attributes = self::builderAttributes($this->builderInput($request), $project, $model);
+        $attributes['campaign_objective'] ??= $model->campaign_objective;
+
+        $model->fill($attributes)->publish();
+        try {
+            GenerateReportJob::dispatch((string) $model->getKey());
+        } catch (Throwable $e) {
+            // The queue did not take it: back to a draft, with the edits kept, rather than a report nobody is building.
+            $model->forceFill(['status' => 'draft'])->saveQuietly();
+            throw $e;
+        }
+        $audit->log(
+            action: 'report.published',
+            entityType: Report::class,
+            entityId: (string) $model->getKey(),
+            before: ['status' => 'draft'],
+            after: ['status' => $model->status, 'type' => $model->type, 'form' => $model->form, 'share_id' => null],
+        );
+
+        return ApiResponse::success($this->shape($model->fresh()), 'Report queued for generation.');
+    }
+
+    /**
+     * POST …/reports/draft-preview — the editor's «معاينة», before any report or link exists.
+     *
+     * The same engine a published report goes through, in the same order: the row the builder's fields describe, the
+     * generator, then the resolver the preview page, the link and the PDF share ({@see ReportSectionSurfaces::previewPayload()}).
+     * It runs inside a transaction that is always rolled back, so the row, and anything the generator wrote beside it, is gone
+     * when the answer is sent: a preview stores nothing, queues nothing and needs no link.
+     */
+    public function previewDraft(Request $request, ReportGenerator $generator, string $project): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('reports.create'), 403);
+        $data = $this->builderInput($request);
+        // The original the copy was started from, or the saved draft itself — either way a report of THIS project.
+        $from = empty($data['source_report_id']) ? null : $this->find((string) $data['source_report_id']);
+        $attributes = self::builderAttributes($data, $project, $from);
+
+        DB::beginTransaction();
+        try {
+            $unsaved = Report::create($attributes + ['status' => 'draft', 'created_by' => $request->user()->id, 'is_demo' => $from !== null && $from->is_demo]);
+            $generated = $generator->generate($unsaved);
+            // The generator forgets the project when it is done; the resolver below reads inside it.
+            app(ProjectContext::class)->setProjectId($project);
+            $stored = app(ReportCreativeMedia::class)->refresh($generated);
+            $payload = app(ReportSectionSurfaces::class)->previewPayload($unsaved, $stored);
+            $platforms = array_values(array_unique(array_filter(array_map(
+                static fn ($p): string => (string) (is_array($p) ? ($p['provider'] ?? '') : ''),
+                (array) ($stored['platforms'] ?? []),
+            ))));
+        } finally {
+            DB::rollBack();
+            app(ProjectContext::class)->setProjectId($project);
         }
 
-        $scope = null;
-        if (is_array($source->scope) && $source->scope !== []) {
-            $verified = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, $source->scope)));
+        return ApiResponse::success(['name' => $attributes['name'], 'data' => $payload, 'platforms' => $platforms], 'Draft preview built. Nothing was saved.');
+    }
+
+    private function draftOrRefuse(string $id): Report
+    {
+        $model = $this->find($id);
+        abort_unless($model->isDraft(), 409, __('api.report_not_a_draft'));
+
+        return $model;
+    }
+
+    /**
+     * A report as the editor's fields: what «تكرار» starts from, and what a saved draft reopens with.
+     *
+     * Settings only. No stored document, no link and nothing of a link's access. A live link report keeps its sources on
+     * the link (its ceiling), so they are read from there: the accounts, campaigns, ads and platforms, never its token,
+     * password or expiry. A scope with no ad account is handed over without the ids that cannot be placed under one, so the
+     * editor asks for the accounts instead of guessing them.
+     *
+     * @return array<string, mixed>
+     */
+    private function editorState(Report $r, string $project, bool $stored): array
+    {
+        $config = (array) ($r->config ?? []);
+        $branding = (array) ($config['branding'] ?? []);
+        // A live link report is known by its link as much as by its row: the builder marks the row, a converted link does not.
+        $liveLink = $stored ? null : ReportShare::query()->where('report_id', $r->getKey())->whereNull('revoked_at')->where('mode', 'live')->whereNotNull('scope')->oldest()->first();
+        $live = ($config['live'] ?? false) === true || $r->type === 'live' || $liveLink !== null;
+        $level = DetailLevel::fromInput($config['detail_level'] ?? null) ?? ($r->form === 'executive_summary' ? DetailLevel::Summary : DetailLevel::Detailed);
+
+        $scope = is_array($r->scope) && $r->scope !== [] ? $r->scope : null;
+        if ($scope === null && $liveLink !== null) {
+            $ceiling = (array) ($liveLink->scope ?? []);
+            $scope = array_filter(array_intersect_key($ceiling, array_flip(['account_ids', 'campaign_ids', 'ad_ids', 'providers'])), static fn ($v): bool => is_array($v) && $v !== []) ?: null;
+        }
+        if ($scope !== null) {
+            $scope = array_filter((array) ($scope['account_ids'] ?? [])) !== []
+                ? ReportScopeHierarchy::verifyFlat($project, $scope)
+                : array_diff_key($scope, array_flip(['campaign_ids', 'ad_ids']));
+            $verified = ReportScope::fromReport(self::pinnedToProject($project, $scope));
             $scope = $verified->isUnbounded() ? null : $verified->toArray();
         }
 
-        $wantsLink = (bool) ($data['with_link'] ?? true) && $request->user()->hasPermission('reports.share')
-            && $source->status === 'completed' && ($source->audience ?? 'client') !== 'internal';
-
-        $result = DB::transaction(function () use ($source, $data, $scope, $request, $sourceLink, $wantsLink, $shares): array {
-            $copy = Report::create([
-                'name' => trim((string) ($data['name'] ?? '')) !== '' ? trim((string) $data['name']) : mb_substr($source->name, 0, 150).' (نسخة)',
-                'description' => $source->description,
-                'type' => $source->type,
-                'form' => $source->form,
-                'audience' => $source->audience,
-                'mode' => $source->mode,
-                'campaign_id' => $source->campaign_id,
-                'campaign_objective' => $source->campaign_objective,
-                'status' => $source->status,
-                'period_start' => $source->period_start,
-                'period_end' => $source->period_end,
-                'currency' => $source->currency,
-                'timezone' => $source->timezone,
-                'attribution_window' => $source->attribution_window,
-                'data_source' => $source->data_source,
-                'config' => $source->config,
-                'scope' => $scope,
-                'section_settings' => $source->section_settings,
-                'data' => $source->data,
-                'generated_at' => $source->generated_at,
-                'created_by' => $request->user()->id,
-                'is_demo' => $source->is_demo,
-            ]);
-
-            $link = null;
-            $raw = null;
-            if ($wantsLink) {
-                $opts = $sourceLink === null
-                    ? ['hide_spend' => true, 'hide_revenue' => true, 'hide_campaign_names' => true, 'allow_download' => true, 'watermark' => false, 'settings' => ['sections' => ['previous_comparison' => false]], 'mode' => 'snapshot']
-                    : [
-                        'hide_spend' => (bool) $sourceLink->getRawOriginal('hide_spend'),
-                        'hide_revenue' => (bool) $sourceLink->hide_revenue,
-                        'hide_campaign_names' => (bool) $sourceLink->hide_campaign_names,
-                        'allow_download' => (bool) $sourceLink->allow_download,
-                        'watermark' => (bool) $sourceLink->watermark,
-                        'form' => $sourceLink->form,
-                        'settings' => $sourceLink->settings,
-                        'scope' => $sourceLink->scope,
-                        'mode' => $sourceLink->mode,
-                        'expires_at' => $sourceLink->expires_at,
-                    ];
-                [$link, $raw] = $shares->create($copy, $opts, $request->user()->id);
-                if ($sourceLink?->password_hash !== null) {
-                    // Same password, no raw value needed: a copy is never more open than the link it came from.
-                    $link->forceFill(['password_hash' => $sourceLink->password_hash])->save();
-                }
-            }
-
-            return [$copy, $link, $raw];
-        });
-        [$copy, $link, $raw] = $result;
-
-        $audit->log(
-            action: 'report.duplicated',
-            entityType: Report::class,
-            entityId: (string) $copy->getKey(),
-            before: ['source_report_id' => (string) $source->getKey(), 'source_share_id' => $sourceLink === null ? null : (string) $sourceLink->getKey()],
-            after: ['report_id' => (string) $copy->getKey(), 'share_id' => $link === null ? null : (string) $link->getKey()],
-        );
-
-        $shape = $this->shape($copy);
-        $shape['link'] = $link === null ? null : [
-            'id' => (string) $link->getKey(),
-            'mode' => $link->isLive() ? 'live' : 'snapshot',
-            'url' => ShareService::urlFor((string) $raw),
-            'path' => ShareService::pathFor((string) $raw),
-            'token' => $raw,
-            'password_protected' => $link->password_hash !== null,
+        return [
+            'id' => $stored ? (string) $r->getKey() : null,
+            'name' => $stored ? $r->name : null,
+            'description' => $r->description,
+            'type' => in_array($r->type, self::TYPES, true) ? $r->type : 'custom',
+            'mode' => $live && ! $stored ? 'live' : (in_array($r->mode, ['live', 'snapshot'], true) ? $r->mode : 'snapshot'),
+            'form' => $level->form(),
+            'detail_level' => $level->value,
+            'audience' => $r->audience ?? 'client',
+            'campaign_objective' => $r->campaign_objective,
+            'period_start' => $r->period_start?->toDateString(),
+            'period_end' => $r->period_end?->toDateString(),
+            'period_mode' => in_array($config['period_mode'] ?? null, ReportPeriod::MODES, true) ? $config['period_mode'] : 'fixed',
+            'period_kind' => in_array($config['period_kind'] ?? null, ReportPeriod::KINDS, true) ? $config['period_kind'] : 'custom',
+            'branding_identity' => in_array($branding['prefer'] ?? null, ['client', 'agency'], true) ? $branding['prefer'] : null,
+            'prepared_for_name' => isset($branding['prepared_for_name']) ? (string) $branding['prepared_for_name'] : null,
+            'prepared_by_name' => isset($branding['prepared_by_name']) ? (string) $branding['prepared_by_name'] : null,
+            'columns' => ReportColumns::fromArray((array) ($config['columns'] ?? []))->toArray(),
+            'sections' => array_filter((array) ($r->section_settings['sections'] ?? []), 'is_bool'),
+            'scope' => $scope,
+            // What the share dialog will be filled with once the copy is published: switches only, never a link or its access.
+            'share_preferences' => $stored ? SharePreferences::normalise($config[SharePreferences::KEY] ?? null) : SharePreferences::forCopyOf($r),
         ];
-
-        return ApiResponse::success($shape, 'Report duplicated.', status: 201);
     }
 
     /** REPORT-SNAPSHOT-PROTECT-001 — replacing a stored copy is asked for, attributed, and the copy is kept by the job. */
@@ -456,6 +648,10 @@ final class ReportController extends Controller
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
+        // REPORT-DUPLICATE-001 — a draft is built by publishing it, which validates it first; a rebuild is not a way round that.
+        if ($model->isDraft()) {
+            return ApiResponse::error(__('api.report_is_draft'), ['code' => 'report_is_draft'], status: 409);
+        }
         $confirmed = (bool) ($request->validate(['confirm' => ['nullable', 'boolean']])['confirm'] ?? false);
         if ($model->status === 'completed' && $model->hasStoredCopy() && ! $confirmed) {
             return ApiResponse::error(__('api.report_regenerate_needs_confirmation'), ['code' => 'report_regenerate_needs_confirmation'], status: 409);
@@ -594,10 +790,14 @@ final class ReportController extends Controller
             'campaign_objective' => $r->campaign_objective,
             'version' => $r->version,
             'status' => $r->status,
+            // REPORT-DUPLICATE-001 — saved from the editor and not published; `draft` alone is also the column's default.
+            'is_draft' => $r->isDraft(),
             'audience' => $r->audience,
             'period' => ['from' => $r->period_start?->toDateString(), 'to' => $r->period_end?->toDateString()],
             'currency' => $r->currency,
             'config' => $r->config,
+            // REPORT-DUPLICATE-001 — the link switches a copy was started with; the share dialog opens filled from them. Not a link.
+            'share_preferences' => SharePreferences::normalise(((array) ($r->config ?? []))[SharePreferences::KEY] ?? null),
             // What the report covers (§14.5) — a list that hides it cannot tell a whole-project
             // report from one narrowed to a single platform.
             'scope' => $r->scope,
@@ -646,7 +846,8 @@ final class ReportController extends Controller
              * sending it would see «no cover» on the very rows the client is about to see correctly
              * — and would reasonably conclude the report was broken and not send it.
              */
-            $stored = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
+            // REPORT-SOURCE-ISOLATION-001 — the builder and preview read the same contained document the link serves.
+            $stored = app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($r->data ?? [], $r));
             /*
              * REPORT-PARITY-FOUR-SURFACES-001 — the preview is the client's document, through the surfaces' own resolver.
              *

@@ -14,6 +14,7 @@ use App\Domains\Reports\Services\LiveDrilldown;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\GenericNames;
@@ -111,7 +112,8 @@ final class PublicReportController extends Controller
          */
         $data = [];
         if (! $share->isLive()) {
-            $fresh = app(ReportCreativeMedia::class)->refresh($report->data ?? []);
+            // REPORT-SOURCE-ISOLATION-001 — a copy stored before the content section was bounded by the report's accounts is served inside them.
+            $fresh = app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($report->data ?? [], $report));
 
             // REPORT-PARITY-FOUR-SURFACES-001 — the print route and the files ask the same question of the same method.
             $data = $view->document($fresh, $report->audience === 'executive' ? 'executive' : 'client', $form);
@@ -552,11 +554,20 @@ final class PublicReportController extends Controller
         ];
     }
 
-    public function download(Request $request, string $token, string $format): StreamedResponse
+    public function download(Request $request, string $token, string $format): StreamedResponse|JsonResponse
     {
-        $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
-        abort_if($share === null, 404, 'Link not found.');
+        /*
+         * SHARED-DOWNLOAD-PASSWORD-001 — the file passes the gate the page passes.
+         *
+         * This resolved the token itself and never asked for the password, so a protected link gave
+         * the whole report as a file to anyone holding the address while the page was still showing
+         * a prompt. `open()` is the one gate: throttle, token, password — and a refusal is logged
+         * as a refusal, not as a download.
+         */
+        [$share, $denied] = $this->open($request, $token);
+        if ($denied !== null) {
+            return $denied;
+        }
         abort_unless($share->allow_download, 403, 'Downloads are disabled for this link.');
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);
 

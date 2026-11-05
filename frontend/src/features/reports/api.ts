@@ -42,6 +42,10 @@ export interface ReportRow {
   name: string
   type: string
   status: ReportStatus
+  /** REPORT-DUPLICATE-001 — saved from the editor and not published. The status `draft` alone is also the column's default. */
+  is_draft?: boolean
+  /** REPORT-DUPLICATE-001 — the link switches a copy was started with. The share dialog opens filled from them; it is not a link. */
+  share_preferences?: SharePreferences | null
   /** Sent by the list payload; an `internal` report cannot be shared by link. */
   audience?: string | null
   period: { from: string | null; to: string | null }
@@ -57,7 +61,7 @@ export interface ReportRow {
 }
 export interface ReportsIndex {
   reports: ReportRow[]
-  summary: { total: number; completed: number; processing: number; failed: number }
+  summary: { total: number; completed: number; processing: number; failed: number; draft?: number }
 }
 export interface ReportDetail extends ReportRow {
   /**
@@ -169,12 +173,68 @@ export const revokeShare = (p: string, reportId: string, shareId: string) =>
 
 export const renameReport = (p: string, id: string, name: string) => patchData<ReportRow>(`${base(p)}/${id}`, { name })
 
-export interface DuplicatedReport extends ReportRow {
-  link: { id: string; mode: 'live' | 'snapshot'; url: string; path: string; token: string; password_protected: boolean } | null
+/**
+ * REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — a report as the editor's fields.
+ *
+ * What «تكرار» starts from and what a saved draft reopens with: settings only. It carries no link, token, password or stored
+ * document, and `id` is null until «حفظ كمسودة» has stored the draft.
+ */
+export interface ReportEditorState {
+  id: string | null
+  name: string | null
+  description: string | null
+  type: string
+  mode: 'live' | 'snapshot'
+  form: string
+  detail_level: 'summary' | 'standard' | 'detailed'
+  audience: string
+  campaign_objective: string | null
+  period_start: string | null
+  period_end: string | null
+  period_mode: string
+  period_kind: string
+  branding_identity: 'client' | 'agency' | null
+  prepared_for_name: string | null
+  prepared_by_name: string | null
+  columns: Record<string, string[]>
+  sections: Record<string, boolean>
+  scope: ReportScopeShape | null
+  /** The original link's switches, carried as preferences only: no token, password, expiry or scope ids. Null when it had no link. */
+  share_preferences?: SharePreferences | null
 }
-/** An independent copy: a new report and (for someone who may share) a new link; the original is never touched. */
-export const duplicateReport = (p: string, id: string, body: { name?: string; share_id?: string; with_link?: boolean } = {}) =>
-  postData<DuplicatedReport>(`${base(p)}/${id}/duplicate`, body)
+/**
+ * REPORT-DUPLICATE-001 — what a copy remembers of its original's link. Switches only; `was_locked` says a password was asked
+ * for and never what it was. The share dialog starts from these, and a link exists only once someone makes one there.
+ */
+export interface SharePreferences {
+  allow_download?: boolean
+  hide_spend?: boolean
+  hide_revenue?: boolean
+  hide_campaign_names?: boolean
+  watermark?: boolean
+  mode: 'live' | 'snapshot'
+  form: string | null
+  generic_names: GenericNameKind[]
+  sections: Record<string, boolean>
+  creatives: Record<string, boolean>
+  was_locked: boolean
+}
+export interface DuplicateStart {
+  source: { id: string; name: string; status: ReportStatus }
+  suggested_name: { ar: string; en: string }
+  draft: ReportEditorState
+}
+/** «تكرار»: stores NOTHING. It answers with the editor's starting state; the copy exists only after a save or a publish. */
+export const startDuplicate = (p: string, id: string) => postData<DuplicateStart>(`${base(p)}/${id}/duplicate`, {})
+/** A saved draft, as the editor's state, to carry on editing it. */
+export const getReportDraft = (p: string, id: string) => getData<{ draft: ReportEditorState }>(`${base(p)}/${id}/draft`)
+/** «حفظ كمسودة» on a draft that already exists; it stays a draft. */
+export const saveReportDraft = (p: string, id: string, body: Record<string, unknown>) => putData<ReportRow>(`${base(p)}/${id}/draft`, body)
+/** «نشر التقرير»: the settings and the scope are validated again, then the report is queued. No link is made. */
+export const publishReportDraft = (p: string, id: string, body: Record<string, unknown>) => postData<ReportRow>(`${base(p)}/${id}/publish`, body)
+/** The editor's preview, through the published report's own engine. Nothing is stored and no link exists. */
+export const previewReportDraft = (p: string, body: Record<string, unknown>) =>
+  postData<{ name: string; data: Record<string, unknown>; platforms: string[] }>(`${base(p)}/draft-preview`, body)
 
 export interface ShareConversion {
   changed: boolean
@@ -325,6 +385,30 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
+
+/**
+ * SHARED-DOWNLOAD-PASSWORD-001 — the file of a password-protected link, taken with the password.
+ *
+ * A plain address cannot carry a header, and the password does not belong in an address (history,
+ * referrers, server logs). So a protected link fetches the file with the header the page already
+ * uses and hands the bytes to the browser under the name the server gave it.
+ */
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<void> {
+  const response = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  if (!response.ok) throw new Error(`download_failed_${response.status}`)
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const starred = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)
+  const name = starred ? decodeURIComponent(starred[1]) : plain ? plain[1] : `report.${format}`
+  const url = URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
