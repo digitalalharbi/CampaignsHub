@@ -101,11 +101,15 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
         purpose={ar
           ? 'كل مصدر بيانات مربوط، ومن صرّح به، وما يُزامَن منه.'
           : 'Every connected source, who authorised it, and what it reads.'}
-        actions={
+        /*
+          ONE connect entry on the surface, never two. With nothing connected the empty state below
+          carries it (`hub-connect-empty`), so the head does not repeat the same button above it.
+        */
+        actions={connections.length === 0 ? undefined : (
           <Button onClick={onConnect} data-testid="hub-connect">
             <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
           </Button>
-        }
+        )}
         kpis={connections.length === 0 ? undefined : (
           <>
             <StatCard

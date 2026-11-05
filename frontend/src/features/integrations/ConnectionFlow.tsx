@@ -46,8 +46,13 @@ export type Stage = 'login' | 'parent' | 'accounts'
  * it does not pretend a completed journey is still in progress.
  */
 export function ConnectionFlow({ mode, provider, connection, projectId, onClose, onDone }: {
-  /** `connect` runs all three stages; `manage` reopens the selector on a connection that exists. */
-  mode: 'connect' | 'manage'
+  /**
+   * `connect` runs all three stages; `manage` reopens the selector on a connection that exists;
+   * `reauthorise` renews the consent of a connection that exists, through the SAME sign-in stage and
+   * the same OAuth start as a new connection — with the connection's client workspace and project on
+   * the state, so the callback finds that connection again instead of opening a second one.
+   */
+  mode: 'connect' | 'manage' | 'reauthorise'
   provider: ConnectableProvider | null
   connection: HubConnection | null
   /** Fixed for the whole flow once chosen — through OAuth and back. */
@@ -59,7 +64,7 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
 
   const [destination, setDestination] = useState<string | null>(projectId)
   const [stage, setStage] = useState<Stage>(
-    mode === 'manage' || connection !== null ? (provider?.has_parent ?? connection?.has_parent ? 'parent' : 'accounts') : 'login',
+    mode === 'reauthorise' ? 'login' : mode === 'manage' || connection !== null ? (provider?.has_parent ?? connection?.has_parent ? 'parent' : 'accounts') : 'login',
   )
   const [finished, setFinished] = useState(false)
   /*
@@ -73,7 +78,9 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
   const [openedByKey, setOpenedByKey] = useState<string | null>(null)
 
   const hasParent = connection?.has_parent ?? provider?.has_parent ?? false
-  const stages: Stage[] = mode === 'manage'
+  const stages: Stage[] = mode === 'reauthorise'
+    ? ['login']
+    : mode === 'manage'
     ? (hasParent ? ['parent', 'accounts'] : ['accounts'])
     : (hasParent ? ['login', 'parent', 'accounts'] : ['login', 'accounts'])
 
@@ -103,8 +110,10 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
             <h2 className="min-w-0 flex-1 truncate text-base font-bold text-text-primary">
               {finished
                 ? (ar ? `تم ربط ${label}` : `${label} connected`)
+                : mode === 'reauthorise'
+                  ? (ar ? `إعادة المصادقة — ${label}` : `Reconnect — ${label}`)
                 : mode === 'manage'
-                  ? (ar ? `إدارة الحسابات — ${label}` : `Manage accounts — ${label}`)
+                  ? (ar ? `تعديل الاختيار — ${label}` : `Edit the selection — ${label}`)
                   : (ar ? `ربط ${label}` : `Connect ${label}`)}
             </h2>
             <Button variant="ghost" onClick={onClose} data-testid="flow-close">{ar ? 'إغلاق' : 'Close'}</Button>
@@ -152,6 +161,10 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
                 providerKey={providerKey}
                 destination={destination}
                 onDestination={setDestination}
+                reauthorise={mode === 'reauthorise'}
+                allowedProjectIds={mode === 'reauthorise' && (connection?.projects.length ?? 0) > 0
+                  ? connection!.projects.map((p) => p.id)
+                  : null}
               />
             )
           ) : connectionId === null ? (
@@ -364,12 +377,15 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
  * reads because they have already decided. This says it in ours, before they leave, and it names the
  * client the accounts will belong to — the one decision that is expensive to change afterwards.
  */
-function Login({ ar, label, providerKey, destination, onDestination }: {
+function Login({ ar, label, providerKey, destination, onDestination, reauthorise = false, allowedProjectIds = null }: {
   ar: boolean
   label: string
   providerKey: string
   destination: string | null
   onDestination: (id: string) => void
+  /** Renewing an existing connection: the selection is untouched, and only its own clients are offered. */
+  reauthorise?: boolean
+  allowedProjectIds?: string[] | null
 }) {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
@@ -422,9 +438,11 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
           >
             <option value="">{ar ? 'اختر العميل' : 'Choose a client'}</option>
-            {(projects.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {(projects.data ?? [])
+              .filter((p) => allowedProjectIds === null || allowedProjectIds.includes(p.id))
+              .map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
           </select>
         )}
       </section>
@@ -475,9 +493,13 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
               : 'Read only — CampaignsHub never creates a campaign, changes a budget or spends anything.'}
           </li>
           <li>
-            · {ar
-              ? 'لن يُزامَن أي حساب لم تختره في الخطوة الأخيرة.'
-              : 'No account is ever synced unless you choose it in the last stage.'}
+            · {reauthorise
+              ? (ar
+                ? 'تُجدَّد المصادقة فقط. لا تتغيّر الحسابات المختارة ولا ارتباطها بالعملاء.'
+                : 'Renews the authorisation only. Your selected accounts and their clients are untouched.')
+              : (ar
+                ? 'لن يُزامَن أي حساب لم تختره في الخطوة الأخيرة.'
+                : 'No account is ever synced unless you choose it in the last stage.')}
           </li>
         </ul>
       </section>

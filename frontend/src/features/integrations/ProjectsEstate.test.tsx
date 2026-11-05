@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { ProjectsEstate } from './ProjectsEstate'
 import { renderWithProviders } from '@/test/utils'
 
-vi.mock('./AccountsPanel', () => ({ AccountsPanel: ({ project }: { project?: string }) => <div data-testid="panel">{project}</div> }))
+vi.mock('./SelectedAccounts', () => ({ SelectedAccounts: ({ project }: { project?: string }) => <div data-testid="panel">{project}</div> }))
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   fetchEstate: vi.fn(() => Promise.resolve({
