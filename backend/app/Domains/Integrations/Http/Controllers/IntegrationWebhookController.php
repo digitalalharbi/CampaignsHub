@@ -4,24 +4,18 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
-use App\Domains\Commerce\Install\SallaInstalls;
-use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderDefinition;
-use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Catalogue\WebhookSupport;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
-use App\Domains\Integrations\Models\ExternalAccount;
-use App\Domains\Integrations\Models\IntegrationWebhookEvent;
-use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Webhooks\WebhookEventFacts;
+use App\Domains\Integrations\Webhooks\WebhookEventProcessor;
+use App\Domains\Integrations\Webhooks\WebhookInbox;
 use App\Domains\Integrations\Webhooks\WebhookIngest;
 use App\Domains\Integrations\Webhooks\WebhookSignature;
-use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Http\Controllers\Controller;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Carbon;
 
 /**
  * WEBHOOK-001 — the public endpoint a provider POSTs to.
@@ -57,7 +51,8 @@ final class IntegrationWebhookController extends Controller
         private readonly WebhookSignature $signatures,
         private readonly WebhookIngest $ingest,
         private readonly ProviderConfigurationService $settings,
-        private readonly AccountAssignment $assignment,
+        private readonly WebhookInbox $inbox,
+        private readonly WebhookEventProcessor $processor,
     ) {}
 
     /**
@@ -99,131 +94,42 @@ final class IntegrationWebhookController extends Controller
         $check = $this->signatures->check($definition->key, $raw, $request->header($header));
 
         if (! $check['verified']) {
-            // Nothing is recorded. An unverified body is not evidence of anything except that
-            // somebody posted to a public URL, and storing it would put attacker-controlled content
-            // in the same table a consumer reads as trusted.
+            // INTEG-WEBHOOK-ENGINE-001 — the REFUSAL is recorded (verdict, time, body hash, correlation id);
+            // the body is not. An unverified body is attacker-controlled and never enters the table a
+            // consumer reads as trusted.
+            $this->inbox->rejected($definition, $raw, 'rejected_signature', (string) $check['reason']);
+
             return response('', 401);
         }
 
         /** @var array<string,mixed> $payload */
         $payload = json_decode($raw, true) ?: [];
 
+        // INTEG-WEBHOOK-ENGINE-001 — replay protection. Only where the signed material carries a time.
+        $stale = $this->inbox->staleReason($definition, $payload);
+
+        if ($stale !== null) {
+            $this->inbox->rejected($definition, $raw, 'rejected_stale', $stale, true, WebhookEventFacts::eventTime($payload));
+
+            return response('', 400);
+        }
+
         $result = $this->ingest->record($definition->key, $raw, $payload, verified: true);
         $event = $result['event'];
 
-        /*
-         * SALLA-INSTALL-001 — Salla's app lifecycle: `app.store.authorize` hands over (or renews) a
-         * merchant's tokens, `app.uninstalled` withdraws the app. Verified above, recorded once.
-         */
-        if ($definition->key === 'salla' && ! $result['duplicate']) {
-            match ((string) ($payload['event'] ?? '')) {
-                'app.store.authorize' => app(SallaInstalls::class)->onAuthorize($payload),
-                'app.installed' => app(SallaInstalls::class)->onInstalled($payload),
-                'app.uninstalled' => app(SallaInstalls::class)->onUninstall($payload),
-                'app.subscription.started', 'app.subscription.renewed', 'app.subscription.expired', 'app.subscription.canceled' => app(SallaInstalls::class)->onSubscription($payload, (string) $payload['event']),
-                default => null,
-            };
-        }
-
-        if (! $result['duplicate'] && $event->status === 'received') {
-            $this->scheduleSync($event, $definition->kind, $result['accounts']);
+        // SALLA-INSTALL-001 lifecycle events are handled in place whatever the row says (an install for a
+        // merchant we have no store for yet is `unmatched` and must still hand over its tokens). A redelivery
+        // of one whose handler FAILED runs it again: that is the provider's retry doing its job.
+        if ($this->processor->isLifecycle($event) && (! $result['duplicate'] || $event->status === 'failed')) {
+            if (! $this->processor->runLifecycle($event, $payload)) {
+                return response('', 500); // the provider retries; the row says why it failed
+            }
+        } elseif (! $result['duplicate'] && $event->status === 'received') {
+            $this->processor->enqueue($event);
         }
 
         // Always 2xx once the row is safe. A provider retries anything else, for hours.
         return response('', 200);
-    }
-
-    /**
-     * Ask for a sync of the account or store this delivery named.
-     *
-     * Deliberately the SAME job the scheduler runs, over a short window. A webhook makes the product
-     * notice sooner; it does not become a second path by which numbers arrive, because two paths mean
-     * two answers and no way to tell which is right.
-     *
-     * ## Why a commerce delivery does not simply write the order it carries (COMMERCE-001)
-     *
-     * It is tempting: `order.created` arrives with the whole order in it. But an order changes for a
-     * fortnight afterwards — paid, shipped, returned, refunded — and each change is a separate delivery
-     * that may arrive out of order, late, or not at all. A receiver that wrote each payload as it
-     * landed would apply «قيد المعالجة» after «مكتمل» whenever two deliveries crossed, and a refund
-     * that never arrived would leave revenue on a client's report for ever.
-     *
-     * Re-reading the store's own window costs one queued job and cannot go backwards. The webhook is
-     * what makes it happen in seconds instead of within the hour.
-     *
-     * @param  Collection<int, ExternalAccount>  $accounts  every tenant's copy of the account the delivery named
-     */
-    private function scheduleSync(IntegrationWebhookEvent $event, ProviderKind $kind, Collection $accounts): void
-    {
-        /*
-         * RUNTIME-100 §11 — a delivery for an account nobody assigned queues nothing.
-         *
-         * The jobs re-prove their own scope, so nothing would have been WRITTEN either way. What this
-         * adds is that nothing is queued: a provider pushing events for an authorisation whose
-         * accounts were never attached to a project would otherwise fill the queue with work that
-         * exists only to refuse itself, and — worse — every one of those refusals looks like activity
-         * on a connection that is doing nothing.
-         *
-         * ACCOUNT-SCOPE-ISOLATION-001 — asked of EVERY copy of the account, one per tenant that holds
-         * it, and each copy is judged on its own binding and dispatched through its own connection.
-         * A tenant whose copy was never assigned gets nothing; a tenant whose copy was gets its sync,
-         * whichever row Postgres happened to return first.
-         *
-         * The verification, the idempotency ledger and the 401 for an unsigned delivery are untouched:
-         * this is about what happens AFTER a delivery has been accepted as genuine.
-         */
-        $dispatched = 0;
-
-        foreach ($accounts as $account) {
-            if (! $this->assignment->isActivelyAssigned($account)) {
-                continue;
-            }
-
-            $accountId = (string) $account->getKey();
-
-            match ($kind) {
-                ProviderKind::Advertising => SyncAccountMetricsJob::dispatch(
-                    $accountId,
-                    Carbon::now()->subDays(2)->toDateString(),
-                    Carbon::now()->toDateString(),
-                ),
-                /*
-                 * A wider window than the advertising one, because a store event is frequently ABOUT
-                 * an older order: a refund on a three-week-old purchase is a delivery today, and asking
-                 * only for the last two days would re-read everything except the order that changed.
-                 */
-                ProviderKind::Commerce => SyncStoreJob::dispatch(
-                    $accountId,
-                    Carbon::now()->subDays(30)->toDateString(),
-                    Carbon::now()->toDateString(),
-                    ['source' => 'webhook', 'topic' => $event->topic],
-                ),
-                /*
-                 * GA4-INTEGRATION-001 — a measurement source has no webhook to arrive from.
-                 *
-                 * Google Analytics publishes no push notification for reporting data; GA4 is
-                 * `WebhookSupport::PollingOnly` in the catalogue and is synced on a schedule. So
-                 * this arm is unreachable in practice and says so, rather than dispatching an
-                 * advertising job for a provider that has no ad account — which is what a default
-                 * arm would quietly have done.
-                 */
-                ProviderKind::Measurement => null,
-            };
-
-            $dispatched++;
-        }
-
-        if ($dispatched === 0) {
-            $event->forceFill([
-                'status' => 'ignored',
-                'processed_at' => Carbon::now(),
-                'error' => 'No active project assignment for this account — nothing was fetched.',
-            ])->save();
-
-            return;
-        }
-
-        $event->forceFill(['status' => 'processed', 'processed_at' => Carbon::now()])->save();
     }
 
     private function definitionOr404(string $kind, string $provider): ProviderDefinition

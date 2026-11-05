@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\PlatformWebhookEventController;
 use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
@@ -263,6 +264,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * products individually, X gates on a paid tier, and Salla and Zid each need a partner app.
          * A generic list would be wrong in both directions at once.
          */
+        // INTEG-WEBHOOK-ENGINE-001 — the webhook inbox: every delivery with its verdict and state, and a replay for a failed one.
+        Route::get('/webhook-events', [PlatformWebhookEventController::class, 'index'])->name('webhook-events.index');
+        Route::post('/webhook-events/{event}/replay', [PlatformWebhookEventController::class, 'replay'])
+            ->middleware('throttle:30,1')->name('webhook-events.replay');
+
         Route::get('/integrations/review', [ReviewChecklistController::class, 'index'])->name('integrations.review.index');
         Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
         Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])

@@ -270,7 +270,7 @@ final class SallaOnboardingTest extends TestCase
         $connection = ProviderConnection::withoutGlobalScopes()->where('provider', 'salla')->firstOrFail();
         $this->assertSame('AT-install', app(TokenVault::class)->stored($connection)->accessToken);
 
-        $this->webhook(['event' => 'app.uninstalled', 'merchant' => (int) self::MERCHANT, 'created_at' => '2026-10-20 10:00:00', 'data' => []])->assertOk();
+        $this->webhook(['event' => 'app.uninstalled', 'merchant' => (int) self::MERCHANT, 'created_at' => now()->toDateTimeString(), 'data' => []])->assertOk();
 
         $connection->refresh();
         $this->assertSame('revoked', $connection->status);
@@ -289,7 +289,7 @@ final class SallaOnboardingTest extends TestCase
     {
         $this->fakeSalla();
         $this->install();
-        $body = ['event' => 'app.subscription.started', 'merchant' => (int) self::MERCHANT, 'created_at' => '2026-10-20 10:00:00', 'id' => 'evt-1', 'data' => []];
+        $body = ['event' => 'app.subscription.started', 'merchant' => (int) self::MERCHANT, 'created_at' => now()->toDateTimeString(), 'id' => 'evt-1', 'data' => []];
 
         $this->webhook($body)->assertOk();
         $tenant = Tenant::query()->where('name', 'متجر الأزياء')->firstOrFail();
@@ -308,7 +308,7 @@ final class SallaOnboardingTest extends TestCase
         $tenant = Tenant::query()->where('name', 'متجر الأزياء')->firstOrFail();
 
         foreach ([['app.subscription.started', 'salla-subscribed', 'active'], ['app.subscription.expired', 'salla-expired', 'expired'], ['app.subscription.renewed', 'salla-subscribed', 'active'], ['app.subscription.canceled', 'salla-canceled', 'canceled']] as $n => [$event, $plan, $status]) {
-            $this->webhook(['event' => $event, 'merchant' => (int) self::MERCHANT, 'created_at' => '2026-10-20 10:0'.$n.':00', 'data' => []])->assertOk();
+            $this->webhook(['event' => $event, 'merchant' => (int) self::MERCHANT, 'created_at' => now()->toDateTimeString(), 'data' => []])->assertOk();
             $tenant->refresh();
             $this->assertSame($plan, $tenant->subscription_plan, $event);
             $this->assertSame($status, $tenant->settings['salla_subscription']['status']);
@@ -321,7 +321,7 @@ final class SallaOnboardingTest extends TestCase
         $this->fakeSalla();
         $this->install();
 
-        $this->webhook(['event' => 'app.subscription.expired', 'merchant' => 111, 'created_at' => '2026-10-20 10:00:00', 'data' => []])->assertOk();
+        $this->webhook(['event' => 'app.subscription.expired', 'merchant' => 111, 'created_at' => now()->toDateTimeString(), 'data' => []])->assertOk();
 
         $this->assertSame('salla-trial', Tenant::query()->where('name', 'متجر الأزياء')->value('subscription_plan'));
     }
@@ -336,7 +336,7 @@ final class SallaOnboardingTest extends TestCase
         CommerceOrder::create(['tenant_id' => $connection->tenant_id, 'project_id' => Project::query()->value('id'), 'external_account_id' => $store->id, 'provider' => 'salla', 'external_id' => 'o1', 'status' => 'completed', 'total' => 100, 'currency' => 'SAR', 'ordered_at' => now()]);
         app(TenantContext::class)->forget();
 
-        $this->webhook(['event' => 'app.uninstalled', 'merchant' => (int) self::MERCHANT, 'created_at' => '2026-10-20 10:00:00', 'data' => []]);
+        $this->webhook(['event' => 'app.uninstalled', 'merchant' => (int) self::MERCHANT, 'created_at' => now()->toDateTimeString(), 'data' => []]);
 
         // 29 days: kept.
         DB::table('provider_connections')->where('id', $connection->id)->update(['uninstalled_at' => now()->subDays(29)]);
@@ -344,7 +344,7 @@ final class SallaOnboardingTest extends TestCase
         $this->assertSame(1, CommerceOrder::withoutGlobalScopes()->count());
 
         // A reinstall inside the period clears the clock: nothing is ever purged.
-        $this->webhook(['event' => 'app.installed', 'merchant' => (int) self::MERCHANT, 'created_at' => '2026-10-21 10:00:00', 'data' => []]);
+        $this->webhook(['event' => 'app.installed', 'merchant' => (int) self::MERCHANT, 'created_at' => now()->toDateTimeString(), 'data' => []]);
         DB::table('provider_connections')->where('id', $connection->id)->update(['uninstalled_at' => null]);
         Artisan::call('commerce:purge-uninstalled');
         $this->assertSame(1, CommerceOrder::withoutGlobalScopes()->count());
