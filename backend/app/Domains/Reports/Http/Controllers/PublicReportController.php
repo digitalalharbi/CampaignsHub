@@ -17,6 +17,7 @@ use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -120,6 +121,8 @@ final class PublicReportController extends Controller
             $data = $this->shares->sanitize($data, $share);
             // REPORT-SECTION-SURFACES-001 — the same resolver as the live page, the print route and the export.
             $data = app(ReportSectionSurfaces::class)->apply($data, $report, $share, 'shared');
+            // REPORT-FILTERS-FUNCTIONAL-001 — a KPI or a column nobody chose leaves the answer, not only the list; the stored copy is not written.
+            $data = ChosenFigures::for($report, $share)->cut($data);
         }
 
         return ApiResponse::success([
@@ -161,7 +164,7 @@ final class PublicReportController extends Controller
              * to open should never appear as a control that then refuses, and a metric column that
              * is withheld should not be drawn as an empty column with a name on it.
              */
-            'creatives' => $share->creativeVisibility()->toArray(),
+            'creatives' => ChosenFigures::for($report, $share)->narrowPermissions($share->creativeVisibility()->toArray()),
             /*
              * Which optional sections this link may open — ATTRIB-VIS-001.
              *
@@ -284,6 +287,8 @@ final class PublicReportController extends Controller
         // Sanitised with the same hide-flags as the snapshot path: a live link that leaks spend a
         // snapshot link would have hidden is the same disclosure, arriving by a newer route.
         $payload = $this->shares->sanitizeLive($payload, $share);
+        // REPORT-FILTERS-FUNCTIONAL-001 — the values of what the link did not choose leave with the lists; `metrics` and `columns` state the choice.
+        $payload = ChosenFigures::forLive($share)->cut($payload);
 
         $this->shares->log($share, 'view', $request, 'live');
 
@@ -384,10 +389,10 @@ final class PublicReportController extends Controller
          * before this it showed revenue anyway.
          */
         return ApiResponse::success(
-            GenericNames::for($report, $share)->apply($this->shares->sanitizeAttribution(
+            GenericNames::for($report, $share)->apply(ChosenFigures::for($report, $share)->cutSection($this->shares->sanitizeAttribution(
                 $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
                 $share,
-            )),
+            ))),
             'Shared attribution.',
         );
     }
@@ -412,7 +417,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for($report, $share)->apply(['widgets' => $widgets->forShare($share, $report)]), 'Shared widgets.');
+        return ApiResponse::success(GenericNames::for($report, $share)->apply(ChosenFigures::for($report, $share)->cutSection(['widgets' => $widgets->forShare($share, $report)])), 'Shared widgets.');
     }
 
     public function creatives(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -428,7 +433,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creatives');
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->library($share, $request->query())), 'Shared creatives.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $creatives->library($share, $request->query()))), 'Shared creatives.');
     }
 
     public function creativeSummary(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -444,7 +449,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creative-summary');
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->summary($share, $request->query())), 'Shared creative summary.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $creatives->summary($share, $request->query()))), 'Shared creative summary.');
     }
 
     public function creative(Request $request, string $token, string $creative, SharedCreativeView $creatives): JsonResponse
@@ -462,7 +467,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('هذا المحتوى غير متاح ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $payload)), 'Shared creative.');
     }
 
     public function creativeComparison(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -485,7 +490,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('المقارنة غير متاحة ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative comparison.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $payload)), 'Shared creative comparison.');
     }
 
     /**
@@ -538,6 +543,19 @@ final class PublicReportController extends Controller
         $report = Report::withoutGlobalScopes()->find($share->report_id);
 
         return $report !== null && app(ReportSectionSurfaces::class)->operatorAllows('content_performance', $report, $share);
+    }
+
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — the content section's answers, cut to the same choice as the page around them.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function chosenContent(ReportShare $share, array $payload): array
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report === null ? $payload : ChosenFigures::for($report, $share)->cutContent($payload);
     }
 
     private function branding(Report $report): array

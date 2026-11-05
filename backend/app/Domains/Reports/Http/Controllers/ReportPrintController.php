@@ -16,6 +16,7 @@ use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
 use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -120,6 +121,11 @@ final class ReportPrintController extends Controller
         if ($drilldowns !== []) {
             // REPORT-GENERIC-LABELS-001 — attached after the sweep, so it passes through the sweep itself.
             $body['platform_drilldowns'] = GenericNames::for($report, $share)->apply($drilldowns);
+        }
+
+        // REPORT-FILTERS-FUNCTIONAL-001 — the document holds the values of what was chosen, not only their list. An internal copy keeps everything.
+        if ($audience !== 'internal') {
+            $body = ChosenFigures::for($report, $share)->cut($body);
         }
 
         /*
