@@ -32,6 +32,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -869,23 +870,26 @@ final class AlertEvaluator
         $from = $now->copy()->subDays($days);
         $out = [];
 
-        UnifiedCampaign::query()
+        $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($from, $now, $days, &$out) {
-                $totals = $this->totalsFor((string) $c->id, $from, $now);
-                $spend = (float) $totals['spend'];
-                $conv = (float) $totals['conversions'];
-                if ($spend > 0 && $conv <= 0) {
-                    $out[] = [
-                        'entity_type' => UnifiedCampaign::class,
-                        'entity_id' => (string) $c->id,
-                        'project_id' => (string) $c->project_id,
-                        'title' => 'Spending with no results',
-                        'message' => $c->name.' spent '.round($spend, 2).' with no conversions in the last '.$days.' days.',
-                        'context' => ['spend' => $spend, 'conversions' => $conv, 'days' => $days],
-                    ];
-                }
-            });
+            ->get();
+        $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $now);
+
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, &$out) {
+            $totals = $figures[(string) $c->getKey()];
+            $spend = (float) $totals['spend'];
+            $conv = (float) $totals['conversions'];
+            if ($spend > 0 && $conv <= 0) {
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => 'Spending with no results',
+                    'message' => $c->name.' spent '.round($spend, 2).' with no conversions in the last '.$days.' days.',
+                    'context' => ['spend' => $spend, 'conversions' => $conv, 'days' => $days],
+                ];
+            }
+        });
 
         return $out;
     }
@@ -900,23 +904,28 @@ final class AlertEvaluator
         $prevFrom = $now->copy()->subDays($days * 2);
         $prevTo = $now->copy()->subDays($days + 1);
 
-        UnifiedCampaign::query()
+        $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $days, &$out) {
-                $cur = $this->campaignRoas((string) $c->id, $curFrom, $now);
-                $prev = $this->campaignRoas((string) $c->id, $prevFrom, $prevTo);
-                if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
-                    $out[] = [
-                        'entity_type' => UnifiedCampaign::class,
-                        'entity_id' => (string) $c->id,
-                        'project_id' => (string) $c->project_id,
-                        'title' => 'ROAS dropped',
-                        // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window, stated.
-                        'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).' — '.$this->deteriorationBasis($days, $pct, 'drop'),
-                        'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days],
-                    ];
-                }
-            });
+            ->get();
+        $metrics = $this->campaignMetrics($campaigns);
+        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, &$out) {
+            $cur = $current[(string) $c->getKey()]['roas'];
+            $prev = $previous[(string) $c->getKey()]['roas'];
+            if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
+                $out[] = [
+                    'entity_type' => UnifiedCampaign::class,
+                    'entity_id' => (string) $c->id,
+                    'project_id' => (string) $c->project_id,
+                    'title' => 'ROAS dropped',
+                    // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window, stated.
+                    'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).' — '.$this->deteriorationBasis($days, $pct, 'drop'),
+                    'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days],
+                ];
+            }
+        });
 
         return $out;
     }
@@ -950,8 +959,8 @@ final class AlertEvaluator
      * a decision, not an anomaly, and a sweep that pages you for your own action is the noise this
      * type would otherwise be dismissed for.
      *
-     * One timeseries query per active campaign, on the same per-campaign shape {@see roasDrops()}
-     * and {@see costPerIncreases()} already use.
+     * One timeseries statement for all the active campaigns, as {@see roasDrops()} and
+     * {@see costPerIncreases()} read their figures.
      *
      * @return list<array<string, mixed>>
      */
@@ -963,15 +972,18 @@ final class AlertEvaluator
 
         $out = [];
 
-        UnifiedCampaign::query()
+        $campaigns = UnifiedCampaign::query()
             ->where('status', 'active')
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()
-            ->each(function (UnifiedCampaign $c) use ($from, $now, $earliest, &$out) {
-                $timeline = new ChangeTimeline($this->metrics->acrossProjects()->forCampaign((string) $c->id));
+            ->get();
+        $metrics = $this->campaignMetrics($campaigns);
+        $series = $metrics->timeseriesByCampaign($from, $now);
+        $timeline = new ChangeTimeline($metrics);
 
+        $campaigns
+            ->each(function (UnifiedCampaign $c) use ($series, $timeline, $from, $now, $earliest, &$out) {
                 $points = array_values(array_filter(
-                    $timeline->build($from, $now)['points'],
+                    $timeline->fromSeries($series[(string) $c->getKey()] ?? [])['points'],
                     static fn (array $p): bool => $p['date'] >= $earliest,
                 ));
 
@@ -1027,7 +1039,7 @@ final class AlertEvaluator
     }
 
     /**
-     * One campaign's figures, from the SAME engine every screen reads (UNIFIED-001).
+     * The campaigns' figures, from the SAME engine every screen reads (UNIFIED-001).
      *
      * These handlers used to sum `daily_metrics` themselves and divide revenue by spend inline. The
      * arithmetic agreed with {@see MetricsAggregator} on the day it was written and nothing held it
@@ -1035,15 +1047,21 @@ final class AlertEvaluator
      * who spotted the discrepancy would have had no way to tell which number was the real one. There is
      * one definition of spend, of conversions and of ROAS now, and alerts read it.
      *
-     * The aggregator is scoped by campaign only, deliberately: this runs from the scheduler with no
-     * request behind it and therefore no active project, and a campaign id already names exactly one
-     * project. The tenant scope is live throughout — {@see evaluateAll()} sets it per tenant.
+     * Scoped by campaign only, deliberately: this runs from the scheduler with no request behind it and
+     * therefore no active project, and a campaign id already names exactly one project. The tenant scope
+     * is live throughout — {@see evaluateAll()} sets it per tenant.
      *
-     * @return array<string,float|null>
+     * PERF-RECOVERY-001 — one statement for a rule's campaigns and window, where one `totals()` per
+     * campaign per window cost about seven and was most of a sweep's minutes. The reads differ in nothing
+     * an alert reads; see {@see MetricsAggregator::figuresByCampaign()}. No campaign is skipped for having
+     * «nothing new»: a window moves with the clock and a cooldown lapses without a new row, so a campaign
+     * with no new row can still breach, recover or re-notify.
+     *
+     * @param  Collection<int, UnifiedCampaign>  $campaigns
      */
-    private function totalsFor(string $campaignId, Carbon $from, Carbon $to): array
+    private function campaignMetrics(Collection $campaigns): MetricsAggregator
     {
-        return $this->metrics->acrossProjects()->forCampaign($campaignId)->totals($from, $to);
+        return $this->metrics->acrossProjects()->forCampaigns($campaigns->map(static fn (UnifiedCampaign $c): string => (string) $c->id)->all());
     }
 
     /**
@@ -1358,76 +1376,79 @@ final class AlertEvaluator
         $prevTo = $now->copy()->subDays($days + 1);
         $label = strtoupper($key);
 
-        UnifiedCampaign::query()
+        $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get()->each(function (UnifiedCampaign $c) use ($curFrom, $now, $prevFrom, $prevTo, $pct, $days, $key, $resultKey, $label, &$out) {
-                $cur = $this->totalsFor((string) $c->id, $curFrom, $now);
-                $prev = $this->totalsFor((string) $c->id, $prevFrom, $prevTo);
+            ->get();
+        $metrics = $this->campaignMetrics($campaigns);
 
-                // Either window holding withheld money has no comparable cost — no verdict, no alert.
-                /*
-                 * AGGREGATION-TRUTH-001 widened this guard, and the reason is the paging.
-                 *
-                 * It refused a verdict when money was withheld for want of an exchange rate, which was
-                 * right and too narrow: a provider whose sync FAILED produces exactly the same shape —
-                 * a total missing a contributor that should be in it — and the comparison then reads
-                 * «CPA rose from 12.00 to 50.00» when what actually happened is that a platform stopped
-                 * reporting. The operator gets paged for a broken connector wearing a cost increase's
-                 * name, which is the most expensive kind of false alarm: it is actionable, and every
-                 * action it suggests is wrong.
-                 *
-                 * Coverage answers the general question — is this total the whole answer — so both
-                 * windows must now be complete, not merely fully converted.
-                 */
-                $curComplete = ($cur['coverage']['state'] ?? 'complete') === 'complete';
-                $prevComplete = ($prev['coverage']['state'] ?? 'complete') === 'complete';
+        // Either window holding withheld money has no comparable cost — no verdict, no alert.
+        /*
+         * AGGREGATION-TRUTH-001 widened this guard, and the reason is the paging.
+         *
+         * It refused a verdict when money was withheld for want of an exchange rate, which was
+         * right and too narrow: a provider whose sync FAILED produces exactly the same shape —
+         * a total missing a contributor that should be in it — and the comparison then reads
+         * «CPA rose from 12.00 to 50.00» when what actually happened is that a platform stopped
+         * reporting. The operator gets paged for a broken connector wearing a cost increase's
+         * name, which is the most expensive kind of false alarm: it is actionable, and every
+         * action it suggests is wrong.
+         *
+         * Coverage answers the general question — is this total the whole answer — so both
+         * windows must now be complete, not merely fully converted.
+         */
+        /*
+         * PERF-RECOVERY-001 — the coverage block of an across-projects read is the tenant's, the same for every campaign, so it is read
+         * once per window and an incomplete one withdraws every verdict of this rule at once, as it always did one campaign at a time.
+         */
+        $curComplete = ($metrics->coverageOfWindow($curFrom, $now)['state'] ?? 'complete') === 'complete';
+        $prevComplete = ($metrics->coverageOfWindow($prevFrom, $prevTo)['state'] ?? 'complete') === 'complete';
 
-                if (! $curComplete || ! $prevComplete) {
-                    // A closure over each campaign — `return` is this iteration's «no verdict».
-                    return;
-                }
+        if (! $curComplete || ! $prevComplete) {
+            return [];
+        }
 
-                if ((int) ($cur['spend_withheld_rows'] ?? 0) > 0 || (int) ($prev['spend_withheld_rows'] ?? 0) > 0) {
-                    return;
-                }
+        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
 
-                $now_ = $cur[$key] ?? null;
-                $was = $prev[$key] ?? null;
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, &$out) {
+            $cur = $current[(string) $c->getKey()];
+            $prev = $previous[(string) $c->getKey()];
 
-                if ($now_ === null || $was === null || $was <= 0) {
-                    return;
-                }
+            if ((int) ($cur['spend_withheld_rows'] ?? 0) > 0 || (int) ($prev['spend_withheld_rows'] ?? 0) > 0) {
+                return;
+            }
 
-                $rise = ($now_ - $was) / $was * 100;
+            $now_ = $cur[$key] ?? null;
+            $was = $prev[$key] ?? null;
 
-                if ($rise < $pct) {
-                    return;
-                }
+            if ($now_ === null || $was === null || $was <= 0) {
+                return;
+            }
 
-                $out[] = [
-                    'entity_type' => UnifiedCampaign::class,
-                    'entity_id' => (string) $c->id,
-                    'project_id' => (string) $c->project_id,
-                    'title' => $label.' increased',
-                    'message' => $c->name.' '.$label.' rose from '.round($was, 2).' to '.round($now_, 2)
-                        .' ('.round($rise).'% up) on '.(int) ($cur[$resultKey] ?? 0).' '.$resultKey.' — '.$this->deteriorationBasis($days, $pct, 'rise'),
-                    'context' => [
-                        'threshold_pct' => $pct,
-                        'window_days' => $days,
-                        $key.'_current' => round($now_, 4),
-                        $key.'_previous' => round($was, 4),
-                        'rise_pct' => round($rise, 2),
-                        $resultKey => (int) ($cur[$resultKey] ?? 0),
-                    ],
-                ];
-            });
+            $rise = ($now_ - $was) / $was * 100;
+
+            if ($rise < $pct) {
+                return;
+            }
+
+            $out[] = [
+                'entity_type' => UnifiedCampaign::class,
+                'entity_id' => (string) $c->id,
+                'project_id' => (string) $c->project_id,
+                'title' => $label.' increased',
+                'message' => $c->name.' '.$label.' rose from '.round($was, 2).' to '.round($now_, 2)
+                    .' ('.round($rise).'% up) on '.(int) ($cur[$resultKey] ?? 0).' '.$resultKey.' — '.$this->deteriorationBasis($days, $pct, 'rise'),
+                'context' => [
+                    'threshold_pct' => $pct,
+                    'window_days' => $days,
+                    $key.'_current' => round($now_, 4),
+                    $key.'_previous' => round($was, 4),
+                    'rise_pct' => round($rise, 2),
+                    $resultKey => (int) ($cur[$resultKey] ?? 0),
+                ],
+            ];
+        });
 
         return $out;
-    }
-
-    /** ROAS (revenue / spend) for a campaign over a date range, or null when there was no spend. */
-    private function campaignRoas(string $campaignId, Carbon $from, Carbon $to): ?float
-    {
-        return $this->totalsFor($campaignId, $from, $to)['roas'];
     }
 }
