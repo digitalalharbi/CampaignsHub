@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Accounts\Services;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Audit\AuditLogger;
@@ -67,7 +68,7 @@ final class RegistrationDecisionService
      * Take the decision.
      *
      * @param  array<string, mixed>  $input
-     * @return array{registration: RegistrationRequest, decision: RegistrationDecision, replayed: bool}
+     * @return array{registration: RegistrationRequest, decision: RegistrationDecision|null, replayed: bool, no_change: bool}
      */
     public function decide(RegistrationRequest $request, array $input, User $actor): array
     {
@@ -88,7 +89,7 @@ final class RegistrationDecisionService
                         throw new ConflictHttpException('That idempotency key belongs to a different decision.');
                     }
 
-                    return ['registration' => $locked, 'decision' => $earlier, 'replayed' => true];
+                    return ['registration' => $locked, 'decision' => $earlier, 'replayed' => true, 'no_change' => false];
                 }
             }
 
@@ -96,7 +97,12 @@ final class RegistrationDecisionService
 
             // Pressing approve twice is one decision and one email.
             if ($current !== null && (($current->terms ?? [])['fingerprint'] ?? null) === $fingerprint) {
-                return ['registration' => $locked, 'decision' => $current, 'replayed' => true];
+                return ['registration' => $locked, 'decision' => $current, 'replayed' => true, 'no_change' => $outcome === RegistrationDecision::PAYMENT_REQUIRED];
+            }
+
+            // The plain answer on a row that already holds it: nothing changes, so nothing is written, and the caller says so.
+            if ($this->alreadyAwaitingPayment($locked, $current, $outcome, $input)) {
+                return ['registration' => $locked, 'decision' => $current, 'replayed' => false, 'no_change' => true];
             }
 
             abort_if($locked->isProvisioned(), 422, 'This application has already become a workspace. Manage the account from Tenants instead.');
@@ -113,6 +119,39 @@ final class RegistrationDecisionService
                 default => $this->record($locked, $input, $actor, $fingerprint),
             };
         });
+    }
+
+    /**
+     * «Approved, payment still owed» said of an application already approved and waiting on that payment.
+     *
+     * This click wrote `registration.approved` every time, while nothing moved: eight identical lines on the Owner's own
+     * application, and the button appeared broken. Narrowing the access, or going back from a concession, is a real change.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function alreadyAwaitingPayment(RegistrationRequest $request, ?RegistrationDecision $current, string $outcome, array $input): bool
+    {
+        if ($outcome !== RegistrationDecision::PAYMENT_REQUIRED) {
+            return false;
+        }
+
+        if (! in_array($request->state, [AccountState::ApprovedAwaitingPayment, AccountState::PaymentPending], true) || $request->isProvisioned()) {
+            return false;
+        }
+
+        $access = (array) ($input['access'] ?? []);
+        if (($access['portal'] ?? null) !== null || ($access['modules'] ?? null) !== null) {
+            return false;
+        }
+
+        // No decision on the row: a person approved it before decisions existed (the Owner's own), or nobody has yet.
+        if ($current === null) {
+            return $request->approved_at !== null || $request->reviewed_at !== null;
+        }
+
+        $held = (array) $current->access;
+
+        return $current->outcome === RegistrationDecision::PAYMENT_REQUIRED && ($held['portal'] ?? null) === null && ($held['modules'] ?? null) === null;
     }
 
     /**
@@ -187,7 +226,7 @@ final class RegistrationDecisionService
 
     /**
      * @param  array<string, mixed>  $input
-     * @return array{registration: RegistrationRequest, decision: RegistrationDecision, replayed: bool}
+     * @return array{registration: RegistrationRequest, decision: RegistrationDecision|null, replayed: bool, no_change: bool}
      */
     private function approve(RegistrationRequest $request, ?RegistrationDecision $current, array $input, User $actor, string $fingerprint): array
     {
@@ -203,7 +242,7 @@ final class RegistrationDecisionService
         $access = $this->access($request, $input);
         $terms = $this->terms($request, $input) + ['fingerprint' => $fingerprint];
 
-        if (in_array($outcome, [RegistrationDecision::DISCOUNT, RegistrationDecision::WAIVER, RegistrationDecision::TRIAL], true)
+        if (in_array($outcome, [RegistrationDecision::DISCOUNT, RegistrationDecision::WAIVER, RegistrationDecision::TRIAL, RegistrationDecision::COMPLIMENTARY], true)
             && $this->gate->hasSettledPayment($request)) {
             abort(422, 'A payment for this application has already settled, so there is nothing left to concede.');
         }
@@ -213,7 +252,7 @@ final class RegistrationDecisionService
             $decision = $this->store($request, $outcome, RegistrationDecision::AWAITING_FINANCE, $input, $actor, $terms, $access);
             $this->auditDecision($request, $current, $decision, $actor);
 
-            return ['registration' => $request, 'decision' => $decision, 'replayed' => false];
+            return ['registration' => $request, 'decision' => $decision, 'replayed' => false, 'no_change' => false];
         }
 
         $current?->forceFill(['status' => RegistrationDecision::SUPERSEDED])->save();
@@ -226,12 +265,12 @@ final class RegistrationDecisionService
         $registration = $this->advance->approved($request, (int) $actor->getKey(), $input['note'] ?? null, notify: false);
         $this->advance->tellDecision($registration, $decision);
 
-        return ['registration' => $registration, 'decision' => $decision, 'replayed' => false];
+        return ['registration' => $registration, 'decision' => $decision, 'replayed' => false, 'no_change' => false];
     }
 
     /**
      * @param  array<string, mixed>  $input
-     * @return array{registration: RegistrationRequest, decision: RegistrationDecision, replayed: bool}
+     * @return array{registration: RegistrationRequest, decision: RegistrationDecision|null, replayed: bool, no_change: bool}
      */
     private function reject(RegistrationRequest $request, ?RegistrationDecision $current, array $input, User $actor, string $fingerprint): array
     {
@@ -243,6 +282,7 @@ final class RegistrationDecisionService
             'registration' => $this->advance->rejected($request, (string) $input['reason'], (int) $actor->getKey()),
             'decision' => $decision,
             'replayed' => false,
+            'no_change' => false,
         ];
     }
 
@@ -250,7 +290,7 @@ final class RegistrationDecisionService
      * Request info and defer: on the record, and they move no state and no commercial term.
      *
      * @param  array<string, mixed>  $input
-     * @return array{registration: RegistrationRequest, decision: RegistrationDecision, replayed: bool}
+     * @return array{registration: RegistrationRequest, decision: RegistrationDecision|null, replayed: bool, no_change: bool}
      */
     private function record(RegistrationRequest $request, array $input, User $actor, string $fingerprint): array
     {
@@ -265,7 +305,7 @@ final class RegistrationDecisionService
             userId: (int) $actor->getKey(),
         );
 
-        return ['registration' => $request, 'decision' => $decision, 'replayed' => false];
+        return ['registration' => $request, 'decision' => $decision, 'replayed' => false, 'no_change' => false];
     }
 
     /**
@@ -321,6 +361,11 @@ final class RegistrationDecisionService
         $plan = $this->catalogue->byCode($request->plan_code);
         $quote = $plan === null ? null : $this->catalogue->quote($plan, $interval);
 
+        // Nothing is charged, so a plan sold only through sales (no list price on this term) is as good as any other.
+        if ($outcome === RegistrationDecision::COMPLIMENTARY && $plan !== null && $quote === null) {
+            return $this->complimentaryTerms(['plan_code' => $plan->code, 'interval' => $interval, 'currency' => $plan->currency], $input, $previewing);
+        }
+
         if ($plan === null || $quote === null) {
             // Nothing to pay against is fine for plain approval, and a refusal for anything that names an amount.
             abort_if($outcome !== RegistrationDecision::PAYMENT_REQUIRED, 422, 'This application names no plan with a price on this term.');
@@ -341,6 +386,7 @@ final class RegistrationDecisionService
             RegistrationDecision::DISCOUNT => $this->discountTerms($base, $due, (int) ($input['discount_percent'] ?? 0)),
             RegistrationDecision::WAIVER => $this->waiverTerms($base, $due, $interval, $input, $previewing),
             RegistrationDecision::TRIAL => $this->trialTerms($base, $input),
+            RegistrationDecision::COMPLIMENTARY => $this->complimentaryTerms(array_diff_key($base, ['renewal_amount' => 1]), $input, $previewing),
             RegistrationDecision::EXTERNAL_SETTLEMENT => $this->settlementTerms($base, $due, $input),
             default => $base + ['amount_due' => $due, 'vat' => $this->vat($due)],
         };
@@ -395,6 +441,22 @@ final class RegistrationDecisionService
             'period_end' => $end->toIso8601String(),
             'renewal_on' => $end->toDateString(),
         ];
+    }
+
+    /**
+     * «دخول مباشر دون دفع». Deliberately no period, no renewal date and no renewal price: there is nothing to come due.
+     *
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function complimentaryTerms(array $base, array $input, bool $previewing): array
+    {
+        if (! $previewing && ($input['confirm_complimentary'] ?? false) !== true) {
+            throw ValidationException::withMessages(['confirm_complimentary' => 'Direct entry with no payment has to be confirmed explicitly.']);
+        }
+
+        return $base + ['complimentary' => true, 'scope' => 'open_ended', 'amount_due' => '0.00'];
     }
 
     /**

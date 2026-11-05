@@ -7,6 +7,7 @@ import {
   type AdminRegistration,
 } from './api'
 import { RegistrationDecisionForm } from './RegistrationDecisionForm'
+import { accountStateLabel } from './labels'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
@@ -129,8 +130,8 @@ export function RegistrationsPage() {
       {list.data && (
         <div data-testid="registrations-counts" className="flex flex-wrap gap-2">
           {Object.entries(list.data.counts).map(([k, n]) => (
-            <span key={k} data-testid={`registrations-count-${k}`} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-text-secondary">
-              {k} · {n}
+            <span key={k} data-testid={`registrations-count-${k}`} data-state={k} className="rounded-lg bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-text-secondary">
+              {accountStateLabel(k, ar)} · <Num>{n}</Num>
             </span>
           ))}
         </div>

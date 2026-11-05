@@ -115,17 +115,21 @@ final class PlatformRegistrationController extends Controller
         $data = $request->validate(['note' => ['sometimes', 'nullable', 'string', 'max:2000']]);
 
         // The plain answer on the decision form: approved, and the payment is still owed.
-        $registration = $this->decisions->decide($registration, [
+        $result = $this->decisions->decide($registration, [
             'outcome' => RegistrationDecision::PAYMENT_REQUIRED,
             'reason' => $data['note'] ?? 'Approved: payment required.',
             'note' => $data['note'] ?? null,
-        ], $request->user())['registration'];
+        ], $request->user());
+        $registration = $result['registration'];
 
         return ApiResponse::success(
-            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration)],
-            $registration->isProvisioned()
-                ? 'Approved. The workspace has been created.'
-                : 'Approved. The application is now waiting on payment.',
+            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration), 'no_change' => $result['no_change']],
+            match (true) {
+                // Said in words: an unchanged screen after a click reads as a broken button.
+                $result['no_change'] => 'Already approved. Nothing changed: what is outstanding is the payment.',
+                $registration->isProvisioned() => 'Approved. The workspace has been created.',
+                default => 'Approved. The application is now waiting on payment.',
+            },
         );
     }
 
@@ -204,6 +208,7 @@ final class PlatformRegistrationController extends Controller
             'trial_ends_on' => ['required_if:outcome,'.RegistrationDecision::TRIAL, 'nullable', 'date'],
             'confirm_waiver' => ['sometimes', 'boolean'],
             'confirm_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'confirm_complimentary' => ['sometimes', 'boolean'],
             'evidence' => ['required_if:outcome,'.RegistrationDecision::EXTERNAL_SETTLEMENT, 'nullable', 'array'],
             'evidence.reference' => ['sometimes', 'string', 'max:190'],
             'evidence.amount' => ['sometimes', 'numeric', 'min:0'],
@@ -266,9 +271,12 @@ final class PlatformRegistrationController extends Controller
         return ApiResponse::success([
             'registration' => $this->row($registration, $request),
             'policy' => $this->policy->for($registration),
-            'decision' => ['id' => (string) $result['decision']->getKey(), 'outcome' => $result['decision']->outcome, 'status' => $result['decision']->status],
+            'decision' => $result['no_change'] && $result['decision'] === null ? null : [
+                'id' => (string) $result['decision']?->getKey(), 'outcome' => $result['decision']?->outcome, 'status' => $result['decision']?->status,
+            ],
             'replayed' => $result['replayed'],
-        ], 'The decision has been recorded.');
+            'no_change' => $result['no_change'],
+        ], $result['no_change'] ? 'Already approved. Nothing changed: what is outstanding is the payment.' : 'The decision has been recorded.');
     }
 
     /** POST /api/v1/admin/registrations/{registration}/decisions/{decision}/verify-settlement */

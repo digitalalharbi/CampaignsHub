@@ -64,6 +64,10 @@ final class AdvanceRegistration
      */
     public function approved(RegistrationRequest $request, ?int $reviewerId = null, ?string $note = null, bool $notify = true): RegistrationRequest
     {
+        // A concession on a row already approved is on the record as its own decision. It is not another approval.
+        $alreadyApproved = in_array($request->state, [AccountState::ApprovedAwaitingPayment, AccountState::PaymentPending], true)
+            && ($request->approved_at !== null || $request->reviewed_at !== null);
+
         $request->forceFill([
             'reviewed_by' => $reviewerId,
             'reviewed_at' => now(),
@@ -82,12 +86,14 @@ final class AdvanceRegistration
             $this->tell($request, 'registration_approved', ['reason' => $note ?? '']);
         }
 
-        $this->audit->log(
-            action: 'registration.approved',
-            entityType: RegistrationRequest::class,
-            entityId: (string) $request->getKey(),
-            after: ['note' => $note, 'reviewer' => $reviewerId],
-        );
+        if (! $alreadyApproved) {
+            $this->audit->log(
+                action: 'registration.approved',
+                entityType: RegistrationRequest::class,
+                entityId: (string) $request->getKey(),
+                after: ['note' => $note, 'reviewer' => $reviewerId],
+            );
+        }
 
         return $this->advance($request->refresh(), approvalGranted: true);
     }
@@ -241,7 +247,7 @@ final class AdvanceRegistration
         // A decision taken while a verification was still open activates here, so the applicant hears about it here.
         $decision = $this->gate->inForce($request);
         if ($decision !== null && in_array($decision->outcome, [
-            RegistrationDecision::WAIVER, RegistrationDecision::TRIAL, RegistrationDecision::EXTERNAL_SETTLEMENT, RegistrationDecision::JOIN_EXISTING,
+            RegistrationDecision::WAIVER, RegistrationDecision::TRIAL, RegistrationDecision::EXTERNAL_SETTLEMENT, RegistrationDecision::JOIN_EXISTING, RegistrationDecision::COMPLIMENTARY,
         ], true)) {
             $this->tellDecision($request, $decision);
         }
@@ -266,6 +272,7 @@ final class AdvanceRegistration
             $decision->outcome === RegistrationDecision::WAIVER => ['registration_approved_waived', [
                 'amount' => (string) ($terms['renewal_amount'] ?? ''), 'currency' => $money['currency'], 'date' => (string) ($terms['renewal_on'] ?? ''),
             ]],
+            $decision->outcome === RegistrationDecision::COMPLIMENTARY => ['registration_approved_complimentary', []],
             $decision->outcome === RegistrationDecision::TRIAL => ['registration_approved_trial', [
                 'amount' => (string) ($terms['renewal_amount'] ?? ''), 'currency' => $money['currency'], 'date' => (string) ($terms['renewal_on'] ?? ''),
             ]],

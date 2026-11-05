@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
@@ -135,6 +136,8 @@ final class PlatformOverviewController extends Controller
          * customers who are still on the old terms.
          */
         $rows = DB::table('subscriptions')
+            // Complimentary access is owed by nobody, so it is not committed revenue.
+            ->where(fn ($q) => $q->whereNull('commercial_basis')->orWhere('commercial_basis', '!=', RegistrationDecision::BASIS_COMPLIMENTARY))
             ->get(['status', 'billing_interval', 'currency', 'unit_amount']);
 
         $byStatus = $rows->groupBy('status')->map->count()->all();

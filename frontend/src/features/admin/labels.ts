@@ -22,6 +22,22 @@ const ACCOUNT_TYPES: Record<string, Label> = {
   unset: { ar: 'غير محدّد', en: 'Not set' },
 }
 
+/** The same words as `AccountState::label()` on the server: a chip in the queue reads like the row it counts. */
+const ACCOUNT_STATES: Record<string, Label> = {
+  draft: { ar: 'غير مكتمل', en: 'Incomplete' },
+  email_verification_required: { ar: 'بانتظار تأكيد البريد', en: 'Awaiting email verification' },
+  mobile_verification_required: { ar: 'بانتظار تأكيد الجوال', en: 'Awaiting mobile verification' },
+  pending_approval: { ar: 'قيد المراجعة', en: 'Under review' },
+  approved_awaiting_payment: { ar: 'معتمد — بانتظار الدفع', en: 'Approved — awaiting payment' },
+  payment_pending: { ar: 'بانتظار تأكيد الدفع', en: 'Awaiting payment confirmation' },
+  active: { ar: 'نشط', en: 'Active' },
+  past_due: { ar: 'متأخر السداد', en: 'Past due' },
+  suspended: { ar: 'موقوف', en: 'Suspended' },
+  rejected: { ar: 'مرفوض', en: 'Rejected' },
+  cancelled: { ar: 'ملغى', en: 'Cancelled' },
+  expired: { ar: 'منتهٍ', en: 'Expired' },
+}
+
 const SUBSCRIPTION_STATES: Record<string, Label> = {
   active: { ar: 'نشط', en: 'Active' },
   trialing: { ar: 'تجربة', en: 'Trial' },
@@ -46,6 +62,7 @@ function look(table: Record<string, Label>, code: string, ar: boolean): string {
 }
 
 export const accountTypeLabel = (code: string, ar: boolean) => look(ACCOUNT_TYPES, code, ar)
+export const accountStateLabel = (code: string, ar: boolean) => look(ACCOUNT_STATES, code, ar)
 export const subscriptionStateLabel = (code: string, ar: boolean) => look(SUBSCRIPTION_STATES, code, ar)
 
 /**

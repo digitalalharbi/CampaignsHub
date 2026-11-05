@@ -207,6 +207,8 @@ final class SubscriptionLifecycle
         $end = match ($basis) {
             RegistrationDecision::BASIS_WAIVED => Carbon::parse((string) $terms['period_end']),
             RegistrationDecision::BASIS_TRIAL => Carbon::parse((string) $terms['trial_ends_at']),
+            // Open-ended: there is no date, so nothing in the sweep below ever has anything to act on.
+            RegistrationDecision::BASIS_COMPLIMENTARY => null,
             default => Carbon::now()->{$interval === 'annual' ? 'addYear' : 'addMonth'}(),
         };
 
@@ -220,6 +222,7 @@ final class SubscriptionLifecycle
 
         $subscription->forceFill([
             'current_period_start' => Carbon::now(),
+            'current_period_end' => $end,
             'trial_ends_at' => $basis === RegistrationDecision::BASIS_TRIAL ? $end : null,
             'commercial_basis' => $basis,
             'registration_decision_id' => $decision->getKey(),
@@ -233,7 +236,7 @@ final class SubscriptionLifecycle
             action: 'subscription.started_by_decision',
             entityType: Subscription::class,
             entityId: (string) $subscription->getKey(),
-            after: ['basis' => $basis, 'decision' => (string) $decision->getKey(), 'plan' => $plan->code, 'current_period_end' => $end->toIso8601String()],
+            after: ['basis' => $basis, 'decision' => (string) $decision->getKey(), 'plan' => $plan->code, 'current_period_end' => $end?->toIso8601String()],
             reason: $decision->reason,
             userId: $decision->actor_id === null ? null : (int) $decision->actor_id,
             tenantId: (string) $tenant->getKey(),
@@ -267,7 +270,7 @@ final class SubscriptionLifecycle
         return [
             'trials_due' => $this->query()->where('status', 'trialing')->whereNotNull('trial_ends_at')->where('trial_ends_at', '<=', $now)->count(),
             'plan_changes_due' => $this->query()->whereNotNull('scheduled_plan_id')->whereNotNull('scheduled_change_at')->where('scheduled_change_at', '<=', $now)->count(),
-            'renewals_due' => $this->query()->where('status', 'active')->whereNotNull('current_period_end')->where('current_period_end', '<=', $now)->count(),
+            'renewals_due' => $this->billable()->where('status', 'active')->whereNotNull('current_period_end')->where('current_period_end', '<=', $now)->count(),
             'grace_expired' => $this->query()->where('status', 'past_due')->whereNotNull('grace_ends_at')->where('grace_ends_at', '<=', $now)->count(),
         ];
     }
@@ -383,7 +386,7 @@ final class SubscriptionLifecycle
     /** Active subscriptions whose period has ended: open the renewal charge, do not extend anything yet. */
     public function chargeDueRenewals(?SubscriptionCheckout $checkout = null): int
     {
-        $due = $this->query()
+        $due = $this->billable()
             ->where('status', 'active')
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<=', Carbon::now())
@@ -424,7 +427,7 @@ final class SubscriptionLifecycle
      */
     public function markPastDue(): int
     {
-        $lapsed = $this->query()
+        $lapsed = $this->billable()
             ->whereIn('status', ['active'])
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<=', Carbon::now())
@@ -940,6 +943,11 @@ final class SubscriptionLifecycle
 
     // ── Reading ───────────────────────────────────────────────────────────────────────────────
 
+    public function isComplimentary(Tenant $tenant): bool
+    {
+        return $this->subscriptions->subscriptionFor($tenant)?->isComplimentary() === true;
+    }
+
     private function nextPeriodEnd(Subscription $subscription, Carbon $from): Carbon
     {
         return $subscription->billing_interval === 'annual' ? $from->copy()->addYear() : $from->copy()->addMonth();
@@ -995,6 +1003,17 @@ final class SubscriptionLifecycle
     {
         // The lifecycle runs for every tenant at once, from a schedule that belongs to none of them.
         return Subscription::query()->withoutGlobalScope(TenantScope::class);
+    }
+
+    /**
+     * Everything that can owe a renewal. Complimentary access cannot, whatever date is left on the row: the money question is
+     * answered by the basis, and the missing date is only how that looks when nothing has gone wrong.
+     *
+     * @return Builder<Subscription>
+     */
+    private function billable()
+    {
+        return $this->query()->where(fn ($q) => $q->whereNull('commercial_basis')->orWhere('commercial_basis', '!=', RegistrationDecision::BASIS_COMPLIMENTARY));
     }
 
     /** @return Collection<int, Subscription> */

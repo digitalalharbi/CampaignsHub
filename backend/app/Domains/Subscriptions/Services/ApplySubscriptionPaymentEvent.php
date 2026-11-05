@@ -351,6 +351,24 @@ final class ApplySubscriptionPaymentEvent
              * they are different calls rather than one call with a flag.
              */
             if ($advanced->isProvisioned() && $advanced->tenant !== null) {
+                /*
+                 * A checkout opened before the owner granted direct entry, and paid after it. The access stands and stays free, so
+                 * this money is owed back. Letting it start a period would turn a free workspace into a billed one with no decision.
+                 */
+                if ($this->lifecycle->isComplimentary($advanced->tenant)) {
+                    $payment->forceFill(['status' => 'refund_due', 'error' => 'This workspace has complimentary access, so this payment is owed back.'])->save();
+
+                    $this->audit->log(
+                        action: 'subscription.payment_after_complimentary',
+                        entityType: RegistrationRequest::class,
+                        entityId: (string) $advanced->getKey(),
+                        reason: 'A payment settled after complimentary access was granted; the fee is owed back.',
+                        tenantId: (string) $advanced->tenant->getKey(),
+                    );
+
+                    return;
+                }
+
                 $isTrial
                     ? $this->lifecycle->beginTrial($advanced->tenant, $advanced, $payment)
                     : $this->lifecycle->beginSubscription($advanced->tenant, $advanced, $payment);
