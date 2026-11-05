@@ -16,6 +16,7 @@ use App\Domains\Reports\Services\ExportFailureReason;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportDeliveryAudienceGuard;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\DetailLevel;
@@ -451,10 +452,21 @@ final class ReportController extends Controller
         return ApiResponse::success($shape, 'Report duplicated.', status: 201);
     }
 
-    public function regenerate(Request $request, string $project, string $report): JsonResponse
+    /** REPORT-SNAPSHOT-PROTECT-001 — replacing a stored copy is asked for, attributed, and the copy is kept by the job. */
+    public function regenerate(Request $request, AuditLogger $audit, string $project, string $report): JsonResponse
     {
         abort_unless($request->user()->hasPermission('reports.view'), 403);
         $model = $this->find($report);
+        $confirmed = (bool) ($request->validate(['confirm' => ['nullable', 'boolean']])['confirm'] ?? false);
+        if ($model->status === 'completed' && $model->hasStoredCopy() && ! $confirmed) {
+            return ApiResponse::error(__('api.report_regenerate_needs_confirmation'), ['code' => 'report_regenerate_needs_confirmation'], status: 409);
+        }
+        $audit->log(
+            action: 'report.regenerated',
+            entityType: Report::class,
+            entityId: (string) $model->getKey(),
+            before: ['generated_at' => $model->generated_at?->toIso8601String()],
+        );
         $model->update(['status' => 'processing', 'error' => null]);
         GenerateReportJob::dispatch((string) $model->id);
 
@@ -635,7 +647,8 @@ final class ReportController extends Controller
              * sending it would see «no cover» on the very rows the client is about to see correctly
              * — and would reasonably conclude the report was broken and not send it.
              */
-            $stored = app(ReportCreativeMedia::class)->refresh($r->data ?? []);
+            // REPORT-SOURCE-ISOLATION-001 — the builder and preview read the same contained document the link serves.
+            $stored = app(ReportCreativeMedia::class)->refresh(app(ReportSourceContainment::class)->apply($r->data ?? [], $r));
             /*
              * REPORT-PARITY-FOUR-SURFACES-001 — the preview is the client's document, through the surfaces' own resolver.
              *

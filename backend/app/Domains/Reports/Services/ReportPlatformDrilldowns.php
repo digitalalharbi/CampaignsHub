@@ -9,6 +9,7 @@ use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -98,7 +99,10 @@ final class ReportPlatformDrilldowns
                     : [
                         'project_ids' => $projectIds,
                         'providers' => [$provider],
-                        'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+                        // REPORT-SOURCE-ISOLATION-001 — the report's ad accounts bound the printed content exactly as they bound the
+                        // stored section: this list named project, platform and campaigns and never the accounts.
+                        'campaign_ids' => AccountCampaignCeiling::campaigns($scope->resolvedCampaignIds() ?? [], $scope->accountIds, (string) $report->project_id),
+                        'account_ids' => $scope->accountIds,
                         'creative_ids' => $scope->creativeIds,
                     ], $form->form, liveMedia: true)
                 : null;

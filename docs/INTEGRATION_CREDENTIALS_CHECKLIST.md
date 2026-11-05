@@ -391,6 +391,31 @@ The console lists the pairs the absence has ALREADY cost, worst first, derived f
 actually withheld in both pipelines — so a currency nobody thought to list appears the moment it
 costs somebody a number.
 
+**The one source that ships, off (`MONEY-FX-FLOATING-001`, `MONEY-CURRENCY-NEVER-ASSUMED-001`).**
+`App\Domains\Metrics\Rates\EcbReferenceRates` reads the European Central Bank's euro reference rates
+(public, keyless, one publication per working day; the 90-day history for older days). It is used
+only when the Owner sets, on the server, the two keys that `deploy/backend.production.env.example`
+carries commented out:
+
+```
+FX_RATE_DRIVER=App\Domains\Metrics\Rates\EcbReferenceRates
+FX_RATE_STALE_AFTER_DAYS=3
+```
+
+Checked against the ECB's recorded publication of 2026-11-04 (`backend/tests/Fixtures/ecb/`): of
+Production's account currencies it answers **USD** and **TRY** (EUR is its base); it does **not**
+publish **EGP** (hand-enter at `/admin/settings/currency-rates`, or another source) and does not
+publish **SAR**, which needs no source — the legal pegs (SAR, AED, QAR, BHD, OMR, JOD) are recorded
+by `fx:rates` itself the first night a figure is withheld for them. Once a rate exists, `fx:rates`
+records it back to the earliest withheld day of each pair, and the rows already withheld convert
+themselves through `money-renormalise.yml` (`metrics:renormalise-currency`, dry run first).
+
+An ad account whose currency nobody states — not the row, not the account, not the provider when the
+sync asks — has its money **withheld with no currency claimed** and reads «العملة غير معروفة» on
+its connection; it is never taken to be in USD. `php artisan money:currency-audit --json` (also
+printed by production-diagnostics) lists, per provider, the accounts without a currency, stored money
+whose currency differs from its account's, money rows with no currency, and pairs without a rate.
+
 ## 4c. The compliance URLs every platform review asks for (`LEGAL-DELETE-001`)
 
 Before any of the six advertising platforms will approve an app, its console asks for these. They are

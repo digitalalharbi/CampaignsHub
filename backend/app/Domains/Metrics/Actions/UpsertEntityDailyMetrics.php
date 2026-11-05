@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Actions;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\SourceCurrency;
 use App\Support\GroupedUpsert;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -55,7 +56,9 @@ final class UpsertEntityDailyMetrics
      * @param  list<array<string,mixed>>  $rows  canonical rows; provider entity id in `entity_id`
      * @param  array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>  $known
      *                                                                                                                          provider entity id => the entity the structure sweep already discovered
-     * @return array{upserted:int,skipped:int,unkeyed:int} `unkeyed` counts the skipped rows that carried no `entity_id` at all
+     * @return array{upserted:int,skipped:int,unkeyed:int,currency_unknown:int} `unkeyed` counts the skipped rows that carried no
+     *                                                                          `entity_id` at all; `currency_unknown` the stored rows whose
+     *                                                                          money was withheld because nobody stated its currency
      */
     public function execute(
         ExternalAccount $account,
@@ -65,13 +68,14 @@ final class UpsertEntityDailyMetrics
         ?string $syncRunId = null,
     ): array {
         if ($rows === []) {
-            return ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0];
+            return ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0];
         }
 
         $now = Carbon::now();
         $payload = [];
         $skipped = 0;
         $unkeyed = 0;
+        $unlabelled = 0;
 
         foreach ($rows as $row) {
             $providerId = (string) ($row['entity_id'] ?? '');
@@ -95,7 +99,9 @@ final class UpsertEntityDailyMetrics
             }
 
             $reporting = $this->currency->forProject($entity['project_id']);
-            $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
+            // MONEY-CURRENCY-NEVER-ASSUMED-001 — row, else account, else NULL (withheld). Never the reporting currency.
+            $source = SourceCurrency::of($row, $account);
+            $withheldForCurrency = false;
 
             $measures = [];
             foreach (self::MEASURES as $key) {
@@ -121,6 +127,11 @@ final class UpsertEntityDailyMetrics
                 $money["{$key}_original"] = $amount;
                 $money['original_currency'] = $source;
                 $money['project_currency'] = $reporting;
+                $withheldForCurrency = $withheldForCurrency || $source === null;
+            }
+
+            if ($withheldForCurrency) {
+                $unlabelled++;
             }
 
             $payload[] = [
@@ -157,6 +168,6 @@ final class UpsertEntityDailyMetrics
             ],
         );
 
-        return ['upserted' => count($payload), 'skipped' => $skipped, 'unkeyed' => $unkeyed];
+        return ['upserted' => count($payload), 'skipped' => $skipped, 'unkeyed' => $unkeyed, 'currency_unknown' => $unlabelled];
     }
 }

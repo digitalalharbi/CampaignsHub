@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -196,7 +198,39 @@ final class ReportShare extends Model
     {
         $scope = (array) ($this->scope ?? []);
 
-        return (array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== [];
+        if ((array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== []) {
+            return true;
+        }
+
+        return $this->reportIsNarrower ??= $this->reportNarrowerThanItsProject();
+    }
+
+    /** Memo for {@see narrowerThanItsProject()} — the report's own sources are read once per link. */
+    private ?bool $reportIsNarrower = null;
+
+    /**
+     * REPORT-SOURCE-ISOLATION-001 — a link is as narrow as the REPORT it serves, whatever the link itself names.
+     *
+     * A stored copy's link may carry no scope of its own (a duplicate's default link, a link made before links had one). The
+     * rule above then read «not narrower» for a report made for one ad account, and the sections that answer for a whole
+     * project — attribution against the store's orders, the widgets — were served beside figures that cover part of it. The
+     * report is narrower when it names campaigns, ad sets, ads or platforms, or when its accounts leave out an account the
+     * project actively selects.
+     */
+    private function reportNarrowerThanItsProject(): bool
+    {
+        $report = Report::withoutGlobalScopes()->whereKey($this->report_id)->first(['id', 'project_id', 'scope']);
+        if ($report === null || ! is_array($report->scope) || $report->scope === []) {
+            return false;
+        }
+
+        $sources = ReportScope::fromReport($report->scope, (string) $report->project_id);
+        if ($sources->campaignIds !== [] || $sources->adSetIds !== [] || $sources->adIds !== [] || $sources->providers !== []) {
+            return true;
+        }
+
+        return $sources->accountIds !== []
+            && array_diff(BoundAccountVisibility::activeAccountIds((string) $report->project_id), $sources->accountIds) !== [];
     }
 
     /**
