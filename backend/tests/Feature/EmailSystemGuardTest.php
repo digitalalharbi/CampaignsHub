@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Notifications\Support\MailGallery;
+use App\Domains\Notifications\Support\MailShell;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -46,8 +47,13 @@ final class EmailSystemGuardTest extends TestCase
     {
         $wrong = [];
         $subject = (string) $mail->envelope()->subject;
-        if (! str_starts_with($subject, 'CampaignsHub — ')) {
-            $wrong[] = "subject does not start «CampaignsHub — »: {$subject}";
+        // Owner, 2026-11-05: the name is written in the reader's language, and that supersedes §17.3.1's Latin name on an Arabic subject.
+        $opens = MailShell::wordmark($locale === 'ar').' — ';
+        if (! str_starts_with($subject, $opens)) {
+            $wrong[] = "subject does not start «{$opens}»: {$subject}";
+        }
+        if ($locale === 'ar' && str_contains($subject, 'CampaignsHub')) {
+            $wrong[] = "an Arabic subject names the product in Latin: {$subject}";
         }
 
         Mail::mailer('array')->to('guard@example.test')->send($mail);
@@ -170,11 +176,11 @@ final class EmailSystemGuardTest extends TestCase
         $ar = MailGallery::messages('ar');
         $en = MailGallery::messages('en');
 
-        $this->assertSame('CampaignsHub — دعوة للانضمام إلى وكالة المدى', (string) $ar['account-invitation']->envelope()->subject);
+        $this->assertSame('كامبينز هَب — دعوة للانضمام إلى وكالة المدى', (string) $ar['account-invitation']->envelope()->subject);
         $this->assertStringStartsWith('CampaignsHub — You have been invited to join', (string) $en['account-invitation']->envelope()->subject);
-        $this->assertStringStartsWith('CampaignsHub — 3 تنبيهات', (string) $ar['alerts-bundle']->envelope()->subject);
-        $this->assertStringStartsWith('CampaignsHub — تقريرك الأسبوعي', (string) $ar['digest-weekly']->envelope()->subject);
+        $this->assertStringStartsWith('كامبينز هَب — 3 تنبيهات', (string) $ar['alerts-bundle']->envelope()->subject);
+        $this->assertStringStartsWith('كامبينز هَب — تقريرك الأسبوعي', (string) $ar['digest-weekly']->envelope()->subject);
         $this->assertStringStartsWith('CampaignsHub — Your weekly report', (string) $en['digest-weekly']->envelope()->subject);
-        $this->assertStringStartsWith('CampaignsHub — تقريرك الشهري', (string) $ar['digest-monthly']->envelope()->subject);
+        $this->assertStringStartsWith('كامبينز هَب — تقريرك الشهري', (string) $ar['digest-monthly']->envelope()->subject);
     }
 }

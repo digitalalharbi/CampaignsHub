@@ -57,7 +57,7 @@ final class OperationalMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: MailSubject::of($this->title));
+        return new Envelope(subject: MailSubject::of($this->title, $this->lang === 'ar'));
     }
 
     public function content(): Content

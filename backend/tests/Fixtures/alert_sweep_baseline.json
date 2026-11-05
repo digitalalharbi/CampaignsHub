@@ -42262,7 +42262,7 @@
             ],
             "lang": "ar",
             "name": "ar@alerts.test",
-            "subject": "CampaignsHub — 55 تنبيهًا تحتاج قرارًا",
+            "subject": "كامبينز هَب — 55 تنبيهًا تحتاج قرارًا",
             "items": [
                 {
                     "severity": "warning",
@@ -44336,7 +44336,7 @@
             ],
             "lang": "ar",
             "name": "ar@alerts.test",
-            "subject": "CampaignsHub — تعافى: Internal spend limit at 100%",
+            "subject": "كامبينز هَب — تعافى: Internal spend limit at 100%",
             "items": [
                 {
                     "severity": "info",
@@ -44374,7 +44374,7 @@
             ],
             "lang": "ar",
             "name": "ar@alerts.test",
-            "subject": "CampaignsHub — 7 تنبيهات تحتاج قرارًا",
+            "subject": "كامبينز هَب — 7 تنبيهات تحتاج قرارًا",
             "items": [
                 {
                     "severity": "info",
@@ -44640,7 +44640,7 @@
             ],
             "lang": "ar",
             "name": "ar@alerts.test",
-            "subject": "CampaignsHub — 50 تنبيهًا تحتاج قرارًا",
+            "subject": "كامبينز هَب — 50 تنبيهًا تحتاج قرارًا",
             "items": [
                 {
                     "severity": "warning",
@@ -46466,7 +46466,7 @@
             ],
             "lang": "ar",
             "name": "ar@alerts.test",
-            "subject": "CampaignsHub — 50 تنبيهًا تحتاج قرارًا",
+            "subject": "كامبينز هَب — 50 تنبيهًا تحتاج قرارًا",
             "items": [
                 {
                     "severity": "warning",

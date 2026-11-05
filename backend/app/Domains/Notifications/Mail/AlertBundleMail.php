@@ -59,14 +59,14 @@ final class AlertBundleMail extends Mailable
         $n = count($this->items);
 
         if ($n === 1) {
-            return new Envelope(subject: MailSubject::of($this->items[0]['title']));
+            return new Envelope(subject: MailSubject::of($this->items[0]['title'], $ar));
         }
 
         return new Envelope(subject: MailSubject::of($ar
             // Arabic counts 3–10 with a plural and 11+ with a singular. Getting this wrong is two
             // mistakes in three characters, which MAIL-007 recorded the first time.
             ? sprintf('%d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
-            : sprintf('%d alerts need a decision', $n)));
+            : sprintf('%d alerts need a decision', $n), $ar));
     }
 
     public function content(): Content

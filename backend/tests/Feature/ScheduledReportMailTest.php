@@ -291,7 +291,7 @@ final class ScheduledReportMailTest extends TestCase
                 $this->assertStringContainsString('SAR', $html);
                 $this->assertStringContainsString('Bundle Carousel', $html);
                 $this->assertStringContainsString('Static Offer', $html);
-                $this->assertStringStartsWith('CampaignsHub — ', (string) $m->envelope()->subject);
+                $this->assertStringStartsWith(($language === 'ar' ? 'كامبينز هَب' : 'CampaignsHub').' — ', (string) $m->envelope()->subject);
 
                 return true;
             });

@@ -44,7 +44,7 @@ final class ScheduledReportMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: MailSubject::of($this->reportTitle));
+        return new Envelope(subject: MailSubject::of($this->reportTitle, $this->lang === 'ar'));
     }
 
     public function content(): Content

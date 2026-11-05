@@ -23,9 +23,10 @@ final class TestSendMark
     public static function subject(Mailable $mail, string $lang): string
     {
         $line = method_exists($mail, 'envelope') ? (string) $mail->envelope()->subject : '';
-        $rest = str_starts_with($line, MailSubject::PREFIX) ? substr($line, strlen(MailSubject::PREFIX)) : $line;
+        $prefix = MailSubject::prefix($lang === 'ar');
+        $rest = str_starts_with($line, $prefix) ? substr($line, strlen($prefix)) : $line;
 
-        return MailSubject::of(($lang === 'ar' ? '[اختبار] ' : '[TEST] ').$rest);
+        return MailSubject::of(($lang === 'ar' ? '[اختبار] ' : '[TEST] ').$rest, $lang === 'ar');
     }
 
     public static function apply(Mailable $mail, string $lang): Mailable

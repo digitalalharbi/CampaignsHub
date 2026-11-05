@@ -10,7 +10,7 @@ use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Providers\NullEmailProvider;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailGallery;
-use App\Domains\Notifications\Support\MailSubject;
+use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Platform\Services\OperationalReadiness;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
@@ -168,8 +168,8 @@ final class MailTestSendTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'en', 'key' => 'report-ready'])->assertOk();
 
         [$ar, $en] = $this->wire();
-        $this->assertStringStartsWith(MailSubject::PREFIX.'[اختبار] ', (string) $ar->getSubject());
-        $this->assertStringStartsWith(MailSubject::PREFIX.'[TEST] ', (string) $en->getSubject());
+        $this->assertStringStartsWith(MailShell::wordmark(true).' — [اختبار] ', (string) $ar->getSubject());
+        $this->assertStringStartsWith(MailShell::wordmark(false).' — [TEST] ', (string) $en->getSubject());
         $this->assertStringContainsString('رسالة اختبار', (string) $ar->getHtmlBody());
         $this->assertStringContainsString('dir="rtl"', (string) $ar->getHtmlBody());
         $this->assertStringContainsString('Test message', (string) $en->getHtmlBody());
@@ -204,7 +204,7 @@ final class MailTestSendTest extends TestCase
                 $message = end($all);
                 $mark = $lang === 'ar' ? '[اختبار] ' : '[TEST] ';
 
-                $this->assertStringStartsWith(MailSubject::PREFIX.$mark, (string) $message->getSubject(), "{$key}.{$lang}");
+                $this->assertStringStartsWith(MailShell::wordmark($lang === 'ar').' — '.$mark, (string) $message->getSubject(), "{$key}.{$lang}");
                 $this->assertSame(1, substr_count((string) $message->getHtmlBody(), 'data-test-send-notice'), "{$key}.{$lang}");
             }
         }
@@ -468,8 +468,8 @@ final class MailTestSendTest extends TestCase
     public function test_the_review_shows_the_subject_the_text_part_and_who_may_send(): void
     {
         $preview = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/email/previews/account-password-reset?locale=ar')->assertOk()->json('data');
-        $this->assertStringStartsWith(MailSubject::PREFIX, $preview['subject']);
-        $this->assertStringStartsWith(MailSubject::PREFIX.'[اختبار] ', $preview['test_subject']);
+        $this->assertStringStartsWith(MailShell::wordmark(true).' — ', $preview['subject']);
+        $this->assertStringStartsWith(MailShell::wordmark(true).' — [اختبار] ', $preview['test_subject']);
         $this->assertStringContainsString('كامبينز هَب', $preview['text']);
         $this->assertTrue($preview['mandatory']);
 

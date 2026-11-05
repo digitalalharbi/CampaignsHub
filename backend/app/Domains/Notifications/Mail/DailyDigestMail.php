@@ -33,7 +33,7 @@ use Illuminate\Queue\SerializesModels;
  *
  * ## The subject line carries the answer
  *
- * «CampaignsHub — 12,400 SAR, 84 نتيجة» tells somebody on a lock screen whether to open it. A
+ * «كامبينز هَب — 12,400 SAR، 84 نتيجة» tells somebody on a lock screen whether to open it. A
  * subject that says only «Your daily report» makes every day look identical, which is how a daily
  * email stops being read.
  */
@@ -173,7 +173,7 @@ final class DailyDigestMail extends Mailable
          * EMAIL-SUBJECT-001 — the product first, then the report, then the answer.
          *
          * The Owner's §17.3.1 is the later instruction and it wins over BRANDING-HIERARCHY-001 for the
-         * subject line: the inbox says CampaignsHub on every installation. The agency a white-label
+         * subject line: the inbox names the product on every installation, in the reader's language (Owner, 2026-11-05). The agency a white-label
          * digest goes out for follows the prefix and is named in the footer, so the reader still sees
          * whose report this is, and nobody is shown a sender the mail did not come from.
          *
@@ -191,7 +191,7 @@ final class DailyDigestMail extends Mailable
         // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
         return new Envelope(subject: MailSubject::of($this->withholdsMoney()
             ? ($ar ? "{$lead}: {$results} نتيجة" : "{$lead}: {$results} results")
-            : ($ar ? "{$lead}: {$spend}، {$results} نتيجة" : "{$lead}: {$spend}, {$results} results")));
+            : ($ar ? "{$lead}: {$spend}، {$results} نتيجة" : "{$lead}: {$spend}, {$results} results"), $ar));
     }
 
     public function content(): Content

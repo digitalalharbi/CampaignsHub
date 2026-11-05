@@ -55,7 +55,7 @@ final class SecurityAlertMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: MailSubject::of($this->words()['subject']));
+        return new Envelope(subject: MailSubject::of($this->words()['subject'], $this->lang === 'ar'));
     }
 
     public function content(): Content

@@ -48,7 +48,7 @@ final class InvitationMail extends Mailable
 
         return new Envelope(subject: MailSubject::of($ar
             ? "دعوة للانضمام إلى {$this->workspace}"
-            : "You have been invited to join {$this->workspace}"));
+            : "You have been invited to join {$this->workspace}", $ar));
     }
 
     public function content(): Content
