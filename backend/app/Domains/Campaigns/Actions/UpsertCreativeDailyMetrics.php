@@ -244,6 +244,8 @@ final class UpsertCreativeDailyMetrics
                 'spend_original', 'revenue_original', 'original_currency', 'project_currency',
                 'campaign_id', 'updated_at',
             ],
+            // PERF-RECOVERY-001 — a row the provider repeated is not written again.
+            stamps: ['updated_at'],
         );
 
         $this->recordDelivery(array_values(array_unique(array_column($payload, 'creative_id'))));

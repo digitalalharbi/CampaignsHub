@@ -102,4 +102,25 @@ return [
          */
         'account_sync_seconds' => (int) env('INTEGRATIONS_ACCOUNT_LOCK_SECONDS', 900),
     ],
+
+    'sync' => [
+        /*
+         * PERF-RECOVERY-001 — a sweep leaves a row alone when the provider repeated what is stored.
+         *
+         * On: only new and changed rows are written (`App\Support\UnchangedRows`). Off: every row a
+         * sweep receives is written again, as it was before — the figures are the same either way, and
+         * the switch exists so the old behaviour is one environment line away if it is ever needed.
+         */
+        'skip_unchanged_rows' => (bool) env('SYNC_SKIP_UNCHANGED_ROWS', true),
+
+        /*
+         * PERF-RECOVERY-001 — minutes over which the scheduled sweep spreads its accounts (0 to 20).
+         *
+         * 0 (the default) queues every account at :00 and :30 as before. A number gives each account
+         * its own fixed second inside that many minutes (`integrations:sync --spread`). It ships off
+         * because its effect on the readers can only be measured on the one-CPU host: turn it on,
+         * read the live link at :01 and :31 against a quiet minute, and keep whichever is better.
+         */
+        'sweep_spread_minutes' => (int) env('SYNC_SWEEP_SPREAD_MINUTES', 0),
+    ],
 ];
