@@ -16,6 +16,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Services\ProviderIdentity;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -179,6 +180,9 @@ final class ApiKeyConnectionController extends Controller
                 $this->reclaimAccountRow($connection, $owner);
 
                 $discovered = $this->discovery->refresh($connection)['discovered'];
+
+                // INTEG-PROVIDER-IDENTITY-001 — a key has no person behind it: the ad account's name is the identity.
+                app(ProviderIdentity::class)->capture($connection, $tokens);
 
                 /*
                  * A key the provider accepts for an account we cannot list is not a connection.

@@ -19,6 +19,7 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\FirstSync;
+use App\Domains\Integrations\Services\ProviderIdentity;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -327,6 +328,9 @@ final class AdPlatformOAuthController extends Controller
                 createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
                 appProfile: $creds->platform === 'meta' ? MetaCredentialProfile::from((string) $record['profile']) : null,
             );
+
+            // INTEG-PROVIDER-IDENTITY-001 — which provider login granted this; best effort, never blocks the connect.
+            app(ProviderIdentity::class)->capture($connection, $tokens);
 
             // The first real round trip. Until this returns, nothing is called connected.
             $discovered = $this->discoverAccounts($connection);
