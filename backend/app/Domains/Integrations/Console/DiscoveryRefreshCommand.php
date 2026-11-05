@@ -6,7 +6,6 @@ namespace App\Domains\Integrations\Console;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountDiscovery;
 use Illuminate\Console\Command;
@@ -84,8 +83,8 @@ final class DiscoveryRefreshCommand extends Command
         $this->line(sprintf('  connection %s [%s]   stored before: %d', $connection->getKey(), $connection->provider, count($stored)));
 
         if (! $this->option('apply')) {
-            $connector = $registry->get($connection->provider);
-            if (! $connector instanceof ApiAdvertisingConnector) {
+            $connector = $registry->forDiscovery($connection->provider);
+            if ($connector === null) {
                 $this->error('This provider has no account discovery.');
 
                 return self::FAILURE;

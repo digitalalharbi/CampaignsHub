@@ -6,7 +6,6 @@ namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Support\Carbon;
@@ -71,9 +70,9 @@ final class AccountDiscovery
      */
     public function refresh(ProviderConnection $connection): array
     {
-        $connector = $this->registry->get($connection->provider);
+        $connector = $this->registry->forDiscovery($connection->provider);
 
-        if (! $connector instanceof ApiAdvertisingConnector) {
+        if ($connector === null) {
             return ['discovered' => 0, 'created' => 0, 'named' => 0, 'access_lost' => 0];
         }
 

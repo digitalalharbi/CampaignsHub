@@ -10,6 +10,8 @@ use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
 use App\Domains\Commerce\Services\StoreAssignment;
 use App\Domains\Commerce\Services\StoreSyncQueue;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -100,7 +102,7 @@ final class StoreController extends Controller
                  * Zid store would claim a perfect checkout rate for a merchant who is losing carts
                  * every day, so the absence is stated as a capability rather than a count.
                  */
-                'supports_abandoned_carts' => $key !== 'zid',
+                'supports_abandoned_carts' => ProviderCatalogue::supports($key, ProviderCapability::AbandonedCarts),
             ];
         }
 
