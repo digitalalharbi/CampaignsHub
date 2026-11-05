@@ -11,7 +11,8 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Integrations\Services\IntegrationStatusResolver;
+use App\Domains\Integrations\Status\ConnectionFacts;
 use App\Domains\Integrations\Support\IntegrationTruth;
 use App\Domains\Integrations\Support\NextScheduledSync;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -25,6 +26,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub: one row per AUTHORISATION.
@@ -63,6 +65,7 @@ final class ConnectionHubController extends Controller
         private readonly TenantContext $tenant,
         private readonly ProviderConfigurationService $settings,
         private readonly ReachableProjects $reach,
+        private readonly IntegrationStatusResolver $status,
     ) {}
 
     /** @return list<string>|null null = every project of the tenant */
@@ -124,7 +127,7 @@ final class ConnectionHubController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('account_type', 'ad_account')
             ->whereIn('provider_connection_id', $connections->modelKeys())
-            ->get(['id', 'provider_connection_id', 'client_workspace_id', 'last_synced_at', 'access_lost_at', 'last_sync_error_category'])
+            ->get(['id', 'provider_connection_id', 'client_workspace_id', 'last_synced_at', 'access_lost_at', 'last_sync_error_category', 'last_sync_attempt_at', 'next_sync_at'])
             ->groupBy(fn (ExternalAccount $a): string => (string) $a->provider_connection_id);
 
         /*
@@ -140,7 +143,7 @@ final class ConnectionHubController extends Controller
             ->where('is_active', true)
             ->whereNotNull('project_id')
             ->when($reachable !== null, fn ($q) => $q->whereIn('project_id', $reachable ?: ['00000000-0000-0000-0000-000000000000']))
-            ->get(['project_id', 'external_account_id']);
+            ->get(['project_id', 'external_account_id', 'sync_enabled']);
 
         if ($reachable !== null) {
             $clients = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $reachable)
@@ -170,6 +173,16 @@ final class ConnectionHubController extends Controller
 
         $selectedIds = $selected->pluck('external_account_id')->map(strval(...))->unique();
 
+        /*
+         * INTEG-STATUS-MODEL-001 — the five-status object's inputs, read once for the whole page.
+         * `sync_enabled` per selected account, and the newest open / finished / failed run of each.
+         */
+        $syncEnabled = [];
+        foreach ($selected as $b) {
+            $syncEnabled[(string) $b->external_account_id] = ($syncEnabled[(string) $b->external_account_id] ?? false) || (bool) $b->sync_enabled;
+        }
+        $statusRuns = $this->status->runsByAccount($tenantId, $selectedIds->values()->all());
+
         $runs = $selectedIds->isEmpty() ? collect() : MetricSyncRun::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->whereIn('external_account_id', $selectedIds)
@@ -190,7 +203,7 @@ final class ConnectionHubController extends Controller
             ->groupBy(fn ($b): string => (string) $b->external_account_id)
             ->map(fn ($rows) => (string) $rows->first()->project_id);
 
-        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors): array {
+        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $syncEnabled, $statusRuns): array {
             $mine = $accounts->get((string) $connection->getKey(), collect());
 
             // «Discovered» excludes an account whose access the provider has withdrawn: it is not one
@@ -202,13 +215,8 @@ final class ConnectionHubController extends Controller
             );
             $chosenIds = $chosen->map(fn (ExternalAccount $a): string => (string) $a->getKey())->values()->all();
 
-            $connectionState = match (true) {
-                in_array($connection->status, ['revoked', 'disconnected'], true) => IntegrationTruth::REVOKED,
-                $connection->status === 'error',
-                $connection->insights_denied_at !== null,
-                ! InsightsAuthorisation::grantedBy((string) $connection->provider, $connection->scopes) => IntegrationTruth::REAUTH_REQUIRED,
-                default => IntegrationTruth::CONNECTED,
-            };
+            // One definition of the legacy word, shared with the wizard (INTEG-STATUS-MODEL-001).
+            $connectionState = IntegrationStatusResolver::connectionTruth(ConnectionFacts::fromModel($connection));
 
             $syncState = IntegrationTruth::syncStateFromRuns($chosenIds, $runs);
             $author = $connection->created_by === null ? null : $authors->get((string) $connection->created_by);
@@ -262,6 +270,11 @@ final class ConnectionHubController extends Controller
                 'has_parent' => ProviderHierarchy::hasParent((string) $connection->provider),
                 'discovery_blocked_reason' => $connection->discovery_blocked_reason,
                 'token_expires_at' => $connection->token_expires_at?->toIso8601String(),
+                /*
+                 * INTEG-STATUS-MODEL-001 §1.13 — ADDITIVE. Five independent statuses; every field above is unchanged.
+                 * `connection_state` / `sync_state` stay the legacy two words; `statuses` is the honest object.
+                 */
+                ...$this->statusFields($connection, $chosen, $discovered->count(), $syncEnabled, $statusRuns),
             ];
         })->all();
 
@@ -274,6 +287,19 @@ final class ConnectionHubController extends Controller
              */
             'connectable' => $this->connectable(),
         ], __('api.ok'));
+    }
+
+    /**
+     * @param  Collection<int, ExternalAccount>  $chosen
+     * @param  array<string, bool>  $syncEnabled
+     * @param  Collection<int|string, Collection<int, MetricSyncRun>>  $runs
+     * @return array{statuses: array<string, array<string,mixed>>, status_profile: array<string,mixed>}
+     */
+    private function statusFields(ProviderConnection $connection, Collection $chosen, int $discovered, array $syncEnabled, Collection $runs): array
+    {
+        $resolved = $this->status->forConnectionModel($connection, $chosen, $discovered, $syncEnabled, $runs);
+
+        return ['statuses' => $resolved['statuses'], 'status_profile' => $resolved['profile']];
     }
 
     /** @return list<array<string,mixed>> */

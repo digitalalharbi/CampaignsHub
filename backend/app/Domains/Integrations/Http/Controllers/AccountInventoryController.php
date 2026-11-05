@@ -9,6 +9,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountHealth;
 use App\Domains\Integrations\Services\AccountLabel;
+use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\SyncRunLog;
@@ -21,6 +22,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 /**
@@ -86,6 +88,7 @@ final class AccountInventoryController extends Controller
         private readonly AccountLabel $label,
         private readonly AccountHealth $health,
         private readonly ReachableProjects $reach,
+        private readonly IntegrationStatusResolver $status,
     ) {}
 
     /**
@@ -461,11 +464,24 @@ final class AccountInventoryController extends Controller
             ->whereIn('id', $bindings->values()->unique()->all())
             ->pluck('name', 'id');
 
-        $connectionNames = ProviderConnection::withoutGlobalScopes()
+        $connectionModels = ProviderConnection::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
             ->whereIn('id', array_map(static fn (ExternalAccount $a): string => (string) $a->provider_connection_id, $accounts))
-            ->pluck('connection_name', 'id');
+            ->get()->keyBy(static fn (ProviderConnection $c): string => (string) $c->getKey());
+        $connectionNames = $connectionModels->map(static fn (ProviderConnection $c): string => (string) $c->connection_name);
 
-        return array_map(function (ExternalAccount $account) use ($bindings, $projectNames, $connectionNames): array {
+        /*
+         * INTEG-STATUS-MODEL-001 — «never linked» and «was linked, is not now» are different facts, so the
+         * binding is read in both states. `sync_enabled` rides on the active row.
+         */
+        $anyBinding = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('external_account_id', $ids)
+            ->get(['external_account_id', 'is_active', 'sync_enabled'])
+            ->groupBy(fn ($b): string => (string) $b->external_account_id);
+        $statusRuns = $this->status->runsByAccount($tenantId, $ids);
+
+        return array_map(function (ExternalAccount $account) use ($bindings, $projectNames, $connectionNames, $connectionModels, $anyBinding, $statusRuns): array {
             $projectId = $bindings[$account->id] ?? null;
             $label = $this->label->describe($account);
 
@@ -513,8 +529,25 @@ final class AccountInventoryController extends Controller
                  * and the row that spends a slot should be the row that says so.
                  */
                 'counts_toward_ad_account_quota' => $account->account_type === 'ad_account',
+
+                /* INTEG-STATUS-MODEL-001 §1.13 — ADDITIVE: five independent statuses; `health` above is unchanged. */
+                ...$this->statusFields($account, $connectionModels->get((string) $account->provider_connection_id), $anyBinding->get((string) $account->getKey(), collect()), $statusRuns),
             ];
         }, $accounts);
+    }
+
+    /**
+     * @param  Collection<int, object>  $bindings  every binding row of this account
+     * @param  Collection<int|string, Collection<int, MetricSyncRun>>  $runs
+     * @return array{statuses: array<string, array<string,mixed>>, status_profile: array<string,mixed>}
+     */
+    private function statusFields(ExternalAccount $account, ?ProviderConnection $connection, Collection $bindings, Collection $runs): array
+    {
+        $active = $bindings->first(static fn ($b): bool => (bool) $b->is_active);
+        $binding = $active !== null ? 'active' : ($bindings->isNotEmpty() ? 'inactive' : 'none');
+        $resolved = $this->status->forAccountModel($account, $connection, $binding, $active === null || (bool) $active->sync_enabled, $runs);
+
+        return ['statuses' => $resolved['statuses'], 'status_profile' => $resolved['profile']];
     }
 
     /**
