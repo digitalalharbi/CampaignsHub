@@ -54,6 +54,19 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== GPT FX FACTS"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'cols_external_accounts' as q, string_agg(column_name, ',') from information_schema.columns where table_name='external_accounts'; ROLLBACK;
+            BEGIN READ ONLY; select 'accounts' as q, left(id::text,8) id, provider, currency, status from external_accounts where provider='openai_ads'; ROLLBACK;
+            BEGIN READ ONLY; select 'daily_spend' as q, original_currency, project_currency, count(*) n, round(sum(original_amount)::numeric,2) orig_sum, round(sum(value)::numeric,2) value_sum, min(exchange_rate) rmin, max(exchange_rate) rmax, min(metric_date) d0, max(metric_date) d1 from daily_metrics where provider='openai_ads' and metric_key='spend' group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'daily_spend_by_account' as q, left(external_account_id::text,8) acct, left(project_id::text,8) proj, original_currency, project_currency, count(*) n, round(sum(original_amount)::numeric,2) orig_sum, round(sum(value)::numeric,2) value_sum from daily_metrics where provider='openai_ads' and metric_key='spend' group by 2,3,4,5 order by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'other_providers_spend' as q, provider, original_currency, project_currency, count(*) n, min(exchange_rate) rmin, max(exchange_rate) rmax from daily_metrics where metric_key='spend' group by 2,3,4 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'cols_currency_rates' as q, string_agg(column_name, ',') from information_schema.columns where table_name='currency_rates'; ROLLBACK;
+            BEGIN READ ONLY; select 'cols_entity_daily' as q, string_agg(column_name, ',') from information_schema.columns where table_name='entity_daily_metrics'; ROLLBACK;
+            SQL
+            echo "== END GPT FX FACTS"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
