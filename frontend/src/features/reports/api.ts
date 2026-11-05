@@ -326,6 +326,57 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
+/**
+ * SHARED-DOWNLOAD-PASSWORD-001 — take a password link's file with the password the reader already typed.
+ *
+ * A plain `<a href>` is a navigation, and a navigation cannot carry a header: on a password link it
+ * arrives with no password and is refused. So the file is fetched with `X-Report-Password` and
+ * handed to the browser as a blob. The password is deliberately NOT put in the address — a query
+ * string is written to server logs, to browser history and to whatever the reader pastes the link into.
+ *
+ * Returns the response status when the file was refused, so the page can say why.
+ */
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<{ ok: true } | { ok: false; status: number }> {
+  let response: Response
+  try {
+    response = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  } catch {
+    return { ok: false, status: 0 }
+  }
+  if (!response.ok) return { ok: false, status: response.status }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filenameFromDisposition(response.headers.get('content-disposition')) ?? `report.${format}`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // Revoked on a later tick: Safari cancels a download whose blob address is gone before it starts reading.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+  return { ok: true }
+}
+
+/** The name the server gave the file — the UTF-8 form first, because a report's name is usually Arabic. */
+export function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null
+  const star = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(header)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim())
+    } catch {
+      // A malformed escape: fall through to the plain form.
+    }
+  }
+  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/.exec(header)
+  if (!plain) return null
+  const name = (plain[2] ?? plain[1]).trim()
+
+  return name === '' ? null : name
+}
+
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
 
