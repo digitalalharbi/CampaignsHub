@@ -10,6 +10,9 @@ import { ConnectionHub, HubSummary } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { IntegrationAudit } from './IntegrationAudit'
+import { ProjectLinkFlow } from './ProjectLinkFlow'
+import { useNavigate } from 'react-router-dom'
+import { usePortalPath } from '@/app/portalPath'
 import { listProjects } from '@/features/projects/api'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
@@ -99,7 +102,6 @@ export function IntegrationsPage() {
    */
   const [params, setParams] = useSearchParams()
   const returning = params.get('connection')
-  const returningProject = params.get('project')
 
   const [flow, setFlow] = useState<
     { mode: 'connect' | 'manage' | 'reauthorise'; provider: ConnectableProvider | null; connection: HubConnection | null; projectId: string | null } | null
@@ -108,6 +110,13 @@ export function IntegrationsPage() {
   const [drawer, setDrawer] = useState<{ id: string; tab: DrawerTab } | null>(null)
   const [menu, setMenu] = useState<HubConnection | null>(null)
   const [removing, setRemoving] = useState<HubConnection | null>(null)
+  /*
+   * INTEG-PROJECT-LINK-001 — linking from the centre IS the project's journey: the same flow the
+   * project page opens, with the project fixed, ending on that project's page.
+   */
+  const [linking, setLinking] = useState<{ projectId: string; provider: ConnectableProvider } | null>(null)
+  const navigate = useNavigate()
+  const to = usePortalPath()
 
   const connections = hub.data?.connections ?? []
   const open = drawer === null ? null : connections.find((c) => c.id === drawer.id) ?? null
@@ -124,14 +133,15 @@ export function IntegrationsPage() {
     const connection = connections.find((c) => c.id === returning)
     if (connection === undefined) return
 
-    setFlow({ mode: 'connect', provider: null, connection, projectId: returningProject })
+    // A project in the address is never believed (INTEG-PROJECT-LINK-001): project journeys return to the project page.
+    setFlow({ mode: 'connect', provider: null, connection, projectId: null })
     setParams((current) => {
       const next = new URLSearchParams(current)
       next.delete('connection')
       next.delete('project')
       return next
     }, { replace: true })
-  }, [returning, returningProject, connections, setParams])
+  }, [returning, connections, setParams])
 
   const close = () => {
     setFlow(null)
@@ -198,7 +208,7 @@ export function IntegrationsPage() {
       <div data-testid="hub-section-projects" className="min-w-0">
         <ProjectsEstate
           connectable={hub.data?.connectable ?? []}
-          onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
+          onLink={(projectId, provider) => setLinking({ projectId, provider })}
           onManage={manageAccount}
         />
       </div>
@@ -249,9 +259,23 @@ export function IntegrationsPage() {
           initialProjectId={currentProjectId}
           onPick={(provider, projectId) => {
             setPicking(false)
-            setFlow({ mode: 'connect', provider, connection: null, projectId })
+            setLinking({ projectId, provider })
           }}
           onClose={() => setPicking(false)}
+        />
+      )}
+
+      {linking !== null && (
+        <ProjectLinkFlow
+          projectId={linking.projectId}
+          provider={linking.provider}
+          onClose={() => { setLinking(null); close() }}
+          onReturn={() => {
+            const { projectId } = linking
+            setLinking(null)
+            close()
+            navigate(to(`/projects/${projectId}/integrations`))
+          }}
         />
       )}
 

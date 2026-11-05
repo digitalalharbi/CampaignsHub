@@ -6,7 +6,7 @@ import { ConnectionFlow } from './ConnectionFlow'
 import { listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
-import { platformColor } from '@/features/analytics/components'
+import { ProviderMark } from '@/components/ProviderMark'
 import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 
@@ -128,10 +128,10 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
         {/* Where the reader is. The steps after these two are the centre's own flow, which draws its own. */}
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold" data-testid="link-steps">
           {[
-            { key: 'platform', ar: 'المنصة', en: 'Platform' },
-            { key: 'authorisation', ar: 'التفويض', en: 'Authorisation' },
-            { key: 'organisation', ar: 'المنظمة', en: 'Organisation' },
-            { key: 'account', ar: 'الحساب', en: 'Account' },
+            { key: 'platform', ar: 'منصة', en: 'Platform' },
+            { key: 'authorisation', ar: 'تفويض', en: 'Sign-in' },
+            { key: 'organisation', ar: 'منظمة', en: 'Organisation' },
+            { key: 'account', ar: 'حساب', en: 'Account' },
             { key: 'done', ar: 'تم', en: 'Done' },
           ].map((s, index) => (
             <li
@@ -151,12 +151,10 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
           <ErrorState title={ar ? 'تعذّر تحميل المنصات المتاحة.' : 'Could not load the available platforms.'} onRetry={() => void hub.refetch()} />
         ) : step === 'platform' ? (
           <fieldset className="flex flex-col gap-1.5" data-testid="link-step-platform-body">
-            <legend className="mb-1 text-sm font-bold text-text-primary">{ar ? 'اختر المنصة' : 'Choose the platform'}</legend>
+            <legend className="mb-1 text-sm font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</legend>
             {providers.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="link-no-platform">
-                {ar
-                  ? 'لا توجد منصة مهيّأة للربط بعد. يتولّى مشغّل المنصة تجهيزها.'
-                  : 'No platform is set up for connecting yet. The platform operator is preparing them.'}
+                {ar ? 'لا منصة مهيّأة بعد.' : 'No platform set up yet.'}
               </p>
             ) : providers.map((p) => (
               <label
@@ -171,13 +169,11 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
                   onChange={() => setMarked(p.key)}
                   data-testid={`link-platform-${p.key}`}
                 />
-                <span className="h-7 w-1 shrink-0 rounded-full" style={{ background: platformColor(p.key) }} aria-hidden />
+                <ProviderMark provider={p.key} size={22} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-semibold text-text-primary">{platformLabel(p.key, ar)}</span>
                   <span className="truncate text-xs text-text-secondary">
-                    {p.auth === 'api_key'
-                      ? (ar ? 'بمفتاح واجهة تملكه' : 'With an API key you hold')
-                      : (ar ? 'بتسجيل الدخول لدى المنصة' : 'By signing in at the platform')}
+                    {p.auth === 'api_key' ? (ar ? 'مفتاح API' : 'API key') : (ar ? 'تسجيل دخول' : 'Sign-in')}
                   </span>
                 </span>
               </label>
@@ -186,7 +182,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
         ) : (
           <fieldset className="flex flex-col gap-1.5" data-testid="link-step-authorisation-body">
             <legend className="mb-1 text-sm font-bold text-text-primary">
-              {ar ? `أي حساب على ${platformLabel(chosen!.key, ar)} تريد استخدامه؟` : `Which ${platformLabel(chosen!.key, ar)} account do you want to use?`}
+              {ar ? `حساب ${platformLabel(chosen!.key, ar)}` : `${platformLabel(chosen!.key, ar)} account`}
             </legend>
             {reusable.map((c) => {
               const account = c.provider_account ?? null
@@ -205,12 +201,10 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
                     data-testid={`link-reuse-${c.id}`}
                   />
                   <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold text-text-primary">{ar ? 'استخدام التفويض القائم' : 'Use the existing authorisation'}</span>
-                    <span className="truncate text-xs text-text-secondary">
-                      {identity === null
-                        ? (ar ? 'لم يُسجَّل حساب المنصة لهذا التفويض' : 'The platform account of this authorisation was not recorded')
-                        : `${ar ? 'حساب المنصة' : 'Platform account'}: ${identity}`}
+                    <span className="truncate text-sm font-semibold text-text-primary" dir="auto">
+                      {identity ?? (ar ? 'حساب غير مسجَّل' : 'Account not recorded')}
                     </span>
+                    <span className="truncate text-xs text-text-secondary">{ar ? 'تفويض قائم' : 'Existing sign-in'}</span>
                   </span>
                 </label>
               )
@@ -224,7 +218,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
                 onChange={() => setMarkedAuth('new')}
                 data-testid="link-new-authorisation"
               />
-              <span className="text-sm font-semibold text-text-primary">{ar ? 'تسجيل الدخول بحساب آخر' : 'Sign in with another account'}</span>
+              <span className="text-sm font-semibold text-text-primary">{ar ? 'حساب آخر' : 'Another account'}</span>
             </label>
           </fieldset>
         )}
