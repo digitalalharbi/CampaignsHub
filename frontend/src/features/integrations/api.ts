@@ -891,3 +891,52 @@ export interface ProjectLink {
 export function fetchProjectLink(projectId: string, connectionId: string): Promise<ProjectLink> {
   return getData<ProjectLink>(`/projects/${projectId}/integrations/link/${connectionId}`)
 }
+
+/**
+ * INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — the steps after the platform sign-in, asked of the
+ * provider when the reader reaches them: the organisations, then the CHOSEN organisation's accounts, then
+ * one confirmation. Nothing is stored until the confirmation, and it stores one account.
+ *
+ * `id` null is «no organisation»: the accounts the signed-in identity holds directly.
+ */
+export interface LinkOrganisation { id: string | null; name: string | null }
+
+export interface LinkAccountOption {
+  external_id: string
+  name: string
+  currency: string | null
+  status: string
+  /** `here` — already linked to this project; `elsewhere` — feeds another project and cannot be chosen. */
+  linked: 'here' | 'elsewhere' | null
+}
+
+export function fetchLinkOrganisations(projectId: string, connectionId: string): Promise<{ organisations: LinkOrganisation[] }> {
+  return getData(`/projects/${projectId}/integrations/link/${connectionId}/organisations`)
+}
+
+export function fetchLinkAccounts(
+  projectId: string,
+  connectionId: string,
+  params: { organisation: string | null; q?: string; page?: number },
+): Promise<{ accounts: LinkAccountOption[]; total: number; page: number; per_page: number }> {
+  const query = new URLSearchParams()
+  if (params.organisation !== null) query.set('organisation', params.organisation)
+  if (params.q) query.set('q', params.q)
+  if (params.page && params.page > 1) query.set('page', String(params.page))
+  const qs = query.toString()
+
+  return getData(`/projects/${projectId}/integrations/link/${connectionId}/accounts${qs === '' ? '' : `?${qs}`}`)
+}
+
+export async function confirmLinkAccount(input: {
+  projectId: string
+  connectionId: string
+  externalId: string
+  organisation: string | null
+}): Promise<{ account_id: string; relinked: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${input.projectId}/integrations/link/${input.connectionId}/accounts`, {
+    external_id: input.externalId,
+    organisation: input.organisation,
+  })
+}

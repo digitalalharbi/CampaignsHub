@@ -14,6 +14,7 @@ use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProjectLinkController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkDirectoryController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
@@ -175,6 +176,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::get('/', [ProjectIntegrationController::class, 'index'])->middleware('project.can:integrations.manage')->name('index');
         // INTEG-PROJECT-LINK-001 — is a link journey waiting for THIS project, and what has been linked to it. Read-only.
         Route::get('link/{connection}', ProjectLinkController::class)->whereUuid('connection')->middleware('project.can:integrations.manage')->name('link');
+        // INTEG-ON-DEMAND-DISCOVERY-001 — organisations → the chosen organisation's accounts → confirm ONE. Asked on demand, stored on confirm.
+        Route::get('link/{connection}/organisations', [ProjectLinkDirectoryController::class, 'organisations'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:60,1'])->name('link.organisations');
+        Route::get('link/{connection}/accounts', [ProjectLinkDirectoryController::class, 'accounts'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:120,1'])->name('link.accounts');
+        Route::post('link/{connection}/accounts', [ProjectLinkDirectoryController::class, 'confirm'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('link.confirm');
         // PROJINT-001: the same project's integrations organised by the real ad platforms the registry
         // publishes — the count is `AdPlatforms::ORDER`'s to state, not this comment's.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');

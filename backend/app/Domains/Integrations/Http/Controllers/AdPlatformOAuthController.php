@@ -376,7 +376,16 @@ final class AdPlatformOAuthController extends Controller
             app(ProviderIdentity::class)->capture($connection, $tokens);
 
             // The first real round trip. Until this returns, nothing is called connected.
-            $discovered = $this->discoverAccounts($connection);
+            /*
+             * INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — a project's journey catalogues NOTHING here.
+             *
+             * The sign-in used to be followed by a walk of everything the identity could reach, all of it
+             * written to `external_accounts`: ~2450 rows in Production against 31 ever linked. A journey
+             * started from a project asks for the organisations when the person reaches that step, then the
+             * chosen organisation's accounts, and stores the one that is confirmed
+             * ({@see ProjectLinkDirectoryController}). The workspace-wide connect keeps its discovery.
+             */
+            $discovered = $projectId === null ? $this->discoverAccounts($connection) : 0;
 
             /*
              * A RECONNECT fetches immediately — META-INSIGHTS-GRANT-001 §10.

@@ -21,6 +21,14 @@ const calls = vi.hoisted(() => ({
   started: [] as Array<{ provider: string; projectId?: string | null; portal?: string | null }>,
   keyed: [] as Array<{ provider: string; projectId: string | null }>,
   wizard: [] as Array<{ connectionId: string; destinationProjectId: string | null }>,
+  organisations: [] as Array<[string, string]>,
+  accounts: [] as Array<{ projectId: string; connectionId: string; organisation: string | null; q?: string; page?: number }>,
+  confirmed: [] as Array<{ projectId: string; connectionId: string; externalId: string; organisation: string | null }>,
+  removed: [] as Array<{ id: string; unconfirmedOnly?: boolean }>,
+}))
+const directory = vi.hoisted(() => ({
+  organisations: [{ id: 'biz-1', name: 'Acme Business' }, { id: 'biz-2', name: 'Nova Business' }] as Array<{ id: string | null; name: string | null }>,
+  refuse: false,
 }))
 
 vi.mock('./api', async (importOriginal) => {
@@ -41,7 +49,28 @@ vi.mock('./api', async (importOriginal) => {
       calls.keyed.push({ provider, projectId })
       return Promise.resolve({ connection: 'c-key' })
     },
-    removeConnection: () => Promise.resolve({ removed: true, disabled_bindings: 0 }),
+    removeConnection: (id: string, options: { unconfirmedOnly?: boolean } = {}) => {
+      calls.removed.push({ id, unconfirmedOnly: options.unconfirmedOnly })
+      return Promise.resolve({ removed: true, disabled_bindings: 0 })
+    },
+    fetchLinkOrganisations: (projectId: string, connectionId: string) => {
+      calls.organisations.push([projectId, connectionId])
+      return Promise.resolve({ organisations: directory.organisations })
+    },
+    fetchLinkAccounts: (projectId: string, connectionId: string, params: { organisation: string | null; q?: string; page?: number }) => {
+      calls.accounts.push({ projectId, connectionId, ...params })
+      const all = [
+        { external_id: 'act_1', name: 'Riyadh Retail', currency: 'SAR', status: 'active', linked: null },
+        { external_id: 'act_2', name: 'Jeddah Outlet', currency: 'USD', status: 'active', linked: 'elsewhere' as const },
+      ].filter((a) => a.name.toLowerCase().includes((params.q ?? '').toLowerCase()))
+      return Promise.resolve({ accounts: all, total: all.length, page: 1, per_page: 25 })
+    },
+    confirmLinkAccount: (input: { projectId: string; connectionId: string; externalId: string; organisation: string | null }) => {
+      calls.confirmed.push(input)
+      return directory.refuse
+        ? Promise.reject({ isAxiosError: true, response: { status: 409, data: { message: 'elsewhere' } } })
+        : Promise.resolve({ account_id: 'a-1', relinked: false })
+    },
   }
 })
 
@@ -108,6 +137,12 @@ function projectLink(over: Partial<ProjectLink> = {}): ProjectLink {
 beforeEach(() => {
   hub.data = { connections: [], connectable: [META, OPENAI] }
   link.data = null
+  directory.organisations = [{ id: 'biz-1', name: 'Acme Business' }, { id: 'biz-2', name: 'Nova Business' }]
+  directory.refuse = false
+  calls.organisations.length = 0
+  calls.accounts.length = 0
+  calls.confirmed.length = 0
+  calls.removed.length = 0
   link.error = false
   link.asked = []
   calls.started = []
@@ -122,7 +157,8 @@ describe('the project link journey: platform and authorisation', () => {
 
     await waitFor(() => expect(screen.getByTestId('link-project')).toHaveTextContent('Razzah Avenue'))
     expect(within(screen.getByTestId('link-steps')).getAllByRole('listitem').map((li) => li.textContent?.replace(/\d+\s*/, '')))
-      .toEqual(['منصة', 'دخول', 'منظمة', 'حساب', 'تم'])
+      // Owner 2026-11-06: one word per step — منصة ← منظمة ← حساب ← تم. The sign-in is the platform's own page, not a step drawn here.
+      .toEqual(['منصة', 'منظمة', 'حساب', 'تم'])
     expect(screen.getByTestId('link-step-platform')).toHaveAttribute('aria-current', 'step')
     expect(screen.getByTestId('link-next')).toHaveTextContent('التالي')
 
@@ -182,20 +218,100 @@ describe('the project link journey: platform and authorisation', () => {
     await waitFor(() => expect(calls.keyed).toEqual([{ provider: 'openai_ads', projectId: 'p-2' }]))
   })
 
-  it('continues on the connection the sign-in came back with, ends on «تم», and returns to the project', async () => {
+  it('continues on the connection the sign-in came back with: organisation → account → «تم», and returns to the project', async () => {
     link.data = projectLink()
     const onReturn = vi.fn()
     renderWithProviders(
       <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={() => {}} onReturn={onReturn} />,
+      { locale: 'ar' },
     )
 
-    fireEvent.click(await screen.findByTestId('wizard-stub'))
-    expect(calls.wizard.at(-1)).toEqual({ connectionId: 'c-1', destinationProjectId: 'p-1' })
+    // The organisations are asked for THIS project's connection; no account is asked for until one is chosen.
+    const first = await screen.findByTestId('picker-organisation-biz-1')
+    expect(calls.organisations).toEqual([['p-1', 'c-1']])
+    expect(calls.accounts).toEqual([])
+    expect(within(screen.getByTestId('link-steps')).getAllByRole('listitem').map((li) => li.textContent?.replace(/\d+\s*/, '')))
+      .toEqual(['منظمة', 'حساب', 'تم'])
+    expect(screen.getByTestId('link-next')).toBeDisabled()
 
-    expect(await screen.findByTestId('link-success-title')).toHaveTextContent('Linked')
-    expect(link.asked.at(-1)).toEqual(['p-1', 'c-1'])
+    fireEvent.click(first)
+    fireEvent.click(screen.getByTestId('link-next'))
+
+    // Only the chosen organisation's accounts.
+    const account = await screen.findByTestId('picker-account-act_1')
+    expect(calls.accounts.every((c) => c.organisation === 'biz-1' && c.projectId === 'p-1')).toBe(true)
+    expect(screen.getByTestId('picker-currency-act_1')).toHaveTextContent('SAR')
+    // An account feeding another project is shown and cannot be chosen.
+    expect(screen.getByTestId('picker-account-act_2')).toBeDisabled()
+    expect(screen.getByTestId('link-next')).toBeDisabled()
+
+    fireEvent.click(account)
+    fireEvent.click(screen.getByTestId('link-next'))
+
+    expect(await screen.findByTestId('link-success-title')).toHaveTextContent('تم الربط')
+    expect(calls.confirmed).toEqual([{ projectId: 'p-1', connectionId: 'c-1', externalId: 'act_1', organisation: 'biz-1' }])
+    // The wide wizard over a stored estate is not part of a project's journey any more.
+    expect(calls.wizard).toEqual([])
+    expect(screen.getByTestId('project-account-picker').textContent).not.toMatch(/[٠-٩]/)
+
     fireEvent.click(screen.getByTestId('link-return'))
     expect(onReturn).toHaveBeenCalledTimes(1)
+  })
+
+  it('filters accounts as the reader types, on the server', async () => {
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={() => {}} onReturn={() => {}} />,
+    )
+    fireEvent.click(await screen.findByTestId('picker-organisation-biz-2'))
+    fireEvent.click(screen.getByTestId('link-next'))
+    await screen.findByTestId('picker-account-act_1')
+
+    fireEvent.change(screen.getByTestId('picker-account-search'), { target: { value: 'jeddah' } })
+
+    await waitFor(() => expect(calls.accounts.at(-1)).toMatchObject({ organisation: 'biz-2', q: 'jeddah' }))
+    await waitFor(() => expect(screen.queryByTestId('picker-account-act_1')).toBeNull())
+    expect(screen.getByTestId('picker-account-act_2')).toBeInTheDocument()
+  })
+
+  it('passes the organisation step when the sign-in reaches only one', async () => {
+    directory.organisations = [{ id: null, name: null }]
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'tiktok', has_parent: false, projects: [] }} onClose={() => {}} onReturn={() => {}} />,
+      { locale: 'ar' },
+    )
+
+    await screen.findByTestId('picker-account-act_1')
+    expect(calls.accounts[0]).toMatchObject({ organisation: null })
+    expect(screen.queryByTestId('link-step-organisation')).toBeNull()
+    expect(screen.queryByTestId('picker-back')).toBeNull()
+  })
+
+  it('says a refusal in two words and stays on the account step', async () => {
+    directory.refuse = true
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={() => {}} onReturn={() => {}} />,
+      { locale: 'ar' },
+    )
+    fireEvent.click(await screen.findByTestId('picker-organisation-biz-1'))
+    fireEvent.click(screen.getByTestId('link-next'))
+    fireEvent.click(await screen.findByTestId('picker-account-act_1'))
+    fireEvent.click(screen.getByTestId('link-next'))
+
+    expect(await screen.findByTestId('picker-refused')).toHaveTextContent('مرتبط بمشروع آخر')
+    expect(screen.queryByTestId('link-success-title')).toBeNull()
+  })
+
+  it('«إلغاء» removes the sign-in nobody confirmed an account on, so an abandoned start leaves no row', async () => {
+    const onClose = vi.fn()
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={onClose} onReturn={() => {}} />,
+    )
+    await screen.findByTestId('picker-organisation-biz-1')
+
+    fireEvent.click(screen.getByTestId('picker-cancel'))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(calls.removed).toEqual([{ id: 'c-1', unconfirmedOnly: true }])
   })
 })
 
@@ -332,9 +448,9 @@ describe('the project link journey: starts and ends on the project page', () => 
     link.data = projectLink({ pending: true, accounts: [] })
     page('/app/projects/p-1/integrations?provider=meta&outcome=connected&accounts=40&link=c-1')
 
-    await screen.findByTestId('wizard-stub')
+    await screen.findByTestId('project-account-picker')
     expect(link.asked[0]).toEqual(['p-1', 'c-1'])
-    expect(calls.wizard.at(-1)).toEqual({ connectionId: 'c-1', destinationProjectId: 'p-1' })
+    await waitFor(() => expect(calls.organisations).toEqual([['p-1', 'c-1']]))
     expect(screen.queryByTestId('project-link-notice')).toBeNull()
   })
 
@@ -345,8 +461,8 @@ describe('the project link journey: starts and ends on the project page', () => 
 
     expect(await screen.findByTestId('project-link-notice')).toHaveTextContent('هذا الربط ليس لهذا المشروع.')
     expect(link.asked[0]).toEqual(['p-2', 'c-1'])
-    expect(screen.queryByTestId('wizard-stub')).toBeNull()
-    expect(calls.wizard).toEqual([])
+    expect(screen.queryByTestId('project-account-picker')).toBeNull()
+    expect(calls.organisations).toEqual([])
   })
 
   it('resumes nothing for a connection the server does not know', async () => {
@@ -354,6 +470,6 @@ describe('the project link journey: starts and ends on the project page', () => 
     page('/app/projects/p-1/integrations?outcome=connected&link=c-unknown')
 
     expect(await screen.findByTestId('project-link-notice')).toHaveTextContent('This link is not for this project.')
-    expect(screen.queryByTestId('wizard-stub')).toBeNull()
+    expect(screen.queryByTestId('project-account-picker')).toBeNull()
   })
 })

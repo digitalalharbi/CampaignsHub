@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchConnectionHub, type ConnectableProvider, type HubConnection } from './api'
 import { ConnectionFlow } from './ConnectionFlow'
+import { ProjectAccountPicker } from './ProjectAccountPicker'
 import { listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -57,8 +58,9 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   const projectName = project?.name ?? null
   const Arrow = ar ? ArrowLeft : ArrowRight
 
+  // Back from the platform's sign-in: organisation → account → done, asked on demand for this project's own connection.
   if (resume !== null) {
-    return <ConnectionFlow mode="connect" provider={null} connection={resume} projectId={projectId} onClose={onClose} onDone={onReturn} />
+    return <ProjectAccountPicker projectId={projectId} projectName={projectName} connection={resume} onClose={onClose} onReturn={onReturn} />
   }
 
   // The platform is known: straight to its own sign-in (or key entry), for this project. Never a reuse.
@@ -67,7 +69,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   }
 
   const providers = sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key)
-  const step = 'platform'
+  const step: LinkStep = 'platform'
   const next = () => {
     const pick = providers.find((p) => p.key === marked)
     if (pick !== undefined) setChosen(pick)
@@ -92,25 +94,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
           <Button type="button" variant="ghost" onClick={onClose} data-testid="project-link-close">{ar ? 'إغلاق' : 'Close'}</Button>
         </header>
 
-        {/* Where the reader is. The steps after these two are the centre's own flow, which draws its own. */}
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold" data-testid="link-steps">
-          {[
-            { key: 'platform', ar: 'منصة', en: 'Platform' },
-            { key: 'signin', ar: 'دخول', en: 'Sign-in' },
-            { key: 'organisation', ar: 'منظمة', en: 'Organisation' },
-            { key: 'account', ar: 'حساب', en: 'Account' },
-            { key: 'done', ar: 'تم', en: 'Done' },
-          ].map((s, index) => (
-            <li
-              key={s.key}
-              data-testid={`link-step-${s.key}`}
-              aria-current={s.key === step ? 'step' : undefined}
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 ${s.key === step ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-text-secondary'}`}
-            >
-              <span className="tnum">{(index + 1).toLocaleString('en-US')}</span> {ar ? s.ar : s.en}
-            </li>
-          ))}
-        </ol>
+        <LinkSteps steps={['platform', 'organisation', 'account', 'done']} current={step} ar={ar} />
 
         {hub.isLoading || projects.isLoading ? (
           <Skeleton className="h-40 w-full" />
@@ -156,5 +140,32 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
         </footer>
       </form>
     </div>
+  )
+}
+
+export type LinkStep = 'platform' | 'organisation' | 'account' | 'done'
+
+const STEP_WORDS: Record<LinkStep, { ar: string; en: string }> = {
+  platform: { ar: 'منصة', en: 'Platform' },
+  organisation: { ar: 'منظمة', en: 'Organisation' },
+  account: { ar: 'حساب', en: 'Account' },
+  done: { ar: 'تم', en: 'Done' },
+}
+
+/** Where the reader is: one word per step — منصة ← منظمة ← حساب ← تم. The sign-in is the platform's own page, not a step drawn here. */
+export function LinkSteps({ steps, current, ar }: { steps: LinkStep[]; current: LinkStep; ar: boolean }) {
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold" data-testid="link-steps">
+      {steps.map((key, index) => (
+        <li
+          key={key}
+          data-testid={`link-step-${key}`}
+          aria-current={key === current ? 'step' : undefined}
+          className={`flex items-center gap-1 rounded-full px-2 py-0.5 ${key === current ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-text-secondary'}`}
+        >
+          <span className="tnum">{(index + 1).toLocaleString('en-US')}</span> {ar ? STEP_WORDS[key].ar : STEP_WORDS[key].en}
+        </li>
+      ))}
+    </ol>
   )
 }

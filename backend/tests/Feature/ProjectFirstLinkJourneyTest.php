@@ -89,8 +89,9 @@ final class ProjectFirstLinkJourneyTest extends TestCase
 
         $this->assertTrue(PendingProjectLink::holds((string) $connection->id, $this->tenant->id, $this->projectA->id, (int) $this->owner->id));
 
-        // Discovery is not a binding: one account catalogued, nothing linked, nothing queued.
-        $this->assertSame(1, ExternalAccount::withoutGlobalScopes()->count());
+        // INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — a project's sign-in catalogues NOTHING: this read «one
+        // account catalogued» while the sign-in still walked the estate. Nothing stored, nothing linked, nothing queued.
+        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->count());
         $this->assertSame(0, ProjectIntegrationBinding::withoutGlobalScopes()->count());
         Queue::assertNothingPushed();
 

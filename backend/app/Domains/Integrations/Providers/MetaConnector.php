@@ -221,6 +221,84 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         return array_values($accounts);
     }
 
+    /**
+     * INTEG-ON-DEMAND-DISCOVERY-001 — the businesses, in ONE call, plus «direct» for the accounts the person
+     * was added to themselves. No ad account is read here.
+     *
+     * A token without `business_management` cannot list businesses; that is not a failure of the journey —
+     * the directly-held accounts are still reachable, so «direct» is all it offers.
+     */
+    protected function fetchOrganisations(OAuthTokens $tokens): array
+    {
+        $organisations = [];
+
+        try {
+            foreach ($this->readAll($tokens, 'me/businesses', 'businesses', ['fields' => 'id,name', 'limit' => 200]) as $business) {
+                if (($business['id'] ?? null) !== null) {
+                    $organisations[] = ['external_id' => (string) $business['id'], 'name' => isset($business['name']) ? (string) $business['name'] : null];
+                }
+            }
+        } catch (\RuntimeException) {
+            // Offered below: the accounts held without a business.
+        }
+
+        $organisations[] = ['external_id' => null, 'name' => null];
+
+        return $organisations;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — the two edges of the CHOSEN business, or `me/adaccounts` for «direct». Nothing else is walked. */
+    protected function fetchAdAccountsOf(OAuthTokens $tokens, ?string $organisationId): array
+    {
+        $accounts = [];
+        $query = ['fields' => self::ACCOUNT_FIELDS, 'limit' => 200];
+
+        if ($organisationId === null) {
+            foreach ($this->readAll($tokens, 'me/adaccounts', 'ad accounts', $query) as $a) {
+                $row = $this->accountRow($a, null, null);
+                if ($row !== null) {
+                    $accounts[$row['external_id']] = $row;
+                }
+            }
+
+            return array_values($accounts);
+        }
+
+        $refused = null;
+        $answered = false;
+        foreach (['owned_ad_accounts', 'client_ad_accounts'] as $edge) {
+            try {
+                foreach ($this->readAll($tokens, "{$organisationId}/{$edge}", 'business ad accounts', $query) as $a) {
+                    $row = $this->accountRow($a, $organisationId, null);
+                    if ($row !== null) {
+                        $accounts[$row['external_id']] ??= $row;
+                    }
+                }
+                $answered = true;
+            } catch (\RuntimeException $e) {
+                $refused = $e;
+            }
+        }
+
+        // One refused edge is a partial answer; both refused is the provider saying no, and is said.
+        if (! $answered && $refused !== null) {
+            throw $refused;
+        }
+
+        return array_values($accounts);
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — one ad account, asked by its own id (`act_<number>`). */
+    protected function fetchAdAccount(OAuthTokens $tokens, string $externalId): ?array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url($externalId), ['fields' => self::ACCOUNT_FIELDS]),
+            'ad account',
+        );
+
+        return $this->accountRow($body, null, null);
+    }
+
     private const ACCOUNT_FIELDS = 'id,account_id,name,currency,timezone_name,account_status';
 
     /** @var list<array{customer:string,reason:string}> */

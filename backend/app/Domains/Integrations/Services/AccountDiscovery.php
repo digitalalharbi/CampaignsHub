@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Support\Carbon;
@@ -91,6 +92,17 @@ final class AccountDiscovery
          * Rethrown, because the caller still has to handle the failure; this only stops it being silent.
          */
         $connection->forceFill(['last_discovery_attempted_at' => Carbon::now()])->save();
+
+        /*
+         * INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — a project's connection is never walked.
+         *
+         * It holds the accounts that were confirmed for its project and nothing else, and a refresh must
+         * not be the back door through which the rest of the estate is catalogued. Each stored account is
+         * asked about by its own id; nothing is inserted.
+         */
+        if ($connection->project_id !== null) {
+            return $this->refreshStoredOnly($connection, $connector->withConnection($connection));
+        }
 
         try {
             // The BOUND connector is the one that read — and the one that holds what it could not read.
@@ -232,6 +244,59 @@ final class AccountDiscovery
             'inaccessible' => count($warnings),
             'warnings' => $warnings,
         ];
+    }
+
+    /**
+     * Refresh the accounts a project-scoped connection already holds — and only those.
+     *
+     * A platform with a per-account call ({@see ApiAdvertisingConnector::readAdAccount}) is asked once per
+     * stored account. A platform without one is NOT asked for its whole listing instead: the row stays as
+     * it was confirmed, and a loss of access shows where it always does — as that account's sync failing.
+     * `access_lost_at` is therefore never stamped here: «not asked» is not «not listed».
+     *
+     * @return array{discovered:int, created:int, named:int, access_lost:int, inaccessible:int, warnings:list<array<string,mixed>>}
+     */
+    private function refreshStoredOnly(ProviderConnection $connection, ApiAdvertisingConnector $connector): array
+    {
+        $rows = ExternalAccount::withoutGlobalScopes()
+            ->where('provider_connection_id', $connection->getKey())
+            ->where('account_type', 'ad_account')
+            ->where('status', '!=', 'superseded')
+            ->get();
+
+        $now = Carbon::now();
+        $refreshed = 0;
+        $warnings = [];
+
+        foreach ($rows as $row) {
+            try {
+                $said = $connector->readAdAccount((string) $row->external_id);
+            } catch (\Throwable $e) {
+                $warnings[] = ['customer' => (string) $row->external_id, 'reason' => ProviderErrorText::forStorage($e->getMessage())];
+
+                continue;
+            }
+
+            if ($said === null) {
+                continue;
+            }
+
+            $row->forceFill(array_filter([
+                'name' => $said['name'] ?? null,
+                'currency' => $said['currency'] ?? null,
+                'timezone' => $said['timezone'] ?? null,
+                'status' => $said['status'] ?? null,
+            ], static fn ($v): bool => $v !== null) + ['discovered_at' => $now, 'access_lost_at' => null])->save();
+            $refreshed++;
+        }
+
+        $connection->forceFill([
+            'last_health_check_at' => $now,
+            'last_discovery_succeeded_at' => $now,
+            'discovery_blocked_reason' => null,
+        ])->save();
+
+        return ['discovered' => $refreshed, 'created' => 0, 'named' => 0, 'access_lost' => 0, 'inaccessible' => count($warnings), 'warnings' => $warnings];
     }
 
     /**
