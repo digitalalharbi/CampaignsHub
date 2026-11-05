@@ -43,6 +43,8 @@ function accountHealthLabel(health: string | undefined, ar: boolean): string {
       for a capability this product does not need.
     */
     case 'insights_not_authorised': return ar ? 'لم تُمنح صلاحية ads_read لهذا الحساب' : 'ads_read is not granted on this account'
+    // MONEY-CURRENCY-NEVER-ASSUMED-001 — the money is withheld, not shown in a guessed currency.
+    case 'currency_unknown': return ar ? 'العملة غير معروفة — المبالغ محجوبة' : 'Currency unknown — money withheld'
     case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
     case 'revoked': return ar ? 'الربط ملغى' : 'Authorisation revoked'
     default: return ar ? 'مرتبطة' : 'Linked'
@@ -56,6 +58,7 @@ function accountHealthTone(health: string | undefined): string {
     case 'delayed': return 'text-warning'
     case 'failed':
     case 'insights_not_authorised':
+    case 'currency_unknown':
     case 'access_lost':
     case 'revoked': return 'text-danger'
     default: return 'text-text-muted'

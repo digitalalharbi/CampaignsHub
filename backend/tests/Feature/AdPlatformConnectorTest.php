@@ -1413,6 +1413,35 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — an X row carries the currency its CAMPAIGN states.
+     *
+     * The X account object has no currency at all (docs.x.com/x-ads-api/campaign-management: `name`,
+     * `timezone`, `id`, `approval_status`, …), so every X account is stored without one, and the stats
+     * arrays are bare micros. The campaign object does carry `currency` — the connector already reads it for
+     * budgets — so each row is labelled from the campaign it belongs to. A campaign that states none yields
+     * a row with no `currency` key, and the pipeline withholds that money rather than assuming a unit.
+     */
+    public function test_x_rows_carry_the_currency_their_campaign_states(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE', 'currency' => 'sar'],
+                ['id' => 'cy', 'name' => 'D', 'entity_status' => 'ACTIVE'],
+            ]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [
+                ['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [1_000_000], 'impressions' => [100]]]]],
+                ['id' => 'cy', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [2_000_000], 'impressions' => [200]]]]],
+            ]]),
+        ]);
+
+        $rows = collect($this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01')->records)->keyBy('campaign_id');
+
+        $this->assertSame('SAR', $rows['cx']['currency'] ?? null);
+        $this->assertArrayNotHasKey('currency', $rows['cy'], 'a campaign that states no currency must not be given one');
+    }
+
+    /**
      * X-001 — the whole canonical set, out of the metric groups the mapping actually reads.
      *
      * The request asked for `BILLING,ENGAGEMENT` while `unroll()` read `conversion_purchases` (a

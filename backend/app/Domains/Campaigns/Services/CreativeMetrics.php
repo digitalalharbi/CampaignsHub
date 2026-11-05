@@ -232,7 +232,7 @@ final class CreativeMetrics
         'money_original_currency' => 'MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
         // The reader refuses to name a currency when this is not exactly 1: several unconvertible
         // currencies cannot be added, and printing one of their names would be a wrong label.
-        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+        'money_original_currencies' => '(COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL)) + 2 * COUNT(DISTINCT 1) FILTER (WHERE ((spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL)) AND original_currency IS NULL))',
     ];
 
     /**

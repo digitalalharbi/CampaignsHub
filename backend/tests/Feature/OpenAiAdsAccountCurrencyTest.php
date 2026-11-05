@@ -139,10 +139,17 @@ final class OpenAiAdsAccountCurrencyTest extends TestCase
 
     /**
      * The repair path: rows the old code wrote as «USD → USD» are rewritten, in place, by the ordinary
-     * sync once the account has its currency — no second pipeline and no hand-edited history.
+     * sync — no second pipeline and no hand-edited history.
+     *
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 changed how the Production state is reproduced here. The old
+     * fallback no longer exists, so a currency-less account can no longer write «USD at 1.0» on its own:
+     * the rows are written the way Production holds them (as dollars), the account is put back to having
+     * no currency, and the ordinary sync must then ask the provider, record SAR and rewrite the rows —
+     * without anybody pressing «refresh accounts» first.
      */
     public function test_a_resync_rewrites_rows_that_were_stored_as_dollars(): void
     {
+        $this->account->forceFill(['currency' => 'USD'])->save();
         $this->providerReports(245.07);
         $this->sync();
 
@@ -150,11 +157,11 @@ final class OpenAiAdsAccountCurrencyTest extends TestCase
         $this->assertSame('USD', $wrong->original_currency, 'the fixture must reproduce the Production state first');
         $this->assertEqualsWithDelta(245.07, (float) $wrong->value, 0.001);
 
-        Http::fake(['api.ads.openai.com/*' => Http::response($this->adAccount('SAR'))]);
-        app(AccountDiscovery::class)->refresh($this->connection);
+        $this->account->forceFill(['currency' => null])->save();
         $this->providerReports(245.07);
         $this->sync();
 
+        $this->assertSame('SAR', $this->account->fresh()->currency, 'the sync itself asks for a missing account currency');
         $this->assertSame(1, DB::table('daily_metrics')->where('metric_key', 'spend')->where('metric_date', '2026-11-02')->count(), 'the rewrite inserted a second row');
         $fixed = DB::table('daily_metrics')->where('metric_key', 'spend')->where('metric_date', '2026-11-02')->first();
         $this->assertSame('SAR', $fixed->original_currency);

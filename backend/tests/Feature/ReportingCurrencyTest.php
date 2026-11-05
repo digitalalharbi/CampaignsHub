@@ -538,16 +538,23 @@ final class ReportingCurrencyTest extends TestCase
         $this->assertNotNull($row->original_currency, 'a zero lost its currency and reads as unconvertible');
     }
 
-    /** An unlabelled account is treated as already reporting — stated, not assumed silently. */
-    public function test_an_account_with_no_currency_is_treated_as_the_reporting_currency(): void
+    /**
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — this case used to read «an unlabelled account is treated as the
+     * reporting currency». That assumption is the defect the Owner ordered closed on 2026-11-05 (riyal
+     * spend stored as dollars at 1.0): an account nobody states a currency for has its money WITHHELD —
+     * amount kept, no value, no currency claimed.
+     */
+    public function test_an_account_with_no_currency_is_withheld_not_treated_as_the_reporting_currency(): void
     {
         $account = $this->account('USD', 'none');
         $account->forceFill(['currency' => null])->save();
 
         $this->sync($account, [['campaign_id' => 'c-none', 'date' => '2026-06-01', 'spend' => 90]]);
 
-        $this->assertSame('USD', $this->spendRow()->original_currency);
-        $this->assertEqualsWithDelta(90.0, (float) $this->spendRow()->value, 0.01);
+        $row = $this->spendRow();
+        $this->assertNull($row->original_currency, 'no currency may be claimed for it');
+        $this->assertNull($row->value, 'unknown-unit money must not be stored as dollars');
+        $this->assertEqualsWithDelta(90.0, (float) $row->original_amount, 0.001, 'the amount survives');
     }
 
     /** Several currencies in one window all land in one reporting currency, and add up correctly. */
