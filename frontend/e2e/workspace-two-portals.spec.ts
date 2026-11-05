@@ -116,7 +116,9 @@ test.describe('one session, two portals', () => {
     await tabA.evaluate(() => { window.name = 'deaf' })
     await signIn(tabA, EMAIL)
     await tabA.getByTestId('switch-to-app').first().click({ timeout: 30_000 })
-    await tabA.waitForURL(/\/app(\/|$)/)
+    // Not `waitForURL`: the sign-in redirect replaces its own navigation, and WebKit rejects the wait with
+    // «Navigation canceled by policy check» while the page lands exactly where it should. The URL is the claim.
+    await expect(tabA).toHaveURL(/\/app(\/|$)/, { timeout: 30_000 })
 
     const claims: (string | undefined)[] = []
     tabA.on('request', (r) => { if (new URL(r.url()).pathname === '/api/v1/projects') claims.push(r.headers()['x-workspace-membership']) })
