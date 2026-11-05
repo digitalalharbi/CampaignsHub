@@ -54,6 +54,15 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS14"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'tok_metric' as q, count(*) from metric_sync_runs where error ilike '%access_token=%' or meta::text ilike '%access_token=%'; ROLLBACK;
+            BEGIN READ ONLY; select 'tok_integ' as q, count(*) from integration_sync_runs where error ilike '%access_token=%' or meta::text ilike '%access_token=%'; ROLLBACK;
+            BEGIN READ ONLY; select 'tok_conn' as q, count(*) from provider_connections where last_error ilike '%access_token=%'; ROLLBACK;
+            SQL
+            echo "== END FACTS14"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
