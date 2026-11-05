@@ -54,6 +54,17 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS9"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'cols' as q, table_name, string_agg(column_name, ',') from information_schema.columns where table_name in ('workspace_invitations','registration_requests') and column_name not in ('password','token','token_hash') group by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'reg' as q, left(id::text,8), email, tenant_name, plan_code, state, created_at from registration_requests where lower(email) like '%smartcode%' or tenant_name ilike '%smart%' order by created_at; ROLLBACK;
+            BEGIN READ ONLY; select 'mem' as q, left(m.tenant_id::text,8), t.name, u.email, m.role, m.status, m.portal, m.created_at from memberships m join tenants t on t.id=m.tenant_id join users u on u.id=m.user_id where m.tenant_id::text like '5a72eddd%' or lower(u.email) like '%smartcode%' or lower(u.email)='al2020harbi@gmail.com' order by m.created_at; ROLLBACK;
+            BEGIN READ ONLY; select 'sub' as q, left(s.tenant_id::text,8), s.status, s.plan_id, s.created_at from subscriptions s where s.tenant_id::text like '5a72eddd%' order by s.created_at desc limit 3; ROLLBACK;
+            BEGIN READ ONLY; select 'link' as q, left(s.id::text,8), s.mode, left(r.id::text,8) rep, left(r.project_id::text,8) proj, p.name, r.generated_at, r.status from report_shares s join reports r on r.id=s.report_id left join projects p on p.id=r.project_id where s.token_hash=encode(sha256('a1gKL8suPq2iKZR1OD0pL4'::bytea),'hex'); ROLLBACK;
+            SQL
+            echo "== END FACTS9"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
