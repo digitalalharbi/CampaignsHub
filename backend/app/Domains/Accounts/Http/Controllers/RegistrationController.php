@@ -8,6 +8,7 @@ use App\Domains\Accounts\Actions\StartRegistration;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\RegistrationVerificationService;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
@@ -33,7 +34,24 @@ final class RegistrationController extends Controller
     public function __construct(
         private readonly RegistrationVerificationService $verification,
         private readonly RegistrationPolicy $policy,
+        private readonly RegistrationVerificationSettings $settings,
     ) {}
+
+    /**
+     * GET /auth/registration-policy — which proofs a new application will be asked for, so the form can ask for what is
+     * needed and nothing else. Says nothing about any application, and it decides nothing: the server applies the rule.
+     */
+    public function publicPolicy(): JsonResponse
+    {
+        $application = new RegistrationRequest;
+        $application->forceFill(['effective_policy' => $this->settings->snapshot()]);
+        $policy = $this->policy->for($application);
+
+        return ApiResponse::success([
+            'requires_email' => $policy['requires_email'],
+            'requires_mobile' => $policy['requires_mobile'],
+        ], 'Registration policy.');
+    }
 
     /**
      * POST /auth/register — apply.
@@ -44,6 +62,18 @@ final class RegistrationController extends Controller
     public function store(RegisterRequest $request, StartRegistration $start): JsonResponse
     {
         $validated = $request->validated();
+
+        /*
+         * The abuse ceiling while the email gate is off (SIGNUP-VERIFY-POLICY-001): with nothing to prove, opening
+         * applications in a loop costs an attacker nothing. Refused as being at capacity, and it applies per platform
+         * rather than per address because a distributed script has many addresses.
+         */
+        $current = $this->settings->current();
+        if (! $current['email_enabled']
+            && $current['unverified_signups_daily_cap'] !== null
+            && $this->settings->unverifiedSignupsToday() >= (int) $current['unverified_signups_daily_cap']) {
+            return ApiResponse::error(__('accounts.signup_capacity_reached'), status: 429);
+        }
 
         $result = $start->execute(
             RegisterData::fromArray($validated),
@@ -65,7 +95,9 @@ final class RegistrationController extends Controller
                 // status screen can say "an administrator will review this" before they wonder.
                 'policy' => $this->policy->for($registration),
             ],
-            'Your application has been received. Confirm your email address to continue.',
+            $this->policy->for($registration)['requires_email']
+                ? 'Your application has been received. Confirm your email address to continue.'
+                : 'Your application has been received.',
             status: 202,
         );
     }
@@ -123,6 +155,17 @@ final class RegistrationController extends Controller
             );
         }
 
+        // A gate this application does not owe has no challenge. Said plainly, and nothing is sent.
+        if (! $this->policy->for($registration)[$data['channel'] === 'mobile' ? 'requires_mobile' : 'requires_email']) {
+            return ApiResponse::success(
+                [
+                    'registration' => $registration->statusPayload($this->ar($request)),
+                    'verification' => $this->verification->send($registration, $data['channel']),
+                ],
+                'This application does not need that verification.',
+            );
+        }
+
         if ($data['channel'] === 'mobile' && $registration->phone === null) {
             return ApiResponse::error(__('accounts.no_mobile_on_file'), status: 422);
         }
@@ -130,9 +173,11 @@ final class RegistrationController extends Controller
         return ApiResponse::success(
             [
                 'registration' => $registration->statusPayload($this->ar($request)),
-                'verification' => $this->verification->send($registration, $data['channel']),
+                'verification' => $issued = $this->verification->send($registration, $data['channel']),
             ],
-            'A new verification was issued.',
+            $issued['delivery_status'] === RegistrationVerificationService::BLOCKED
+                ? 'No message was sent: the sending limit has been reached.'
+                : 'A new verification was issued.',
         );
     }
 

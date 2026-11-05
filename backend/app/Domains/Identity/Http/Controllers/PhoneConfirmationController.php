@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Requests\Services\ContactVerificationService;
@@ -56,6 +57,7 @@ final class PhoneConfirmationController extends Controller
         private readonly ProviderRegistry $providers,
         private readonly AuditLogger $audit,
         private readonly TwilioVerifyService $twilio,
+        private readonly AuthCodeSwitches $switches,
     ) {}
 
     /**
@@ -73,6 +75,8 @@ final class PhoneConfirmationController extends Controller
             'phone' => $user?->phone,
             'confirmed' => $user?->phone_verified_at !== null,
             'confirmed_at' => $user?->phone_verified_at,
+            // AUTH-CODE-SWITCHES-001 — off by decision, which is a different thing from no provider below.
+            'code_available' => $this->switches->allows(self::PURPOSE, 'sms'),
             'channels' => [
                 'sms' => $this->twilio->configured() || $this->providers->isConfigured('sms'),
                 'whatsapp' => $this->providers->isConfigured('whatsapp'),

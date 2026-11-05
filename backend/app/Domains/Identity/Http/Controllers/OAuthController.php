@@ -7,6 +7,7 @@ namespace App\Domains\Identity\Http\Controllers;
 use App\Domains\Identity\Actions\OAuthOutcome;
 use App\Domains\Identity\Actions\ResolveOAuthIdentity;
 use App\Domains\Identity\Models\OAuthIdentity;
+use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\GoogleIdTokenVerifier;
 use App\Domains\Identity\Services\OAuthFlow;
 use App\Domains\Identity\Services\OAuthProviderRegistry;
@@ -51,12 +52,14 @@ final class OAuthController extends Controller
     ) {}
 
     /** GET /auth/oauth/providers — public; no secrets, only whether each provider can be used. */
-    public function providers(): JsonResponse
+    public function providers(AuthCodeSwitches $switches): JsonResponse
     {
         // `email_code` travels here because /login already waits on this answer: one lookup, one reserved row, no second request.
         return ApiResponse::success([
             'providers' => $this->registry->forClient(),
-            'email_code' => (bool) config('requests.verification.portal_code_on_login', false),
+            // AUTH-CODE-SWITCHES-001 — a way that cannot work is not offered. Only booleans leave here.
+            'email_code' => $switches->emailCodeOffered(),
+            'sms_code' => $switches->allows('phone_sign_in', 'sms'),
         ], __('accounts.oauth_providers'));
     }
 

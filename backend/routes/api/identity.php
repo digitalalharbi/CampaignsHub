@@ -38,6 +38,8 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
      */
     Route::post('/register', [RegistrationController::class, 'store'])->name('register')
         ->middleware('throttle:registration');
+    Route::get('/registration-policy', [RegistrationController::class, 'publicPolicy'])->name('registration-policy')
+        ->middleware('throttle:60,1');
     Route::prefix('registration')->name('registration.')->group(function (): void {
         Route::post('/verify-email', [RegistrationController::class, 'verifyEmail'])->name('verify-email')
             ->middleware('throttle:otp-check');

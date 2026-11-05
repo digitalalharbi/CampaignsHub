@@ -41,13 +41,38 @@ export interface RegistrationStatus {
   /** Server-derived resend cooldown; the browser countdown is display only. */
   mobile_resend_after?: number
   mobile_delivery_status?: string | null
+  email_delivery_status?: string | null
+  /** A requirement, beside the facts above: `not_required_by_policy` means nobody asked, never that it was proved. */
+  verification?: { email: VerificationStanding; mobile: VerificationStanding }
+  /** The commercial terms in force (SIGNUP-DECISION-001). Waived or trialing is never paid. */
+  commercial?: RegistrationCommercial | null
   /** The one thing this applicant can do now, or null when the application is waiting on us. */
   next_step: string | null
   reason: string | null
   provisioned: boolean
 }
 
+export interface RegistrationCommercial {
+  outcome: string
+  currency?: string
+  list_amount?: string
+  amount_due?: string
+  discount_percent?: number
+  waived_by_admin?: boolean
+  fee?: string
+  period_end?: string
+  renewal_amount?: string
+  renewal_on?: string
+  trial_ends_at?: string
+  /** The server's own quote with the discount applied, so the amount shown is the amount charged. */
+  quote?: PlanQuote | null
+}
+
+export type VerificationStanding = 'verified' | 'required' | 'not_required_by_policy'
+
 export interface RegistrationPolicy {
+  /** Absent on an older payload, which means required. */
+  requires_email?: boolean
   requires_mobile: boolean
   requires_approval: boolean
   requires_payment: boolean
@@ -60,7 +85,8 @@ export interface VerificationIssued {
   /** Non-production only. The journey stays walkable without pretending a message was delivered. */
   dev_link: string | null
   dev_code: string | null
-  expires_at: string
+  /** Null when nothing was issued: the channel is not required, or a send limit refused it. */
+  expires_at: string | null
   resend_after?: number
 }
 
@@ -83,13 +109,20 @@ export interface ApplyInput {
   requested_portal?: string
   plan_code?: string
   billing_interval?: BillingInterval
-  /** E.164, normalised by the form before it is sent — the server reads it again regardless. */
-  phone: string
+  /** E.164, normalised by the form before it is sent — the server reads it again regardless. Absent when no mobile gate applies. */
+  phone?: string
+  /** A field no person sees. See `RegisterPage`. */
+  website?: string
 }
 
 export async function apply(input: ApplyInput): Promise<RegistrationEnvelope> {
   await ensureCsrfCookie()
   return postData<RegistrationEnvelope>('/auth/register', input)
+}
+
+/** Which proofs a new application will be asked for, so the form asks for nothing it does not need. */
+export function fetchRegistrationPolicy(): Promise<{ requires_email: boolean; requires_mobile: boolean }> {
+  return getData('/auth/registration-policy')
 }
 
 export function fetchRegistration(id: string): Promise<RegistrationEnvelope> {

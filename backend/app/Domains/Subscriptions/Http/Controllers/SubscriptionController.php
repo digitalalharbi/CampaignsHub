@@ -84,6 +84,7 @@ final class SubscriptionController extends Controller
         return ApiResponse::success([
             'subscription' => $subscription === null ? null : [
                 'status' => $subscription->status,
+                'commercial_basis' => $subscription->commercial_basis,
                 'seats' => $subscription->seats,
                 'billing_interval' => $subscription->billing_interval,
                 'unit_amount' => $subscription->unit_amount === null ? null : (string) $subscription->unit_amount,
@@ -227,6 +228,7 @@ final class SubscriptionController extends Controller
         return ApiResponse::success([
             'subscription' => [
                 'status' => $subscription->status,
+                'commercial_basis' => $subscription->commercial_basis,
                 'seats' => $subscription->seats,
                 'current_period_end' => $subscription->current_period_end?->toIso8601String(),
             ],
