@@ -61,6 +61,7 @@ final class Subscription extends Model
         'cancel_at_period_end' => 'boolean',
         'unit_amount' => 'decimal:2',
         'seats' => 'integer',
+        'next_charge_discount_percent' => 'integer',
     ];
 
     /** Open-ended access the platform owner granted (ADMIN-FULL-CONTROL-001): no end date, and nothing is ever charged while it stands. */

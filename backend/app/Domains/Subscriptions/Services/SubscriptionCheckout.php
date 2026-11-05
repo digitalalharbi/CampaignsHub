@@ -190,6 +190,11 @@ final class SubscriptionCheckout
             throw new RuntimeException('This subscription has no agreed price to charge.');
         }
 
+        // A discount the platform owner agreed comes off this one charge. It is cleared when the charge settles.
+        if ($subscription->next_charge_discount_percent !== null) {
+            $amount = AdminSubscriptionControl::discounted((string) $amount, (int) $subscription->next_charge_discount_percent);
+        }
+
         return $this->open(
             purpose: $purpose,
             amount: (string) $amount,
