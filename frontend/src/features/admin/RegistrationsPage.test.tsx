@@ -59,12 +59,33 @@ describe('RegistrationsPage', () => {
   })
   afterEach(() => signOut())
 
+  it.each([
+    ['ar', { rejected: 'مرفوض', mobile_verification_required: 'بانتظار تأكيد الجوال', email_verification_required: 'بانتظار تأكيد البريد', approved_awaiting_payment: 'معتمد — بانتظار الدفع' }],
+    ['en', { rejected: 'Rejected', mobile_verification_required: 'Awaiting mobile verification', email_verification_required: 'Awaiting email verification', approved_awaiting_payment: 'Approved — awaiting payment' }],
+  ] as const)('names the queue chips in words, in %s, and keeps the key in the data', async (locale, words) => {
+    vi.mocked(fetchRegistrations).mockResolvedValue({
+      registrations: [application()],
+      meta: { total: 1, per_page: 25, current_page: 1 },
+      counts: { rejected: 2, mobile_verification_required: 3, email_verification_required: 4, approved_awaiting_payment: 1 },
+    })
+    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale })
+
+    await screen.findByTestId('registration-row')
+    for (const [key, word] of Object.entries(words)) {
+      const chip = screen.getByTestId(`registrations-count-${key}`)
+      expect(chip).toHaveTextContent(word)
+      expect(chip).not.toHaveTextContent(key)
+      expect(chip).toHaveAttribute('data-state', key)
+    }
+  })
+
   it('lists what is waiting and where each application is held', async () => {
     renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
 
     const row = await screen.findByTestId('registration-row')
     expect(row).toHaveAttribute('data-state', 'pending_approval')
     expect(screen.getByTestId('registrations-count-pending_approval')).toHaveTextContent('1')
+    expect(screen.getByTestId('registrations-count-pending_approval')).not.toHaveTextContent('pending_approval')
   })
 
   /** The negative claim: nothing here says "activate". */

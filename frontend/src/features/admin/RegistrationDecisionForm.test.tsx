@@ -49,6 +49,60 @@ describe('RegistrationDecisionForm', () => {
     vi.mocked(approveRegistration).mockResolvedValue({ registration: registration() })
   })
 
+  it('says why approving again does nothing, and offers direct entry on the stranded row', async () => {
+    vi.mocked(approveRegistration).mockResolvedValue({ registration: registration(), no_change: true })
+    const onDecided = render()
+
+    expect(screen.getByTestId('decision-stranded')).toHaveTextContent(/already approved/)
+    fireEvent.click(screen.getByTestId('registration-approve'))
+
+    expect(await screen.findByTestId('decision-no-change')).toHaveTextContent(/Nothing changed/)
+    expect(onDecided).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('decision-stranded-complimentary'))
+    expect(screen.getByTestId('decision-approve_complimentary')).toBeChecked()
+    expect(screen.queryByTestId('decision-no-change')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('decision-stranded')).not.toBeInTheDocument()
+  })
+
+  it('does not call a pending application stranded', () => {
+    render(registration({ state: 'pending_approval' }))
+
+    expect(screen.queryByTestId('decision-stranded')).not.toBeInTheDocument()
+  })
+
+  it('names the choice plainly in Arabic', () => {
+    render(registration(), 'ar')
+
+    expect(screen.getByTestId('decision-approve_complimentary').closest('label')).toHaveTextContent('دخول مباشر دون دفع')
+  })
+
+  it('direct entry is previewed, then confirmed apart from everything else, and sends the yes', async () => {
+    vi.mocked(previewRegistrationDecision).mockResolvedValue({
+      outcome: 'approve_complimentary', payment_provider_ready: false, access: ownAccess,
+      terms: { list_amount: '990.00', amount_due: '0.00', currency: 'SAR', complimentary: true, scope: 'open_ended' },
+    })
+    const onDecided = render()
+
+    fireEvent.click(screen.getByTestId('decision-approve_complimentary'))
+    expect(screen.getByTestId('decision-hint')).toHaveTextContent(/no payment gateway is needed/)
+    fireEvent.change(screen.getByTestId('decision-reason'), { target: { value: 'The owner\'s own workspace' } })
+    expect(screen.getByTestId('decision-submit')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('decision-preview'))
+    expect(await screen.findByTestId('preview-open-ended')).toHaveTextContent('No end date')
+    expect(screen.queryByTestId('preview-no-provider')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('preview-renewal-on')).not.toBeInTheDocument()
+    expect(screen.getByTestId('decision-submit')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('decision-confirm-complimentary'))
+    expect(screen.getByTestId('decision-submit')).toBeEnabled()
+    fireEvent.click(screen.getByTestId('decision-submit'))
+
+    await waitFor(() => expect(onDecided).toHaveBeenCalled())
+    expect(vi.mocked(decideRegistration).mock.calls[0][1]).toMatchObject({ outcome: 'approve_complimentary', confirm_complimentary: true })
+  })
+
   it('defaults to approval with payment still owed, which concedes nothing', async () => {
     render()
 

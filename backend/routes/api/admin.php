@@ -27,6 +27,7 @@ use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -101,6 +102,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
         // SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace.
         Route::post('/tenants/{tenant}/members/{user}', [PlatformMembershipController::class, 'act'])->middleware('throttle:20,1')->name('tenants.members');
+        // ADMIN-FULL-CONTROL-001 — add a person with a role; a fresh link for an invitation that went nowhere; the subscription with no money moving.
+        Route::post('/tenants/{tenant}/members', [PlatformMembershipController::class, 'add'])->middleware('throttle:20,1')->name('tenants.members.add');
+        Route::post('/tenants/{tenant}/invitations/{invitation}/reissue', [PlatformMembershipController::class, 'reissue'])->middleware('throttle:20,1')->name('tenants.invitations.reissue');
+        Route::get('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'show'])->name('tenants.subscription');
+        Route::post('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'act'])->middleware('throttle:30,1')->name('tenants.subscription.act');
 
         /*
          * GRANT-001 — one account's administrative exceptions.

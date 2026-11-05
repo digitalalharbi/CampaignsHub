@@ -57,7 +57,7 @@ export interface ScheduledPlanChange {
 export interface SubscriptionSummary {
   status: string
   /** Why this exists when no provider settled it (SIGNUP-DECISION-001). Null means an ordinary paid subscription. */
-  commercial_basis?: 'waived_by_admin' | 'admin_trial' | 'external_settlement' | null
+  commercial_basis?: 'waived_by_admin' | 'admin_trial' | 'external_settlement' | 'complimentary' | 'admin_grant' | null
   seats: number
   billing_interval?: string | null
   unit_amount?: string | null
