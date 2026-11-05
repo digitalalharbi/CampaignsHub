@@ -293,9 +293,17 @@ final class MetricsAggregator
          * withheld precisely because one rate is missing, so these rows share a currency. If a second
          * ever appears the reader gets one of them and the ORIGINAL total is the sum across both,
          * which would be wrong — so the count below is what a caller must check first.
+         *
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — a withheld row whose currency is UNKNOWN (NULL) is not «one
+         * currency». `COUNT(DISTINCT …)` skips NULLs, so EUR-withheld rows beside unknown-currency rows
+         * counted 1 and the unknown amounts were summed and labelled EUR. Any NULL among the withheld rows
+         * now adds 2, which no reader can mistake for «exactly one»: front and back both resolve it to
+         * `mixed_currency` — no single total. Rows that all state a currency count exactly as before. The
+         * same expression is used at every site that counts withheld currencies (here, the entity and
+         * creative grains, and the split queries below).
          */
         'money_original_currency' => 'MIN(original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
-        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL)',
+        'money_original_currencies' => '(COUNT(DISTINCT original_currency) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL))',
     ];
 
     /** When set, every aggregation is scoped to this single unified campaign (command center). */
@@ -1464,7 +1472,7 @@ final class MetricsAggregator
             ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
             ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
             ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currency")
-            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS money_original_currencies")
+            ->selectRaw("(COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL)) AS money_original_currencies")
             ->selectRaw("COALESCE(SUM(value) FILTER (WHERE metric_key = 'conversions'), 0) AS conversions")
             ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
             ->get()->groupBy('campaign_id');
@@ -2144,7 +2152,7 @@ final class MetricsAggregator
         $selects[] = "COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows";
         $selects[] = "COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original";
         $selects[] = "MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency";
-        $selects[] = "COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies";
+        $selects[] = "(COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL)) AS spend_original_currencies";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
         // The figure that is real, through the one money contract. `Partial` (some converted + some
@@ -2253,7 +2261,7 @@ final class MetricsAggregator
             ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
             ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
             ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
-            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
+            ->selectRaw("(COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL)) AS spend_original_currencies")
             ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
             ->get();
 
@@ -2367,7 +2375,7 @@ final class MetricsAggregator
             ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_withheld_rows")
             ->selectRaw("COALESCE(SUM(original_amount) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL), 0) AS spend_original")
             ->selectRaw("MIN(original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currency")
-            ->selectRaw("COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AS spend_original_currencies")
+            ->selectRaw("(COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL)) AS spend_original_currencies")
             ->groupBy('unified_campaign_id')
             ->get()
             ->keyBy('unified_campaign_id');

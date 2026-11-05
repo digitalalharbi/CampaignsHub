@@ -18,7 +18,8 @@ namespace App\Domains\Commerce\ValueObjects;
 final readonly class MoneyConversion
 {
     public function __construct(
-        public string $originalCurrency,
+        /** Null when nobody stated the row's currency: the money is then withheld, never taken as reporting currency. */
+        public ?string $originalCurrency,
         public string $reportingCurrency,
         public ?float $rate,
         public ?string $rateDate,
