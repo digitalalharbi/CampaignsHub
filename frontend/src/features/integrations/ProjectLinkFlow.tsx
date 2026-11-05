@@ -14,41 +14,28 @@ import { useUi } from '@/stores/ui'
 export type LinkConnection = Pick<HubConnection, 'id' | 'provider' | 'has_parent' | 'projects'>
 
 /**
- * Which existing authorisations a project may reuse for a platform.
+ * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — «المشاريع > ربط المصادر > تسجيل الدخول > اختيار المنظمة >
+ * الحساب الإعلاني > تم > الرجوع للمشروع … وكل مشروع بنفس العملية نفسها».
  *
- * Working, not removed, and filed either under nobody (tenant-shared) or under THIS project's own client:
- * a sign-in filed under another client can only ever offer that client's accounts, so it is not offered.
- */
-export function reusableAuthorisations(connections: HubConnection[], providerKey: string, clientWorkspaceId: string | null): HubConnection[] {
-  return connections.filter((c) => c.provider === providerKey
-    && c.connection_state === 'CONNECTED'
-    && (c.removed_at ?? null) === null
-    && ((c.client_workspace_id ?? null) === null || c.client_workspace_id === clientWorkspaceId))
-}
-
-/**
- * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — «الأساس ربط المصدر بالمشروع».
+ * ONE journey, the same for every project, started from the project and ended on it:
  *
- * ONE journey, started from a project and ended on it:
+ *     project (fixed) → platform → sign-in → organisation → account → «تم» → the project
  *
- *     project (fixed) → platform → authorisation → organisation → account → «تم الربط» → the project
+ * This component owns only the first question — WHICH platform — and then hands over to
+ * {@link ConnectionFlow} with the project fixed. It is not a second wizard: the sign-in, the organisation
+ * and account picker, the confirmation and the first sync are the same components and endpoints the
+ * centre has always used.
  *
- * This component owns only the two questions that come before the centre's existing flow — WHICH platform,
- * and WHOSE authorisation — and then hands over to {@link ConnectionFlow} with the project fixed. It is not
- * a second wizard: the sign-in, the organisation and account picker, the confirmation and the first sync are
- * the same components and the same endpoints the centre has always used.
+ * ## Every link signs in
  *
- * ## One question per step, and no question with one answer
- *
- * A platform handed in by the caller is not asked for again. An authorisation is asked about only when one
- * already exists that this project may use — and then the choice names the PLATFORM account it belongs to,
- * because «use the existing one» is meaningless without saying whose it is. With none, the flow goes
- * straight to the platform's sign-in.
+ * An authorisation that already exists is never offered for reuse here. Each project's link goes through
+ * the platform's own sign-in (or its key entry) FOR THAT PROJECT, so a link is always a deliberate,
+ * project-scoped act and never a selection out of somebody else's sign-in.
  *
  * ## The project never changes
  *
- * There is no project picker anywhere in here. The project is stated at the top of every step and is the
- * only place the journey can end.
+ * There is no project picker anywhere in here. The project is stated at the top and is the only place the
+ * journey can end. A platform handed in by the caller is not asked for again.
  */
 export function ProjectLinkFlow({ projectId, provider = null, resume = null, onClose, onReturn }: {
   projectId: string
@@ -66,10 +53,6 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
 
   const [chosen, setChosen] = useState<ConnectableProvider | null>(provider)
   const [marked, setMarked] = useState<string | null>(provider?.key ?? null)
-  /** `undefined` = not asked yet; `null` = a new sign-in; a connection = reuse it. */
-  const [authorisation, setAuthorisation] = useState<HubConnection | null | undefined>(undefined)
-  const [markedAuth, setMarkedAuth] = useState<string>('')
-
   const project = projects.data?.find((p) => p.id === projectId) ?? null
   const projectName = project?.name ?? null
   const Arrow = ar ? ArrowLeft : ArrowRight
@@ -78,34 +61,18 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
     return <ConnectionFlow mode="connect" provider={null} connection={resume} projectId={projectId} onClose={onClose} onDone={onReturn} />
   }
 
-  const reusable = chosen === null ? [] : reusableAuthorisations(hub.data?.connections ?? [], chosen.key, project?.client_workspace_id ?? null)
-
-  // Nothing to reuse is not a question: straight to the platform's own sign-in (or its key entry).
-  if (chosen !== null && hub.isSuccess && !projects.isLoading && (reusable.length === 0 || authorisation !== undefined)) {
-    return (
-      <ConnectionFlow
-        mode="connect"
-        provider={chosen}
-        connection={authorisation ?? null}
-        projectId={projectId}
-        onClose={onClose}
-        onDone={onReturn}
-      />
-    )
+  // The platform is known: straight to its own sign-in (or key entry), for this project. Never a reuse.
+  if (chosen !== null) {
+    return <ConnectionFlow mode="connect" provider={chosen} connection={null} projectId={projectId} onClose={onClose} onDone={onReturn} />
   }
 
   const providers = sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key)
-  const step: 'platform' | 'authorisation' = chosen === null ? 'platform' : 'authorisation'
+  const step = 'platform'
   const next = () => {
-    if (step === 'platform') {
-      const pick = providers.find((p) => p.key === marked)
-      if (pick !== undefined) setChosen(pick)
-      return
-    }
-    if (markedAuth === '') return
-    setAuthorisation(markedAuth === 'new' ? null : (reusable.find((c) => c.id === markedAuth) ?? null))
+    const pick = providers.find((p) => p.key === marked)
+    if (pick !== undefined) setChosen(pick)
   }
-  const canAdvance = step === 'platform' ? marked !== null : markedAuth !== ''
+  const canAdvance = marked !== null
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true" aria-labelledby="project-link-title">
@@ -129,7 +96,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold" data-testid="link-steps">
           {[
             { key: 'platform', ar: 'منصة', en: 'Platform' },
-            { key: 'authorisation', ar: 'تفويض', en: 'Sign-in' },
+            { key: 'signin', ar: 'دخول', en: 'Sign-in' },
             { key: 'organisation', ar: 'منظمة', en: 'Organisation' },
             { key: 'account', ar: 'حساب', en: 'Account' },
             { key: 'done', ar: 'تم', en: 'Done' },
@@ -149,7 +116,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
           <Skeleton className="h-40 w-full" />
         ) : hub.isError ? (
           <ErrorState title={ar ? 'تعذّر تحميل المنصات المتاحة.' : 'Could not load the available platforms.'} onRetry={() => void hub.refetch()} />
-        ) : step === 'platform' ? (
+        ) : (
           <fieldset className="flex flex-col gap-1.5" data-testid="link-step-platform-body">
             <legend className="mb-1 text-sm font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</legend>
             {providers.length === 0 ? (
@@ -179,57 +146,10 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
               </label>
             ))}
           </fieldset>
-        ) : (
-          <fieldset className="flex flex-col gap-1.5" data-testid="link-step-authorisation-body">
-            <legend className="mb-1 text-sm font-bold text-text-primary">
-              {ar ? `حساب ${platformLabel(chosen!.key, ar)}` : `${platformLabel(chosen!.key, ar)} account`}
-            </legend>
-            {reusable.map((c) => {
-              const account = c.provider_account ?? null
-              const identity = account === null ? null : (account.email ?? account.label)
-              return (
-                <label
-                  key={c.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${markedAuth === c.id ? 'border-brand-500 bg-surface-hover' : 'border-border hover:bg-surface-hover'}`}
-                >
-                  <input
-                    type="radio"
-                    name="link-authorisation"
-                    className="h-4 w-4 accent-brand-600"
-                    checked={markedAuth === c.id}
-                    onChange={() => setMarkedAuth(c.id)}
-                    data-testid={`link-reuse-${c.id}`}
-                  />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold text-text-primary" dir="auto">
-                      {identity ?? (ar ? 'حساب غير مسجَّل' : 'Account not recorded')}
-                    </span>
-                    <span className="truncate text-xs text-text-secondary">{ar ? 'تفويض قائم' : 'Existing sign-in'}</span>
-                  </span>
-                </label>
-              )
-            })}
-            <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${markedAuth === 'new' ? 'border-brand-500 bg-surface-hover' : 'border-border hover:bg-surface-hover'}`}>
-              <input
-                type="radio"
-                name="link-authorisation"
-                className="h-4 w-4 accent-brand-600"
-                checked={markedAuth === 'new'}
-                onChange={() => setMarkedAuth('new')}
-                data-testid="link-new-authorisation"
-              />
-              <span className="text-sm font-semibold text-text-primary">{ar ? 'حساب آخر' : 'Another account'}</span>
-            </label>
-          </fieldset>
         )}
 
         <footer className="flex items-center justify-between gap-2">
-          {step === 'authorisation' && provider === null ? (
-            // Going back keeps what was chosen: the platform stays marked.
-            <Button type="button" variant="ghost" onClick={() => { setChosen(null); setAuthorisation(undefined) }} data-testid="link-back">
-              {ar ? 'السابق' : 'Back'}
-            </Button>
-          ) : <span />}
+          <span />
           <Button type="submit" disabled={!canAdvance} data-testid="link-next">
             {ar ? 'التالي' : 'Next'} <Arrow size={15} />
           </Button>

@@ -227,10 +227,6 @@ describe('the Connection Hub', () => {
     fireEvent.click(await screen.findByTestId('estate-link-p-1'))
     fireEvent.click(await screen.findByTestId('estate-link-p-1-meta'))
 
-    // A working Meta authorisation exists, so the journey asks whose account to use — and names it.
-    fireEvent.click(await screen.findByTestId('link-new-authorisation'))
-    fireEvent.click(screen.getByTestId('link-next'))
-
     expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Connect')
     expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razah')
     expect(screen.queryByTestId('flow-destination')).toBeNull()

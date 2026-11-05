@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
-import { ProjectLinkFlow, reusableAuthorisations } from './ProjectLinkFlow'
+import { ProjectLinkFlow } from './ProjectLinkFlow'
 import { AUTO_RETURN_SECONDS, LinkSuccess, moneyChipText } from './LinkSuccess'
 import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
 import type { ConnectionHub as Hub, HubConnection, ProjectLink, ProjectLinkAccount } from './api'
@@ -122,7 +122,7 @@ describe('the project link journey: platform and authorisation', () => {
 
     await waitFor(() => expect(screen.getByTestId('link-project')).toHaveTextContent('Razzah Avenue'))
     expect(within(screen.getByTestId('link-steps')).getAllByRole('listitem').map((li) => li.textContent?.replace(/\d+\s*/, '')))
-      .toEqual(['منصة', 'تفويض', 'منظمة', 'حساب', 'تم'])
+      .toEqual(['منصة', 'دخول', 'منظمة', 'حساب', 'تم'])
     expect(screen.getByTestId('link-step-platform')).toHaveAttribute('aria-current', 'step')
     expect(screen.getByTestId('link-next')).toHaveTextContent('التالي')
 
@@ -152,46 +152,22 @@ describe('the project link journey: platform and authorisation', () => {
     await waitFor(() => expect(calls.started).toEqual([{ provider: 'meta', projectId: 'p-1', portal: 'app' }]))
   })
 
-  it('offers a usable existing authorisation by its PLATFORM account, and continues on it without a new sign-in', async () => {
+  /**
+   * Owner 2026-11-06: «وكل مشروع بنفس العملية نفسها». A working authorisation for the same platform is
+   * never offered for reuse — each project's link signs in at the platform, for that project.
+   */
+  it('never reuses an existing authorisation: every link signs in for its own project', async () => {
     hub.data = { connections: [connection()], connectable: [META] }
     renderWithProviders(<ProjectLinkFlow projectId="p-1" provider={META} onClose={() => {}} onReturn={() => {}} />)
 
-    const reuse = await screen.findByTestId('link-reuse-c-1')
-    expect(screen.getByTestId('link-step-authorisation-body')).toHaveTextContent('sara@meta.test')
-    expect(screen.getByTestId('link-step-authorisation-body')).not.toHaveTextContent('owner@campaignshub.io')
-    expect(screen.getByTestId('link-step-authorisation')).toHaveAttribute('aria-current', 'step')
+    expect(await screen.findByTestId('flow-step-login')).toBeInTheDocument()
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razzah Avenue')
+    expect(screen.queryByTestId('wizard-stub')).toBeNull()
+    expect(document.body).not.toHaveTextContent('sara@meta.test')
+    expect(calls.wizard).toEqual([])
 
-    fireEvent.click(reuse)
-    fireEvent.click(screen.getByTestId('link-next'))
-
-    await screen.findByTestId('wizard-stub')
-    expect(calls.wizard.at(-1)).toEqual({ connectionId: 'c-1', destinationProjectId: 'p-1' })
-    expect(calls.started).toEqual([])
-  })
-
-  it('never offers an authorisation filed under another client, a broken one or a removed one', () => {
-    const rows = [
-      connection({ id: 'shared' }),
-      connection({ id: 'own-client', client_workspace_id: 'ws-1' }),
-      connection({ id: 'other-client', client_workspace_id: 'ws-2' }),
-      connection({ id: 'broken', connection_state: 'REAUTH_REQUIRED' }),
-      connection({ id: 'removed', removed_at: '2026-11-01T00:00:00+00:00' }),
-      connection({ id: 'other-platform', provider: 'tiktok' }),
-    ]
-
-    expect(reusableAuthorisations(rows, 'meta', 'ws-1').map((c) => c.id)).toEqual(['shared', 'own-client'])
-  })
-
-  it('remembers the chosen platform when the reader goes back', async () => {
-    hub.data = { connections: [connection()], connectable: [META, OPENAI] }
-    renderWithProviders(<ProjectLinkFlow projectId="p-1" onClose={() => {}} onReturn={() => {}} />)
-
-    fireEvent.click(await screen.findByTestId('link-platform-meta'))
-    fireEvent.click(screen.getByTestId('link-next'))
-    await screen.findByTestId('link-step-authorisation-body')
-
-    fireEvent.click(screen.getByTestId('link-back'))
-    await waitFor(() => expect(screen.getByTestId('link-platform-meta')).toBeChecked())
+    fireEvent.click(screen.getByTestId('flow-authorise'))
+    await waitFor(() => expect(calls.started).toEqual([{ provider: 'meta', projectId: 'p-1', portal: 'app' }]))
   })
 
   it('asks an API-key platform for its key instead of a sign-in, for the same fixed project', async () => {
@@ -206,15 +182,15 @@ describe('the project link journey: platform and authorisation', () => {
     await waitFor(() => expect(calls.keyed).toEqual([{ provider: 'openai_ads', projectId: 'p-2' }]))
   })
 
-  it('ends on the success screen and returns to the project', async () => {
-    hub.data = { connections: [connection()], connectable: [META] }
+  it('continues on the connection the sign-in came back with, ends on «تم», and returns to the project', async () => {
     link.data = projectLink()
     const onReturn = vi.fn()
-    renderWithProviders(<ProjectLinkFlow projectId="p-1" provider={META} onClose={() => {}} onReturn={onReturn} />)
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={() => {}} onReturn={onReturn} />,
+    )
 
-    fireEvent.click(await screen.findByTestId('link-reuse-c-1'))
-    fireEvent.click(screen.getByTestId('link-next'))
     fireEvent.click(await screen.findByTestId('wizard-stub'))
+    expect(calls.wizard.at(-1)).toEqual({ connectionId: 'c-1', destinationProjectId: 'p-1' })
 
     expect(await screen.findByTestId('link-success-title')).toHaveTextContent('Linked')
     expect(link.asked.at(-1)).toEqual(['p-1', 'c-1'])
