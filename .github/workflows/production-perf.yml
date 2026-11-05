@@ -54,6 +54,14 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS7"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'cols' as q, string_agg(column_name, ',') from information_schema.columns where table_name='integration_webhook_events'; ROLLBACK;
+            BEGIN READ ONLY; select 'tokens' as q, provider, event_type, count(*) total, count(*) filter (where payload::text like '%access_token%') with_access, count(*) filter (where payload::text like '%refresh_token%') with_refresh, min(created_at)::date d0, max(created_at)::date d1 from integration_webhook_events where payload::text like '%\_token%' group by 2,3 order by 2,3; ROLLBACK;
+            SQL
+            echo "== END FACTS7"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
