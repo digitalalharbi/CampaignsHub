@@ -401,6 +401,16 @@ describe('AccountStatusPage', () => {
       expect(screen.queryByTestId('registration-step-payment')).not.toBeInTheDocument()
     })
 
+    it('says direct entry with no payment, and asks for no payment step', async () => {
+      open(envelope('active', {
+        provisioned: true,
+        commercial: { outcome: 'approve_complimentary', complimentary: true, scope: 'open_ended', amount_due: '0.00', currency: 'SAR' },
+      }, { requires_payment: true }))
+
+      expect(await screen.findByTestId('registration-commercial')).toHaveTextContent(/no payment/)
+      expect(screen.queryByTestId('registration-step-payment')).not.toBeInTheDocument()
+    })
+
     it('says a discount still has a remainder to pay, and charges what it quotes', async () => {
       open(envelope('approved_awaiting_payment', {
         plan_code: 'solo',

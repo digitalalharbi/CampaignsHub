@@ -120,7 +120,7 @@ final class ProvisionWorkspace
          * So the ledger is consulted directly: when the policy for this application requires payment,
          * a SETTLED charge must exist for it. A refunded one does not count, because money that came
          * back is money we do not have. The one other answer is a scoped decision the gate has checked
-         * (SIGNUP-DECISION-001): a waiver for this plan and period, a live trial, a confirmed settlement.
+         * (SIGNUP-DECISION-001): a waiver for this plan and period, a live trial, a confirmed settlement, open-ended complimentary access.
          */
         $basis = $this->gate->clearedBy($request);
 
@@ -253,7 +253,7 @@ final class ProvisionWorkspace
 
         // Only a decision makes a subscription here. A paid one begins from the webhook that proved the money.
         if ($decision !== null && in_array($basis, [
-            RegistrationDecision::BASIS_WAIVED, RegistrationDecision::BASIS_TRIAL, RegistrationDecision::BASIS_EXTERNAL,
+            RegistrationDecision::BASIS_WAIVED, RegistrationDecision::BASIS_TRIAL, RegistrationDecision::BASIS_EXTERNAL, RegistrationDecision::BASIS_COMPLIMENTARY,
         ], true)) {
             app(SubscriptionLifecycle::class)->beginFromDecision($tenant->refresh(), $request, $decision, (string) $basis);
         }

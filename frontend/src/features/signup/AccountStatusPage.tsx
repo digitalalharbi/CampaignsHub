@@ -43,6 +43,7 @@ const COPY = {
     codeSent: 'أرسلنا رمز تحقق برسالة نصية إلى رقم جوالك.',
     linkSent: 'أرسلنا رابط التأكيد إلى بريدك الإلكتروني.',
     discounted: (percent: number, from: string, to: string) => `اعتُمد طلبك بخصم ${percent}% على الفترة الأولى: ${from} ← ${to}. يُفعَّل الحساب بعد تأكيد سداد المبلغ المتبقي.`,
+    complimentary: 'اعتُمد طلبك بدخول مباشر دون دفع، وحسابك نشط بلا تاريخ انتهاء. لم يُخصم أي مبلغ.',
     waived: (date: string, renewal: string) => `اعتُمد طلبك بإعفاء من رسوم الفترة الأولى، وحسابك نشط. لم يُخصم أي مبلغ. ينتهي الإعفاء في ${date}، ثم يصبح الاشتراك مستحقًا بقيمة ${renewal}.`,
     trial: (date: string, renewal: string) => `حسابك نشط بفترة تجربة تنتهي في ${date}. لا خصم تلقائي، وبعدها يصبح الدفع مستحقًا بقيمة ${renewal}.`,
     sendLimit: 'لم تُرسل الرسالة: بلغ الإرسال حده الحالي. حاول لاحقًا أو تواصل معنا، ولن يتأثر طلبك.',
@@ -82,6 +83,7 @@ const COPY = {
     codeSent: 'We sent a verification code by SMS to your mobile number.',
     linkSent: 'We sent the confirmation link to your email address.',
     discounted: (percent: number, from: string, to: string) => `Approved with ${percent}% off the first period: ${from} → ${to}. The account activates once the remainder is confirmed.`,
+    complimentary: 'Approved with direct entry and no payment. Your account is active with no end date, and nothing was charged.',
     waived: (date: string, renewal: string) => `Approved with the first period's fee waived, and your account is active. Nothing was charged. The waiver ends on ${date}, then the subscription is due at ${renewal}.`,
     trial: (date: string, renewal: string) => `Your account is active on a trial ending ${date}. Nothing is charged automatically, and after it ${renewal} is due.`,
     sendLimit: 'The message was not sent: the sending limit has been reached. Try again later or contact us. Your application is not affected.',
@@ -530,7 +532,9 @@ function CommercialNote({ reg, copy }: { reg: RegistrationStatus; copy: typeof C
       ? copy.waived(t.renewal_on ?? '', withCurrency(t.renewal_amount))
       : t.outcome === 'approve_trial' && reg.provisioned
         ? copy.trial(t.renewal_on ?? '', withCurrency(t.renewal_amount))
-        : null
+        : t.outcome === 'approve_complimentary' && reg.provisioned
+          ? copy.complimentary
+          : null
 
   return text === null ? null : (
     <p data-testid="registration-commercial" data-outcome={t.outcome} className="rounded-xl border border-border bg-surface-secondary px-4 py-3 text-center text-sm text-text-primary">{text}</p>
@@ -564,7 +568,7 @@ function ActivationSteps({
     })
   }
   // A payment step ticked on a waived account would claim a payment. It is simply not on this journey.
-  const noPayment = reg.commercial?.outcome === 'approve_waiver' || reg.commercial?.outcome === 'approve_trial' || reg.commercial?.outcome === 'approve_join_existing'
+  const noPayment = reg.commercial?.outcome === 'approve_waiver' || reg.commercial?.outcome === 'approve_trial' || reg.commercial?.outcome === 'approve_join_existing' || reg.commercial?.outcome === 'approve_complimentary'
   if (policy?.requires_payment && !noPayment) steps.push({ key: 'payment', label: copy.stepPayment, done: reg.provisioned })
   steps.push({ key: 'active', label: copy.stepActive, done: reg.provisioned })
 

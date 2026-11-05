@@ -14,6 +14,8 @@ import { AccountGrantsPanel } from './AccountGrants'
 import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
 import { SupportAccessDialog } from './SupportAccessDialog'
 import { TenantLimitsPanel } from './TenantLimitsPanel'
+import { TenantSubscriptionPanel } from './TenantSubscriptionPanel'
+import { AddTenantMember, PendingInvitations } from './TenantPeoplePanel'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -40,7 +42,8 @@ export function TenantsPage() {
   const [submitted, setSubmitted] = useState('')
   const [status, setStatus] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [suspending, setSuspending] = useState<PlatformTenant | null>(null)
+  // Both directions decide who can get in, so both ask why.
+  const [switching, setSwitching] = useState<{ tenant: PlatformTenant; next: 'active' | 'suspended' } | null>(null)
   const [reason, setReason] = useState('')
   const [supporting, setSupporting] = useState<PlatformTenant | null>(null)
   const [creating, setCreating] = useState(false)
@@ -51,11 +54,11 @@ export function TenantsPage() {
   })
 
   const change = useMutation({
-    mutationFn: ({ id, next, why }: { id: string; next: 'active' | 'suspended'; why?: string }) =>
+    mutationFn: ({ id, next, why }: { id: string; next: 'active' | 'suspended'; why: string }) =>
       setTenantStatus(id, next, why),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['admin'] })
-      setSuspending(null)
+      setSwitching(null)
       setReason('')
     },
   })
@@ -160,12 +163,11 @@ export function TenantsPage() {
                 <LifeBuoy size={14} /> {ar ? 'الدخول للدعم' : 'Support access'}
               </Button>
               {t.status === 'active' ? (
-                <Button size="sm" variant="secondary" onClick={() => setSuspending(t)}>
+                <Button data-testid={`tenant-suspend-${t.slug}`} size="sm" variant="secondary" onClick={() => setSwitching({ tenant: t, next: 'suspended' })}>
                   <ShieldOff size={14} /> {ar ? 'إيقاف' : 'Suspend'}
                 </Button>
               ) : (
-                <Button size="sm" variant="secondary" disabled={change.isPending}
-                  onClick={() => change.mutate({ id: t.id, next: 'active' })}>
+                <Button data-testid={`tenant-reactivate-${t.slug}`} size="sm" variant="secondary" onClick={() => setSwitching({ tenant: t, next: 'active' })}>
                   <ShieldCheck size={14} /> {ar ? 'إعادة التفعيل' : 'Reactivate'}
                 </Button>
               )}
@@ -176,23 +178,32 @@ export function TenantsPage() {
 
       {openId && <TenantDrawer id={openId} onClose={() => setOpenId(null)} ar={ar} />}
 
-      {suspending && (
-        <Modal open onClose={() => { setSuspending(null); setReason('') }}
-          title={ar ? `إيقاف ${suspending.name}` : `Suspend ${suspending.name}`}>
-          <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
-            <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" aria-hidden />
-            <span className="text-text-primary">
-              {ar
-                ? 'كل شخص لا يملك مساحة عمل أخرى سيفقد الدخول إلى المنصة فورًا.'
-                : 'Everyone whose only workspace this is will lose access to the product immediately.'}
-            </span>
-          </div>
+      {switching && (
+        <Modal open onClose={() => { setSwitching(null); setReason('') }}
+          title={switching.next === 'suspended'
+            ? (ar ? `إيقاف ${switching.tenant.name}` : `Suspend ${switching.tenant.name}`)
+            : (ar ? `إعادة تفعيل ${switching.tenant.name}` : `Reactivate ${switching.tenant.name}`)}>
+          {switching.next === 'suspended' ? (
+            <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+              <span className="text-text-primary">
+                {ar
+                  ? 'كل شخص لا يملك مساحة عمل أخرى سيفقد الدخول إلى المنصة فورًا.'
+                  : 'Everyone whose only workspace this is will lose access to the product immediately.'}
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm text-text-secondary">
+              {ar ? 'يعود دخول كل أعضاء هذه المساحة إليها فورًا.' : 'Everyone in this workspace gets back in immediately.'}
+            </p>
+          )}
 
-          <label className="mt-4 block text-sm font-semibold text-text-primary" htmlFor="suspend-reason">
+          <label className="mt-4 block text-sm font-semibold text-text-primary" htmlFor="tenant-status-reason">
             {ar ? 'السبب (مطلوب)' : 'Reason (required)'}
           </label>
           <textarea
-            id="suspend-reason"
+            id="tenant-status-reason"
+            data-testid="tenant-status-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
@@ -201,15 +212,16 @@ export function TenantsPage() {
           />
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setSuspending(null); setReason('') }}>
+            <Button variant="ghost" onClick={() => { setSwitching(null); setReason('') }}>
               {ar ? 'إلغاء' : 'Cancel'}
             </Button>
             <Button
-              variant="danger"
+              data-testid="tenant-status-confirm"
+              variant={switching.next === 'suspended' ? 'danger' : 'primary'}
               disabled={reason.trim() === '' || change.isPending}
-              onClick={() => change.mutate({ id: suspending.id, next: 'suspended', why: reason.trim() })}
+              onClick={() => change.mutate({ id: switching.tenant.id, next: switching.next, why: reason.trim() })}
             >
-              {ar ? 'إيقاف المستأجر' : 'Suspend tenant'}
+              {switching.next === 'suspended' ? (ar ? 'إيقاف المستأجر' : 'Suspend tenant') : (ar ? 'إعادة التفعيل' : 'Reactivate')}
             </Button>
           </div>
         </Modal>
@@ -254,6 +266,9 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
             </p>
           )}
 
+          {/* ADMIN-FULL-CONTROL-001 — the plan and subscription state, with no money moving. */}
+          <TenantSubscriptionPanel tenantId={id} ar={ar} />
+
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
           {/* SUPERADMIN-LIMITS-001 — this workspace's own caps over its plan's. */}
@@ -281,6 +296,7 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
                     <span>{(p.roles ?? []).join(', ') || p.role}</span>
                     {p.status !== 'active' && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{p.status}</span>}
+                    {p.disabled && <span data-testid={`person-disabled-${p.user_uuid}`} className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{ar ? 'حساب موقوف' : 'Account deactivated'}</span>}
                     {p.user_uuid && !p.is_platform_admin && (
                       <button type="button" data-testid={`membership-${p.user_uuid}`} onClick={() => setMember(p)}
                         className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
@@ -298,6 +314,10 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
               ))}
             </ul>
           )}
+
+          {/* ADMIN-FULL-CONTROL-001 — a person in with a role, and who has been asked and has not answered. */}
+          <AddTenantMember tenantId={id} roles={detail.data.available_roles ?? []} ar={ar} />
+          <PendingInvitations tenantId={id} invitations={detail.data.pending_invitations ?? []} ar={ar} />
 
           {/* SUPERADMIN-WORKSPACE-001 — a fresh one-time owner link; the previous one stops working. */}
           <ReissueOwnerInvitation tenantId={id} ar={ar} />
