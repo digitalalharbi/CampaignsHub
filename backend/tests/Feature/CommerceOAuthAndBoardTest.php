@@ -469,12 +469,12 @@ final class CommerceOAuthAndBoardTest extends TestCase
             ], $raw);
         };
 
-        $post(['event' => 'app.store.authorize', 'merchant' => 793298857, 'created_at' => '2026-10-14 10:00:00',
+        $post(['event' => 'app.store.authorize', 'merchant' => 793298857, 'created_at' => now()->toDateTimeString(),
             'data' => ['access_token' => 'AT-new', 'refresh_token' => 'RT-new', 'expires' => now()->addDays(14)->timestamp, 'scope' => 'offline_access']])->assertOk();
         $this->assertSame('AT-new', app(TokenVault::class)->stored($connection->fresh())->accessToken, 'a reinstall did not renew the tokens');
         $this->assertSame(0, PendingStoreInstall::query()->count(), 'a connected merchant is renewed in place, not queued as a new install');
 
-        $post(['event' => 'app.uninstalled', 'merchant' => 793298857, 'created_at' => '2026-10-14 11:00:00', 'data' => []])->assertOk();
+        $post(['event' => 'app.uninstalled', 'merchant' => 793298857, 'created_at' => now()->toDateTimeString(), 'data' => []])->assertOk();
         $this->assertSame('revoked', $connection->fresh()->status);
 
         // An unsigned delivery changes nothing.
