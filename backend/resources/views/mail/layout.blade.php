@@ -90,17 +90,18 @@
                       LIVE TEXT. The old raster lockup was an opaque dark rectangle; on a pale or inverted
                       page its hard edges showed. Text always renders, so with images blocked the band still
                       reads as the brand. `bgcolor` + inline colour + the dark-mode rules keep the band
-                      dark in Gmail dark mode, which otherwise re-inverts plain background colours.
+                      dark in Gmail dark mode, which otherwise re-inverts plain background colours. The
+                      Gmail app on a phone ignores those rules and turned this band pale (Owner, 2026-11-05):
+                      it does not rewrite a background IMAGE, so the same colour is also a one-colour gradient.
                     --}}
                     <tr>
-                        <td class="ch-hdr ch-pad" align="center" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; padding:28px 24px; border-bottom:3px solid #0b7a62; text-align:center;">
-                            <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; text-align:center;">
-                                <img src="{{ $logoUrl }}" width="56" height="56" alt="CampaignsHub" style="display:block; margin:0 auto; border:0; outline:none; text-decoration:none; width:56px; height:56px; color:#f7f5f0; font-family:{!! $font !!}; font-size:9px;" />
+                        <td class="ch-hdr" align="{{ $align }}" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; background-image:linear-gradient(#0b1a16,#0b1a16); padding:0; border-bottom:3px solid #0b7a62; text-align:{{ $align }}; font-family:{!! $font !!}; font-size:20px; line-height:1.4; font-weight:700; color:#f7f5f0;">
+                            {{-- The banner IS the band: as wide as the card on every screen, with the mark on the reader's side (Owner, 2026-11-05). Blocked images show the alt text on the same ground. --}}
+                            <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; color:#f7f5f0;">
+                                <img src="{{ $logoUrl }}" width="600" alt="{{ $wordmark }}" style="display:block; width:100%; max-width:600px; height:auto; border:0; outline:none; text-decoration:none; color:#f7f5f0;" />
                             </a>
-                            <div class="ch-hdr-name" dir="auto" style="font-family:{!! $font !!}; font-size:22px; line-height:1.4; font-weight:700; color:#f7f5f0; text-align:center; padding-top:12px;">{!! $wordmark !!}</div>
-                            <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:13px; line-height:1.6; color:#b7c9c2; text-align:center; padding-top:4px;">{{ $headerNote }}</div>
                             @if (!empty($scopeNote ?? ''))
-                                <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; color:#b7c9c2; padding-top:4px; text-align:center;">{{ $scopeNote }}</div>
+                                <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; font-weight:400; color:#b7c9c2; padding:0 24px 12px; text-align:{{ $align }};">{{ $scopeNote }}</div>
                             @endif
                         </td>
                     </tr>

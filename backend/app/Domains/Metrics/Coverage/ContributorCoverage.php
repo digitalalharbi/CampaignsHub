@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Coverage;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -369,7 +370,27 @@ final class ContributorCoverage
      */
     private function campaignRows(string $tenantId, ?array $projectIds, ?array $providers): array
     {
-        return $this->normalise($this->campaignQuery($tenantId, $projectIds, $providers)->get()->all());
+        // PERF-RECOVERY-001 — a report build asks this for every window it shows; the campaigns do not depend on the window.
+        return ReportReadMemo::remember(
+            'coverage-campaigns|'.self::scopeKey($tenantId, $projectIds, $providers),
+            fn (): array => $this->normalise($this->campaignQuery($tenantId, $projectIds, $providers)->get()->all()),
+        );
+    }
+
+    /** What a coverage read depends on besides its window: tenant, projects and providers, order-insensitively. */
+    private static function scopeKey(string $tenantId, ?array $projectIds, ?array $providers): string
+    {
+        $normal = static function (?array $list): string {
+            if ($list === null) {
+                return '*';
+            }
+            $list = array_map('strval', $list);
+            sort($list);
+
+            return implode(',', $list);
+        };
+
+        return $tenantId.'|'.$normal($projectIds).'|'.$normal($providers);
     }
 
     /**
@@ -411,16 +432,22 @@ final class ContributorCoverage
     /** Providers that actually put figures in this window. Proves presence only — never absence. */
     private function providersWithFigures(string $tenantId, ?array $projectIds, Carbon $from, Carbon $to): array
     {
-        $q = DB::table('daily_metrics')
-            ->where('tenant_id', $tenantId)
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
+        // PERF-RECOVERY-001 — the same window is judged for the total, the pace and the comparison; it is read once per window.
+        return ReportReadMemo::remember(
+            'coverage-figures|'.self::scopeKey($tenantId, $projectIds, null).'|'.$from->toDateString().'|'.$to->toDateString(),
+            function () use ($tenantId, $projectIds, $from, $to): array {
+                $q = DB::table('daily_metrics')
+                    ->where('tenant_id', $tenantId)
+                    ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+                    ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
 
-        if ($projectIds !== null) {
-            $q->whereIn('project_id', $projectIds);
-        }
+                if ($projectIds !== null) {
+                    $q->whereIn('project_id', $projectIds);
+                }
 
-        return $q->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all();
+                return $q->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all();
+            },
+        );
     }
 
     /**
@@ -442,14 +469,36 @@ final class ContributorCoverage
          * (another client's) whenever both used the same provider. A run is also only evidence while its
          * account is still bound to the project the run was made for — the same rule the figures obey.
          */
-        $rows = DB::table('metric_sync_runs')
-            ->where('tenant_id', $tenantId)
-            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
-            ->whereIn('provider', $providers)
-            ->orderByDesc('window_end')
-            ->orderByDesc('created_at')
-            ->get(['provider', 'status', 'window_end', 'error']);
+        /*
+         * PERF — the newest run per provider, one index walk per provider.
+         *
+         * This was a DISTINCT ON over every run of the project: Production's plan fetched 12,176 rows and sorted them
+         * to keep 7 (97 ms in one report build, and 5,520 runs at about 320 ms each from the console in 24 hours), so
+         * `metric_sync_runs_latest_per_provider_idx` could not stop early. Asking per provider lets it: the first
+         * visible row in that index's order is the answer. Same filters, same ordering, so the same row.
+         */
+        $providers = array_values(array_unique($providers));
+
+        $rows = ReportReadMemo::remember(
+            'coverage-runs|'.self::scopeKey($tenantId, $projectIds, $providers),
+            fn () => DB::query()
+                ->fromRaw('(values '.implode(', ', array_fill(0, count($providers), '(?::text)')).') as wanted(provider)', $providers)
+                ->joinLateral(
+                    DB::table('metric_sync_runs')
+                        ->select('metric_sync_runs.provider', 'metric_sync_runs.status', 'metric_sync_runs.window_end', 'metric_sync_runs.error')
+                        ->where('tenant_id', $tenantId)
+                        ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
+                        ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'metric_sync_runs'))
+                        ->whereColumn('metric_sync_runs.provider', 'wanted.provider')
+                        ->orderByDesc('window_end')
+                        ->orderByDesc('created_at')
+                        ->limit(1),
+                    'run',
+                )
+                ->select('run.*')
+                ->orderBy('run.provider')
+                ->get(),
+        );
 
         $out = [];
         foreach ($rows as $row) {

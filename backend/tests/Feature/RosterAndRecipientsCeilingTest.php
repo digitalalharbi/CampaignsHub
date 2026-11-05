@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\Concerns\BuildsCeilingFixture;
 use Tests\TestCase;
 
@@ -25,6 +26,7 @@ use Tests\TestCase;
  */
 final class RosterAndRecipientsCeilingTest extends TestCase
 {
+    use BindsSeededAccounts;
     use BuildsCeilingFixture;
     use RefreshDatabase;
 
@@ -43,6 +45,7 @@ final class RosterAndRecipientsCeilingTest extends TestCase
 
     private function metric(string $projectId, float $value): void
     {
+        $this->bindSeededAccount($projectId, (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'acct:'.$projectId));
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->agency->id, 'project_id' => $projectId,
             'external_account_id' => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'acct:'.$projectId), 'external_campaign_id' => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, 'camp:'.$projectId),

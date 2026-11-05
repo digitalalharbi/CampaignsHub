@@ -58,7 +58,7 @@ final class EmailSystemGuardTest extends TestCase
         if (substr_count($html, 'class="ch-wrap"') !== 1) {
             $wrong[] = 'not on the shared layout (no single .ch-wrap container)';
         }
-        if (! str_contains($html, 'CampaignsHub')) {
+        if (! str_contains($html, 'CampaignsHub') && ! str_contains($html, 'كامبينز هَب')) {
             $wrong[] = 'the HTML part does not name CampaignsHub';
         }
         if (! str_contains($html, 'dir="'.($locale === 'ar' ? 'rtl' : 'ltr').'"')) {
@@ -80,7 +80,7 @@ final class EmailSystemGuardTest extends TestCase
         if (trim($text) === '') {
             $wrong[] = 'no text/plain part';
         }
-        if (! str_contains($text, 'CampaignsHub')) {
+        if (! str_contains($text, 'CampaignsHub') && ! str_contains($text, 'كامبينز هَب')) {
             $wrong[] = 'the text part does not name CampaignsHub';
         }
 

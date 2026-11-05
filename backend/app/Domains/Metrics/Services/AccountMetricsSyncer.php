@@ -18,13 +18,13 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\AccountCurrencyLookup;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
-use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\PeriodReach;
@@ -146,6 +146,24 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — an account stored without a currency is asked about BEFORE any
+         * money is read.
+         *
+         * Row currency, else account currency, else this: the provider is asked once (see
+         * `AccountCurrencyLookup` for what «once» means and why it is not a full discovery refresh) and the
+         * answer is recorded on the account. If it still has none, every monetary figure of this run is
+         * withheld by the normalisers — original kept, no value, no currency claimed — and the run ends
+         * `partial_mapping` / `currency_unknown` below. It is never stored as the reporting currency.
+         */
+        if ($connector instanceof ApiAdvertisingConnector) {
+            $lookup = app(AccountCurrencyLookup::class)->ensure($account, $connector);
+
+            if ($lookup !== AccountCurrencyLookup::KNOWN) {
+                $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'currency_lookup' => $lookup]])->save();
+            }
+        }
+
         try {
             $result = $connector->syncInsights($account->external_id, $from->toDateString(), $to->toDateString());
         } catch (Throwable $e) {
@@ -179,28 +197,23 @@ final class AccountMetricsSyncer
             $connection->forceFill(['insights_denied_at' => null])->save();
         }
 
-        [$upserted, $skipped, $misfiled] = $this->ingest($account, $result->records, (string) $run->project_id);
+        [$upserted, $skipped, $misfiled, $unlabelled] = $this->ingest($account, $result->records, (string) $run->project_id);
 
         /*
-         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is asked for again.
+         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is marked stale.
          *
          * A window's reach is the provider's answer at the moment it was fetched. Once new delivery for
          * any day inside that window has arrived, the old answer describes fewer days than the cards
-         * now show, so every stored window overlapping the synced range is re-requested (queued, one
-         * per window). Windows entirely before the sync are untouched: their delivery did not change.
+         * now show. Nothing is fetched here — a sweep over many accounts and stored windows used to
+         * queue hundreds of jobs. One UPDATE marks the overlapping windows `stale_at`; PeriodReachReader
+         * re-requests a stale window lazily, only when a report actually reads it. Windows entirely
+         * before the sync are untouched: their delivery did not change.
          */
         PeriodReach::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->whereDate('date_to', '>=', $from->toDateString())
             ->whereDate('date_from', '<=', $to->toDateString())
-            ->select('date_from', 'date_to')
-            ->distinct()
-            ->get()
-            ->each(static fn (PeriodReach $w) => FetchPeriodReachJob::dispatch(
-                (string) $account->getKey(),
-                Carbon::parse($w->getRawOriginal('date_from'))->toDateString(),
-                Carbon::parse($w->getRawOriginal('date_to'))->toDateString(),
-            ));
+            ->update(['stale_at' => Carbon::now()]);
 
         /*
          * SNAP-CREATIVE-METRICS-001 — the same window, asked again at the creative level.
@@ -226,6 +239,7 @@ final class AccountMetricsSyncer
 
                 if ($creative->success) {
                     $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                    $unlabelled += $written['currency_unknown'];
 
                     /*
                      * CONTENT-STATE-SEMANTICS-001 — «it worked and there was nothing» is an ANSWER.
@@ -260,6 +274,7 @@ final class AccountMetricsSyncer
                             'creative_ids_ambiguous' => $written['ambiguous'],
                             'creative_rows_skipped' => $written['skipped'],
                             'creative_unmapped_sample' => $written['unmapped_sample'],
+                            ...($written['currency_unknown'] > 0 ? ['creative_currency_unknown_rows' => $written['currency_unknown']] : []),
                         ],
                     ])->save();
                 } else {
@@ -328,6 +343,34 @@ final class AccountMetricsSyncer
         $entityFailure = null;
         if ($connector instanceof ReportsEntityGrains) {
             $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
+            $unlabelled += (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0);
+        }
+
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — the run SAYS that money was withheld for want of a currency.
+         *
+         * Counted across the three grains (campaign rows here, ad-set/ad and creative rows from their own
+         * upserts). The number is written to `meta` whatever the final status is, and appended to any
+         * other partial reason, so an operator reading a run that is partial for two reasons sees both.
+         */
+        $currencyNote = null;
+        if ($unlabelled > 0) {
+            $campaignRows = $unlabelled - (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0)
+                - (int) (($run->meta ?? [])['creative_currency_unknown_rows'] ?? 0);
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'currency_unknown_rows' => $campaignRows,
+                'currency_unknown_rows_all_grains' => $unlabelled,
+            ]])->save();
+
+            $currencyNote = "The ad account's currency is unknown: neither the report rows nor the account state one"
+                .match (((array) ($run->meta ?? []))['currency_lookup'] ?? null) {
+                    AccountCurrencyLookup::NOT_STATED => ', and '.$connector->label().' did not state one when asked',
+                    AccountCurrencyLookup::FAILED => ', and '.$connector->label().' could not be asked',
+                    AccountCurrencyLookup::ASKED_RECENTLY => ', and '.$connector->label().' did not state one when last asked',
+                    default => '',
+                }
+            .". The money on {$unlabelled} row(s) was stored WITHHELD (original amount kept, no converted figure, no currency assumed); counts were stored. Refresh the connection's accounts once the platform shows the account's currency, then re-sync the window.";
         }
 
         /*
@@ -396,7 +439,8 @@ final class AccountMetricsSyncer
                 $run,
                 SyncRunStatus::PartialMapping,
                 $upserted,
-                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.{$note}",
+                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.{$note}"
+                    .($currencyNote === null ? '' : ' '.$currencyNote),
                 $account,
                 $counts,
                 $misfiled > 0 ? 'campaign_not_refiled' : 'unmapped_rows',
@@ -427,10 +471,22 @@ final class AccountMetricsSyncer
                 $run,
                 SyncRunStatus::PartialMapping,
                 $upserted,
-                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure,
+                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure.($currencyNote === null ? '' : ' '.$currencyNote),
                 $account,
                 $counts,
                 'entity_grain_failed',
+            );
+        }
+
+        if ($currencyNote !== null) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                $currencyNote,
+                $account,
+                $counts,
+                'currency_unknown',
             );
         }
 
@@ -704,6 +760,9 @@ final class AccountMetricsSyncer
                 'entity_failure' => $squadFailure ?? $adFailure,
                 'entity_ad_sets_failure' => $squadFailure,
                 'entity_ads_failure' => $adFailure,
+                ...($squadResult['currency_unknown'] + $adResult['currency_unknown'] > 0
+                    ? ['entity_currency_unknown_rows' => $squadResult['currency_unknown'] + $adResult['currency_unknown']]
+                    : []),
             ],
         ])->save();
 
@@ -789,19 +848,20 @@ final class AccountMetricsSyncer
      * Map provider insight rows onto normalized metrics.
      *
      * @param  array<int,array<string,mixed>>  $records
-     * @return array{0:int,1:int,2:int} [upserted metric rows, skipped records, of which: campaign still filed under another project]
+     * @return array{0:int,1:int,2:int,3:int} [upserted metric rows, skipped records, of which: campaign still filed under another
+     *                                        project, records whose money was withheld for want of a currency]
      */
     private function ingest(ExternalAccount $account, array $records, string $projectId): array
     {
         // Mapping lives in its own class (FX-001): this method is pipeline plumbing, and what a row
         // MEANS — including which currency its money is in — is a separate question with its own tests.
-        [$metrics, $skipped, $misfiled] = $this->normaliser->normalise($account, $records, self::carriedKeys(), $projectId);
+        [$metrics, $skipped, $misfiled, $unlabelled] = $this->normaliser->normalise($account, $records, self::carriedKeys(), $projectId);
 
         if ($metrics !== []) {
             $this->upsert->handle($metrics);
         }
 
-        return [count($metrics), $skipped, $misfiled];
+        return [count($metrics), $skipped, $misfiled, $unlabelled];
     }
 
     /**

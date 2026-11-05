@@ -44,6 +44,13 @@ return [
     // Client-portal contact verification (OTP / magic-code). Providers are OFF until real credentials
     // are wired — delivery is recorded as "awaiting_provider_credentials" and never claimed as sent.
     'verification' => [
+        /*
+         * LOGIN-SINGLE-DOOR-001 — the email code as a way in, OFF unless an operator turns it on.
+         *
+         * Off: `/login` shows no code control and `/client/login/*` answers 404, so nothing mints a portal session from a code.
+         * Sessions opened before it was turned off keep working until they expire. A contact with no password uses recovery.
+         */
+        'portal_code_on_login' => (bool) env('PORTAL_CODE_ON_LOGIN', false),
         'code_ttl_minutes' => (int) env('REQUESTS_OTP_TTL_MINUTES', 10),
         'max_attempts' => (int) env('REQUESTS_OTP_MAX_ATTEMPTS', 5),
         'token_ttl_minutes' => (int) env('REQUESTS_VERIFIED_TTL_MINUTES', 30), // verified→submit window

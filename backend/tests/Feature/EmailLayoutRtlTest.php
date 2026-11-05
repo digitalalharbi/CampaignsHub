@@ -47,11 +47,11 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertStringContainsString('lang="'.$locale.'" dir="'.($ar ? 'rtl' : 'ltr').'"', $html);
         $this->assertMatchesRegularExpression('/<body dir="'.($ar ? 'rtl' : 'ltr').'"/', $html);
         // Header lockup is centred; body and footer cells carry the locale's alignment.
-        $this->assertMatchesRegularExpression('/<td class="ch-hdr ch-pad" align="center"[^>]*bgcolor="#0b1a16"[^>]*border-bottom:3px solid #0b7a62/', $html);
-        $this->assertStringContainsString($ar ? 'كامبينز هَب <span dir="ltr">—</span> CampaignsHub' : 'CampaignsHub <span dir="ltr">—</span> كامبينز هَب', $html);
-        $this->assertStringContainsString($ar ? 'منصة إدارة الحملات المدفوعة' : 'Paid media in one place', $html);
-        $this->assertStringContainsString($ar ? 'كامبينز هَب · CampaignsHub' : 'CampaignsHub · كامبينز هَب', $html);
-        $this->assertMatchesRegularExpression('/<img src="[^"]*\/brand\/email\/mark-cream\.png" width="56" height="56" alt="CampaignsHub"/', $html);
+        $this->assertMatchesRegularExpression('/<td class="ch-hdr" align="'.$align.'"[^>]*bgcolor="#0b1a16"[^>]*border-bottom:3px solid #0b7a62/', $html);
+        $this->assertStringContainsString($ar ? 'كامبينز هَب' : 'CampaignsHub', $html);
+        // One name, in the reader's language (Owner, 2026-11-05): never both side by side.
+        $this->assertStringNotContainsString($ar ? 'CampaignsHub ·' : 'كامبينز', $html);
+        $this->assertMatchesRegularExpression('/<img src="[^"]*\/brand\/email\/banner-'.($ar ? 'ar' : 'en').'\.png" width="600" alt="/', $html);
         $this->assertDoesNotMatchRegularExpression('/lockup|\.jpe?g/i', $html);
         $this->assertStringContainsString('<meta name="color-scheme" content="light dark" />', $html);
         $this->assertStringContainsString('<meta name="supported-color-schemes" content="light dark" />', $html);

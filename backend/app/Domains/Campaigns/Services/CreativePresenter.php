@@ -516,8 +516,11 @@ final class CreativePresenter
                 'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
-                'note_ar' => 'جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى.',
-                'note_en' => 'This ad was fetched from the platform, and the platform exposed no asset for it.',
+                // CONTENT-PREVIEW-COVERAGE-001 — the connector's stored reason, when it kept one, beats the generic sentence.
+                ...($this->storedReasonNote($creative) ?? [
+                    'note_ar' => 'جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى.',
+                    'note_en' => 'This ad was fetched from the platform, and the platform exposed no asset for it.',
+                ]),
             ],
             default => [
                 'state' => 'available',
@@ -555,6 +558,43 @@ final class CreativePresenter
         $headline = $this->plain($creative->headline) ?? $this->plain($creative->name);
 
         return $body === null && $headline === null ? null : ['headline' => $headline, 'body' => $body];
+    }
+
+    /**
+     * CONTENT-PREVIEW-COVERAGE-001 — WHY a TikTok creative draws nothing, in the connector's own stored word.
+     *
+     * `TikTokConnector` writes `raw.media_reason` for every creative it could not resolve, and nothing read it:
+     * 352 live creatives said «the platform exposed no asset» whether TikTok refused the file, no longer serves
+     * the post, or never named the account that owns it. Rows synced before the reason existed have none and
+     * keep the generic sentence — no reason is invented for them.
+     *
+     * @return array{note_ar: string, note_en: string}|null
+     */
+    private function storedReasonNote(ExternalCreative $creative): ?array
+    {
+        if (strtolower((string) $creative->provider) !== 'tiktok') {
+            return null;
+        }
+
+        return match ((string) (((array) ($creative->raw ?? []))['media_reason'] ?? '')) {
+            'video_info_missing' => [
+                'note_ar' => 'لم تُرجع مكتبة أصول TikTok بيانات هذا الفيديو — غالبًا لأن التطبيق لا يملك صلاحية الوصول إلى ملفه، أو لأنه حُذف من المكتبة.',
+                'note_en' => 'TikTok’s Asset Library returned no data for this video — usually because the app has no access to its file, or it was removed from the library.',
+            ],
+            'image_info_missing' => [
+                'note_ar' => 'لم تُرجع مكتبة أصول TikTok بيانات هذه الصورة — غالبًا لأن التطبيق لا يملك صلاحية الوصول إلى ملفها، أو حُذفت من المكتبة.',
+                'note_en' => 'TikTok’s Asset Library returned no data for this image — usually because the app has no access to its file, or it was removed from the library.',
+            ],
+            'spark_post_info_missing' => [
+                'note_ar' => 'إعلان Spark: سُئلت TikTok عن المنشور فلم تُعد غلافًا ولا ملفًا — المنشور محذوف أو غير متاح للهوية المرتبطة به.',
+                'note_en' => 'A Spark ad: TikTok was asked for the post and returned no cover or file — the post is removed or not available to its linked identity.',
+            ],
+            'spark_identity_unknown' => [
+                'note_ar' => 'إعلان Spark: لم ترسل TikTok هوية الحساب الناشر للمنشور، فلا يمكن طلب غلافه.',
+                'note_en' => 'A Spark ad: TikTok did not name the identity that owns the post, so its cover cannot be requested.',
+            ],
+            default => null,
+        };
     }
 
     private function plain(mixed $value): ?string

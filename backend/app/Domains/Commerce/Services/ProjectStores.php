@@ -6,6 +6,7 @@ namespace App\Domains\Commerce\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -108,6 +109,19 @@ final class ProjectStores
             return [];
         }
 
+        // PERF-RECOVERY-001 — the funnel and the freshness note of one report build both ask which stores filed under the project.
+        return ReportReadMemo::remember(
+            'project-stores|'.implode(',', $projectIds),
+            fn (): array => $this->readAccountIdsByProject($projectIds),
+        );
+    }
+
+    /**
+     * @param  list<string>  $projectIds
+     * @return array<string, list<string>>
+     */
+    private function readAccountIdsByProject(array $projectIds): array
+    {
         $out = [];
 
         foreach (self::COMMERCE_TABLES as $table) {

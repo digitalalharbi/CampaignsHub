@@ -12,6 +12,8 @@ use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -230,7 +232,7 @@ final class CreativeMetrics
         'money_original_currency' => 'MIN(original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
         // The reader refuses to name a currency when this is not exactly 1: several unconvertible
         // currencies cannot be added, and printing one of their names would be a wrong label.
-        'money_original_currencies' => 'COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL))',
+        'money_original_currencies' => '(COUNT(DISTINCT original_currency) FILTER (WHERE (spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL)) + 2 * COUNT(DISTINCT 1) FILTER (WHERE ((spend IS NULL AND spend_original IS NOT NULL) OR (revenue IS NULL AND revenue_original IS NOT NULL)) AND original_currency IS NULL))',
     ];
 
     /**
@@ -245,6 +247,68 @@ final class CreativeMetrics
             return [];
         }
 
+        /*
+         * PERF-RECOVERY-001 — the same question, asked again by another section of the same build, is answered once.
+         *
+         * The roster, the ranked cards and the format comparison read the same creatives over the same window. The key holds everything
+         * the answer depends on: the ids in the order given (so the answer's order is the one a fresh read would give), the window, and
+         * the tenant and project whose demo policy and visibility the read ran under.
+         */
+        return ReportReadMemo::remember(
+            'creative-figures|'.app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId().'|'.$from->toDateString().'|'.$to->toDateString().'|'.md5(implode(',', $creativeIds)),
+            fn (): array => $this->readCreativeFigures($creativeIds, $from, $to),
+        );
+    }
+
+    /**
+     * PERF-RECOVERY-001 — the figures `forCreatives()` would give for each consecutive block of a window, WITHOUT the decay and availability notes.
+     *
+     * A trend asks the same creatives about eight neighbouring windows. Read one at a time that is eight scans of the ad grain (174 ms each on
+     * Production); here it is one read per grain, grouped by block. Each block's rows are exactly the rows a separate read of that block would
+     * have grouped — the blocks partition the window — so every sum, count and distinct-day count is the one that read returned, and the merge of
+     * the two grains is the same `fillFromAds()`.
+     *
+     * Decay and availability are left off because they only ADD keys (`decay`, `availability`) and the only caller reads a pooled ratio out
+     * of `aggregate()`, which neither feeds; computing them for eight windows nobody prints is most of what made the trend expensive.
+     *
+     * @param  list<string>  $creativeIds
+     * @return list<array<string, array<string, mixed>>> block index => creative id => figures
+     */
+    public function figuresByBlock(array $creativeIds, Carbon $origin, int $size, int $blocks, Carbon $to): array
+    {
+        if ($creativeIds === [] || $blocks < 1) {
+            return array_fill(0, max(0, $blocks), []);
+        }
+
+        $size = max(1, $size);
+        $last = $origin->copy()->addDays($size * $blocks - 1)->min($to);
+        $bucketing = ['origin' => $origin, 'size' => $size];
+
+        $creative = $this->fromCreativeGrain($creativeIds, $origin, $last, $bucketing);
+        $ad = $this->fromAdGrain($creativeIds, $origin, $last, $bucketing);
+
+        $out = [];
+        for ($block = 0; $block < $blocks; $block++) {
+            $figures = $creative[$block] ?? [];
+
+            foreach ($ad[$block] ?? [] as $creativeId => $adFigures) {
+                $figures[$creativeId] = isset($figures[$creativeId])
+                    ? $this->fillFromAds($figures[$creativeId], $adFigures)
+                    : $adFigures;
+            }
+
+            $out[] = $figures;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $creativeIds
+     * @return array<string, array<string, mixed>>
+     */
+    private function readCreativeFigures(array $creativeIds, Carbon $from, Carbon $to): array
+    {
         $out = $this->fromCreativeGrain($creativeIds, $from, $to);
 
         /*
@@ -406,8 +470,11 @@ final class CreativeMetrics
 
         $days = [];
 
+        // PERF-RECOVERY-001 — the sections of one build that rank overlapping creatives share the per-day read of the grain they have in common.
+        $ambient = app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId().'|'.$from->toDateString().'|'.$to->toDateString();
+
         if ($byGrain['creative'] !== []) {
-            DB::table('creative_daily_metrics')
+            ReportReadMemo::remember('creative-decay-days|creative|'.$ambient.'|'.md5(implode(',', $byGrain['creative'])), fn () => DB::table('creative_daily_metrics')
                 ->whereIn('creative_id', $byGrain['creative'])
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                 ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'creative_daily_metrics', app(ProjectContext::class)->projectId()))
@@ -418,14 +485,14 @@ final class CreativeMetrics
                 ))
                 ->groupBy('creative_id', 'metric_date')
                 ->selectRaw('creative_id, metric_date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(spend) AS spend, COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL) AS withheld')
-                ->get()
+                ->get())
                 ->each(function ($r) use (&$days): void {
                     $days[(string) $r->creative_id][(string) $r->metric_date] = (array) $r;
                 });
         }
 
         if ($byGrain['ad'] !== []) {
-            DB::table('entity_daily_metrics')
+            ReportReadMemo::remember('creative-decay-days|ad|'.$ambient.'|'.md5(implode(',', $byGrain['ad'])), fn () => DB::table('entity_daily_metrics')
                 ->join('external_ads', 'external_ads.id', '=', 'entity_daily_metrics.entity_id')
                 ->where('entity_daily_metrics.entity_type', 'ad')
                 ->whereIn('external_ads.creative_id', $byGrain['ad'])
@@ -434,7 +501,7 @@ final class CreativeMetrics
                 ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
                 ->groupBy('external_ads.creative_id', 'entity_daily_metrics.metric_date')
                 ->selectRaw('external_ads.creative_id AS creative_id, entity_daily_metrics.metric_date AS metric_date, SUM(entity_daily_metrics.impressions) AS impressions, SUM(entity_daily_metrics.clicks) AS clicks, SUM(entity_daily_metrics.spend) AS spend, COUNT(*) FILTER (WHERE entity_daily_metrics.spend IS NULL AND entity_daily_metrics.spend_original IS NOT NULL) AS withheld')
-                ->get()
+                ->get())
                 ->each(function ($r) use (&$days): void {
                     $days[(string) $r->creative_id][(string) $r->metric_date] = (array) $r;
                 });
@@ -760,9 +827,10 @@ final class CreativeMetrics
      * through the very query the product runs rather than through a copy of it.
      *
      * @param  list<string>  $creativeIds
-     * @return array<string, array<string, mixed>>
+     * @param  array{origin: Carbon, size: int}|null  $buckets  PERF-RECOVERY-001 — when set, the window is cut into consecutive blocks of `size` days from `origin` and each block is answered on its own
+     * @return array<string, array<string, mixed>>|array<int, array<string, array<string, mixed>>> creative id => figures, or block => creative id => figures
      */
-    private function fromCreativeGrain(array $creativeIds, Carbon $from, Carbon $to): array
+    private function fromCreativeGrain(array $creativeIds, Carbon $from, Carbon $to, ?array $buckets = null): array
     {
         if ($creativeIds === []) {
             return [];
@@ -799,7 +867,8 @@ final class CreativeMetrics
                 'creative_daily_metrics.project_id',
             ))
             ->groupBy('creative_id')
-            ->selectRaw(implode(', ', $select))
+            ->when($buckets !== null, fn ($q) => $q->groupByRaw(self::bucketExpression('metric_date', $buckets)))
+            ->selectRaw(implode(', ', $buckets === null ? $select : [...$select, self::bucketExpression('metric_date', $buckets).' AS bucket']))
             ->get();
 
         $out = [];
@@ -814,10 +883,30 @@ final class CreativeMetrics
              * the query knows, which is how «trustworthy» becomes unanswerable.
              */
             $figures['grain'] = 'creative';
+
+            if ($buckets !== null) {
+                $out[(int) $row->bucket][(string) $row->creative_id] = $figures;
+
+                continue;
+            }
+
             $out[(string) $row->creative_id] = $figures;
         }
 
         return $out;
+    }
+
+    /**
+     * Which block of a bucketed window a date falls in: whole days since the origin, divided by the block size.
+     *
+     * Built from an integer and a `Y-m-d` string the code formatted itself, so there is nothing to bind and nothing a request can reach.
+     * The select list and the GROUP BY must be the same text, which is why one function writes both.
+     *
+     * @param  array{origin: Carbon, size: int}  $buckets
+     */
+    private static function bucketExpression(string $dateColumn, array $buckets): string
+    {
+        return sprintf("(%s - DATE '%s') / %d", $dateColumn, $buckets['origin']->toDateString(), max(1, (int) $buckets['size']));
     }
 
     /**
@@ -941,15 +1030,17 @@ final class CreativeMetrics
      * A metric the ad grain does not carry stays absent, and the reader renders «—».
      *
      * @param  list<string>  $creativeIds
-     * @return array<string, array<string, mixed>>
+     * @param  array{origin: Carbon, size: int}|null  $buckets  see `fromCreativeGrain()`
+     * @return array<string, array<string, mixed>>|array<int, array<string, array<string, mixed>>>
      */
-    private function fromAdGrain(array $creativeIds, Carbon $from, Carbon $to): array
+    private function fromAdGrain(array $creativeIds, Carbon $from, Carbon $to, ?array $buckets = null): array
     {
         if ($creativeIds === []) {
             return [];
         }
 
-        $entityColumns = Schema::getColumnListing('entity_daily_metrics');
+        // PERF-RECOVERY-001 — the column list of a table does not change inside a report build, and asking for it is a catalogue query.
+        $entityColumns = ReportReadMemo::remember('schema-columns|entity_daily_metrics', static fn (): array => Schema::getColumnListing('entity_daily_metrics'));
 
         $select = ['external_ads.creative_id as creative_id'];
 
@@ -985,7 +1076,8 @@ final class CreativeMetrics
             ->where(fn ($q) => app(CreativeDemoPolicy::class)->applyToProject($q, 'entity_daily_metrics', app(ProjectContext::class)->projectId()))
             ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('external_ads.creative_id')
-            ->selectRaw(implode(', ', $select))
+            ->when($buckets !== null, fn ($q) => $q->groupByRaw(self::bucketExpression('entity_daily_metrics.metric_date', $buckets)))
+            ->selectRaw(implode(', ', $buckets === null ? $select : [...$select, self::bucketExpression('entity_daily_metrics.metric_date', $buckets).' AS bucket']))
             ->get();
 
         $out = [];
@@ -993,6 +1085,13 @@ final class CreativeMetrics
         foreach ($rows as $row) {
             $figures = $this->shape((array) $row);
             $figures['grain'] = 'ad';
+
+            if ($buckets !== null) {
+                $out[(int) $row->bucket][(string) $row->creative_id] = $figures;
+
+                continue;
+            }
+
             $out[(string) $row->creative_id] = $figures;
         }
 

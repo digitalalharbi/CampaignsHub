@@ -69,7 +69,7 @@ final class MailShell
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
             // EMAIL-BRAND-002 — the transparent cream mark (112px, shown at 56), on the app origin.
-            'logoUrl' => MailLinks::to('/brand/email/mark-cream.png'),
+            'logoUrl' => MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png'),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
@@ -77,18 +77,21 @@ final class MailShell
         ];
     }
 
-    /** The header's name line, in the reader's order. Constant markup: safe to print unescaped. */
+    /**
+     * The header's name line: one name, in the reader's language, as the official lockup writes it.
+     *
+     * Owner, 2026-11-05: «إذا عربي اكتب كامبينز هب وإذا إنجليزي اكتب بالإنجليزي», and the lockup he approved
+     * the same day. Both names side by side read as a mistake in either language. Constant text.
+     */
     public static function wordmark(bool $ar): string
     {
-        return $ar
-            ? 'كامبينز هَب <span dir="ltr">—</span> CampaignsHub'
-            : 'CampaignsHub <span dir="ltr">—</span> كامبينز هَب';
+        return $ar ? 'كامبينز هَب' : 'CampaignsHub';
     }
 
     /** The footer's name line. */
     public static function wordmarkPlain(bool $ar): string
     {
-        return $ar ? 'كامبينز هَب · CampaignsHub' : 'CampaignsHub · كامبينز هَب';
+        return self::wordmark($ar);
     }
 
     /**

@@ -64,7 +64,9 @@ Schedule::call(function (): void {
 })->everyMinute()->name('ops-heartbeat')->withoutOverlapping();
 
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
-Schedule::command('alerts:evaluate')->everyFifteenMinutes();
+// PERF-RECOVERY-001 — a sweep never stacks on itself, which could have raised one breach twice. The lock's default life is a day, so a killed run (a deploy, the OOM killer)
+// would silence every alert for a day; 14 minutes means the next tick after a killed run still fires. A run that outlives it can overlap the next, as every run could before.
+Schedule::command('alerts:evaluate')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /*
  * The ad-platform sweep (INTEG-SYNC-001).
@@ -79,6 +81,11 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes();
  * that out.
  */
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
+
+// PERF-SYNC-ISOLATION-001 — the half-hourly sweep above asks 3 days back; this daily pass re-asks the
+// fortnight in which providers restate (late attribution, corrected spend). Same command, same
+// ledger rows (`scheduled_runs.command` is the artisan name), same assigned-accounts-only gate.
+Schedule::command('integrations:sync --days=14')->dailyAt('03:50')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 // SALLA-ONBOARD-001 — a store uninstalled 30 days ago has its synced data removed (the retention the merchant is promised).
 Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverlapping();

@@ -67,6 +67,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Services/CreativePresenter.php' => 'presents one creative it was handed',
         'Domains/Campaigns/Support/CreativeDemoPolicy.php' => 'the demo policy predicate, applied beside this one',
         'Domains/Reports/Services/ReportCreativeMedia.php' => 'resolves media for creatives a report already names',
+        // REPORT-SOURCE-ISOLATION-001 — places creatives a STORED report already names inside or outside that report's own ad accounts,
+        // to drop the ones outside. It can only remove rows, returns no figure, and deliberately does not apply today's selection: a
+        // stored copy states what ran when it was made, and an account deselected since must not empty a document already sent.
+        'Domains/Reports/Services/ReportSourceContainment.php' => 'narrows a stored report to its own ad accounts; removes rows only, reads no figure',
         // SEC-CLUSTER-4 — proves a Drive attachment target is a creative of this tenant inside the caller's client ceiling; reads the creative's project id only.
         'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];

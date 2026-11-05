@@ -34,6 +34,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -69,6 +70,7 @@ use Tests\TestCase;
  */
 final class UnifiedFigureConsistencyTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private const DATE = '2026-07-10';
@@ -132,6 +134,7 @@ final class UnifiedFigureConsistencyTest extends TestCase
         ]);
 
         $this->account = $this->account('meta');
+        $this->bindSeededAccount((string) $this->project->id, $this->account->getKey());
 
         $this->campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,

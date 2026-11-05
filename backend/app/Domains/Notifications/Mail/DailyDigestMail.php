@@ -241,7 +241,7 @@ final class DailyDigestMail extends Mailable
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
                 // EMAIL-BRAND-002 — the transparent mark and the live-text wordmark, same as every other message.
-                'logoUrl' => MailLinks::to('/brand/email/mark-cream.png'),
+                'logoUrl' => MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png'),
                 'wordmark' => MailShell::wordmark($ar),
                 'wordmarkPlain' => MailShell::wordmarkPlain($ar),
                 // The shared footer words (support, sender) under the digest's own copy.

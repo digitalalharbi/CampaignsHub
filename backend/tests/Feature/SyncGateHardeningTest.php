@@ -81,6 +81,27 @@ final class SyncGateHardeningTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /** PERF-SYNC-ISOLATION-001 — the half-hourly sweep asks 3 days back, the daily pass 14; both only for bound accounts. */
+    public function test_the_sweep_asks_three_days_and_the_daily_pass_fourteen_for_bound_accounts_only(): void
+    {
+        Queue::fake();
+        Carbon::setTestNow('2026-11-02 10:00:00');
+
+        $accounts = $this->accounts($this->connection('snapchat', $this->tenant), 3);
+        $this->bind($accounts[0], $this->project('P', $this->workspace('W')));
+
+        $this->artisan('integrations:sync')->assertSuccessful();
+        $this->assertSame(['2026-10-30'], Queue::pushed(SyncAccountMetricsJob::class)->map->from->unique()->values()->all());
+        $this->assertSame([$accounts[0]->id], $this->pushed(SyncAccountMetricsJob::class));
+
+        $this->artisan('integrations:sync', ['--days' => 14])->assertSuccessful();
+        $this->assertContains('2026-10-19', Queue::pushed(SyncAccountMetricsJob::class)->map->from->all());
+        $this->assertCount(2, Queue::pushed(SyncAccountMetricsJob::class), 'one job per pass, and only for the bound account');
+        $this->assertSame([$accounts[0]->id], array_values(array_unique($this->pushed(SyncAccountMetricsJob::class))));
+
+        Carbon::setTestNow();
+    }
+
     public function test_an_organisation_of_200_accounts_with_one_selected_queues_exactly_one_job_of_each_kind(): void
     {
         Queue::fake();

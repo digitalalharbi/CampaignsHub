@@ -33,6 +33,9 @@ final class SyncCensusTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** This test asserts the no-binding branch itself (an account that synced without being assigned) and seeds its own bindings. */
+    protected bool $selectsSeededAccounts = false;
+
     private Tenant $tenant;
 
     protected function setUp(): void

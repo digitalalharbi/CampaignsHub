@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Http\Controllers;
 
+use App\Domains\Accounts\Services\OwnPendingRegistration;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
@@ -29,6 +30,7 @@ final class MembershipController extends Controller
         private readonly PortalResolver $resolver,
         private readonly MembershipSelector $selector,
         private readonly MembershipContext $context,
+        private readonly OwnPendingRegistration $pendingRegistration,
     ) {}
 
     /** GET /auth/memberships */
@@ -47,6 +49,7 @@ final class MembershipController extends Controller
                 'needs_switcher' => false,
                 'requested_portal' => null,
                 'requested_portal_held' => null,
+                'pending_registration' => null,
             ], 'Memberships.');
         }
 
@@ -55,11 +58,20 @@ final class MembershipController extends Controller
         // authentication without becoming a way to ask for a portal you do not have.
         $requested = Portal::tryFrom((string) $request->query('portal', ''));
 
+        /*
+         * WORKSPACE-SWITCH-001 — no workspace yet, and an application of their own still on its way.
+         *
+         * Holding any membership skips this entirely: whoever has a workspace routes like anybody else, whatever
+         * concession or waiver got them there. The id is all that is said, and it opens only the status screen.
+         */
+        $pending = $memberships->isEmpty() ? $this->pendingRegistration->for($user) : null;
+
         return ApiResponse::success([
             'memberships' => $memberships->map(fn (Membership $m) => $this->present($m, $active))->all(),
             'current' => $active !== null ? $this->present($active, $active) : null,
             // Where the frontend should land this user right now.
-            'destination' => $this->resolver->landingPathFor($user, $requested),
+            // LOGIN-SINGLE-DOOR-001 — `intended` is the page the sign-in was interrupted on: a request, never a claim.
+            'destination' => $this->resolver->postAuthDestination($user, $requested, is_string($request->query('intended')) ? $request->query('intended') : null),
             'needs_switcher' => $this->resolver->needsSwitcher($user),
             /*
              * What the visitor ASKED for, and whether they have it (LOGIN-001).
@@ -74,6 +86,9 @@ final class MembershipController extends Controller
              */
             'requested_portal' => $requested?->value,
             'requested_portal_held' => $requested === null ? null : $this->resolver->holds($user, $requested),
+            'pending_registration' => $pending !== null
+                ? ['id' => (string) $pending->getKey(), 'state' => $pending->state->value]
+                : null,
         ], 'Memberships.');
     }
 

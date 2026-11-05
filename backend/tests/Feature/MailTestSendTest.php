@@ -470,7 +470,7 @@ final class MailTestSendTest extends TestCase
         $preview = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/email/previews/account-password-reset?locale=ar')->assertOk()->json('data');
         $this->assertStringStartsWith(MailSubject::PREFIX, $preview['subject']);
         $this->assertStringStartsWith(MailSubject::PREFIX.'[اختبار] ', $preview['test_subject']);
-        $this->assertStringContainsString('CampaignsHub', $preview['text']);
+        $this->assertStringContainsString('كامبينز هَب', $preview['text']);
         $this->assertTrue($preview['mandatory']);
 
         $list = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/email/previews')->assertOk()->json('data');

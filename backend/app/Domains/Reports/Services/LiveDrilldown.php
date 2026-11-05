@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use Illuminate\Support\Facades\Log;
 
@@ -56,7 +57,8 @@ final class LiveDrilldown
             $payload['objectives'],
         );
 
-        return $this->guarded($payload, 'platform');
+        // REPORT-GENERIC-LABELS-001 — a drawer says what the page says.
+        return $this->guarded(GenericNames::for(null, $share)->apply($payload), 'platform');
     }
 
     /**
@@ -79,7 +81,7 @@ final class LiveDrilldown
         $content['content'] = $sanitised['ads_roster'][0];
         $content['trend'] = $sanitised['timeseries'];
 
-        return $this->guarded($content, 'content');
+        return $this->guarded(GenericNames::for(null, $share)->apply($content), 'content');
     }
 
     /**

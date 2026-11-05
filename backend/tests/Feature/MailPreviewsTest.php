@@ -186,7 +186,8 @@ final class MailPreviewsTest extends TestCase
     {
         foreach ($this->render() as $name => $html) {
             $this->assertGreaterThan(2000, strlen($html), "{$name} rendered almost nothing");
-            $this->assertStringContainsString('CampaignsHub', $html);
+            // One name, in the reader's language (Owner, 2026-11-05).
+            $this->assertMatchesRegularExpression('/CampaignsHub|كامبينز هَب/u', $html, "{$name} names no product");
         }
     }
 
@@ -214,16 +215,16 @@ final class MailPreviewsTest extends TestCase
         foreach ($this->render() as $name => $html) {
             // EMAIL-BRAND-001 — the official lockup in the header, and (EMAIL-DECISION-REPORT-001) the static
             // chart PNGs served by opaque token from our own origin, each with its figures in the alt. Nothing else.
-            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/mark-cream\.png"#', $html, "{$name}'s header image is not the brand lockup");
+            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/banner-(ar|en)\.png"#', $html, "{$name}'s header image is not the brand lockup");
             preg_match_all('/<img\b[^>]*>/', $html, $images);
             foreach ($images[0] as $tag) {
-                if (str_contains($tag, '/brand/email/mark-cream.png')) {
+                if (str_contains($tag, '/brand/email/banner-')) {
                     continue;
                 }
                 $this->assertMatchesRegularExpression('#src="[^"]+/mail/charts/[a-z0-9]{32}\.png"#', $tag, "{$name} loads an image that is neither the lockup nor a chart");
                 $this->assertMatchesRegularExpression('#alt="[^"]{8,}"#', $tag, "{$name} has a chart without its readable fallback");
             }
-            $this->assertStringNotContainsString('background-image', $html, "{$name} loads a background image");
+            $this->assertStringNotContainsString('url(', $html, "{$name} loads a background image");
         }
     }
 

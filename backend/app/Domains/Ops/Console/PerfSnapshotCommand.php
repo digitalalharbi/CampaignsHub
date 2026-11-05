@@ -41,6 +41,7 @@ final class PerfSnapshotCommand extends Command
         $this->postgres();
         $this->redis();
         $this->work();
+        $this->scheduled($hours);
 
         return self::SUCCESS;
     }
@@ -160,6 +161,32 @@ final class PerfSnapshotCommand extends Command
             }
 
             $this->line('  structure runs last 24h: '.DB::table('integration_sync_runs')->where('started_at', '>=', $since)->count());
+        });
+    }
+
+    /**
+     * What the scheduler ran, and in which wall-clock minutes it weighed most: a read that came back slow at 05:01 is held against
+     * the 05:00 row here. Serial per minute on one CPU, so a minute's seconds are CPU the web tier competed with. Commands only.
+     */
+    private function scheduled(int $hours): void
+    {
+        $this->heading('SCHEDULED COMMANDS');
+        $this->attempt(function () use ($hours): void {
+            $since = Carbon::now()->subHours($hours);
+
+            foreach (DB::table('scheduled_runs')->where('started_at', '>=', $since)->whereNotNull('duration_ms')
+                ->selectRaw('command, COUNT(*) AS n, ROUND(AVG(duration_ms) / 1000.0, 1) AS avg_s, ROUND(MAX(duration_ms) / 1000.0, 1) AS max_s, ROUND(SUM(duration_ms) / 1000.0) AS total_s')
+                ->groupBy('command')->orderByDesc('total_s')->limit(12)->get() as $row) {
+                $this->line(sprintf('  runs %-5d avg %-7ss max %-7ss total %-7ss %s', $row->n, $row->avg_s, $row->max_s, $row->total_s, $row->command));
+            }
+
+            $this->line('  heaviest minutes (UTC):');
+
+            foreach (DB::table('scheduled_runs')->where('started_at', '>=', $since)->whereNotNull('duration_ms')
+                ->selectRaw("to_char(date_trunc('minute', started_at), 'MM-DD HH24:MI') AS minute, ROUND(SUM(duration_ms) / 1000.0) AS total_s, LEFT(STRING_AGG(command || ' ' || ROUND(duration_ms / 1000.0, 1) || 's', ', ' ORDER BY duration_ms DESC), 180) AS commands")
+                ->groupByRaw("date_trunc('minute', started_at)")->orderByDesc('total_s')->limit(10)->get() as $row) {
+                $this->line(sprintf('    %s  %-6ss %s', $row->minute, $row->total_s, $row->commands));
+            }
         });
     }
 

@@ -12,7 +12,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { Refusal } from '@/lib/api/errors'
 import { useNavigate } from 'react-router-dom'
-import { usePortalPath } from '@/app/portalPath'
+import { useInAdvertiserPortal, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 
@@ -64,6 +64,8 @@ function accountHealthLabel(health: DiscoveredAccount['health'], ar: boolean): s
       for a capability this product does not need.
     */
     case 'insights_not_authorised': return ar ? 'لم تُمنح صلاحية ads_read لهذا الحساب' : 'ads_read is not granted on this account'
+    // MONEY-CURRENCY-NEVER-ASSUMED-001 — the money is withheld, not shown in a guessed currency.
+    case 'currency_unknown': return ar ? 'العملة غير معروفة — المبالغ محجوبة' : 'Currency unknown — money withheld'
     case 'access_lost': return ar ? 'تعذّر الوصول' : 'Access lost'
     case 'revoked': return ar ? 'الربط ملغى' : 'Connection revoked'
     // Assigned but the server did not say — an older response, not a state worth inventing a word for.
@@ -78,6 +80,7 @@ function accountHealthTone(health: DiscoveredAccount['health']): string {
     case 'delayed': return 'text-warning'
     case 'failed':
     case 'insights_not_authorised':
+    case 'currency_unknown':
     case 'access_lost':
     case 'revoked': return 'text-danger'
     default: return 'text-text-muted'
@@ -223,7 +226,12 @@ export function ConnectionWizard({
 
   const usage = useQuery({ queryKey: ['plan-usage'], queryFn: fetchPlanUsage })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
-  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  /*
+   * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
+   * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
+   */
+  const inAdvertiserPortal = useInAdvertiserPortal()
+  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
 
   const adAccounts = usage.data?.ad_accounts
   const afterConfirm = (adAccounts?.used ?? 0) + selected.size

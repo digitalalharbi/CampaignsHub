@@ -43,6 +43,7 @@ use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
+use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
 use App\Domains\Notifications\Console\ConfirmMailDelivery;
 use App\Domains\Notifications\Console\MailPreviewCommand;
@@ -65,6 +66,7 @@ use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Reports\Console\ReportSourceIsolationAuditCommand;
 use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
@@ -115,6 +117,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
+        ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
@@ -191,6 +194,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,
+        // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
+        // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
+        MoneyCurrencyAuditCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
         // PROD-PROVISION-001 — the reference data a production install cannot work without, and

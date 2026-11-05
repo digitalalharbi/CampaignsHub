@@ -71,6 +71,9 @@ class DatabaseSeeder extends Seeder
             // 3a) Deterministic demo accounts for the THREE experiences (Operations Console / SaaS Workspace /
             //     Client Portal). Idempotent; must run AFTER DemoSeeder (it ensures the demo-agency logins).
             $this->call(DemoAccountsSeeder::class);
+
+            // ENSURE-PORTAL-SESSION-001 — the one account that spans two portals in two tenants, on purpose.
+            $this->call(DemoTwoPortalsSeeder::class);
         }
 
         // 3b) Heavy demo data (metrics/reports/creatives) — local/demo ONLY, never in `testing`
@@ -79,10 +82,12 @@ class DatabaseSeeder extends Seeder
         if (App::environment(['local', 'demo'])) {
             $this->call([
                 DemoAnalyticsSeeder::class,
-                DemoReportsSeeder::class,
                 // DEMO-001: the credential → connection → ad account → external campaign chain the
                 // analytics demo was missing, so the integration surfaces have real rows to show.
+                // BEFORE the reports: this is what selects the accounts, and a report generated while
+                // nothing is selected is a report of nothing under deny by default.
                 DemoIntegrationsSeeder::class,
+                DemoReportsSeeder::class,
             ]);
         }
 

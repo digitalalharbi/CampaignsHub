@@ -239,7 +239,8 @@ jobs:
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:probe \
-                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA} ${SHAPES} ${ACCOUNT_SHAPE}
+                "${ACCOUNT}" --from="${FROM}" --to="${TO}" --rows="12" ${STRUCTURE} ${MEDIA} ${SHAPES} ${ACCOUNT_SHAPE} \
+              || echo "PROBE FAILED (provider refused or unreachable): see above"
 
   # ── The sandbox quarantine, in its REPORTING form only ───────────────────────────────────────────
   #
@@ -455,11 +456,23 @@ jobs:
             docker compose \
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan integrations:account-ownership-audit --probe
+              exec -T backend php artisan integrations:account-ownership-audit --probe \
+              || echo "OWNERSHIP PROBE FAILED (provider refused or unreachable): see above — other sections are valid"
 
             # SYNC-CENSUS-001 — who actually synced in the last 24 h against who is actively assigned, per
             # provider, with any account that synced without being assigned. Read-only; counts and short ids.
             docker compose \
               --env-file deploy/backend.production.env \
               -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan integrations:sync-census --hours=24
+              exec -T backend php artisan integrations:sync-census --hours=24 \
+              || echo "SYNC CENSUS FAILED: see above — other sections are valid"
+
+            # MONEY-CURRENCY-NEVER-ASSUMED-001 — per provider: ad accounts with no currency (and how many of
+            # them a project is bound to), stored money whose currency differs from its account's, money
+            # rows with no currency at each grain, and currency pairs withheld for want of a rate. Read-only;
+            # masked ids, no names, no amounts. The way the Owner reads the currency state of Production.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan money:currency-audit \
+              || echo "CURRENCY AUDIT FAILED: see above — other sections are valid"

@@ -239,7 +239,7 @@ final class PlatformEmailOperationsTest extends TestCase
 
         $this->assertStringContainsString('dir="rtl"', $ar);
         $this->assertStringContainsString('dir="ltr"', $en);
-        $this->assertStringContainsString('CampaignsHub', $ar);
+        $this->assertStringContainsString('كامبينز هَب', $ar);
     }
 
     public function test_a_preview_that_does_not_exist_is_a_refusal_rather_than_a_blank_page(): void

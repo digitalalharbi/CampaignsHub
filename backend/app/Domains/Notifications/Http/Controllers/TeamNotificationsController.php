@@ -267,7 +267,9 @@ final class TeamNotificationsController extends Controller
      */
     private function lastMessage(int $userId, string $email, string $tenantId): ?array
     {
+        // This workspace's only, as `deliveries()` asks: another workspace's mail is not its manager's to read.
         $delivery = DB::table('mail_deliveries')
+            ->where('tenant_id', $tenantId)
             // EMAIL-TEST-SEND-001 — keyed by person, so a platform admin who is also a member would show their own test here.
             ->where('kind', '!=', TransactionalMailer::TEST_KIND)
             ->where(fn ($q) => $q->where('user_id', $userId)->orWhere('recipient', $email))

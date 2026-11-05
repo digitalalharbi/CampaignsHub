@@ -17,7 +17,6 @@ final class MailPlainTextPartTest extends TestCase
         $text = PlainText::fromHtml((string) MailGallery::render('account-sign-in-code', 'en'));
 
         $this->assertStringStartsWith('CampaignsHub (', $text, 'the logo\'s link printed as a bare address');
-        $this->assertStringContainsString('CampaignsHub — ', $text);
         $this->assertStringContainsString('482913', $text);
         $this->assertDoesNotMatchRegularExpression('/^·$/mu', $text);
     }
