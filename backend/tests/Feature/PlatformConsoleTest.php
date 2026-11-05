@@ -203,13 +203,13 @@ final class PlatformConsoleTest extends TestCase
             ])->assertOk()->assertJsonPath('data.public_intake_affected', true);
     }
 
-    /** Reactivating is not a suspension, so it needs no reason and must not be blocked by that rule. */
-    public function test_reactivating_needs_no_reason(): void
+    /** ADMIN-FULL-CONTROL-001 (Owner, 2026-11-05): a reason wherever it concerns access, and letting people back in does. */
+    public function test_reactivating_says_why_as_suspending_does(): void
     {
         $tenant = $this->tenant('Back Co', 'suspended');
 
         $this->actingAs($this->owner(), 'sanctum')
-            ->patchJson("/api/v1/admin/tenants/{$tenant->id}/status", ['status' => 'active'])
+            ->patchJson("/api/v1/admin/tenants/{$tenant->id}/status", ['status' => 'active', 'reason' => 'The dispute is settled'])
             ->assertOk();
 
         $this->assertSame('active', $tenant->fresh()->status);
