@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
-import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
+import { downloadSharedFile, fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
@@ -63,6 +63,8 @@ export function PublicReport() {
   const [report, setReport] = useState<Shared | null>(null)
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  /** SHARED-DOWNLOAD-PASSWORD-001 — a protected file that did not arrive says so beside the buttons. */
+  const [downloadFailed, setDownloadFailed] = useState(false)
 
   /*
    * The password that actually worked, kept so the live endpoint can be called with it.
@@ -208,8 +210,13 @@ export function PublicReport() {
                       {locale === 'ar' ? 'الملفات:' : 'Files:'} <bdi dir="ltr">{filesPeriod}</bdi>
                     </span>
                   )}
+                  {downloadFailed && (
+                    <span role="alert" data-testid="shared-report-download-failed" className="text-[11px] text-danger">
+                      {locale === 'ar' ? 'تعذّر تنزيل الملف' : 'The file could not be downloaded'}
+                    </span>
+                  )}
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                    <a key={f} href={sharedDownloadUrl(token, f)} data-testid={`shared-report-download-${f}`} onClick={accepted ? (e) => { e.preventDefault(); void downloadSharedFile(token, f, accepted).catch(() => setDownloadFailed(true)) } : undefined} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
                       <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}
