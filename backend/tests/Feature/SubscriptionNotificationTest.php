@@ -184,7 +184,7 @@ final class SubscriptionNotificationTest extends TestCase
             return $mail->hasTo($notification->to_email)
                 && $mail->detail === $notification->body
                 && $mail->title === $notification->subject
-                && str_contains($html, 'CampaignsHub')
+                && (str_contains($html, 'CampaignsHub') || str_contains($html, 'كامبينز هَب'))
                 && ! str_contains($html, 'you follow this project')
                 && ! str_contains($html, 'تتابع هذا المشروع');
         });

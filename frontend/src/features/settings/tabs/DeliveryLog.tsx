@@ -1,5 +1,6 @@
 import { useDeliveryLog } from '../api'
 import { summariseDeliveries, type DeliveryRow } from '../deliveryLog'
+import { FAILURE_WORDS, stageWords } from '../deliveryWords'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
@@ -23,7 +24,8 @@ import { Num } from '@/components/ui/Num'
  * `everSent` is rendered as its own state rather than folded into zero.
  */
 const STATUS: Record<string, { ar: string; en: string; tone: string }> = {
-  sent: { ar: 'أُرسلت', en: 'Sent', tone: 'text-success' },
+  // EMAIL-DELIVERY-LEDGER-001 — the transport took it; nobody yet knows it arrived.
+  sent: { ar: 'قبلها خادم البريد', en: 'Accepted by the mail server', tone: 'text-success' },
   failed: { ar: 'فشلت', en: 'Failed', tone: 'text-danger' },
   awaiting_provider_credentials: { ar: 'بانتظار مزوّد البريد', en: 'Awaiting mail provider', tone: 'text-warning' },
   awaiting_credentials: { ar: 'بانتظار مزوّد البريد', en: 'Awaiting mail provider', tone: 'text-warning' },
@@ -113,7 +115,8 @@ export function DeliveryLog() {
         <>
           <ul data-testid="delivery-summary" className="mt-4 grid gap-2 sm:grid-cols-3">
             {([
-              ['sent', ar ? 'أُرسلت' : 'Sent', summary.sent, 'text-text-primary'],
+              // «Accepted», not «sent»: the mail server took these, and that is all anybody knows yet.
+              ['sent', ar ? 'قبلها خادم البريد' : 'Accepted by the mail server', summary.sent, 'text-text-primary'],
               ['failed', ar ? 'فشلت' : 'Failed', summary.failed, summary.failed > 0 ? 'text-danger' : 'text-text-muted'],
               ['blocked', ar ? 'بانتظار المزوّد' : 'Awaiting provider', summary.blocked, summary.blocked > 0 ? 'text-warning' : 'text-text-muted'],
             ] as const).map(([key, label, value, tone]) => (
@@ -126,8 +129,10 @@ export function DeliveryLog() {
 
           <ul className="mt-4 grid gap-2">
             {rows.map((r, i) => {
-              const status = STATUS[r.status] ?? { ar: r.status, en: r.status, tone: 'text-text-muted' }
-              const reason = r.reason === null ? null : REASONS[r.reason] ?? null
+              const status = r.state === 'delivered' || r.state === 'queued' || r.state === 'attempted'
+                ? stageWords(r.state)
+                : STATUS[r.status] ?? { ar: r.status, en: r.status, tone: 'text-text-muted' }
+              const reason = r.failure_code ? (FAILURE_WORDS[r.failure_code] ?? FAILURE_WORDS.unknown) : (r.reason === null ? null : REASONS[r.reason] ?? null)
 
               return (
                 <li

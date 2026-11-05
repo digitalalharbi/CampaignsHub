@@ -44,7 +44,32 @@ final class DigestPresenter
          * its own comparison teaches the reader to distrust the number beside it.
          */
         private readonly int $windowDays = 1,
+        /**
+         * EMAIL-CANONICAL-METRICS-001 — the unit the digest's money is IN, as the rows say it.
+         *
+         * The web states `MetricsAggregator::currencyBasis()`: the currency when every row agrees,
+         * none when the rows mix. The mail printed the reporting default on every figure whatever
+         * the rows held, so a project whose rows are still SAR read «USD» in the inbox and «SAR» on
+         * the dashboard. Null here is the web's «no single unit is true»: the figure is printed bare,
+         * not under a label nobody checked.
+         */
+        private readonly ?string $currency = ReportingCurrency::DEFAULT,
     ) {}
+
+    /**
+     * The same presenter over another block's unit, or this one's when the payload names none.
+     *
+     * A payload that carries no `currency` key (one built before the key existed) keeps the default;
+     * a payload whose key is null states that the rows mix.
+     *
+     * @param  array<string,mixed>  $payload  a digest or one of its project blocks
+     */
+    public function forPayload(array $payload): self
+    {
+        return array_key_exists('currency', $payload)
+            ? new self($this->locale, $this->windowDays, is_string($payload['currency']) ? $payload['currency'] : null)
+            : $this;
+    }
 
     /**
      * What this digest compared itself against, in words.
@@ -69,14 +94,14 @@ final class DigestPresenter
         return $this->locale === 'ar';
     }
 
-    /** Money, always with its currency — a bare number reads as a count. */
-    public function money(float|int|null $value, string $currency = ReportingCurrency::DEFAULT): string
+    /** Money with the unit its rows share; bare only where the rows mix and no unit is true. */
+    public function money(float|int|null $value): string
     {
         if ($value === null) {
             return $this->noData();
         }
 
-        return number_format((float) $value, ((float) $value) === floor((float) $value) ? 0 : 2).' '.$currency;
+        return trim(number_format((float) $value, ((float) $value) === floor((float) $value) ? 0 : 2).' '.$this->currency);
     }
 
     /**
@@ -90,13 +115,13 @@ final class DigestPresenter
      * and rounding it to 28 is a different answer to the question the card is asking. This is for
      * headline sums only, which is why it is a separate method rather than a flag on `money()`.
      */
-    public function headline(float|int|null $value, string $currency = ReportingCurrency::DEFAULT): string
+    public function headline(float|int|null $value): string
     {
         if ($value === null) {
             return $this->noData();
         }
 
-        return number_format(round((float) $value), 0).' '.$currency;
+        return trim(number_format(round((float) $value), 0).' '.$this->currency);
     }
 
     /** A count, or the honest reason there is not one. */

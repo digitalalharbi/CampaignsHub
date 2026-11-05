@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -118,6 +119,35 @@ final class AlertDispatchTest extends TestCase
                 && str_contains($detail, 'داخلي')
                 && str_contains($detail, 'لا يوقف كامبينز هب العرض');
         });
+    }
+
+    /** EMAIL-GAPS — the alert sweep goes around `TransactionalMailer`, so it asks the gate itself. */
+    public function test_an_unsubscribed_person_gets_no_bundle_and_every_finding_says_why(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Str::uuid(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', 'ops@alerts.test'), 'scope' => 'alerts']);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertGreaterThan(0, $counts['unsubscribed'] ?? 0);
+        Mail::assertNothingSent();
+    }
+
+    /** One bundle is one message against the allowance, however many findings it carries. */
+    public function test_a_bundle_counts_once_and_past_the_limit_it_is_refused(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+        config(['mail.daily_limit_per_tenant' => 1]);
+        DB::table('mail_daily_usage')->insert(['tenant_id' => (string) $this->tenant->id, 'day' => Carbon::now('UTC')->toDateString(), 'used' => 1]);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertGreaterThan(0, $counts['limit_reached'] ?? 0);
+        Mail::assertNothingSent();
     }
 
     /**

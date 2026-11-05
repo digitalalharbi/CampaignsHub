@@ -112,6 +112,36 @@ final class ScheduledReportsTest extends TestCase
         $this->assertStringNotContainsString('CampaignsHub', (string) $subject);
     }
 
+    /**
+     * EMAIL-GAPS (§17.4.4) — two overlapping sweeps read the same due row. Only one may run it, or the
+     * recipients get two reports for one schedule.
+     */
+    public function test_a_schedule_read_by_two_overlapping_sweeps_runs_once(): void
+    {
+        $s = $this->schedule();
+        $dispatcher = app(ScheduledReportDispatcher::class);
+        $stale = ReportSchedule::withoutGlobalScopes()->findOrFail($s->id);
+
+        $this->assertSame(1, $dispatcher->dispatchDue());
+        // The second sweep read the row before the first one advanced it.
+        $this->assertFalse($dispatcher->claimDue($stale, Carbon::now()));
+        $this->assertSame(1, Report::withoutGlobalScopes()->where('project_id', $this->project->id)->count());
+    }
+
+    /**
+     * EMAIL-GAPS — the scheduler runs with no tenant. The read dropped only `ProjectScope`, so
+     * `TenantScope` failed closed and the cron found nothing, on every run, for every tenant. Every test
+     * above sets a tenant first, which is why none of them saw it.
+     */
+    public function test_the_cron_finds_due_schedules_with_no_tenant_resolved(): void
+    {
+        $this->schedule();
+        app(TenantContext::class)->forget();
+
+        $this->assertSame(1, app(ScheduledReportDispatcher::class)->dispatchDue());
+        $this->assertSame(1, DB::table('report_deliveries')->count());
+    }
+
     public function test_internal_report_is_suppressed_for_external_recipients(): void
     {
         $this->schedule(['audience' => 'internal', 'recipients' => [['email' => 'client@ext.test']]]);

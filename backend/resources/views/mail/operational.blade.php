@@ -15,7 +15,7 @@
 @php($colour = $tone[$severity] ?? $tone['info'])
 @php($background = $toneBg[$severity] ?? $toneBg['info'])
 
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
 
@@ -39,11 +39,7 @@
     </table>
 
     {{-- One button, and it says what it does. «اضغط هنا» tells a reader nothing about where they land. --}}
-    <div>
-        <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
-    </div>
+    @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])
 
     {{-- Why this arrived. An unexplained email is one a person marks as spam rather than unsubscribes from. --}}
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:20px;">{{ $t['why'] }}</div>

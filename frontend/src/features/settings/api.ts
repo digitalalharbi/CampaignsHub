@@ -123,6 +123,9 @@ export function useTeamActions() {
 
 export type Rhythm = 'immediate' | 'daily' | 'weekly' | 'monthly'
 
+/** The least severe finding somebody wants of a type — §17.4.1. Absent means every level. */
+export type Importance = 'warning' | 'critical'
+
 /** One message this product can send, as the server describes it — MAIL-011. */
 export interface CatalogueType {
   key: string
@@ -149,7 +152,9 @@ export interface NotifPrefs {
    * screen renders these directly rather than re-deriving them, so there is one resolution order in
    * the product and it lives in PHP.
    */
-  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm }>
+  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm; min_severity?: Importance | null }>
+  /** What this install has. SMS is listed and unavailable until an adapter is wired. */
+  available_channels?: { key: string; available: boolean }[]
   catalogue: { key: string; types: CatalogueType[] }[]
   quiet_hours: { enabled: boolean; start: string; end: string }
   frequency: 'realtime' | 'hourly' | 'daily'
@@ -358,6 +363,11 @@ export function useDeliveryLog() {
     queryFn: () => getData<DeliveryRow[]>('/settings/notifications/deliveries'),
   })
 }
+
+export const fetchMailPreviews = () => getData<{ keys: string[]; locales: string[] }>('/settings/notifications/previews')
+
+export const fetchMailPreview = (key: string, locale: string) =>
+  getData<{ key: string; locale: string; html: string }>(`/settings/notifications/previews/${key}?locale=${locale}`)
 
 export function useTeamNotifications() {
   return useQuery({

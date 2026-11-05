@@ -1157,14 +1157,25 @@ export function rollbackMetaLive(): Promise<MetaCandidateState> {
 export interface EmailDelivery {
   id: string
   /** `transactional` (mail_deliveries) or `digest` (digest_sends) — two ledgers, one question. */
-  source: 'transactional' | 'digest'
+  source: 'transactional' | 'digest' | 'subscription'
+  /** EMAIL-TEST-SEND-001 — a platform admin's own test: masked, and left out of `by_state`. */
+  is_test?: boolean
   at: string
   kind: string
   template: string
   recipient: string | null
   tenant_name: string | null
   locale: string | null
+  /** The stored word. Read `state`: `sent` here only ever meant a transport took it. */
   status: string
+  /** queued, attempted, accepted, delivered, failed or suppressed — EMAIL-DELIVERY-LEDGER-001. */
+  state: string
+  suppression_reason?: string | null
+  failure_code?: string | null
+  /** What a person recorded having seen. The only thing that makes a row `delivered`. */
+  evidence?: string | null
+  next_attempt_at?: string | null
+  provider_message_id?: string | null
   transport: string | null
   attempts: number
   reason: string | null
@@ -1176,6 +1187,7 @@ export interface EmailLedger {
   page: number
   per_page: number
   by_state: Record<string, number>
+  test_sends?: number
   transport: {
     state: 'awaiting_credentials' | 'sandbox' | 'live'
     provider_configured: boolean
@@ -1184,13 +1196,14 @@ export interface EmailLedger {
     sender?: { address: string; name: string }
     reply_to?: string
     last_success_at?: string | null
-    last_failure?: { at: string; kind: string; error: string } | null
+    last_failure?: { at: string; kind: string; error: string; failure_code?: string | null } | null
   }
   available_states: string[]
 }
 
 export function fetchEmailLedger(params: {
   status?: string
+  state?: string
   kind?: string
   recipient?: string
   source?: string
@@ -1204,15 +1217,45 @@ export function fetchEmailLedger(params: {
   return getData<EmailLedger>(`/admin/email/deliveries${q.size > 0 ? `?${q}` : ''}`)
 }
 
-/** One message to the signed-in operator, recorded in the ledger whatever the transport can do. */
-export const sendTestEmail = (lang: 'ar' | 'en') =>
-  postData<{ state: string; recipient: string }>('/admin/email/test', { lang })
+/** What the transport answered. `delivery_state: accepted` is the mail server taking it, not an inbox receiving it. */
+export interface TestSendResult {
+  state: string
+  delivery_state: string
+  recipient: string
+  delivery_id?: string | null
+  transport?: string | null
+  suppression_reason?: string | null
+  failure_code?: string | null
+  provider_message_id?: string | null
+}
 
-export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[] }> {
+/** EMAIL-TEST-SEND-001 — one fixture message to the signed-in admin's own proven address. No address is ever sent from here. */
+export const sendTestEmail = (lang: 'ar' | 'en', key?: string) =>
+  postData<TestSendResult>('/admin/email/test', { lang, key })
+
+export interface EmailPreviewList {
+  keys: string[]
+  locales: string[]
+  /** Where a test would go, and whether that address was ever proved. */
+  test_send?: { recipient: string; address_proven: boolean }
+}
+
+export function fetchEmailPreviews(): Promise<EmailPreviewList> {
   return getData('/admin/email/previews')
 }
 
-export function fetchEmailPreview(key: string, locale: string): Promise<{ key: string; locale: string; html: string }> {
+export interface EmailPreview {
+  key: string
+  locale: string
+  html: string
+  subject?: string
+  test_subject?: string
+  text?: string
+  /** A security or account message: nobody can switch it off. */
+  mandatory?: boolean
+}
+
+export function fetchEmailPreview(key: string, locale: string): Promise<EmailPreview> {
   return getData(`/admin/email/previews/${key}?locale=${locale}`)
 }
 
