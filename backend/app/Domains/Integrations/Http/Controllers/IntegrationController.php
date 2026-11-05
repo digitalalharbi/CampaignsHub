@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Enums\ConnectorStatus;
@@ -353,7 +354,7 @@ final class IntegrationController extends Controller
             ->where('external_id', (string) $integration->ad_account_id)
             ->first();
         abort_if(
-            $key !== 'sandbox' && ($account === null || ! app(AccountAssignment::class)->isActivelyAssigned($account)),
+            ProviderCatalogue::supports($key, ProviderCapability::Discovery) && ($account === null || ! app(AccountAssignment::class)->isActivelyAssigned($account)),
             409,
             'That ad account is not selected for any project, so nothing is fetched for it.',
         );

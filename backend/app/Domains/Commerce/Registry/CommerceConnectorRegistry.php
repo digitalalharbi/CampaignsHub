@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Registry;
 
 use App\Domains\Commerce\Contracts\CommerceConnector;
+use App\Domains\Commerce\Providers\ApiCommerceConnector;
 use App\Domains\Commerce\Providers\SallaConnector;
 use App\Domains\Commerce\Providers\ZidConnector;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 
 /**
  * COMMERCE-001 — the two store adapters, resolved by key.
@@ -33,6 +36,16 @@ final class CommerceConnectorRegistry
     public function get(?string $key): ?CommerceConnector
     {
         return $this->connectors[strtolower(trim((string) $key))] ?? null;
+    }
+
+    /** INTEG-CAPABILITY-CONTRACT-001 — the connector to discover a store through, when one is declared. */
+    public function forDiscovery(?string $key): ?ApiCommerceConnector
+    {
+        $connector = $this->get($key);
+
+        return $connector instanceof ApiCommerceConnector && ProviderCatalogue::supports($connector->key(), ProviderCapability::Discovery)
+            ? $connector
+            : null;
     }
 
     public function has(?string $key): bool
