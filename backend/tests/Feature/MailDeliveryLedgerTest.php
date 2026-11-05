@@ -252,6 +252,10 @@ final class MailDeliveryLedgerTest extends TestCase
         $alert = app(NotificationDispatcher::class)->dispatch(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'type' => 'budget_risk', 'title' => 'Budget']);
         $this->assertSame('handled_elsewhere', DB::table('notification_deliveries')->where('notification_id', $alert->id)->where('channel', 'email')->value('status'));
 
+        // An alert rule with no category of its own is posted as `performance`, and the alert mailer mails it under that same name.
+        $anomaly = app(NotificationDispatcher::class)->dispatch(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'type' => 'performance', 'title' => 'Anomaly']);
+        $this->assertSame('handled_elsewhere', DB::table('notification_deliveries')->where('notification_id', $anomaly->id)->where('channel', 'email')->value('status'));
+
         // Nothing mails this kind at all, so it says so rather than «sent».
         $request = app(NotificationDispatcher::class)->dispatch(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'type' => 'request.sla_warning', 'title' => 'SLA']);
         $this->assertSame('in_app_only', DB::table('notification_deliveries')->where('notification_id', $request->id)->where('channel', 'email')->value('status'));

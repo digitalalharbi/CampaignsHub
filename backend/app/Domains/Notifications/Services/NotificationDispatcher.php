@@ -55,6 +55,8 @@ final class NotificationDispatcher
         'budget_risk', 'sync_failed', 'token_expiring', 'report_ready', 'report_failed', 'lead_sla', 'security',
         'subscription', 'internal_spend_limit', 'budget_pace', 'rising_cost', 'reallocation', 'stale_data', 'data_gap',
         'falling_rate', 'period_comparison', 'frequency_saturation',
+        // What `AlertEvaluator` posts for a rule with no category of its own, and what `AlertEventMailer` mails it as.
+        'performance',
     ];
 
     /**
