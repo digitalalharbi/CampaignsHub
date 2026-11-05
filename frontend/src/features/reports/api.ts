@@ -44,6 +44,8 @@ export interface ReportRow {
   status: ReportStatus
   /** REPORT-DUPLICATE-001 — saved from the editor and not published. The status `draft` alone is also the column's default. */
   is_draft?: boolean
+  /** REPORT-DUPLICATE-001 — the link switches a copy was started with. The share dialog opens filled from them; it is not a link. */
+  share_preferences?: SharePreferences | null
   /** Sent by the list payload; an `internal` report cannot be shared by link. */
   audience?: string | null
   period: { from: string | null; to: string | null }
@@ -197,6 +199,25 @@ export interface ReportEditorState {
   columns: Record<string, string[]>
   sections: Record<string, boolean>
   scope: ReportScopeShape | null
+  /** The original link's switches, carried as preferences only: no token, password, expiry or scope ids. Null when it had no link. */
+  share_preferences?: SharePreferences | null
+}
+/**
+ * REPORT-DUPLICATE-001 — what a copy remembers of its original's link. Switches only; `was_locked` says a password was asked
+ * for and never what it was. The share dialog starts from these, and a link exists only once someone makes one there.
+ */
+export interface SharePreferences {
+  allow_download?: boolean
+  hide_spend?: boolean
+  hide_revenue?: boolean
+  hide_campaign_names?: boolean
+  watermark?: boolean
+  mode: 'live' | 'snapshot'
+  form: string | null
+  generic_names: GenericNameKind[]
+  sections: Record<string, boolean>
+  creatives: Record<string, boolean>
+  was_locked: boolean
 }
 export interface DuplicateStart {
   source: { id: string; name: string; status: ReportStatus }

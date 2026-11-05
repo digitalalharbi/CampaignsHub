@@ -364,6 +364,122 @@ final class ReportDuplicateDraftTest extends TestCase
         $this->assertArrayNotHasKey(Report::DRAFT_MARK, $built->config, 'a published report keeps no draft mark');
     }
 
+    // ---------------------------------------------------------------- the source link's preferences, as preferences only
+
+    public function test_the_source_links_preferences_travel_as_preferences_only_and_make_no_link(): void
+    {
+        $r = $this->report();
+        [$src, $srcRaw] = app(ShareService::class)->create($r, [
+            'allow_download' => false, 'hide_spend' => true, 'hide_revenue' => true, 'hide_campaign_names' => true, 'watermark' => true,
+            'password' => 'secret1', 'expires_at' => now()->addWeek(), 'form' => 'executive_summary',
+            'settings' => ['generic_names' => ['campaign'], 'sections' => ['attribution' => true]],
+        ], null);
+        $beforeShare = $src->fresh()->toArray();
+
+        // The press: the preferences are named in the prefill, and nothing of the link's access is.
+        $res = $this->as($this->owner)->postJson($this->base($r).'/duplicate', [])->assertOk();
+        $prefs = $res->json('data.draft.share_preferences');
+        $this->assertIsArray($prefs, 'the editor is told which link settings the copy starts with');
+        $this->assertFalse($prefs['allow_download']);
+        $this->assertTrue($prefs['hide_spend']);
+        $this->assertTrue($prefs['hide_revenue']);
+        $this->assertTrue($prefs['hide_campaign_names']);
+        $this->assertTrue($prefs['watermark']);
+        $this->assertSame('executive_summary', $prefs['form']);
+        $this->assertSame('snapshot', $prefs['mode']);
+        $this->assertSame(['campaign'], $prefs['generic_names']);
+        $this->assertTrue($prefs['sections']['attribution']);
+        $this->assertTrue($prefs['was_locked'], 'that the source asked for a password is said; the password is not');
+        $flat = (string) json_encode($res->json());
+        foreach ([$srcRaw, (string) $src->getKey(), (string) $src->token_hash, (string) $src->password_hash, 'secret1', 'expires', 'scope_ids'] as $secret) {
+            $this->assertStringNotContainsString($secret, $flat, 'nothing of the source link’s access is in the prefill');
+        }
+        $this->assertSame(1, ReportShare::query()->count(), 'the press made no link');
+
+        // Saved as a draft, reopened, edited and published: the preferences stay with the copy and still no link exists.
+        $draft = $this->savedDraft($r);
+        $this->assertEquals($prefs, $draft->config['share_preferences']);
+        $this->as($this->owner)->getJson($this->base($draft).'/draft')->assertOk()->assertJsonPath('data.draft.share_preferences.hide_revenue', true);
+        $state = $this->as($this->owner)->getJson($this->base($draft).'/draft')->json('data.draft');
+        $this->as($this->owner)->putJson($this->base($draft).'/draft', $this->editorBody($state, ['name' => 'Edited copy']))->assertOk();
+        $this->as($this->owner)->postJson($this->base($draft).'/publish', $this->editorBody($state, ['name' => 'Edited copy']))->assertOk()
+            ->assertJsonPath('data.share_preferences.hide_campaign_names', true);
+        (new GenerateReportJob((string) $draft->getKey()))->handle(app(ReportGenerator::class));
+        app(ProjectContext::class)->setProjectId((string) $this->project->getKey());
+        $built = Report::query()->findOrFail($draft->getKey());
+        $this->assertSame('completed', $built->status);
+        $this->assertEquals($prefs, $built->config['share_preferences'], 'the preferences survive the copy’s first generation');
+        $this->as($this->owner)->getJson($this->base($built))->assertOk()->assertJsonPath('data.share_preferences.watermark', true);
+        $this->assertSame(0, ReportShare::query()->where('report_id', $built->getKey())->count(), 'a preference is not a link: none exists until someone shares');
+        $this->assertSame(0, AuditLog::query()->where('action', 'report.shared_link_created')->count());
+
+        // The explicit share act, with what the dialog was prefilled with: a NEW link, its own token, no password and no expiry carried.
+        $made = $this->as($this->owner)->postJson($this->base($built).'/shares', array_intersect_key($prefs, array_flip(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'mode', 'generic_names', 'sections'])))->assertSuccessful();
+        $link = ReportShare::query()->where('report_id', $built->getKey())->sole();
+        $this->assertNotSame($srcRaw, $made->json('data.token'));
+        $this->assertNotSame($src->token_hash, $link->token_hash);
+        $this->assertNull($link->password_hash, 'a password is typed again by the person sharing, never copied');
+        $this->assertNull($link->expires_at);
+        $this->assertTrue($link->hide_revenue);
+        $this->assertTrue($link->hide_campaign_names);
+        $this->assertFalse($link->allow_download);
+        $this->assertEquals($beforeShare, $src->fresh()->toArray(), 'the original link is unchanged');
+    }
+
+    public function test_a_source_without_a_link_carries_no_preferences_and_a_revoked_link_is_not_a_source(): void
+    {
+        $r = $this->report();
+        $this->assertNull($this->prefill($r)['share_preferences'], 'no link, no preferences: the share dialog keeps its own defaults');
+
+        [$gone] = app(ShareService::class)->create($r, ['hide_revenue' => true], null);
+        $gone->forceFill(['revoked_at' => now()])->save();
+        $this->assertNull($this->prefill($r)['share_preferences'], 'a link that was revoked for good is not what the copy starts from');
+
+        $draft = $this->savedDraft($r);
+        $this->assertArrayNotHasKey('share_preferences', (array) $draft->config);
+        $this->as($this->owner)->getJson($this->base($draft))->assertOk()->assertJsonPath('data.share_preferences', null);
+    }
+
+    // ---------------------------------------------------------------- the published copy on paper
+
+    public function test_the_published_copy_prints_and_exports_as_itself_and_the_original_is_not_rebuilt_or_exported(): void
+    {
+        $r = $this->report();
+        $before = $r->fresh()->toArray();
+        $draft = $this->savedDraft($r);
+        $state = $this->as($this->owner)->getJson($this->base($draft).'/draft')->json('data.draft');
+        $this->as($this->owner)->postJson($this->base($draft).'/publish', $this->editorBody($state, ['name' => 'August on paper', 'section_settings' => ['sections' => ['trends' => false]]]))->assertOk();
+
+        // Unpublished or not yet built, nothing prints: there is no document to print.
+        $this->as($this->owner)->postJson($this->base($draft).'/print-token', [])->assertStatus(422);
+
+        (new GenerateReportJob((string) $draft->getKey()))->handle(app(ReportGenerator::class));
+        app(ProjectContext::class)->setProjectId((string) $this->project->getKey());
+        $built = Report::query()->findOrFail($draft->getKey());
+        $this->assertSame('completed', $built->status);
+
+        // The PDF renderer's door, both layouts: the copy's own document, under the copy's own name.
+        foreach (['presentation', 'document'] as $type) {
+            $token = $this->as($this->owner)->postJson($this->base($built).'/print-token', ['type' => $type])->assertOk()->json('data.token');
+            $printed = $this->getJson("/api/v1/reports/print/{$token}")->assertOk();
+            $printed->assertJsonPath('data.name', 'August on paper')->assertJsonPath('data.type', $type);
+            $this->assertSame((string) $built->getKey(), (string) $printed->json('data.report_id'));
+            $this->assertNotSame((string) $r->getKey(), (string) $printed->json('data.report_id'), 'the printed document is the copy, not its original');
+            $this->assertNotEmpty($printed->json('data.data'), 'the copy has its own stored document');
+            $this->assertSame($state['period_start'], $printed->json('data.data.period.from'));
+        }
+
+        // The export queue hears of the copy, and only of the copy.
+        $this->as($this->owner)->postJson($this->base($built).'/export', ['format' => 'pdf'])->assertStatus(202)->assertJsonPath('data.format', 'pdf');
+        Queue::assertPushed(GenerateReportExportJob::class, 1);
+        $this->assertSame(1, DB::table('report_exports')->where('report_id', $built->getKey())->count());
+        $this->assertSame(0, DB::table('report_exports')->where('report_id', $r->getKey())->count(), 'the original was not exported');
+
+        $this->assertEquals($before, $r->fresh()->toArray(), 'the original is unchanged');
+        $this->assertSame(0, ReportVersion::query()->where('report_id', $r->getKey())->count(), 'the original was not rebuilt');
+        $this->assertSame(0, ReportShare::query()->count(), 'printing and exporting a copy makes no link');
+    }
+
     // ---------------------------------------------------------------- a draft is not reachable from outside
 
     public function test_a_draft_cannot_be_reached_by_any_link_token_export_or_rebuild(): void

@@ -43,7 +43,7 @@ import {
   resumeShare,
   shareLogs,
 } from './api'
-import type { CreatedShare, GenericNameKind, ReportDetail, ReportEditorState, ReportFormat, ReportRow, ShareRow } from './api'
+import type { CreatedShare, GenericNameKind, ReportDetail, ReportEditorState, ReportFormat, ReportRow, SharePreferences, ShareRow } from './api'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -1004,6 +1004,35 @@ function EditOriginalDialog({ ar, report, onClose, onRename, onNames, onScope, o
   )
 }
 
+/**
+ * REPORT-DUPLICATE-001 — the original link's switches, said in words, wherever a copy carries them.
+ *
+ * The editor and the share dialog both show it, so the person sees the same list before the copy exists and when they share
+ * it. It names what is ON, says the password and the expiry were not copied, and never shows anything of the link itself.
+ */
+function SharePreferencesNote({ ar, prefs, testid, children }: { ar: boolean; prefs: SharePreferences; testid: string; children: React.ReactNode }) {
+  const on: string[] = [
+    ...(prefs.hide_spend ? [ar ? 'إخفاء الإنفاق' : 'Hide spend'] : []),
+    ...(prefs.hide_revenue ? [ar ? 'إخفاء الإيرادات' : 'Hide revenue'] : []),
+    ...(prefs.hide_campaign_names ? [ar ? 'إخفاء أسماء الحملات' : 'Hide campaign names'] : []),
+    ...(prefs.generic_names.length > 0 ? [ar ? 'أسماء عامة بدل الأسماء الحقيقية' : 'Generic names instead of real names'] : []),
+    ...(prefs.watermark ? [ar ? 'علامة مائية' : 'Watermark'] : []),
+    ...(prefs.allow_download === false ? [ar ? 'التنزيل غير مسموح' : 'Download not allowed'] : []),
+    ...(prefs.mode === 'live' ? [ar ? 'رابط لحظي' : 'Live link'] : []),
+  ]
+  return (
+    <div role="note" data-testid={testid} className="min-w-0 space-y-1 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs leading-relaxed text-text-secondary">
+      <p>{children}</p>
+      {on.length > 0 && <p className="font-semibold text-text-primary">{on.join(ar ? '، ' : ', ')}</p>}
+      <p>
+        {prefs.was_locked
+          ? (ar ? 'رابط الأصل كان محميًا بكلمة مرور. كلمة المرور وتاريخ الانتهاء لا يُنسخان: اكتب كلمة مرور جديدة عند المشاركة إن أردت الحماية نفسها.' : 'The original link was protected by a password. The password and the expiry date are never copied: type a new password when you share if you want the same protection.')
+          : (ar ? 'كلمة المرور وتاريخ الانتهاء لا يُنسخان من رابط الأصل.' : 'The password and the expiry date are never copied from the original link.')}
+      </p>
+    </div>
+  )
+}
+
 function IconBtn({ children, title, onClick, danger }: { children: React.ReactNode; title: string; onClick: () => void; danger?: boolean }) {
   return (
     <button
@@ -1166,6 +1195,20 @@ export interface BuilderSeed {
   sourceName?: string
 }
 
+/** The editor's settings as a reader names them, each with the fields of the request it is made of. */
+const DIFF_GROUPS: Array<{ keys: string[]; ar: string; en: string }> = [
+  { keys: ['description'], ar: 'الوصف', en: 'description' },
+  { keys: ['type'], ar: 'نوع التقرير', en: 'report type' },
+  { keys: ['mode'], ar: 'نوع الرابط (لحظي أو ثابت)', en: 'report mode (live or fixed)' },
+  { keys: ['detail_level'], ar: 'مستوى التفصيل', en: 'detail level' },
+  { keys: ['period_start', 'period_end'], ar: 'الفترة', en: 'period' },
+  { keys: ['scope'], ar: 'مصادر البيانات', en: 'data sources' },
+  { keys: ['section_settings'], ar: 'الأقسام', en: 'sections' },
+  { keys: ['config'], ar: 'أعمدة الجداول', en: 'table columns' },
+  { keys: ['branding_identity', 'prepared_for_name', 'prepared_by_name'], ar: 'الهوية', en: 'identity' },
+  { keys: ['audience'], ar: 'الجمهور', en: 'audience' },
+]
+
 export function ReportBuilder({ projectId, onClose, onCreated, seed }: { projectId: string; onClose: () => void; onCreated: () => void; seed?: BuilderSeed }) {
   const ar = useAr()
   const start = seed?.state
@@ -1296,6 +1339,17 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
     scope,
   }
   const draftJson = JSON.stringify(draftBody)
+  /*
+   * How the copy differs from its original, for the preview (§8.3: «توضح الفرق عن التقرير الأصلي»).
+   *
+   * An unsaved copy opens on the original's own settings, so what the editor held when it opened IS the original; the
+   * settings that no longer match are named. The name is left out: a copy always has its own. A saved draft that is
+   * reopened has no original to compare with here, so it says nothing rather than comparing the draft with itself.
+   */
+  const [openedWith] = useState(draftBody)
+  const differs = seed?.sourceId === undefined ? null : DIFF_GROUPS
+    .filter((g) => g.keys.some((k) => JSON.stringify(draftBody[k]) !== JSON.stringify(openedWith[k])))
+    .map((g) => (ar ? g.ar : g.en))
   const [savedJson, setSavedJson] = useState(draftJson)
   const dirty = drafting && draftJson !== savedJson
   const [leaveAsk, setLeaveAsk] = useState(false)
@@ -1385,6 +1439,13 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
                 ? 'معاينة بمحرك التقرير المنشور نفسه وبإعداداتك الحالية. لم يُحفظ شيء، ولا يوجد رابط، والتقرير الأصلي لم يتغير.'
                 : 'A preview through the published report’s own engine, with your current settings. Nothing was saved, no link exists, and the original report did not change.'}
             </p>
+            {differs !== null && (
+              <p role="status" data-testid="rb-preview-diff" className="rounded-xl border border-border px-3 py-2 text-xs text-text-secondary">
+                {differs.length === 0
+                  ? (ar ? `هذه النسخة مطابقة لإعدادات التقرير الأصلي «${seed?.sourceName ?? ''}» عدا الاسم.` : `This copy matches the settings of the original report “${seed?.sourceName ?? ''}”, apart from its name.`)
+                  : (ar ? `هذه النسخة تختلف عن التقرير الأصلي «${seed?.sourceName ?? ''}» في: ${differs.join('، ')}.` : `This copy differs from the original report “${seed?.sourceName ?? ''}” in: ${differs.join(', ')}.`)}
+              </p>
+            )}
             <InteractiveReport
               data={preview.data.data as never}
               meta={{ reportName: preview.data.name, platforms: preview.data.platforms, isDemo: false, agencyName: productName(ar ? 'ar' : 'en') }}
@@ -1403,6 +1464,13 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
                 ? `نسخة مستقلة من «${seed?.sourceName ?? ''}». لم يُنشأ شيء بعد: لا تقرير ولا رابط. احفظها كمسودة أو انشرها أو ألغِ. التقرير الأصلي ورابطه لا يتغيران في كل الأحوال.`
                 : `An independent copy of “${seed?.sourceName ?? ''}”. Nothing has been created yet: no report and no link. Save it as a draft, publish it, or cancel. The original report and its link do not change either way.`)}
           </div>
+        )}
+        {drafting && start?.share_preferences && (
+          <SharePreferencesNote ar={ar} prefs={start.share_preferences} testid="rb-share-preferences">
+            {ar
+              ? 'إعدادات رابط التقرير الأصلي محفوظة مع هذه النسخة كتفضيلات فقط. لا يُنشأ رابط الآن ولا عند النشر: ستجدها معبأة في نافذة «روابط العميل» عندما تشارك النسخة، ويمكنك تغييرها هناك.'
+              : 'The original report’s link settings are kept with this copy as preferences only. No link is made now or on publishing: you will find them filled in under “Client links” when you share the copy, and you can change them there.'}
+          </SharePreferencesNote>
         )}
         {refusalNote && <p role="alert" data-testid="rb-refusal" className="rounded-xl border border-danger px-3 py-2 text-sm text-danger">{refusalNote}</p>}
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={ar ? 'يرجى تصحيح الأخطاء التالية' : 'Please correct the following'} />}
@@ -1680,6 +1748,31 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
   const [logsFor, setLogsFor] = useState<string | null>(null)
   const [editing, setEditing] = useState<ShareRow | null>(null)
 
+  /*
+   * REPORT-DUPLICATE-001 — a copy opens this form filled from its original link's switches, once, when the report arrives.
+   *
+   * Filled, not applied: nothing is sent until «إنشاء رابط آمن», and every field can still be changed. The password and the
+   * expiry are not among them, so they are asked again here. A report that was not copied keeps the defaults above.
+   */
+  const prefs = detail.data?.share_preferences ?? null
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null)
+  if (prefs !== null && prefilledFor !== reportId) {
+    setPrefilledFor(reportId)
+    setOpts((o) => ({
+      ...o,
+      allow_download: prefs.allow_download ?? o.allow_download,
+      hide_spend: prefs.hide_spend ?? o.hide_spend,
+      hide_revenue: prefs.hide_revenue ?? o.hide_revenue,
+      hide_campaign_names: prefs.hide_campaign_names ?? o.hide_campaign_names,
+      watermark: prefs.watermark ?? o.watermark,
+    }))
+    setGenericNames(prefs.generic_names)
+    setForm(prefs.form ?? '')
+    setLive(prefs.mode === 'live')
+    setShowAttribution(prefs.sections.attribution === true)
+    setCreatives((c) => ({ ...c, permissions: { ...c.permissions, ...prefs.creatives } }))
+  }
+
   const create = useMutation({
     mutationFn: () =>
       createShare(projectId, reportId, {
@@ -1797,6 +1890,13 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
           </div>
         ) : (
           <div className="space-y-3">
+            {prefs !== null && (
+              <SharePreferencesNote ar={ar} prefs={prefs} testid="share-prefilled-note">
+                {ar
+                  ? 'هذا التقرير نسخة، والخيارات أدناه معبأة من إعدادات رابط التقرير الأصلي. لم يُنشأ رابط بعد: راجعها وغيّر ما تشاء ثم اضغط «إنشاء رابط آمن».'
+                  : 'This report is a copy, and the options below are filled from the original report’s link settings. No link has been made yet: review them, change what you like, then press “Create a secure link”.'}
+              </SharePreferencesNote>
+            )}
             {/*
               Live or fixed, chosen first, because it changes what the rest of this form means.
               A fixed link shares the document that was signed off; a live one shares a dashboard the

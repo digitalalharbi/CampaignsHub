@@ -26,6 +26,7 @@ use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
+use App\Domains\Reports\Support\SharePreferences;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -242,7 +243,7 @@ final class ReportController extends Controller
             $data['period_end'] = $window['to']->toDateString();
         }
 
-        return [
+        $attributes = [
             'name' => $data['name'],
             'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => $data['type'],
@@ -288,6 +289,26 @@ final class ReportController extends Controller
             // project id lifted the generator's project scope onto another project's rows. The report's own project, or none.
             'scope' => ($scope = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? [])))))->isUnbounded() ? null : $scope->toArray(),
         ];
+
+        // The link preferences a copy carries are cut to the known switches on every write, whoever wrote them.
+        $config = (array) $attributes['config'];
+        if (array_key_exists(SharePreferences::KEY, $config)) {
+            $attributes['config'] = self::withSharePreferences($config, SharePreferences::normalise($config[SharePreferences::KEY]));
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>|null  $preferences
+     * @return array<string, mixed>
+     */
+    private static function withSharePreferences(array $config, ?array $preferences): array
+    {
+        unset($config[SharePreferences::KEY]);
+
+        return $preferences === null ? $config : $config + [SharePreferences::KEY => $preferences];
     }
 
     public function store(Request $request, AuditLogger $audit, string $project): JsonResponse
@@ -313,6 +334,8 @@ final class ReportController extends Controller
                 'data_source' => $source->data_source,
                 'is_demo' => $source->is_demo,
             ], static fn ($v): bool => $v !== null);
+            // The original link's switches, as preferences for the share dialog. No link is made here or anywhere before a share.
+            $attributes['config'] = self::withSharePreferences((array) $attributes['config'], SharePreferences::forCopyOf($source));
         }
 
         if ($asDraft) {
@@ -615,6 +638,8 @@ final class ReportController extends Controller
             'columns' => ReportColumns::fromArray((array) ($config['columns'] ?? []))->toArray(),
             'sections' => array_filter((array) ($r->section_settings['sections'] ?? []), 'is_bool'),
             'scope' => $scope,
+            // What the share dialog will be filled with once the copy is published: switches only, never a link or its access.
+            'share_preferences' => $stored ? SharePreferences::normalise($config[SharePreferences::KEY] ?? null) : SharePreferences::forCopyOf($r),
         ];
     }
 
@@ -771,6 +796,8 @@ final class ReportController extends Controller
             'period' => ['from' => $r->period_start?->toDateString(), 'to' => $r->period_end?->toDateString()],
             'currency' => $r->currency,
             'config' => $r->config,
+            // REPORT-DUPLICATE-001 — the link switches a copy was started with; the share dialog opens filled from them. Not a link.
+            'share_preferences' => SharePreferences::normalise(((array) ($r->config ?? []))[SharePreferences::KEY] ?? null),
             // What the report covers (§14.5) — a list that hides it cannot tell a whole-project
             // report from one narrowed to a single platform.
             'scope' => $r->scope,
