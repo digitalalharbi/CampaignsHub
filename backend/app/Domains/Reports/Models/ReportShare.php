@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property bool $hide_spend the EFFECTIVE flag — see {@see hideSpend()}
@@ -214,7 +215,34 @@ final class ReportShare extends Model
             return true;
         }
 
+        // REPORT-FILTERS-FUNCTIONAL-001 — one platform of two is part of the project as surely as one account of two.
+        $providers = array_values(array_filter((array) ($scope['providers'] ?? []), 'is_string'));
+        if ($providers !== [] && array_diff($this->adPlatformsOfTheProject(), $providers) !== []) {
+            return true;
+        }
+
         return $this->reportIsNarrower ??= $this->reportNarrowerThanItsProject();
+    }
+
+    /**
+     * The ad platforms the project's own rows come from — never a store or a measurement property, which no link names as a platform.
+     *
+     * @return list<string>
+     */
+    private function adPlatformsOfTheProject(): array
+    {
+        $report = Report::withoutGlobalScopes()->whereKey($this->report_id)->first(['id', 'project_id']);
+        if ($report === null) {
+            return [];
+        }
+
+        return DB::table('daily_metrics')
+            ->where('project_id', (string) $report->project_id)
+            ->whereIn('external_account_id', BoundAccountVisibility::activeAccountIds((string) $report->project_id))
+            ->distinct()
+            ->pluck('provider')
+            ->map(static fn (mixed $p): string => (string) $p)
+            ->all();
     }
 
     /** Memo for {@see narrowerThanItsProject()} — the report's own sources are read once per link. */

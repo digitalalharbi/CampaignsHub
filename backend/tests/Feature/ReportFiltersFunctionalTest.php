@@ -7,6 +7,13 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Commerce\Models\CommerceOrder;
+use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
+use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -537,7 +544,8 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertSame(['clicks', 'impressions'], $page['metric_set']);
         $this->assertSame(['clicks', 'impressions'], $print['metric_set']);
         $this->assertSame(['clicks', 'impressions'], $print['kpi_allowlist']);
-        $this->assertSame(['platforms' => ['impressions', 'clicks'], 'days' => ['clicks']], $page['report_columns']);
+        // The operator's tables as chosen; a table nobody restricted follows the KPI list (REPORT-FILTERS-FUNCTIONAL-001, Owner 2026-11-05).
+        $this->assertSame(['platforms' => ['impressions', 'clicks'], 'days' => ['clicks'], 'accounts' => ['platform', 'impressions', 'clicks'], 'content' => ['platform', 'impressions', 'clicks']], $page['report_columns']);
         $this->assertSame($page['report_columns'], $print['report_columns']);
         // The files are cut by the server: no KPI row and no column the operator did not choose.
         $this->assertAbsent(['csv' => $surfaces['csv'], 'xlsx' => $surfaces['xlsx']], [...self::SPEND, ...self::REVENUE], 'spend and revenue are neither a chosen KPI nor a chosen column');
@@ -548,7 +556,9 @@ final class ReportFiltersFunctionalTest extends TestCase
         [, $raw] = $this->liveLink($picked, ['settings' => ['columns' => ['platforms' => ['clicks', 'nonsense'], 'unknown_table' => ['spend']]]], ['metrics' => ['clicks', 'impressions']]);
         $live = $this->live($raw, 'from='.self::FROM.'&to='.self::TO.'&metrics[]=spend&columns[platforms][]=spend');
         $this->assertSame(['clicks', 'impressions'], $live['metrics'], 'a reader changed the KPI list from the address');
-        $this->assertSame(['platforms' => ['clicks']], $live['columns'], 'a reader changed the columns from the address, or an unknown key was stored');
+        $this->assertSame(['clicks'], $live['columns']['platforms'], 'a reader changed the columns from the address, or an unknown key was stored');
+        $this->assertArrayNotHasKey('unknown_table', $live['columns']);
+        $this->assertSame(['impressions', 'clicks'], $live['columns']['days'], 'a table nobody restricted does not follow the KPI list');
     }
 
     // ---------------------------------------------------------------- form and audience
@@ -780,6 +790,211 @@ final class ReportFiltersFunctionalTest extends TestCase
         }
         $csv = $this->get("/api/v1/reports/shared/{$raw}/download/csv", ['X-Report-Password' => 'open-sesame'])->assertOk()->streamedContent();
         $this->assertStringContainsString('4767.67', $csv);
+    }
+
+    // ---------------------------------------------------------------- the values behind the lists (Owner decision 2026-11-05)
+
+    /** Every KPI of this world outside the list `clicks`, `impressions`; none may hold a figure on a served answer once the list stands. */
+    private const UNCHOSEN_KEYS = ['spend', 'spend_original', 'revenue', 'revenue_original', 'conversions', 'cpa', 'cpc', 'cpm', 'ctr', 'roas', 'reach', 'cpl', 'aov', 'purchases', 'leads', 'results', 'cost_per_result', 'spend_share'];
+
+    private const OPEN_CONTENT = ['creatives' => ['creatives' => true, 'spend' => true, 'revenue' => true, 'cpa' => true, 'roas' => true, 'insights' => true]];
+
+    public function test_the_values_of_unchosen_kpis_leave_every_served_answer_and_the_stored_copy_is_not_written(): void
+    {
+        $picked = $this->report(['scope' => ['account_ids' => [$this->snap, $this->meta], 'metrics' => ['clicks', 'impressions']]]);
+        $stored = json_encode(Report::withoutGlobalScopes()->find($picked->getKey())->data);
+
+        $content = ['settings' => self::OPEN_CONTENT];
+        foreach (['snapshot' => $this->snapshotLink($picked, $content), 'live' => $this->liveLink($picked, $content, ['metrics' => ['clicks', 'impressions']])] as $kind => [$share, $raw]) {
+            $surfaces = array_diff_key($this->surfaces($picked, $share, $raw), ['csv' => 1, 'xlsx' => 1]);
+            $this->assertAbsent($surfaces, [...self::SPEND, ...self::REVENUE], "the {$kind} link chose clicks and impressions");
+            foreach ($surfaces as $surface => $json) {
+                $this->assertSame([], self::figuresUnder($json, self::UNCHOSEN_KEYS), "the {$kind} link's «{$surface}» still carries an unchosen KPI");
+            }
+            $main = $kind === 'live' ? $surfaces['live'] : $surfaces['page'];
+            foreach ([$main, $surfaces['print']] as $answer) {
+                $this->assertStringContainsString('1497', $answer, 'a chosen KPI left with the others');
+                $this->assertStringContainsString('146000', $answer, 'a chosen KPI left with the others');
+            }
+        }
+
+        // The stored copy is what it was, and the operator's preview of an internal report keeps every figure.
+        $this->assertSame($stored, json_encode(Report::withoutGlobalScopes()->find($picked->getKey())->data), 'the serving cut wrote to reports.data');
+        $internal = $this->report(['audience' => 'internal', 'scope' => ['account_ids' => [$this->snap, $this->meta], 'metrics' => ['clicks']]]);
+        $preview = self::text($this->as()->getJson("/api/v1/projects/{$this->project->getKey()}/reports/{$internal->getKey()}")->assertOk()->json('data.data'));
+        $this->assertStringContainsString('4767.67', $preview, 'the operator lost a figure of an internal report');
+    }
+
+    public function test_the_values_of_unchosen_columns_leave_the_rows_they_sit_on(): void
+    {
+        $columns = ['platforms' => ['impressions', 'clicks'], 'accounts' => ['platform', 'clicks'], 'content' => ['clicks'], 'days' => ['clicks']];
+        $report = $this->report(['form' => 'detailed']);
+
+        foreach (['snapshot' => $this->snapshotLink($report, ['settings' => ['columns' => $columns, 'sections' => ['account_names' => true]]]), 'live' => $this->liveLink($report, ['settings' => ['columns' => $columns, 'sections' => ['account_names' => true]]])] as $kind => [$share, $raw]) {
+            $surfaces = $this->surfaces($report, $share, $raw);
+            foreach (array_diff_key($surfaces, ['csv' => 1, 'xlsx' => 1, 'creatives' => 1, 'creatives/summary' => 1, 'widgets' => 1, 'attribution' => 1]) as $surface => $json) {
+                // The days of the world: one day's spend sits on no other row than a daily one.
+                $this->assertStringNotContainsString('1111.11', $json, "the {$kind} link's «{$surface}» still carries an unchosen daily column");
+                $decoded = (array) json_decode($json, true);
+                $body = (array) ($decoded['data']['data'] ?? $decoded['data'] ?? []);
+                foreach ((array) ($body['platforms'] ?? []) as $row) {
+                    $this->assertSame([], array_values(array_intersect(array_keys((array) $row), ['spend', 'revenue', 'roas', 'cpa', 'ctr', 'conversions', 'reach', 'cpm', 'cpc'])), "the {$kind} link's «{$surface}» still has unchosen platform columns");
+                }
+                foreach ((array) ($body['accounts'] ?? []) as $row) {
+                    $this->assertSame([], array_values(array_intersect(array_keys((array) $row), ['spend', 'impressions', 'conversions', 'cpa'])), "the {$kind} link's «{$surface}» still has unchosen account columns");
+                }
+                foreach ((array) ($body['ads_roster'] ?? []) as $row) {
+                    $this->assertSame([], array_values(array_intersect(array_keys((array) ($row['metrics'] ?? [])), ['spend', 'impressions', 'conversions', 'cpa'])), "the {$kind} link's «{$surface}» still has unchosen content columns");
+                }
+            }
+            // With no KPI list the headline figures stay: the columns choose a table's columns, not the report's totals.
+            $this->assertStringContainsString('4767.67', $kind === 'live' ? $surfaces['live'] : $surfaces['page']);
+        }
+
+        // The drawer states the platform row of the same table.
+        [, $raw] = $this->liveLink($report, ['settings' => ['columns' => $columns]]);
+        RateLimiter::clear('share:127.0.0.1');
+        $drawer = $this->getJson("/api/v1/reports/shared/{$raw}/live/platform/snapchat?from=".self::FROM.'&to='.self::TO)->assertOk()->json('data');
+        $this->assertSame([], self::figuresUnder(self::text($drawer['totals'] ?? []), ['spend', 'revenue', 'cpa', 'conversions', 'ctr']));
+        $this->assertStringNotContainsString('1333.33', self::text($drawer));
+    }
+
+    public function test_a_report_with_no_list_keeps_every_value(): void
+    {
+        $report = $this->report();
+        $data = (array) $report->data;
+        [$share, $raw] = $this->snapshotLink($report);
+        RateLimiter::clear('share:127.0.0.1');
+        $page = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data');
+        $this->assertEqualsWithDelta(4767.67, $page['kpis']['spend'], 0.001);
+        $this->assertSame($data['metric_set'], $page['metric_set'], 'a template default is not somebody\'s choice');
+        $this->assertArrayHasKey('spend', $page['platforms'][0]);
+        [, $raw] = $this->liveLink($report);
+        $this->assertArrayHasKey('spend', $this->live($raw)['platforms'][0]);
+    }
+
+    public function test_the_two_comparisons_built_from_their_own_read_leave_with_the_switch(): void
+    {
+        $report = $this->report();
+        $impact = 'extra_cost_vs_previous_rate';
+
+        // On: the finding and the pulse compare with the window before.
+        [, $raw] = $this->liveLink($report, ['settings' => self::OPEN_CONTENT + ['sections' => ['previous_comparison' => true]]]);
+        $this->assertStringContainsString($impact, self::text($this->live($raw)), 'the world produced no comparison finding, so its absence below proves nothing');
+        RateLimiter::clear('share:127.0.0.1');
+        $pulse = $this->getJson("/api/v1/reports/shared/{$raw}/creatives/summary")->assertOk()->json('data');
+        $this->assertArrayHasKey('previous_period', $pulse);
+
+        // Off: neither travels, on either kind of link; the figures of the period stay.
+        $off = ['settings' => self::OPEN_CONTENT + ['sections' => ['previous_comparison' => false]]];
+        foreach (['snapshot' => $this->snapshotLink($report, $off), 'live' => $this->liveLink($report, $off)] as $kind => [$share, $raw]) {
+            $surfaces = array_diff_key($this->surfaces($report, $share, $raw), ['csv' => 1, 'xlsx' => 1]);
+            foreach ($surfaces as $surface => $json) {
+                $this->assertStringNotContainsString($impact, $json, "the {$kind} link's «{$surface}» still states the extra cost against the window before");
+                // The block naming the window before; a fatigue verdict may still say it could not read one (`missing: [previous_period]`).
+                $this->assertStringNotContainsString('"previous_period":', $json, "the {$kind} link's «{$surface}» still names the window before");
+                $this->assertSame([], self::figuresUnder($json, ['previous', 'before']), "the {$kind} link's «{$surface}» still carries a figure of the window before");
+                // A finding's movement is the ratio that returns the figure it was compared with; a note comparing two platforms is not the window before.
+                $this->assertSame([], array_filter(self::figuresUnder($json, ['change']), static fn (string $path): bool => str_contains($path, 'attention'), ARRAY_FILTER_USE_KEY), "the {$kind} link's «{$surface}» still carries a finding's movement");
+                $this->assertStringNotContainsString('period_comparison', $json, "the {$kind} link's «{$surface}» still carries a note against the previous period");
+            }
+            $this->assertStringContainsString('4767.67', $kind === 'live' ? $surfaces['live'] : $surfaces['page']);
+        }
+    }
+
+    public function test_store_and_site_sections_answer_from_seeded_rows_and_leave_with_their_switch_and_the_list(): void
+    {
+        $this->seedStoreAndSite();
+        // The site section is off on a client report until the operator turns it on (`clientDefault: false`).
+        $report = $this->report(['section_settings' => ['sections' => ['site_measurement' => true]]]);
+        $open = ['settings' => ['sections' => ['funnel_store' => true]]];
+
+        [, $raw] = $this->liveLink($report, $open);
+        $live = $this->live($raw);
+        $this->assertEqualsWithDelta(7777.77, $live['store_funnel']['totals']['revenue'], 0.001, 'the seeded store did not reach the link');
+        $this->assertEqualsWithDelta(6543.0, $live['site_measurement']['totals']['sessions'], 0.001, 'the seeded property did not reach the link');
+
+        // Each section's own switch.
+        [, $raw] = $this->liveLink($report, ['settings' => ['sections' => ['funnel_store' => false]]]);
+        $this->assertNull($this->live($raw)['store_funnel'] ?? null, 'the store stayed after its switch went off');
+        [, $raw] = $this->liveLink($report, ['settings' => ['section_overrides' => ['site_measurement']]]);
+        $this->assertStringNotContainsString('6543', self::text($this->live($raw)['site_measurement'] ?? null), 'the site section stayed after it was taken off the link');
+
+        // A link whose ceiling names nothing vouches for neither.
+        [, $raw] = $this->liveLink($report, [], ['account_ids' => [], 'campaign_ids' => [], 'dynamic_campaigns' => false]);
+        $nothing = $this->live($raw);
+        $this->assertNull($nothing['store_funnel'] ?? null);
+        $this->assertNull($nothing['site_measurement'] ?? null);
+
+        // A KPI list reaches them: revenue is a KPI the operator did not choose.
+        [, $raw] = $this->liveLink($report, $open, ['metrics' => ['clicks', 'impressions']]);
+        $listed = self::text($this->live($raw));
+        $this->assertStringNotContainsString('7777.77', $listed, 'the store still states revenue the list left out');
+        $this->assertStringNotContainsString('888.88', $listed, 'the site still states revenue the list left out');
+    }
+
+    public function test_attribution_answers_only_for_a_link_as_wide_as_its_project(): void
+    {
+        $this->seedStoreAndSite();
+        $report = $this->report(['scope' => []]);
+        $sections = ['settings' => ['sections' => ['attribution' => true]]];
+
+        [, $raw] = $this->snapshotLink($report, $sections);
+        RateLimiter::clear('share:127.0.0.1');
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertOk();
+
+        // One platform of two, one account of two, a report made for one platform: the store cannot be split by them, so the section refuses.
+        $narrow = [
+            'a link naming one platform' => [$report, $this->liveLink($report, $sections, ['providers' => ['meta'], 'account_ids' => []])],
+            'a link naming one account' => [$report, $this->liveLink($report, $sections, ['account_ids' => [$this->meta]])],
+        ];
+        $forOne = $this->report(['scope' => ['providers' => ['meta']]]);
+        $narrow['a report made for one platform'] = [$forOne, $this->snapshotLink($forOne, $sections)];
+        foreach ($narrow as $why => [, [, $raw]]) {
+            RateLimiter::clear('share:127.0.0.1');
+            $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertStatus(404);
+        }
+
+        // A link naming every platform the project has is not narrower.
+        [, $raw] = $this->liveLink($report, $sections, ['providers' => ['meta', 'snapchat'], 'account_ids' => []]);
+        RateLimiter::clear('share:127.0.0.1');
+        $this->getJson("/api/v1/reports/shared/{$raw}/attribution")->assertOk();
+    }
+
+    /** One store order and one GA4 property of this project, inside the window, each with a figure found nowhere else. */
+    private function seedStoreAndSite(): void
+    {
+        $tenant = (string) $this->tenant->getKey();
+        $project = (string) $this->project->getKey();
+        $connection = app(TokenVault::class)->open(tenantId: $tenant, provider: 'salla', tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)), connectionName: 'Salla');
+        $store = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant, 'provider_connection_id' => $connection->getKey(), 'provider' => 'salla', 'account_type' => 'store',
+            'external_id' => 'store-1', 'name' => 'QSTORE', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant, 'client_workspace_id' => $this->project->client_workspace_id, 'project_id' => $project,
+            'external_account_id' => $store->getKey(), 'provider' => 'salla', 'purpose' => 'ecommerce', 'is_active' => true,
+        ]);
+        CommerceOrder::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant, 'project_id' => $project, 'external_account_id' => $store->getKey(), 'provider' => 'salla', 'external_id' => 'o-1',
+            'status' => 'completed', 'placed_at' => Carbon::parse(self::IN1), 'currency' => 'SAR', 'total' => 7777.77, 'attribution_method' => 'none', 'attributed_at' => Carbon::now(),
+        ]);
+
+        $ga4 = app(TokenVault::class)->open(tenantId: $tenant, provider: 'ga4', tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)), connectionName: 'GA4');
+        $property = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant, 'provider_connection_id' => $ga4->getKey(), 'provider' => 'ga4', 'account_type' => Ga4PropertyDiscovery::ACCOUNT_TYPE,
+            'external_id' => '555', 'name' => 'QPROPERTY', 'status' => 'active',
+        ]);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant, 'client_workspace_id' => $this->project->client_workspace_id, 'project_id' => $project,
+            'external_account_id' => $property->getKey(), 'provider' => 'ga4', 'purpose' => 'analytics', 'is_active' => true,
+        ]);
+        foreach (['sessions' => [6543, null], 'revenue' => [888.88, 'SAR']] as $key => [$value, $currency]) {
+            MeasurementDailyMetric::withoutGlobalScopes()->create([
+                'tenant_id' => $tenant, 'project_id' => $project, 'external_account_id' => $property->getKey(), 'property_id' => '555',
+                'metric_date' => self::IN1, 'metric_key' => $key, 'value' => $value, 'currency' => $currency, 'timezone' => 'Asia/Riyadh',
+            ]);
+        }
     }
 
     private function as(): self

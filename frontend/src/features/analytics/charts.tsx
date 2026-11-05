@@ -427,7 +427,7 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false }: { s
                   {s.exceeds_previous && <span aria-hidden> ⚠</span>}
                 </span>
               )}
-              {s.cost_per !== null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
+              {s.cost_per != null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>
           </div>
         )

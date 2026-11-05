@@ -15,11 +15,14 @@ use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -101,7 +104,7 @@ final class SharedCreativeView
          * ranking was not. A sort the reader may not see the figure of falls back to the default order.
          */
         $sort = (string) ($applied['sort'] ?? '');
-        if ($visibility->hides($sort)) {
+        if ($visibility->hides($sort) || $this->chosenHides($share, $sort)) {
             $sort = '';
         }
 
@@ -109,7 +112,7 @@ final class SharedCreativeView
             ->forPage($page, $perPage)
             ->get();
 
-        $rows = $this->rows->present($creatives, $from, $to, withFatigue: true, withPrevious: true);
+        $rows = $this->withoutComparison($share, $this->rows->present($creatives, $from, $to, withFatigue: true, withPrevious: true));
 
         return [
             'creatives' => array_map(fn (array $row): array => $this->redactRow($row, $visibility), $rows),
@@ -140,18 +143,34 @@ final class SharedCreativeView
 
         [$from, $to] = [Carbon::parse($applied['from']), Carbon::parse($applied['to'])];
 
-        $rows = $this->rows->present(
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — the pulse and the findings read each row's `previous`. With the comparison off the rows carry none,
+         * so «fastest growing», «declining» and every against-itself finding are empty by construction, not by filtering their result.
+         */
+        $rows = $this->withoutComparison($share, $this->rows->present(
             $this->bounded($share, $applied)->get(),
             $from,
             $to,
             withFatigue: true,
             withPrevious: true,
-        );
+        ));
 
         $payload = $this->pulse->build($rows, $from, $to);
 
         if ($visibility->insights) {
             $payload['insights'] = $this->redactInsights($this->insights->build($rows, $from, $to), $visibility);
+        }
+
+        if (! $share->sectionVisibility()->previous_comparison) {
+            unset($payload['previous_period']);
+            if (is_array($payload['insights'] ?? null)) {
+                unset($payload['insights']['previous_period']);
+                $payload['insights']['items'] = array_map(static function ($item) {
+                    unset($item['previous_period']);
+
+                    return $item;
+                }, (array) ($payload['insights']['items'] ?? []));
+            }
         }
 
         return $this->redactSummary($payload, $visibility) + [
@@ -221,11 +240,15 @@ final class SharedCreativeView
         $detail['metrics'] = $current;
         $detail['previous'] = $previous;
         $detail['fatigue'] = $this->fatigue->assess($current ?? ['active_days' => 0], $previous);
+        $comparing = $share->sectionVisibility()->previous_comparison;
+        if (! $comparing) {
+            $detail = PreviousComparison::stripCreativeRow($detail);
+        }
 
         return [
             'creative' => $this->redactRow($detail, $visibility),
             'period' => ['from' => $applied['from'], 'to' => $applied['to'], 'days' => $days],
-            'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            ...($comparing ? ['previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()]] : []),
             // The same reshaping of the same figures the operator's page shows — with the per-stage
             // cost removed when the link withholds spend, since a cost per step IS spend divided.
             'funnel' => $this->redactFunnel($this->funnel->build($current), $visibility),
@@ -284,7 +307,7 @@ final class SharedCreativeView
             return null;
         }
 
-        $rows = $this->rows->present($creatives, $from, $to, withFatigue: false, withPrevious: true);
+        $rows = $this->withoutComparison($share, $this->rows->present($creatives, $from, $to, withFatigue: false, withPrevious: true));
 
         $objectives = array_values(array_unique(array_map(
             static fn (array $r): ?string => $r['objective'],
@@ -303,6 +326,23 @@ final class SharedCreativeView
             'reason_ar' => $verdict['reason_ar'],
             'permissions' => $visibility->toArray(),
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function withoutComparison(ReportShare $share, array $rows): array
+    {
+        return $share->sectionVisibility()->previous_comparison ? $rows : array_map(PreviousComparison::stripCreativeRow(...), $rows);
+    }
+
+    /** An order by a KPI the link did not choose ranks by a figure it does not carry. */
+    private function chosenHides(ReportShare $share, string $sort): bool
+    {
+        $report = $sort === '' ? null : Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report !== null && ChosenFigures::for($report, $share)->hidesMetric($sort);
     }
 
     // ---- the ceiling --------------------------------------------------------------------------

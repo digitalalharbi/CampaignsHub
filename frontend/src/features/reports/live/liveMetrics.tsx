@@ -295,6 +295,8 @@ export function cardHasFigure(key: string, text: string, payload: LivePayload): 
  */
 export function spendHiddenByLink(payload: LivePayload): boolean {
   const t = (payload.totals ?? {}) as Record<string, unknown>
+  // REPORT-FILTERS-FUNCTIONAL-001 — a link whose KPI list leaves spend out sends no spend key at all: the same «no money here».
+  if (payload.totals && !('spend' in t)) return true
 
   return t.spend === null && (t.spend_withheld_rows === null || t.spend_withheld_rows === undefined || t.spend_withheld_rows === 0)
     && (t.spend_original === null || t.spend_original === undefined)

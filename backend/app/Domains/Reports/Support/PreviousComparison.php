@@ -26,6 +26,9 @@ final class PreviousComparison
         'objective_performance_previous' => null,
     ];
 
+    /** The attention finding whose whole figure is this period's cost against the last period's rate. */
+    public const COMPARISON_IMPACT = 'extra_cost_vs_previous_rate';
+
     /** Row lists whose rows carry their own movement against the window before. */
     private const ROWS_WITH_MOVEMENT = ['platforms', 'accounts'];
 
@@ -53,6 +56,34 @@ final class PreviousComparison
             }
         }
 
+        /*
+         * Built from their own window read, so no key above reaches them. A finding that IS a sum against the last window's rate leaves
+         * whole; every other finding keeps what this period measured and loses the figure it was compared with and the ratio that returns it.
+         */
+        if (is_array($payload['attention'] ?? null)) {
+            $payload['attention'] = array_values(array_map(static function ($item) {
+                if (is_array($item)) {
+                    $item['kpis'] = array_map(static function ($kpi) {
+                        if (is_array($kpi)) {
+                            unset($kpi['before'], $kpi['change']);
+                        }
+
+                        return $kpi;
+                    }, (array) ($item['kpis'] ?? []));
+                }
+
+                return $item;
+            }, array_filter($payload['attention'], static fn ($item): bool => ! (is_array($item) && (($item['impact']['kind'] ?? null) === self::COMPARISON_IMPACT)))));
+        }
+
+        // A note that says «against the previous period» in words is the same comparison; the other notes do not read that window.
+        if (is_array($payload['observations'] ?? null)) {
+            $payload['observations'] = array_values(array_filter(
+                $payload['observations'],
+                static fn ($note): bool => ! (is_array($note) && ($note['kind'] ?? null) === 'period_comparison'),
+            ));
+        }
+
         // The deck's «this period against the last» slide has nothing left to draw.
         if (is_array($payload['slides'] ?? null)) {
             $payload['slides'] = array_values(array_filter(
@@ -62,5 +93,27 @@ final class PreviousComparison
         }
 
         return $payload;
+    }
+
+    /**
+     * A row of the content section with no window before it: no `previous`, and a fatigue signal keeps its direction and loses the figure it compared with.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function stripCreativeRow(array $row): array
+    {
+        unset($row['previous']);
+        if (is_array($row['fatigue']['signals'] ?? null)) {
+            $row['fatigue']['signals'] = array_map(static function ($signal) {
+                if (is_array($signal)) {
+                    unset($signal['previous'], $signal['change']);
+                }
+
+                return $signal;
+            }, $row['fatigue']['signals']);
+        }
+
+        return $row;
     }
 }
