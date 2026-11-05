@@ -116,12 +116,18 @@ export async function startPlatformOAuth(
   projectId?: string | null,
   /** META-SAAS-APP-001 — which Meta app issues this connection; absent = the platform's choice for new connections. */
   appProfile?: 'live' | 'saas' | null,
+  /**
+   * INTEG-PROJECT-LINK-001 — which portal's PROJECT PAGE the journey returns to. A place to land, not a
+   * permission: the project itself rides the server's single-use state.
+   */
+  returnPortal?: 'app' | 'agency' | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
     ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
     ...(projectId ? { project_id: projectId } : {}),
     ...(appProfile ? { app_profile: appProfile } : {}),
+    ...(returnPortal ? { return_portal: returnPortal } : {}),
   })
 }
 
@@ -752,6 +758,8 @@ export interface HubConnection {
   has_parent: boolean
   discovery_blocked_reason: string | null
   token_expires_at: string | null
+  /** The client this sign-in is filed under. Null is tenant-shared; otherwise it can only feed that client's projects. */
+  client_workspace_id?: string | null
   /** INTEG-STATUS-MODEL-001 — five independent statuses of this authorisation, resolved on the server. */
   statuses?: IntegrationStatuses | null
   /** What this provider can and cannot do, stated rather than hidden (an API-key source has no consent screen). */
@@ -841,4 +849,45 @@ export function fetchIntegrationAudit(query: {
   if (query.perPage) params.set('per_page', String(query.perPage))
   const qs = params.toString()
   return getData<IntegrationAuditPage>(`/integrations/audit${qs === '' ? '' : `?${qs}`}`)
+}
+
+/**
+ * INTEG-PROJECT-LINK-001 — one project's view of one authorisation.
+ *
+ * `pending` is the SERVER's answer to «did this user open this connection for this project» — the
+ * return from a provider is resumed on it and never on anything in the address. `accounts` are the
+ * accounts of this connection linked to THIS project, and only those.
+ */
+export type LinkMoneyState = 'reporting' | 'converted' | 'withheld_no_rate' | 'withheld_unknown'
+
+export interface ProjectLinkAccount {
+  id: string
+  name: string
+  external_id: string
+  account_type: string
+  organisation: string | null
+  currency: string | null
+  money: { state: LinkMoneyState; rate: number | null; rate_date: string | null }
+  health: string | null
+  last_synced_at: string | null
+}
+
+export interface ProjectLink {
+  pending: boolean
+  project: { id: string; name: string }
+  connection: {
+    id: string
+    provider: string
+    label: string
+    label_ar: string
+    status: string
+    has_parent: boolean
+    platform_account: { label: string | null; email: string | null } | null
+  }
+  reporting_currency: string
+  accounts: ProjectLinkAccount[]
+}
+
+export function fetchProjectLink(projectId: string, connectionId: string): Promise<ProjectLink> {
+  return getData<ProjectLink>(`/projects/${projectId}/integrations/link/${connectionId}`)
 }

@@ -253,6 +253,8 @@ final class ConnectionHubController extends Controller
                     ? ProviderCatalogue::get((string) $connection->provider)->labelAr
                     : (string) $connection->provider,
                 'connection_name' => (string) $connection->connection_name,
+                // INTEG-PROJECT-LINK-001 — the client this sign-in is filed under, so a project is only offered an authorisation it may use.
+                'client_workspace_id' => $connection->client_workspace_id === null ? null : (string) $connection->client_workspace_id,
                 /*
                  * INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with, as the provider
                  * itself reported it at connect time. Null is «not recorded», never the workspace email.
