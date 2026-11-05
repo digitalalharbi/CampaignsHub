@@ -298,7 +298,7 @@ final class ProviderCatalogue
                  * they had configured something for everybody.
                  */
             ],
-            scopes: ['https://www.googleapis.com/auth/adwords'],
+            scopes: ['https://www.googleapis.com/auth/adwords', 'openid', 'email'],
             usesPkce: false,
             supportsRefresh: true,
             tokenNote: 'A refresh token is issued only when the authorise URL asks for `access_type=offline` '

@@ -64,6 +64,8 @@ final class ScheduledWorkInventoryTest extends TestCase
          */
         'integrations:close-abandoned-runs',
         'integrations:prune-raw',
+        // INTEG-SOURCE-REMOVAL-001 — inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED; hides, never deletes.
+        'integrations:sweep-abandoned',
         'integrations:refresh-tokens',
         // Scheduled TWICE under one name (PERF-SYNC-ISOLATION-001): the half-hourly 3-day sweep and the 03:50 `--days=14` pass.
         'integrations:sync',

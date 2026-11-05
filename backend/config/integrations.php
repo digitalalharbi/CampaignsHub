@@ -127,4 +127,10 @@ return [
             'grace_minutes' => 90,
         ],
     ],
+
+    /*
+     * INTEG-SOURCE-REMOVAL-001 — whether the daily sweep may HIDE connections that were started and never finished.
+     * Off unless an operator sets INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true after reading the command's preview.
+     */
+    'abandoned_sweep_enabled' => (bool) env('INTEGRATIONS_ABANDONED_SWEEP_ENABLED', false),
 ];

@@ -240,6 +240,8 @@ final class AccountInventoryController extends Controller
             ->whereIn('account_type', self::MANAGED_TYPES)
             // META-SAAS-APP-001 — a row retired by a move between Meta apps is history, not an account anybody manages.
             ->where(fn ($q) => $q->whereNull('status')->orWhere('status', '!=', 'superseded'))
+            // INTEG-SOURCE-REMOVAL-001 — the accounts of a removed source are history, not something to manage or select.
+            ->whereNotIn('provider_connection_id', ProviderConnection::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereNotNull('removed_at')->select('id'))
             ->tap(fn ($q) => $this->visibleTo($q, $reachable, $tenantId));
 
         $summary = $this->summarise($tenantId, $reachable);

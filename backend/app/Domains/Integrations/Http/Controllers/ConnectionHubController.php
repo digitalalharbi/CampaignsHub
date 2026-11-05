@@ -11,6 +11,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\ConnectionRemoval;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\IntegrationTruth;
 use App\Domains\Integrations\Support\NextScheduledSync;
@@ -89,6 +90,12 @@ final class ConnectionHubController extends Controller
         $connections = ProviderConnection::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->whereNotIn('status', ['disconnected'])
+            /*
+             * INTEG-SOURCE-REMOVAL-001 — a removed source, and one whose authorisation was revoked, are
+             * not listed by default: they stayed on this page for ever and nothing could take them off.
+             * `?include_removed=1` is the «show removed» toggle and lists them, marked.
+             */
+            ->when(! $request->boolean('include_removed'), fn ($q) => $q->whereNull('removed_at')->where('status', '!=', 'revoked'))
             ->orderBy('provider')
             ->orderBy('created_at')
             /*
@@ -190,7 +197,9 @@ final class ConnectionHubController extends Controller
             ->groupBy(fn ($b): string => (string) $b->external_account_id)
             ->map(fn ($rows) => (string) $rows->first()->project_id);
 
-        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors): array {
+        $removal = app(ConnectionRemoval::class);
+
+        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $removal): array {
             $mine = $accounts->get((string) $connection->getKey(), collect());
 
             // «Discovered» excludes an account whose access the provider has withdrawn: it is not one
@@ -237,9 +246,22 @@ final class ConnectionHubController extends Controller
                     : (string) $connection->provider,
                 'connection_name' => (string) $connection->connection_name,
                 /*
-                 * WHO authorised it — the CampaignsHub user, because that is the identity this
-                 * product actually holds. No provider returns an account email on these grants, and
-                 * printing one would be an invention. Null is «nobody recorded it», said as such.
+                 * INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with, as the provider
+                 * itself reported it at connect time. Null is «not recorded», never the workspace email.
+                 */
+                'provider_account' => $connection->provider_identity_label === null && $connection->provider_identity_email === null
+                    ? null
+                    : [
+                        'label' => $connection->provider_identity_label,
+                        'email' => $connection->provider_identity_email,
+                        'fetched_at' => $connection->provider_identity_fetched_at?->toIso8601String(),
+                    ],
+                'removed_at' => $connection->removed_at?->toIso8601String(),
+                // Started in the wizard and never finished: the row offers «إلغاء/إزالة» prominently.
+                'abandoned' => $removal->isAbandoned($connection),
+                /*
+                 * The CampaignsHub USER who pressed connect — kept as the secondary «added by» line. It is
+                 * the workspace-side identity and says nothing about which provider login was used.
                  */
                 'authorised_by' => $author === null ? null : [
                     'name' => (string) $author->name,
