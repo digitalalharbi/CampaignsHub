@@ -58,11 +58,11 @@ final class InvitationMail extends Mailable
 
         $intro = $this->invitedBy !== ''
             ? ($ar
-                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
-                : "{$this->invitedBy} has invited you to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.")
+                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace}."
+                : "{$this->invitedBy} invited you to join the {$this->workspace} workspace.")
             : ($ar
-                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
-                : "You have been invited to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.");
+                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace}."
+                : "You are invited to join the {$this->workspace} workspace.");
 
         $shell = MailShell::build(
             lang: $this->lang,
@@ -71,12 +71,12 @@ final class InvitationMail extends Mailable
             // The recipient has no account and therefore no preferences to manage.
             preferences: false,
             footerNote: $ar
-                ? 'وصلتك هذه الرسالة لأن أحد أعضاء الفريق أدخل بريدك الإلكتروني عند إرسال الدعوة.'
-                : 'You received this because a member of the team entered your email address when sending the invitation.',
+                ? 'وصلتك لأن أحد أعضاء الفريق أدخل بريدك.'
+                : 'Sent because a team member entered your email.',
         );
 
         $body = $shell + [
-            'title' => $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
+            'title' => $ar ? 'دعوة للانضمام' : 'An invitation to join',
             'intro' => $intro,
             'workspace' => $this->workspace,
             'roleName' => $role['name'],
@@ -84,22 +84,22 @@ final class InvitationMail extends Mailable
             'actionUrl' => $this->acceptUrl,
             'actionLabel' => $ar ? 'قبول الدعوة' : 'Accept the invitation',
             'validity' => $ar
-                ? "هذه الدعوة صالحة لمدة {$this->expiresInHours} ساعة، وبعدها يمكن لأي عضو في الفريق إرسال دعوة جديدة."
-                : "This invitation is valid for {$this->expiresInHours} hours. After that, any member of the team can send a new one.",
+                ? "الدعوة صالحة لمدة {$this->expiresInHours} ساعة."
+                : "Valid for {$this->expiresInHours} hours.",
         ];
 
         $body['t'] = $shell['t'] + ($ar
             ? [
                 'workspace' => 'مساحة العمل',
                 'role' => 'دورك',
-                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط والصقه في المتصفح:',
-                'not_expecting' => 'إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل الرسالة. لن يُفتح أي حساب على بريدك ما لم تقبل الدعوة بنفسك.',
+                'or_paste' => 'إذا لم يعمل الزر، افتح هذا الرابط:',
+                'not_expecting' => 'إذا لم تتوقع هذه الدعوة، فتجاهلها. لن يُفتح حساب دون قبولك.',
             ]
             : [
                 'workspace' => 'Workspace',
                 'role' => 'Your role',
-                'or_paste' => 'If the button does not work, copy this link into your browser:',
-                'not_expecting' => 'If you were not expecting this invitation, you can ignore this message. No account will be opened on your address unless you accept it yourself.',
+                'or_paste' => 'If the button fails, open this link:',
+                'not_expecting' => 'Not expecting this? Ignore it. No account opens unless you accept.',
             ]);
 
         return new Content(view: 'mail.layout', with: $body + [
@@ -115,24 +115,24 @@ final class InvitationMail extends Mailable
     private function role(bool $ar): array
     {
         $roles = $ar ? [
-            'tenant-owner' => ['مالك مساحة العمل', 'صلاحية كاملة على مساحة العمل، بما في ذلك الفريق والاشتراك والفواتير.'],
-            'owner' => ['مالك الحساب', 'صلاحية كاملة على مساحة العمل، بما في ذلك الفريق والاشتراك والفواتير.'],
-            'admin' => ['مدير', 'إدارة المشاريع والحملات والفريق، دون الوصول إلى إعدادات الاشتراك.'],
-            'manager' => ['مدير حسابات', 'متابعة المشاريع المسندة إليه وإدارة حملاتها وتقاريرها.'],
+            'tenant-owner' => ['مالك مساحة العمل', 'صلاحية كاملة، تشمل الفريق والاشتراك والفواتير.'],
+            'owner' => ['مالك الحساب', 'صلاحية كاملة، تشمل الفريق والاشتراك والفواتير.'],
+            'admin' => ['مدير', 'إدارة المشاريع والحملات والفريق، دون إعدادات الاشتراك.'],
+            'manager' => ['مدير حسابات', 'إدارة حملات المشاريع المسندة إليه وتقاريرها.'],
             'analyst' => ['محلل', 'الاطلاع على البيانات والتقارير وإنشاؤها، دون تعديل الحملات.'],
             'viewer' => ['مطّلع', 'الاطلاع على لوحات المتابعة والتقارير فقط.'],
-            'member' => ['عضو فريق', 'العمل على المشاريع المسندة إليه داخل مساحة العمل.'],
+            'member' => ['عضو فريق', 'العمل على المشاريع المسندة إليه.'],
             'client_viewer' => ['مطّلع', 'الاطلاع على أداء حملاتك وتقاريرك فقط.'],
             'client_approver' => ['معتمِد', 'الاطلاع على الأداء والتقارير، واعتماد العروض والرد على الطلبات والرسائل.'],
             'client_admin' => ['مسؤول العميل', 'كل ما سبق، مع إدارة من يصل إلى بوابتك.'],
         ] : [
-            'tenant-owner' => ['Workspace owner', 'Full control of the workspace, including the team, the subscription and billing.'],
-            'owner' => ['Account owner', 'Full control of the workspace, including the team, the subscription and billing.'],
-            'admin' => ['Administrator', 'Manages projects, campaigns and the team, without access to subscription settings.'],
-            'manager' => ['Account manager', 'Follows their assigned projects and manages the campaigns and reports within them.'],
+            'tenant-owner' => ['Workspace owner', 'Full control, including team, subscription and billing.'],
+            'owner' => ['Account owner', 'Full control, including team, subscription and billing.'],
+            'admin' => ['Administrator', 'Manages projects, campaigns and the team, not the subscription.'],
+            'manager' => ['Account manager', 'Manages campaigns and reports on assigned projects.'],
             'analyst' => ['Analyst', 'Reads and builds reports and analysis, without changing campaigns.'],
             'viewer' => ['Viewer', 'Reads dashboards and reports only.'],
-            'member' => ['Team member', 'Works on the projects assigned to them inside the workspace.'],
+            'member' => ['Team member', 'Works on assigned projects.'],
             'client_viewer' => ['Viewer', 'Reads the performance of your campaigns and your reports only.'],
             'client_approver' => ['Approver', 'Reads performance and reports, approves quotes, and replies to requests and messages.'],
             'client_admin' => ['Client administrator', 'Everything above, and manages who can reach your portal.'],

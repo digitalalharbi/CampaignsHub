@@ -41,11 +41,12 @@ final class MemberNotices
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? "أهلًا بك في {$tenant->name}" : "Welcome to {$tenant->name}",
                 detail: $ar
-                    ? "انضممت إلى مساحة العمل بدور «{$roleName}». يمكنك الآن متابعة الحملات والتقارير من لوحة التحكم."
-                    : "You have joined the workspace as «{$roleName}». You can now follow campaigns and reports from the dashboard.",
+                    ? "انضممت بدور «{$roleName}»."
+                    : "You joined as «{$roleName}».",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
                 path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         );
     }
@@ -65,11 +66,12 @@ final class MemberNotices
                 kind: 'role_changed', severity: 'warning',
                 title: $ar ? 'تغيّر دورك في مساحة العمل' : 'Your role in the workspace changed',
                 detail: $ar
-                    ? "تغيّر دورك في {$tenant->name}{$who}: من «{$from}» إلى «{$to}». إن لم تكن تتوقع هذا التغيير فتواصل مع مسؤول الفريق."
-                    : "Your role in {$tenant->name} was changed{$who}: from «{$from}» to «{$to}». If you did not expect this, contact a workspace administrator.",
+                    ? "تغيّر دورك في {$tenant->name}{$who}: من «{$from}» إلى «{$to}». إن لم تتوقعه، تواصل مع مسؤول الفريق."
+                    : "Your role in {$tenant->name} was changed{$who}: from «{$from}» to «{$to}». Not expected? Please contact a workspace administrator.",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
                 path: '/app/dashboard', action: $ar ? 'فتح كامبينز هب' : 'Open CampaignsHub',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         );
     }
@@ -86,7 +88,7 @@ final class MemberNotices
         [$titleAr, $titleEn, $detailAr, $detailEn, $severity] = match ($reason) {
             'report_failed' => ['فشل تجهيز تقرير التسليم', 'A delivery report failed to build', "تعذّر توليد تقرير {$clientName} للفترة {$period}. افتح الحزمة وأعد المحاولة.", "The report for {$clientName} ({$period}) could not be built. Open the pack and try again.", 'critical'],
             'send_due' => ['تقرير معتمد بانتظار الإرسال', 'An approved report is waiting to be sent', "تقرير {$clientName} للفترة {$period} معتمد ولم يُسجَّل إرساله بعد.", "The report for {$clientName} ({$period}) is approved but not yet marked as sent.", 'warning'],
-            default => ['تقرير بانتظار مراجعتك', 'A report is waiting for your review', "مسودة تقرير {$clientName} للفترة {$period} جاهزة للمراجعة والاعتماد.", "The draft report for {$clientName} ({$period}) is ready for your review and approval.", 'warning'],
+            default => ['تقرير بانتظار مراجعتك', 'A report is waiting for your review', "مسودة تقرير {$clientName} للفترة {$period} جاهزة للاعتماد.", "The draft report for {$clientName} ({$period}) is ready to approve.", 'warning'],
         };
 
         return $this->send(
@@ -96,6 +98,7 @@ final class MemberNotices
                 title: $ar ? $titleAr : $titleEn, detail: $ar ? $detailAr : $detailEn, context: $clientName,
                 lang: $this->lang($reviewer), recipientName: (string) $reviewer->name,
                 path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
+                why: $ar ? 'وصلتك لأنك مراجع هذا التسليم.' : 'Sent because you review this delivery.',
             ),
         );
     }

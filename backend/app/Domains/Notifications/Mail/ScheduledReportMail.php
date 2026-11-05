@@ -73,8 +73,8 @@ final class ScheduledReportMail extends Mailable
                 : ['results' => 'Results for this period', 'best' => 'Best content', 'improve' => 'Worth improving'],
         ];
         $body['t']['why'] = $ar
-            ? 'وصلتك هذه الرسالة لأنك ضمن مستلمي هذا التقرير المجدول.'
-            : 'You are receiving this because you are on the recipient list of this scheduled report.';
+            ? 'وصلتك لأنك ضمن مستلمي هذا التقرير.'
+            : 'Sent because you receive this report.';
 
         return new Content(view: 'mail.layout', with: $body + [
             'unsubscribeUrl' => $this->unsubscribeUrl,

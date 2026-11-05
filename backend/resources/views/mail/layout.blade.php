@@ -160,7 +160,10 @@
                             @endif
                             <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
                                 © {{ $year }} {!! $wordmarkPlain !!} · <a href="{{ $urls['home'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $urls['host'] }}</a>
-                                <br />{{ $t['sender'] }}
+                                {{-- Only an agency's digest names a sender here; the banner already says who the platform is (Owner, 2026-11-05). --}}
+                                @if (! empty($t['sender'] ?? null))
+                                    <br />{{ $t['sender'] }}
+                                @endif
                             </div>
                         </td>
                     </tr>

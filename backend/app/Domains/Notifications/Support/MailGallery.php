@@ -75,11 +75,11 @@ final class MailGallery
         return new OperationalMail(
             kind: 'message', severity: 'info',
             title: $ar ? 'فحص إرسال البريد' : 'Mail sending check',
-            detail: $ar ? 'وصلتك هذه الرسالة لأن مشرف المنصة طلب فحص إرسال البريد.' : 'You received this because a platform admin asked to check outgoing mail.',
-            context: 'CampaignsHub',
+            detail: $ar ? 'طلب مشرف المنصة فحص إرسال البريد.' : 'A platform admin asked to check outgoing mail.',
+            context: $ar ? 'كامبينز هب' : 'CampaignsHub',
             lang: $locale,
             // «You follow this project» would be false here, and this message is about the mail itself.
-            why: $ar ? 'لا تحتاج هذه الرسالة إلى أي إجراء منك.' : 'This message needs nothing from you.',
+            why: $ar ? 'لا تحتاج إلى أي إجراء.' : 'No action needed.',
         );
     }
 
@@ -166,18 +166,19 @@ final class MailGallery
             'delivery-reminder' => new OperationalMail(
                 kind: 'delivery_review_due', severity: 'warning',
                 title: $ar ? 'تقرير بانتظار مراجعتك' : 'A report is waiting for your review',
-                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للمراجعة والاعتماد.' : 'The draft report for Demo store (2026-07) is ready for your review and approval.',
+                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للاعتماد.' : 'The draft report for Demo store (2026-07) is ready to approve.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
+                why: $ar ? 'وصلتك لأنك مراجع هذا التسليم.' : 'Sent because you review this delivery.',
             ),
 
             'report-ready' => new OperationalMail(
                 kind: 'report_ready', severity: 'positive',
                 title: $ar ? 'تقرير يوليو جاهز' : 'The July report is ready',
                 detail: $ar
-                    ? 'اكتمل إعداد تقرير الأداء الشهري ويمكنك فتحه أو مشاركته مع العميل.'
-                    : 'The monthly performance report has finished generating and is ready to open or share.',
+                    ? 'تقرير الأداء الشهري جاهز للفتح أو المشاركة.'
+                    : 'The monthly performance report is ready to open or share.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/reports', action: $ar ? 'فتح التقرير' : 'Open the report',
@@ -187,8 +188,8 @@ final class MailGallery
                 kind: 'billing', severity: 'info',
                 title: $ar ? 'فاتورة اشتراكك الجديدة' : 'Your new subscription invoice',
                 detail: $ar
-                    ? 'صدرت فاتورة اشتراك شهر أغسطس، ويمكنك مراجعتها أو تنزيلها من صفحة الفواتير.'
-                    : 'The August subscription invoice has been issued and can be reviewed or downloaded from your billing page.',
+                    ? 'صدرت فاتورة اشتراك شهر أغسطس.'
+                    : 'The August subscription invoice was issued.',
                 context: $ar ? 'الاشتراك' : 'Subscription',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/billing', action: $ar ? 'عرض الفاتورة' : 'View the invoice',
@@ -198,8 +199,8 @@ final class MailGallery
                 kind: 'approval', severity: 'info',
                 title: $ar ? 'طلب ينتظر موافقتك' : 'A request is waiting for your approval',
                 detail: $ar
-                    ? 'أُرسل طلب إعلاني جديد إلى فريقك وينتظر مراجعتك قبل بدء التنفيذ.'
-                    : 'A new advertising request has reached your team and needs your review before work starts.',
+                    ? 'طلب إعلاني جديد ينتظر مراجعتك قبل التنفيذ.'
+                    : 'A new advertising request needs your review before work starts.',
                 context: $ar ? 'الطلبات' : 'Requests',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/requests', action: $ar ? 'مراجعة الطلب' : 'Review the request',
@@ -209,8 +210,8 @@ final class MailGallery
                 kind: 'message', severity: 'info',
                 title: $ar ? 'رسالة جديدة من العميل' : 'A new message from your client',
                 detail: $ar
-                    ? 'وصلت رسالة جديدة في محادثة المشروع وتنتظر ردك.'
-                    : 'There is a new message in the project conversation waiting for a reply.',
+                    ? 'رسالة جديدة في محادثة المشروع تنتظر ردك.'
+                    : 'A new project message is waiting for your reply.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/conversations', action: $ar ? 'فتح المحادثة' : 'Open the conversation',
@@ -248,23 +249,23 @@ final class MailGallery
                 kind: 'client_request', severity: 'info',
                 title: $ar ? 'طلب جديد من عميل' : 'A new request from a client',
                 detail: $ar
-                    ? 'وصل طلب جديد برقم REQ-2026-0142 من بوابة العملاء، وينتظر مراجعة فريقك.'
-                    : 'Request REQ-2026-0142 has arrived from the client portal and is waiting for your team.',
+                    ? 'وصل الطلب REQ-2026-0142 من بوابة العملاء.'
+                    : 'Request REQ-2026-0142 arrived from the client portal.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/agency/requests/01J9Z0PY8QF3T4V6', action: $ar ? 'مراجعة الطلب' : 'Review the request',
-                why: $ar ? 'وصلتك هذه الرسالة لأن هذا الطلب ضمن نطاق عملك.' : 'You are receiving this because this request is within your access.',
+                why: $ar ? 'وصلتك لأن هذا الطلب ضمن نطاق عملك.' : 'Sent because this request is within your access.',
             ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
             // EMAIL-GAPS — a client request, back to the person who filed it.
             'request-to-client' => (new OperationalMail(
                 kind: 'client_request', severity: 'warning',
                 title: $ar ? 'طلبك يحتاج معلومات منك' : 'Your request needs information from you',
-                detail: $ar ? 'طلب الفريق معلومات إضافية لإكمال طلبك.' : 'The team has asked for more information to complete your request.',
+                detail: $ar ? 'يحتاج الفريق معلومات إضافية.' : 'The team needs more information.',
                 context: 'REQ-2026-0142',
                 lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah',
                 path: '/client/requests/REQ-2026-0142', action: $ar ? 'فتح الطلب' : 'Open the request',
-                why: $ar ? 'وصلتك هذه الرسالة لأنك صاحب هذا الطلب في كامبينز هب.' : 'You are receiving this because you filed this request in CampaignsHub.',
+                why: $ar ? 'وصلتك لأنك صاحب هذا الطلب.' : 'Sent because you filed this request.',
             ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
             // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
@@ -272,22 +273,24 @@ final class MailGallery
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
                 detail: $ar
-                    ? 'انضممت إلى مساحة العمل بدور «محلل». يمكنك الآن متابعة الحملات والتقارير من لوحة التحكم.'
-                    : 'You have joined the workspace as «Analyst». You can now follow campaigns and reports from the dashboard.',
+                    ? 'انضممت بدور «محلل».'
+                    : 'You joined as «Analyst».',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
 
             'role-changed' => new OperationalMail(
                 kind: 'role_changed', severity: 'warning',
                 title: $ar ? 'تغيّر دورك في مساحة العمل' : 'Your role in the workspace changed',
                 detail: $ar
-                    ? 'تغيّر دورك في وكالة العرض بواسطة سارة: من «محلل» إلى «مدير». إن لم تكن تتوقع هذا التغيير فتواصل مع مسؤول الفريق.'
-                    : 'Your role in Demo Agency was changed by Sara: from «Analyst» to «Manager». If you did not expect this, contact a workspace administrator.',
+                    ? 'تغيّر دورك في وكالة العرض بواسطة سارة: من «محلل» إلى «مدير». إن لم تتوقعه، تواصل مع مسؤول الفريق.'
+                    : 'Your role in Demo Agency was changed by Sara: from «Analyst» to «Manager». Not expected? Please contact a workspace administrator.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/dashboard', action: $ar ? 'فتح كامبينز هب' : 'Open CampaignsHub',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         ];
     }

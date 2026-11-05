@@ -161,11 +161,11 @@ final class SendSubscriptionNotification implements ShouldQueue
             severity: $worrying ? 'warning' : 'info',
             title: $notification->subject,
             detail: $notification->body,
-            context: $ar ? 'اشتراكك في كامبينز هب' : 'Your CampaignsHub subscription',
+            context: $ar ? 'اشتراكك' : 'Your subscription',
             lang: $ar ? 'ar' : 'en',
             path: $notification->tenant_id === null ? '/' : '/app/subscription',
             action: $ar ? 'فتح اشتراكك' : 'Open your subscription',
-            why: $ar ? 'وصلتك هذه الرسالة لأنها تخص اشتراك حسابك في كامبينز هب.' : 'You are receiving this because it concerns your CampaignsHub account subscription.',
+            why: $ar ? 'وصلتك لأنها تخص اشتراك حسابك.' : 'Sent because it concerns your subscription.',
         ));
     }
 }

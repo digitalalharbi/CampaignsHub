@@ -331,7 +331,7 @@ final class MailPreviewsTest extends TestCase
 
         $this->assertStringContainsString('مدير حسابات', $files['account-invitation.ar.html']);
         $this->assertStringContainsString(
-            'متابعة المشاريع المسندة إليه',
+            'إدارة حملات المشاريع المسندة إليه',
             $files['account-invitation.ar.html'],
             'a known role lost its description',
         );
@@ -339,7 +339,7 @@ final class MailPreviewsTest extends TestCase
         $unknown = $files['account-invitation-unknown-role.ar.html'];
         $this->assertStringContainsString('عضو', $unknown, 'the unknown role falls back to the generic label');
         $this->assertStringNotContainsString('campaign_ops', $unknown, 'the raw slug leaked');
-        $this->assertStringNotContainsString('متابعة المشاريع المسندة إليه', $unknown, 'a description was invented');
+        $this->assertStringNotContainsString('إدارة حملات المشاريع المسندة إليه', $unknown, 'a description was invented');
     }
 
     /**

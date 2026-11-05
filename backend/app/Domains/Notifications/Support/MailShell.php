@@ -107,24 +107,22 @@ final class MailShell
     {
         return $ar
             ? [
-                'manage_preferences' => 'إدارة إشعاراتك',
-                'unsubscribe' => 'إلغاء الاشتراك في هذا النوع',
+                'manage_preferences' => 'الإشعارات',
+                'unsubscribe' => 'إلغاء الاشتراك',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
                 'support' => 'الدعم',
-                'sender' => 'أُرسلت هذه الرسالة من كامبينز هب — منصة إدارة الحملات الإعلانية المدفوعة.',
-                'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في كامبينز هب.',
+                'why' => 'وصلتك لأنك تتابع هذا المشروع.',
             ]
             : [
-                'manage_preferences' => 'Manage your notifications',
-                'unsubscribe' => 'Unsubscribe from this type',
+                'manage_preferences' => 'Notifications',
+                'unsubscribe' => 'Unsubscribe',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
                 'support' => 'Support',
-                'sender' => 'Sent by CampaignsHub — the paid-campaign management platform.',
-                'why' => 'You are receiving this because you follow this project in CampaignsHub.',
+                'why' => 'Sent because you follow this project.',
             ];
     }
 
@@ -138,7 +136,7 @@ final class MailShell
     public static function accountFootnote(bool $ar): string
     {
         return $ar
-            ? 'هذه رسالة تخص أمان حسابك، وتُرسل عند الحاجة فقط، ولا يمكن إيقافها من إعدادات الإشعارات.'
-            : 'This message is about the security of your account. It is sent only when needed, and cannot be turned off in notification settings.';
+            ? 'رسالة تخص أمان حسابك، ولا يمكن إيقافها.'
+            : 'About your account security. It cannot be turned off.';
     }
 }

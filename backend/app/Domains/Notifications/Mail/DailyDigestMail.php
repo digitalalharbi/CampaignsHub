@@ -136,7 +136,7 @@ final class DailyDigestMail extends Mailable
      *
      * The platform sends it and the agency is who it is for: both are said, neither is impersonated.
      * The agency comes from the recipient's own tenant through `SharedLinkBranding`, so it cannot name
-     * another customer. Empty on an unbranded install, where the shell's line already says it.
+     * another customer. Empty on an unbranded install, where the banner already says it.
      *
      * @return array<string,string>
      */
@@ -149,8 +149,8 @@ final class DailyDigestMail extends Mailable
         }
 
         return ['sender' => $ar
-            ? "أُرسلت هذه الرسالة عبر كامبينز هب نيابة عن {$agency}."
-            : "Sent through CampaignsHub on behalf of {$agency}."];
+            ? "أُرسلت عبر كامبينز هب نيابة عن {$agency}."
+            : "Sent via CampaignsHub on behalf of {$agency}."];
     }
 
     private function brandName(): string
@@ -596,8 +596,8 @@ final class DailyDigestMail extends Mailable
         $ceiling = (int) ($n['ceiling'] ?? 0);
 
         return $ar
-            ? "هذا الملخص يغطي {$chosen} من {$ceiling} مشاريع تصل إليها، حسب اختيارك في الإعدادات."
-            : "This summary covers {$chosen} of the {$ceiling} projects you can reach, per your settings.";
+            ? "يغطي {$chosen} من {$ceiling} مشاريع، حسب إعداداتك."
+            : "Covers {$chosen} of {$ceiling} projects, per your settings.";
     }
 
     /**
@@ -1097,16 +1097,16 @@ final class DailyDigestMail extends Mailable
              * which is why reading only them missed it.
              */
             'intro' => match ($this->kind) {
-                'monthly' => 'هذا ما حدث هذا الشهر عبر مشاريعك — والقرارات التي تستحق وقتك.',
-                'weekly' => 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.',
-                default => 'هذا ما حدث في آخر 7 أيام عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+                'monthly' => 'هذا الشهر عبر مشاريعك، وما يحتاج قرارك.',
+                'weekly' => 'هذا الأسبوع عبر مشاريعك، وما يحتاج قرارك.',
+                default => 'آخر 7 أيام عبر مشاريعك، وما يحتاج قرارك اليوم.',
             },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
             'projects' => 'المشاريع',
             'intro_single' => 'ملخص الفترة لمشروع',
-            'intro_client' => 'هذا ما تحقّق في حملاتك هذه الفترة — والقرارات التي تستحق نظرتك.',
+            'intro_client' => 'نتائج حملاتك هذه الفترة، وما يستحق نظرتك.',
             'open_portal' => 'افتح بوابتك ←',
             'portfolio' => 'محفظة المشاريع',
             'highlights' => 'أبرز التحرّكات',
@@ -1140,7 +1140,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
             'open_dashboard' => 'افتح لوحة التحكم',
-            'footer_note' => 'تصلك هذه الرسالة لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
+            'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. غيّر ذلك من تفضيلات الإشعارات.',
             'manage_preferences' => 'تفضيلات الإشعارات',
             'privacy' => 'الخصوصية',
             'terms' => 'الشروط',
@@ -1148,16 +1148,16 @@ final class DailyDigestMail extends Mailable
         ] : [
             'greeting' => "Good morning, {$this->recipientName}",
             'intro' => match ($this->kind) {
-                'monthly' => 'Here is the month across your projects — and what is worth your time.',
-                'weekly' => 'Here is the week across your projects — and what is worth your time.',
-                default => 'Here is what happened in the last 7 days across your projects — and what is worth your time today.',
+                'monthly' => 'Here is the month across your projects, and what needs your decision.',
+                'weekly' => 'Here is the week across your projects, and what needs your decision.',
+                default => 'Here are the last 7 days across your projects, and what needs your decision today.',
             },
             'account_total' => 'Account total',
             'spend' => 'Spend',
             'results' => 'Results',
             'projects' => 'Projects',
             'intro_single' => 'The period for',
-            'intro_client' => 'Here is what your campaigns achieved this period — and the decisions worth your look.',
+            'intro_client' => 'Your campaign results this period, and what deserves a look.',
             'open_portal' => 'Open your portal →',
             'portfolio' => 'Project portfolio',
             'highlights' => 'Biggest moves',
@@ -1191,7 +1191,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'Best',
             'worst' => 'Weakest',
             'open_dashboard' => 'Open the dashboard',
-            'footer_note' => 'You are receiving this because you chose the '.$this->rhythmName(false).'. Change the projects, the time, or turn it off in your notification preferences.',
+            'footer_note' => 'Sent because you chose the '.$this->rhythmName(false).'. Change it in your notification preferences.',
             'manage_preferences' => 'Notification preferences',
             'privacy' => 'Privacy',
             'terms' => 'Terms',

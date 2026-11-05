@@ -90,8 +90,8 @@ final class AlertBundleMail extends Mailable
                 ? ($this->recipientName !== '' ? "مرحبًا، {$this->recipientName}" : 'مرحبًا')
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),
             'intro' => $ar
-                ? 'هذه الملاحظات ظهرت في آخر فحص، وكل واحدة منها تستحق قرارًا اليوم.'
-                : 'These came up in the last sweep, and each is worth a decision today.',
+                ? 'من آخر فحص. كل تنبيه يحتاج قرارًا اليوم.'
+                : 'From the last sweep. Each needs a decision today.',
             'actionLabel' => $ar ? 'فتح في كامبينز هب' : 'Open in CampaignsHub',
             'actionUrl' => Frontend::origin().'/app/dashboard',
         ];
