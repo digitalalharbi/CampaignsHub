@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -19,6 +20,7 @@ use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 /**
@@ -28,7 +30,7 @@ use Illuminate\Validation\Rule;
  *
  * ## Not a new trail
  *
- * Every integration act already writes one row through {@see \App\Domains\Audit\AuditLogger} — connect,
+ * Every integration act already writes one row through {@see AuditLogger} — connect,
  * re-authorise, select, link, unlink, detach, remove, revoke, discovery refresh, manual sync. Those rows had
  * exactly one reader, the platform operator's `/admin/audit`. This endpoint is the tenant's own read of ITS
  * rows; it writes nothing, stores nothing and adds no table.
@@ -169,10 +171,10 @@ final class IntegrationAuditController extends Controller
      * Every lookup states the tenant: an `entity_id` is a value somebody wrote into a log row, and a row
      * that named another tenant's connection must resolve to nothing rather than to that tenant's name.
      *
-     * @param  \Illuminate\Support\Collection<int, AuditLog>  $entries
+     * @param  Collection<int, AuditLog>  $entries
      * @return array<string, array{kind:?string, name:?string, provider:?string}>
      */
-    private function subjects(string $tenantId, \Illuminate\Support\Collection $entries): array
+    private function subjects(string $tenantId, Collection $entries): array
     {
         $kinds = [
             ProviderConnection::class => 'connection', 'provider_connection' => 'connection',
