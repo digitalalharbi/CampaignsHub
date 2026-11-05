@@ -228,10 +228,12 @@ final class AdPlatformOAuthFlowTest extends TestCase
 
         $response = $this->get("/api/v1/oauth/ads/meta/callback?code=abc&state={$state}")
             ->assertRedirectContains('outcome=connected')
-            ->assertRedirectContains('project='.$project->id);
+            // INTEG-PROJECT-LINK-001 — the return lands on the PROJECT's page; the project is no longer a query parameter.
+            ->assertRedirectContains('/app/projects/'.$project->id.'/integrations?');
 
         $connection = ProviderConnection::withoutGlobalScopes()->firstOrFail();
-        $this->assertStringContainsString('connection='.$connection->getKey(), (string) $response->headers->get('Location'));
+        $this->assertStringContainsString('link='.$connection->getKey(), (string) $response->headers->get('Location'));
+        $this->assertStringNotContainsString('project=', (string) $response->headers->get('Location'));
     }
 
     /**
