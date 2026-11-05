@@ -161,6 +161,21 @@ final class TokenVault
          * scopes or accounts of a connection another app issued.
          */
         ?MetaCredentialProfile $appProfile = null,
+        /*
+         * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — the ONE project this authorisation was opened for.
+         *
+         * A link journey starts from a project and signs in at the platform every time, and what that
+         * sign-in opens is that project's own connection. Keyed by project as well, two projects signing
+         * in to the same platform hold two connections: re-authorising or removing one never re-credentials
+         * or hides the other's. NULL is a workspace-wide connection — every row from before this rule, and
+         * the centre's own connect — and it is matched only by another NULL, so a project journey never
+         * adopts a workspace-wide connection and a workspace-wide connect never adopts a project's.
+         *
+         * The double-count the paragraph above warns about is still impossible: an account is refused a
+         * second project by its REAL id across every connection of the tenant
+         * ({@see \App\Domains\Integrations\Services\AccountAssignment::activeBindingElsewhere}).
+         */
+        ?string $projectId = null,
     ): ProviderConnection {
         $creds = PlatformCredentials::for($provider);
         $profile = $creds->platform === 'meta' ? ($appProfile ?? MetaCredentialProfile::Live) : null;
@@ -175,6 +190,11 @@ final class TokenVault
                 $clientWorkspaceId === null,
                 fn ($q) => $q->whereNull('client_workspace_id'),
                 fn ($q) => $q->where('client_workspace_id', $clientWorkspaceId),
+            )
+            ->when(
+                $projectId === null,
+                fn ($q) => $q->whereNull('project_id'),
+                fn ($q) => $q->where('project_id', $projectId),
             )
             /*
              * ACCOUNT-SCOPE-ISOLATION-002 — a pasted key is scoped to ONE ad account, so the connection
@@ -278,7 +298,8 @@ final class TokenVault
             // META-APP-SWITCH-GUARD-001 — the App ID that issued these tokens, so a later switch of the Live app can see who depends on it.
             'issuing_app_id' => $profile !== null ? PlatformCredentials::forMeta($profile)->get('client_id') : null,
             'connection_name' => $connectionName,
-            'scope' => $clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared',
+            'scope' => $projectId !== null ? 'project_only' : ($clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared'),
+            'project_id' => $projectId,
             'external_owner_id' => $externalOwnerId,
             'scopes' => $tokens->scope === null ? $creds->scopes() : explode(' ', $tokens->scope),
             'status' => 'connected',

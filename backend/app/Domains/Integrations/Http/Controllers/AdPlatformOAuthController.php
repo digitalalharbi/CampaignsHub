@@ -368,6 +368,8 @@ final class AdPlatformOAuthController extends Controller
                 clientWorkspaceId: isset($record['client_workspace_id']) ? (string) $record['client_workspace_id'] : null,
                 createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
                 appProfile: $creds->platform === 'meta' ? MetaCredentialProfile::from((string) $record['profile']) : null,
+                // INTEG-PROJECT-LINK-001 — a journey started from a project opens that project's OWN connection.
+                projectId: $projectId,
             );
 
             // INTEG-PROVIDER-IDENTITY-001 — which provider login granted this; best effort, never blocks the connect.

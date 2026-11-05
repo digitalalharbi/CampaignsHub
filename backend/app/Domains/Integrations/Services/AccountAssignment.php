@@ -137,6 +137,16 @@ final class AccountAssignment
             ->first();
     }
 
+    /** The one project the account's connection was opened for, or null for a workspace-wide connection. */
+    public function connectionProjectId(ExternalAccount $account): ?string
+    {
+        $projectId = ProviderConnection::withoutGlobalScopes()
+            ->whereKey($account->provider_connection_id)
+            ->value('project_id');
+
+        return is_string($projectId) && $projectId !== '' ? $projectId : null;
+    }
+
     /**
      * Whether this account may be assigned to this project.
      *
@@ -155,6 +165,19 @@ final class AccountAssignment
     public function mayAssign(ExternalAccount $account, Project $project): bool
     {
         if ((string) $account->tenant_id !== (string) $project->tenant_id) {
+            return false;
+        }
+
+        /*
+         * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — the project fence.
+         *
+         * A connection opened from a project's link journey belongs to that project alone. One of its
+         * accounts is never assignable to another project, whatever the client workspace says — the
+         * authorisation was given for ONE project and is not a pool the rest of the workspace draws on.
+         * A workspace-wide connection (no project) is unaffected.
+         */
+        $owner = $this->connectionProjectId($account);
+        if ($owner !== null && $owner !== (string) $project->getKey()) {
             return false;
         }
 

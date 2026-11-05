@@ -28,7 +28,7 @@ final class ProviderConnection extends Model
          */
         'last_discovery_attempted_at', 'last_discovery_succeeded_at', 'discovery_blocked_reason',
         /* INTEG-SOURCE-REMOVAL-001 — a soft hide; INTEG-PROVIDER-IDENTITY-001 — the provider login that granted access. */
-        'removed_at', 'provider_identity_label', 'provider_identity_email', 'provider_identity_fetched_at',
+        'removed_at', 'project_id', 'provider_identity_label', 'provider_identity_email', 'provider_identity_fetched_at',
     ];
 
     protected $casts = [
