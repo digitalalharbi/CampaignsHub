@@ -50,19 +50,19 @@ final class SubscriptionNotificationTemplates
             ] : [
                 'subject' => "Your subscription is active — {$plan}",
                 'body' => "Your payment ({$amount}) was confirmed.\n"
-                    ."It renews on {$date}. Cancel any time in subscription settings.\n{$url}",
+                    ."It renews on {$date}, and you can cancel it in subscription settings.\n{$url}",
             ],
 
             'trial_started' => $ar ? [
                 'subject' => "بدأت تجربتك لمدة {$days} أيام — باقة {$plan}",
                 'body' => "تم تأكيد رسوم التجربة ({$amount}).\n"
-                    ."تنتهي في {$date} وتتحول تلقائيًا إلى الاشتراك الذي اخترته.\n"
-                    ."يمكنك الإلغاء قبلها دون رسوم إضافية.\n{$url}",
+                    ."تنتهي التجربة في {$date} وتتحول تلقائيًا إلى الاشتراك الذي اخترته.\n"
+                    ."يمكنك الإلغاء قبلها من إعدادات الاشتراك دون رسوم إضافية.\n{$url}",
             ] : [
                 'subject' => "Your {$days}-day trial has started — {$plan}",
                 'body' => "The trial fee ({$amount}) was confirmed.\n"
-                    ."It ends on {$date} and converts to the subscription you chose.\n"
-                    ."Cancel before then at no further charge.\n{$url}",
+                    ."The trial ends on {$date} and converts to the subscription you chose.\n"
+                    ."Cancel before then in subscription settings at no further charge.\n{$url}",
             ],
 
             // Sent BEFORE the charge, because the point of a warning is that it arrives in time to act on.
@@ -120,20 +120,20 @@ final class SubscriptionNotificationTemplates
 
             'suspended' => $ar ? [
                 'subject' => 'تم تعليق حسابك',
-                'body' => "انتهت مهلة السماح دون تأكيد دفع.\n"
-                    ."بياناتك محفوظة. أكمل الدفع لإعادة التفعيل.\n{$url}",
+                'body' => "انتهت مهلة السماح دون تأكيد دفع، فعُلّق الوصول إلى مساحة العمل.\n"
+                    ."بياناتك محفوظة بالكامل. أكمل الدفع لإعادة التفعيل.\n{$url}",
             ] : [
                 'subject' => 'Your account has been suspended',
-                'body' => "The grace period ended without a confirmed payment.\n"
-                    ."Your data is kept. Complete the payment to reactivate.\n{$url}",
+                'body' => "The grace period ended without a confirmed payment, so access to the workspace has stopped.\n"
+                    ."All of your data is kept. Complete the payment to reactivate.\n{$url}",
             ],
 
             'reactivated' => $ar ? [
                 'subject' => 'تمت إعادة تفعيل حسابك',
-                'body' => "تنتهي الفترة الحالية في {$date}.\n{$url}",
+                'body' => "عاد حسابك للعمل، وتنتهي الفترة الحالية في {$date}.\n{$url}",
             ] : [
                 'subject' => 'Your account is active again',
-                'body' => "The current period runs until {$date}.\n{$url}",
+                'body' => "Your account is working again, and the current period runs until {$date}.\n{$url}",
             ],
 
             /*
@@ -162,11 +162,11 @@ final class SubscriptionNotificationTemplates
              */
             'plan_change_scheduled' => $ar ? [
                 'subject' => "سيتم تحويلك إلى باقة {$planName} في {$effectiveAt}",
-                'body' => "تحتفظ بباقتك الحالية حتى {$effectiveAt}.\n"
+                'body' => "تحتفظ بباقتك الحالية كاملة حتى {$effectiveAt}، ثم تنتقل إلى {$planName}.\n"
                     ."لم يُخصم أي مبلغ ولم يُسترد أي مبلغ.\n{$url}",
             ] : [
                 'subject' => "You move to {$planName} on {$effectiveAt}",
-                'body' => "You keep your current plan until {$effectiveAt}.\n"
+                'body' => "You keep your current plan in full until {$effectiveAt}, then move to {$planName}.\n"
                     ."Nothing was charged or refunded.\n{$url}",
             ],
 

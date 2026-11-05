@@ -131,7 +131,7 @@ final class MailGallery
                         'context' => $ar ? 'متجر تجريبي' : 'Demo store',
                         'title' => $ar ? 'تراجع معدل النقر' : 'Click-through rate is falling',
                         'detail' => $ar
-                            ? 'تراجع معدل النقر 30% ليصل إلى 1.20%، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.'
+                            ? 'تراجع معدل النقر 30% إلى 1.20%، وقد يشير إلى بداية ضعف أداء المحتوى.'
                             : 'Click-through rate fell 30% to 1.20%, which can be the first sign of creative wearing out.',
                     ],
                     [
@@ -139,7 +139,7 @@ final class MailGallery
                         'context' => $ar ? 'عميل تجريبي' : 'Demo client',
                         'title' => $ar ? 'تعذّرت آخر مزامنة لبيانات سناب شات' : 'The Snapchat sync could not complete',
                         'detail' => $ar
-                            ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
+                            ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، فقد تكون بعض المؤشرات غير مكتملة.'
                             : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
                         'action' => AlertEventMailer::action('sync_failed', $ar),
                         'url' => Frontend::origin().'/app/alerts?event=demo-3',
@@ -156,7 +156,7 @@ final class MailGallery
                     'context' => $ar ? 'متجر تجريبي' : 'Demo store',
                     'title' => $ar ? 'ارتفاع معدل التكرار' : 'Frequency is climbing',
                     'detail' => $ar
-                        ? 'يشاهد الشخص الواحد الإعلان 6 مرات في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.'
+                        ? 'يشاهد الشخص الإعلان 6 مرات في المتوسط؛ نوصي بتوسيع الجمهور أو تحديث المحتوى.'
                         : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
@@ -166,7 +166,7 @@ final class MailGallery
             'delivery-reminder' => new OperationalMail(
                 kind: 'delivery_review_due', severity: 'warning',
                 title: $ar ? 'تقرير بانتظار مراجعتك' : 'A report is waiting for your review',
-                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للاعتماد.' : 'The draft report for Demo store (2026-07) is ready to approve.',
+                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للمراجعة والاعتماد.' : 'The draft report for Demo store (2026-07) is ready for your review and approval.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
@@ -249,8 +249,8 @@ final class MailGallery
                 kind: 'client_request', severity: 'info',
                 title: $ar ? 'طلب جديد من عميل' : 'A new request from a client',
                 detail: $ar
-                    ? 'وصل الطلب REQ-2026-0142 من بوابة العملاء.'
-                    : 'Request REQ-2026-0142 arrived from the client portal.',
+                    ? 'وصل الطلب REQ-2026-0142 من بوابة العملاء، وينتظر مراجعة فريقك.'
+                    : 'Request REQ-2026-0142 arrived from the client portal and is waiting for your team.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/agency/requests/01J9Z0PY8QF3T4V6', action: $ar ? 'مراجعة الطلب' : 'Review the request',
@@ -261,7 +261,7 @@ final class MailGallery
             'request-to-client' => (new OperationalMail(
                 kind: 'client_request', severity: 'warning',
                 title: $ar ? 'طلبك يحتاج معلومات منك' : 'Your request needs information from you',
-                detail: $ar ? 'يحتاج الفريق معلومات إضافية.' : 'The team needs more information.',
+                detail: $ar ? 'يحتاج الفريق معلومات إضافية لإكمال طلبك.' : 'The team needs more information to complete your request.',
                 context: 'REQ-2026-0142',
                 lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah',
                 path: '/client/requests/REQ-2026-0142', action: $ar ? 'فتح الطلب' : 'Open the request',
@@ -273,8 +273,8 @@ final class MailGallery
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
                 detail: $ar
-                    ? 'انضممت بدور «محلل».'
-                    : 'You joined as «Analyst».',
+                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من لوحة التحكم.'
+                    : 'You joined as «Analyst». Follow campaigns and reports from the dashboard.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
@@ -509,7 +509,7 @@ final class MailGallery
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
                         'title' => 'ارتفاع تكلفة النتيجة',
-                        'detail' => 'ارتفعت تكلفة النتيجة 27% لتصل إلى 88.72 SAR، وقد يعود ذلك إلى منافسة أعلى أو ضعف في أداء المحتوى.',
+                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR، ربما بسبب منافسة أعلى أو ضعف أداء المحتوى.',
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],

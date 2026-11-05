@@ -144,25 +144,25 @@ final class SecurityAlertMail extends Mailable
             self::PASSWORD_CHANGED => $ar ? [
                 'subject' => 'تغيّرت كلمة المرور',
                 'title' => 'تغيّرت كلمة المرور لحسابك',
-                'detail' => 'انتهت الجلسات المفتوحة على الأجهزة الأخرى.',
-                'reassurance' => 'إذا كنت أنت، فلا حاجة لأي إجراء. إذا لم تكن أنت، أعد تعيين كلمة المرور فورًا وراجع أجهزتك.',
+                'detail' => 'تم تغيير كلمة مرورك، وانتهت الجلسات المفتوحة على الأجهزة الأخرى.',
+                'reassurance' => 'إذا كنت أنت من غيّرها، فلا حاجة لأي إجراء. وإن لم تكن أنت، أعد تعيين كلمة المرور فورًا وراجع الأجهزة المرتبطة بحسابك.',
             ] : [
                 'subject' => 'Your password was changed',
                 'title' => 'Your account password was changed',
-                'detail' => 'Sessions on other devices were ended.',
-                'reassurance' => 'If this was you, do nothing. If not, reset your password now and review your devices.',
+                'detail' => 'Your password was changed, and sessions on other devices were ended.',
+                'reassurance' => 'If this was you, there is nothing to do. If not, reset your password immediately and review the devices connected to your account.',
             ],
 
             default => $ar ? [
                 'subject' => 'تسجيل دخول جديد إلى حسابك',
                 'title' => 'تسجيل دخول جديد إلى حسابك',
                 'detail' => 'سُجّل دخول إلى حسابك من جهاز جديد.',
-                'reassurance' => 'إذا كنت أنت، فلا حاجة لأي إجراء. إذا لم تكن أنت، غيّر كلمة المرور الآن وأنهِ الجلسات المفتوحة.',
+                'reassurance' => 'إذا كنت أنت، فلا حاجة لأي إجراء. وإن لم تكن أنت، غيّر كلمة المرور الآن وأنهِ الجلسات المفتوحة من صفحة الأمان.',
             ] : [
                 'subject' => 'A new sign-in to your account',
                 'title' => 'A new sign-in to your account',
-                'detail' => 'Somebody signed in from a new device.',
-                'reassurance' => 'If this was you, do nothing. If not, change your password now and end open sessions.',
+                'detail' => 'Somebody signed in to your account from a new device.',
+                'reassurance' => 'If this was you, there is nothing to do. If not, change your password now and end the open sessions from your security page.',
             ],
         };
     }

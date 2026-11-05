@@ -107,8 +107,8 @@ final class MailShell
     {
         return $ar
             ? [
-                'manage_preferences' => 'الإشعارات',
-                'unsubscribe' => 'إلغاء الاشتراك',
+                'manage_preferences' => 'إدارة الإشعارات',
+                'unsubscribe' => 'إلغاء الاشتراك في هذا النوع',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
@@ -116,8 +116,8 @@ final class MailShell
                 'why' => 'وصلتك لأنك تتابع هذا المشروع.',
             ]
             : [
-                'manage_preferences' => 'Notifications',
-                'unsubscribe' => 'Unsubscribe',
+                'manage_preferences' => 'Manage notifications',
+                'unsubscribe' => 'Unsubscribe from this type',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
@@ -136,7 +136,7 @@ final class MailShell
     public static function accountFootnote(bool $ar): string
     {
         return $ar
-            ? 'رسالة تخص أمان حسابك، ولا يمكن إيقافها.'
-            : 'About your account security. It cannot be turned off.';
+            ? 'وصلتك لأنها تخص أمان حسابك، ولا يمكن إيقافها من إعدادات الإشعارات.'
+            : 'Sent because it concerns your account security. It cannot be turned off in notification settings.';
     }
 }

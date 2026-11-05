@@ -74,7 +74,7 @@ final class ScheduledReportMail extends Mailable
         ];
         $body['t']['why'] = $ar
             ? 'وصلتك لأنك ضمن مستلمي هذا التقرير.'
-            : 'Sent because you receive this report.';
+            : 'Sent because you are on this report\'s recipient list.';
 
         return new Content(view: 'mail.layout', with: $body + [
             'unsubscribeUrl' => $this->unsubscribeUrl,

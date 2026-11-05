@@ -206,11 +206,11 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->render();
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->render();
 
-        $this->assertStringContainsString('Reading the results depends on the performance and data available', $en);
+        $this->assertStringContainsString('Note: Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.', $en);
         $this->assertStringContainsString('Last updated:', $en);
         $this->assertStringContainsString('Currency: USD', $en);
         $this->assertStringContainsString('Time zone: Asia/Riyadh', $en);
-        $this->assertStringContainsString('تعتمد قراءة النتائج على الأداء والبيانات المتاحة', $ar);
+        $this->assertStringContainsString('ملاحظة: تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.', $ar);
         $this->assertStringContainsString('آخر تحديث:', $ar);
         $this->assertStringContainsString('العملة: USD', $ar);
     }

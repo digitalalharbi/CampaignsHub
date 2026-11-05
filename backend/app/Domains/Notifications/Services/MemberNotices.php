@@ -41,8 +41,8 @@ final class MemberNotices
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? "أهلًا بك في {$tenant->name}" : "Welcome to {$tenant->name}",
                 detail: $ar
-                    ? "انضممت بدور «{$roleName}»."
-                    : "You joined as «{$roleName}».",
+                    ? "انضممت بدور «{$roleName}». تابع الحملات والتقارير من لوحة التحكم."
+                    : "You joined as «{$roleName}». Follow campaigns and reports from the dashboard.",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
                 path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
@@ -88,7 +88,7 @@ final class MemberNotices
         [$titleAr, $titleEn, $detailAr, $detailEn, $severity] = match ($reason) {
             'report_failed' => ['فشل تجهيز تقرير التسليم', 'A delivery report failed to build', "تعذّر توليد تقرير {$clientName} للفترة {$period}. افتح الحزمة وأعد المحاولة.", "The report for {$clientName} ({$period}) could not be built. Open the pack and try again.", 'critical'],
             'send_due' => ['تقرير معتمد بانتظار الإرسال', 'An approved report is waiting to be sent', "تقرير {$clientName} للفترة {$period} معتمد ولم يُسجَّل إرساله بعد.", "The report for {$clientName} ({$period}) is approved but not yet marked as sent.", 'warning'],
-            default => ['تقرير بانتظار مراجعتك', 'A report is waiting for your review', "مسودة تقرير {$clientName} للفترة {$period} جاهزة للاعتماد.", "The draft report for {$clientName} ({$period}) is ready to approve.", 'warning'],
+            default => ['تقرير بانتظار مراجعتك', 'A report is waiting for your review', "مسودة تقرير {$clientName} للفترة {$period} جاهزة للمراجعة والاعتماد.", "The draft report for {$clientName} ({$period}) is ready for your review and approval.", 'warning'],
         };
 
         return $this->send(

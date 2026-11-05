@@ -124,8 +124,8 @@ final class DailyDigestMail extends Mailable
 
         return [
             'note' => $ar
-                ? 'ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.'
-                : 'Note: Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+                ? 'ملاحظة: تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.'
+                : 'Note: Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.',
             'items' => $items,
         ];
     }
@@ -596,8 +596,8 @@ final class DailyDigestMail extends Mailable
         $ceiling = (int) ($n['ceiling'] ?? 0);
 
         return $ar
-            ? "يغطي {$chosen} من {$ceiling} مشاريع، حسب إعداداتك."
-            : "Covers {$chosen} of {$ceiling} projects, per your settings.";
+            ? "يغطي هذا الملخص {$chosen} من {$ceiling} مشاريع، حسب إعداداتك."
+            : "This summary covers {$chosen} of {$ceiling} projects, per your settings.";
     }
 
     /**
@@ -1097,9 +1097,9 @@ final class DailyDigestMail extends Mailable
              * which is why reading only them missed it.
              */
             'intro' => match ($this->kind) {
-                'monthly' => 'هذا الشهر عبر مشاريعك، وما يحتاج قرارك.',
-                'weekly' => 'هذا الأسبوع عبر مشاريعك، وما يحتاج قرارك.',
-                default => 'آخر 7 أيام عبر مشاريعك، وما يحتاج قرارك اليوم.',
+                'monthly' => 'ملخص هذا الشهر عبر مشاريعك، وما يحتاج قرارك.',
+                'weekly' => 'ملخص هذا الأسبوع عبر مشاريعك، وما يحتاج قرارك.',
+                default => 'ملخص آخر 7 أيام عبر مشاريعك، وما يحتاج قرارك اليوم.',
             },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
@@ -1140,7 +1140,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
             'open_dashboard' => 'افتح لوحة التحكم',
-            'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. غيّر ذلك من تفضيلات الإشعارات.',
+            'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
             'manage_preferences' => 'تفضيلات الإشعارات',
             'privacy' => 'الخصوصية',
             'terms' => 'الشروط',
@@ -1191,7 +1191,7 @@ final class DailyDigestMail extends Mailable
             'best' => 'Best',
             'worst' => 'Weakest',
             'open_dashboard' => 'Open the dashboard',
-            'footer_note' => 'Sent because you chose the '.$this->rhythmName(false).'. Change it in your notification preferences.',
+            'footer_note' => 'Sent because you chose the '.$this->rhythmName(false).'. Change the projects or the time, or turn it off, in your notification preferences.',
             'manage_preferences' => 'Notification preferences',
             'privacy' => 'Privacy',
             'terms' => 'Terms',

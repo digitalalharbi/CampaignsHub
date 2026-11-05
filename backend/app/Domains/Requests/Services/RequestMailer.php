@@ -114,8 +114,8 @@ final class RequestMailer
                         severity: 'info',
                         title: $ar ? 'طلب جديد من عميل' : 'A new request from a client',
                         detail: $ar
-                            ? "وصل الطلب {$request->reference} من بوابة العملاء."
-                            : "Request {$request->reference} arrived from the client portal.",
+                            ? "وصل الطلب {$request->reference} من بوابة العملاء، وينتظر مراجعة فريقك."
+                            : "Request {$request->reference} arrived from the client portal and is waiting for your team.",
                         context: (string) ($request->company_name ?: $request->reference),
                         lang: $locale,
                         recipientName: (string) $user->name,
@@ -248,10 +248,10 @@ final class RequestMailer
     private static function clientWords(string $event, bool $ar): array
     {
         [$title, $detail, $titleEn, $detailEn] = match ($event) {
-            'received' => ['استلمنا طلبك', 'وصل طلبك إلى الفريق.', 'We received your request', 'Your request reached the team.'],
-            'info_requested' => ['طلبك يحتاج معلومات منك', 'يحتاج الفريق معلومات إضافية.', 'Your request needs information from you', 'The team needs more information.'],
+            'received' => ['استلمنا طلبك', 'وصل طلبك إلى الفريق، وستصلك المستجدات هنا.', 'We received your request', 'Your request reached the team, and updates will arrive here.'],
+            'info_requested' => ['طلبك يحتاج معلومات منك', 'يحتاج الفريق معلومات إضافية لإكمال طلبك.', 'Your request needs information from you', 'The team needs more information to complete your request.'],
             'team_reply' => ['ردّ جديد على طلبك', 'أضاف الفريق ردًا على طلبك.', 'A new reply on your request', 'The team replied on your request.'],
-            'approved' => ['تمت الموافقة على طلبك', 'سيبدأ الفريق العمل عليه.', 'Your request was approved', 'The team will start work on it.'],
+            'approved' => ['تمت الموافقة على طلبك', 'وافق الفريق على طلبك وسيبدأ العمل عليه.', 'Your request was approved', 'The team approved your request and will start work on it.'],
             'in_progress' => ['بدأ العمل على طلبك', 'طلبك قيد التنفيذ.', 'Work has started on your request', 'Your request is in progress.'],
             'completed' => ['اكتمل طلبك', 'أنهى الفريق العمل على طلبك.', 'Your request is complete', 'The team finished your request.'],
             default => ['تحديث على طلبك', 'تغيّرت حالة طلبك.', 'An update on your request', 'Your request status changed.'],

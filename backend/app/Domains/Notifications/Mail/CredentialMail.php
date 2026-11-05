@@ -99,12 +99,12 @@ final class CredentialMail extends Mailable
         $body['t'] = $shell['t'] + ($ar
             ? [
                 'never_share' => 'لا تشارك هذا الرمز مع أي شخص. لن يطلبه منك فريقنا أبدًا.',
-                'or_paste' => 'إذا لم يعمل الزر، افتح هذا الرابط:',
+                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط إلى المتصفح:',
                 'not_you_title' => 'إذا لم تطلب هذه الرسالة',
             ]
             : [
                 'never_share' => 'Do not share this code with anyone. Our team will never ask for it.',
-                'or_paste' => 'If the button fails, open this link:',
+                'or_paste' => 'If the button does not work, copy this link into your browser:',
                 'not_you_title' => 'If you did not ask for this',
             ]);
 
@@ -163,15 +163,15 @@ final class CredentialMail extends Mailable
             self::PASSWORD_RESET => $ar ? [
                 'subject' => 'إعادة تعيين كلمة المرور',
                 'title' => 'إعادة تعيين كلمة المرور',
-                'intro' => 'وصلنا طلب لإعادة تعيين كلمة مرورك.',
+                'intro' => 'وصلنا طلب لإعادة تعيين كلمة مرورك. اضغط الزر لاختيار كلمة مرور جديدة.',
                 'action' => 'اختيار كلمة مرور جديدة',
-                'not_you' => 'تجاهل الرسالة. كلمة مرورك الحالية ما زالت تعمل. إذا تكررت، غيّرها من إعدادات الأمان.',
+                'not_you' => 'تجاهل الرسالة؛ كلمة مرورك الحالية ما زالت تعمل، وسينتهي الرابط تلقائيًا. إذا تكررت دون طلب منك، غيّرها من إعدادات الأمان.',
             ] : [
                 'subject' => 'Reset your password',
                 'title' => 'Reset your password',
-                'intro' => 'We received a request to reset your password.',
+                'intro' => 'We received a request to reset your password. Use the button to choose a new one.',
                 'action' => 'Choose a new password',
-                'not_you' => 'Ignore this message. Your current password still works. If this repeats, change it in your security settings.',
+                'not_you' => 'Ignore this message. Your current password still works, and this link expires on its own. If this keeps arriving without you asking, change your password in your security settings.',
             ],
 
             self::MEMBER_SETUP => $ar ? [
@@ -181,7 +181,7 @@ final class CredentialMail extends Mailable
                     ? "أُضيف حسابك إلى مساحة عمل {$this->workspace}. اختر كلمة المرور للدخول."
                     : 'أُضيف حسابك إلى كامبينز هب. اختر كلمة المرور للدخول.',
                 'action' => 'اختيار كلمة المرور',
-                'not_you' => 'إذا لم تتوقعها، فتجاهلها. لن يعمل الحساب قبل اختيار كلمة المرور.',
+                'not_you' => 'إذا لم تتوقع هذه الرسالة، فتجاهلها. لن يعمل الحساب قبل اختيار كلمة المرور.',
             ] : [
                 'subject' => 'Your account is ready — choose a password',
                 'title' => 'Your account is ready',
@@ -189,21 +189,21 @@ final class CredentialMail extends Mailable
                     ? "Your account was added to the {$this->workspace} workspace. Choose a password to sign in."
                     : 'Your account was added to CampaignsHub. Choose a password to sign in.',
                 'action' => 'Choose a password',
-                'not_you' => 'Not expecting this? Ignore it. The account cannot be used until a password is chosen.',
+                'not_you' => 'Not expecting this message? Ignore it. The account cannot be used until a password is chosen.',
             ],
 
             self::EMAIL_VERIFICATION => $ar ? [
                 'subject' => 'تأكيد بريدك الإلكتروني',
                 'title' => 'تأكيد بريدك الإلكتروني',
-                'intro' => 'أكّد أن هذا البريد يخصك لإكمال حسابك.',
+                'intro' => 'اضغط الزر لتأكيد أن هذا البريد يخصك وإكمال حسابك.',
                 'action' => 'تأكيد البريد الإلكتروني',
-                'not_you' => 'تجاهل الرسالة. لن يُفتح حساب دون هذا الرابط.',
+                'not_you' => 'تجاهل الرسالة. لن يُفتح حساب على هذا البريد ما لم يُضغط الرابط.',
             ] : [
                 'subject' => 'Confirm your email address',
                 'title' => 'Confirm your email address',
-                'intro' => 'Confirm this address is yours to finish your account.',
+                'intro' => 'Use the button to confirm this address is yours and finish your account.',
                 'action' => 'Confirm my email',
-                'not_you' => 'Ignore this message. No account opens without this link.',
+                'not_you' => 'Ignore this message. No account is opened on this address unless the link is used.',
             ],
 
             default => $ar ? [
@@ -211,13 +211,13 @@ final class CredentialMail extends Mailable
                 'title' => 'رمز تسجيل الدخول',
                 'intro' => 'أدخل هذا الرمز لإكمال تسجيل الدخول.',
                 'action' => 'تسجيل الدخول',
-                'not_you' => 'قد يعرف شخص آخر كلمة مرورك. غيّرها الآن من إعدادات الأمان، ولا تستخدم هذا الرمز.',
+                'not_you' => 'إذا لم تحاول تسجيل الدخول، فقد يعرف شخص آخر كلمة مرورك. غيّرها الآن من إعدادات الأمان، ولا تستخدم هذا الرمز.',
             ] : [
                 'subject' => 'Your sign-in code',
                 'title' => 'Your sign-in code',
                 'intro' => 'Enter this code to finish signing in.',
                 'action' => 'Sign in',
-                'not_you' => 'Somebody else may know your password. Change it now in your security settings, and do not use this code.',
+                'not_you' => 'If you were not signing in, somebody else may know your password. Change it now in your security settings, and do not use this code.',
             ],
         };
     }

@@ -58,25 +58,25 @@ final class InvitationMail extends Mailable
 
         $intro = $this->invitedBy !== ''
             ? ($ar
-                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace}."
-                : "{$this->invitedBy} invited you to join the {$this->workspace} workspace.")
+                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
+                : "{$this->invitedBy} invited you to join the {$this->workspace} workspace on CampaignsHub.")
             : ($ar
-                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace}."
-                : "You are invited to join the {$this->workspace} workspace.");
+                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
+                : "You are invited to join the {$this->workspace} workspace on CampaignsHub.");
 
         $shell = MailShell::build(
             lang: $this->lang,
-            subject: $ar ? 'دعوة للانضمام' : 'An invitation to join',
+            subject: $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
             preheader: $intro,
             // The recipient has no account and therefore no preferences to manage.
             preferences: false,
             footerNote: $ar
-                ? 'وصلتك لأن أحد أعضاء الفريق أدخل بريدك.'
-                : 'Sent because a team member entered your email.',
+                ? 'وصلتك لأن أحد أعضاء الفريق أدخل بريدك عند إرسال الدعوة.'
+                : 'Sent because a team member entered your email when sending the invitation.',
         );
 
         $body = $shell + [
-            'title' => $ar ? 'دعوة للانضمام' : 'An invitation to join',
+            'title' => $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
             'intro' => $intro,
             'workspace' => $this->workspace,
             'roleName' => $role['name'],
@@ -84,22 +84,22 @@ final class InvitationMail extends Mailable
             'actionUrl' => $this->acceptUrl,
             'actionLabel' => $ar ? 'قبول الدعوة' : 'Accept the invitation',
             'validity' => $ar
-                ? "الدعوة صالحة لمدة {$this->expiresInHours} ساعة."
-                : "Valid for {$this->expiresInHours} hours.",
+                ? "الدعوة صالحة لمدة {$this->expiresInHours} ساعة، وبعدها تحتاج إلى دعوة جديدة."
+                : "This invitation is valid for {$this->expiresInHours} hours. After that, you will need a new one.",
         ];
 
         $body['t'] = $shell['t'] + ($ar
             ? [
                 'workspace' => 'مساحة العمل',
                 'role' => 'دورك',
-                'or_paste' => 'إذا لم يعمل الزر، افتح هذا الرابط:',
+                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط إلى المتصفح:',
                 'not_expecting' => 'إذا لم تتوقع هذه الدعوة، فتجاهلها. لن يُفتح حساب دون قبولك.',
             ]
             : [
                 'workspace' => 'Workspace',
                 'role' => 'Your role',
-                'or_paste' => 'If the button fails, open this link:',
-                'not_expecting' => 'Not expecting this? Ignore it. No account opens unless you accept.',
+                'or_paste' => 'If the button does not work, copy this link into your browser:',
+                'not_expecting' => 'Not expecting this invitation? Ignore it. No account is opened unless you accept.',
             ]);
 
         return new Content(view: 'mail.layout', with: $body + [
