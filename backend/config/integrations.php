@@ -61,6 +61,61 @@ return [
         'provisional_hours' => (int) env('INTEGRATIONS_PROVISIONAL_HOURS', 48),
     ],
 
+    'checkpoints' => [
+        /*
+         * INTEG-SYNC-ENGINE-001 — how far a scheduled sweep may reach back to its checkpoint after a gap.
+         *
+         * The first-sync backfill plus a margin: a resume is at worst a first sync. An outage longer than this is capped, the days it
+         * skips are written on the checkpoint, and `integrations:resync-window` reads them on a person's say-so.
+         */
+        'resume_max_days' => (int) env('SYNC_RESUME_MAX_DAYS', 35),
+
+        /*
+         * A grain can be stuck for a reason a re-read does not cure (a campaign not discovered, a currency unknown). A wide read that
+         * got an answer is not repeated for this many hours: once a day, against 48 half-hourly sweeps.
+         */
+        'resume_cooldown_hours' => (int) env('SYNC_RESUME_COOLDOWN_HOURS', 24),
+    ],
+
+    'rate_budget' => [
+        /*
+         * INTEG-SYNC-ENGINE-001 — requests per window, enforced on sync jobs by `ProviderRateBudget`.
+         *
+         * The defaults are a brake on a runaway, chosen so today's traffic cannot reach them. `supervisor-sync` runs ONE process, so
+         * requests are sequential: at a 250 ms round trip one worker makes at most 14,400 an hour, whoever it is working for. The
+         * largest account in the code's own record is 89 campaigns, about 180 ad-set and ad requests plus a few for the campaign and
+         * creative grains: 2 sweeps an hour would need 40 such accounts on ONE connection to reach 15,000. They are NOT a fit to any
+         * provider's quota. Read `meta.provider_requests` on the run ledger, then lower them per provider below.
+         */
+        'enabled' => (bool) env('SYNC_BUDGET_ENABLED', true),
+        'window_seconds' => (int) env('SYNC_BUDGET_WINDOW_SECONDS', 3600),
+        'provider_requests' => (int) env('SYNC_BUDGET_PROVIDER_REQUESTS', 30000),
+        'connection_requests' => (int) env('SYNC_BUDGET_CONNECTION_REQUESTS', 15000),
+
+        // No connection may spend more than this share of its provider's pool, whatever `connection_requests` says.
+        'connection_share' => (float) env('SYNC_BUDGET_CONNECTION_SHARE', 0.5),
+
+        // A provider's own limit, where it differs from `provider_requests`. Null falls through to the default.
+        'providers' => [
+            'meta' => env('SYNC_BUDGET_META_REQUESTS'),
+            'snapchat' => env('SYNC_BUDGET_SNAPCHAT_REQUESTS'),
+            'tiktok' => env('SYNC_BUDGET_TIKTOK_REQUESTS'),
+            'google' => env('SYNC_BUDGET_GOOGLE_REQUESTS'),
+            'linkedin' => env('SYNC_BUDGET_LINKEDIN_REQUESTS'),
+            'x' => env('SYNC_BUDGET_X_REQUESTS'),
+            'openai_ads' => env('SYNC_BUDGET_OPENAI_ADS_REQUESTS'),
+        ],
+
+        // The longest a provider's `Retry-After` or usage header may hold a connection: an hour, the same as a spent window.
+        'max_hold_seconds' => (int) env('SYNC_BUDGET_MAX_HOLD_SECONDS', 3600),
+
+        // Meta throttles at 100% of `X-Business-Use-Case-Usage`. Lower this to back off before it does.
+        'meta_usage_hold_percent' => (int) env('SYNC_BUDGET_META_USAGE_HOLD_PERCENT', 100),
+
+        // Null is the application's default store. The counters are per hour and may be lost without harm.
+        'cache_store' => env('SYNC_BUDGET_CACHE_STORE'),
+    ],
+
     'chunking' => [
         /*
          * How many local days one provider request may cover.

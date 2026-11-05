@@ -41,4 +41,30 @@ final class MetaUsageHeader
             'max_total_time' => $max['total_time'],
         ];
     }
+
+    /**
+     * Meta's `estimated_time_to_regain_access`, in minutes: above zero means this business is being throttled now.
+     *
+     * Documented beside the three percentages (Marketing API, rate limiting). The highest across the header's entries, 0 when absent.
+     */
+    public static function regainAccessMinutes(?string $header): int
+    {
+        $decoded = is_string($header) && $header !== '' ? json_decode($header, true) : null;
+
+        if (! is_array($decoded)) {
+            return 0;
+        }
+
+        $minutes = 0;
+
+        foreach ($decoded as $entries) {
+            foreach ((array) $entries as $entry) {
+                if (is_array($entry) && is_numeric($entry['estimated_time_to_regain_access'] ?? null)) {
+                    $minutes = max($minutes, (int) $entry['estimated_time_to_regain_access']);
+                }
+            }
+        }
+
+        return $minutes;
+    }
 }
