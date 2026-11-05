@@ -54,6 +54,11 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== REGEN"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan tinker --execute='$r = App\Domains\Reports\Models\Report::withoutGlobalScopes()->find("626b5eb1-695d-4d5e-9d8f-cfa20742696c"); echo $r->status." ".($r->hasStoredCopy() ? "copy" : "nocopy")."\n"; if ($r->status === "completed" && $r->hasStoredCopy()) { $r->update(["status" => "processing", "error" => null]); App\Domains\Reports\Jobs\GenerateReportJob::dispatch((string) $r->id); echo "dispatched\n"; }'
+            echo "== END REGEN"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
