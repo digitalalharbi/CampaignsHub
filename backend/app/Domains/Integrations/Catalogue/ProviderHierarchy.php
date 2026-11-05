@@ -26,10 +26,21 @@ namespace App\Domains\Integrations\Catalogue;
  * - **Google Ads** — `customer_client` gives the manager an account is reached through
  *   (GADS-HIERARCHY-001), which the adapter records as the account's parent.
  *
- * Meta has Business Manager, TikTok has Business Centre and LinkedIn has organisations — but none of
- * those is in what our discovery currently returns, and declaring a step we cannot populate would be
- * the same invention from the other direction. When an adapter starts returning one, it appears here,
- * and the wizard gains the step without any interface change.
+ * TikTok has Business Centre and LinkedIn has organisations — but neither is in what our discovery
+ * currently returns, and declaring a step we cannot populate would be the same invention from the
+ * other direction. When an adapter starts returning one, it is declared and the wizard gains the step
+ * without any interface change.
+ *
+ * Meta's discovery DOES record the business an account was reached through (META-BUSINESS-ACCOUNTS-001),
+ * and GA4's records the Analytics account above a property. Both declare that parent; neither has ever
+ * had a wizard step, so `parentStep` stays false for them. This class answers about the STEP.
+ *
+ * ## Where the answer lives
+ *
+ * INTEG-CAPABILITY-CONTRACT-001 — the map that stood here moved onto each provider's declaration in
+ * `ProviderCatalogue`, because a new provider should not need an edit to a second file. This class
+ * keeps its name and its answers. The key is looked up exactly as it was: `google_ads` has never had
+ * a parent step here and does not gain one.
  *
  * ChatGPT Ads is absent for a stronger reason than the others: OpenAI publishes no Business Centre,
  * Portfolio or Manager Account for advertising at all, and its key is scoped to a single ad account.
@@ -37,33 +48,25 @@ namespace App\Domains\Integrations\Catalogue;
  */
 final class ProviderHierarchy
 {
-    /**
-     * Providers whose accounts genuinely sit under a named parent, and what that parent is called.
-     *
-     * The label is the provider's own word. An agency choosing a Snapchat «Organization» should see
-     * «Organization», not a house term invented to cover every provider at once.
-     *
-     * @var array<string, array{key: string, label: string, labelAr: string}>
-     */
-    private const PARENTS = [
-        'snapchat' => ['key' => 'organization', 'label' => 'Organization', 'labelAr' => 'المؤسسة'],
-        'google' => ['key' => 'manager', 'label' => 'Manager account', 'labelAr' => 'الحساب المدير'],
-    ];
-
     /** Whether this provider's wizard shows a parent-selection step at all. */
     public static function hasParent(string $provider): bool
     {
-        return array_key_exists($provider, self::PARENTS);
+        return self::parent($provider) !== null;
     }
 
     /**
-     * How this provider names its parent level, or null when it has none.
+     * How this provider names its parent step, or null when it has none.
+     *
+     * The label is the provider's own word. An agency choosing a Snapchat «Organization» should see
+     * «Organization», not a house term invented to cover every provider at once.
      *
      * @return array{key: string, label: string, labelAr: string}|null
      */
     public static function parent(string $provider): ?array
     {
-        return self::PARENTS[$provider] ?? null;
+        $declared = (ProviderCatalogue::all()[$provider] ?? null)?->capabilities;
+
+        return $declared?->parentStep === true ? $declared->parentLevel : null;
     }
 
     /**

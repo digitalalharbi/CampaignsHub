@@ -51,6 +51,18 @@ describe('EmailCodeSignIn', () => {
     expect(await screen.findByTestId('login-error')).toHaveTextContent('That is not available.')
   })
 
+  it('stays on the form with the reason when the platform has turned the code off', async () => {
+    vi.mocked(portalLoginStart).mockRejectedValue(new axios.AxiosError('off', undefined, undefined, undefined, { status: 403, statusText: '', headers: {}, config: {} as never, data: { message: 'Signing in with a code on this channel is turned off.' } }))
+    renderWithProviders(page(), { route: '/login', locale: 'en' })
+
+    fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value: 'client@example.test' } })
+    fireEvent.click(screen.getByTestId('email-code-send'))
+
+    expect(await screen.findByTestId('login-error')).toHaveTextContent(/turned off/)
+    expect(screen.queryByTestId('email-code-step')).not.toBeInTheDocument()
+    expect(screen.getByTestId('email-code-form')).toBeInTheDocument()
+  })
+
   it('says plainly when no code was actually sent', async () => {
     vi.mocked(portalLoginStart).mockResolvedValue({ ...QUEUED, delivery_status: 'awaiting_provider_credentials' })
     renderWithProviders(page(), { route: '/login', locale: 'en' })

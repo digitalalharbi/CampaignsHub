@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
-  connectWithApiKey, fetchMetaApps, startPlatformOAuth, type ConnectableProvider, type HubConnection,
+  connectWithApiKey, fetchMetaApps, removeConnection, startPlatformOAuth, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
 import { listProjects } from '@/features/projects/api'
@@ -94,6 +94,12 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
   const providerKey = connection?.provider ?? provider?.key ?? ''
   const connectionId = connection?.id ?? openedByKey
 
+  const cancel = useMutation({
+    mutationFn: () => removeConnection(connectionId ?? '', { unconfirmedOnly: true }),
+    // Whatever the server answered, the dialog ends: a refusal means the source is in use and was kept.
+    onSettled: onClose,
+  })
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true">
       <div className="w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl" data-testid="connection-flow">
@@ -107,6 +113,24 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
                   ? (ar ? `إدارة الحسابات — ${label}` : `Manage accounts — ${label}`)
                   : (ar ? `ربط ${label}` : `Connect ${label}`)}
             </h2>
+            {/*
+              INTEG-SOURCE-REMOVAL-001 — «إلغاء» is an act, «إغلاق» is leaving.
+
+              A connection this flow opened and nobody confirmed is removed on cancel, so nothing half-made is left
+              on the hub. The server removes it only if nothing was ever selected or synced on it, so cancelling a
+              re-authorisation of a working source changes nothing. Closing the tab instead is covered by the
+              abandoned-connection sweep.
+            */}
+            {mode === 'connect' && !finished && connectionId !== null && (
+              <Button
+                variant="ghost"
+                loading={cancel.isPending}
+                onClick={() => cancel.mutate()}
+                data-testid="flow-cancel"
+              >
+                {ar ? 'إلغاء' : 'Cancel'}
+              </Button>
+            )}
             <Button variant="ghost" onClick={onClose} data-testid="flow-close">{ar ? 'إغلاق' : 'Close'}</Button>
           </div>
 

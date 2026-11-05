@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Domains\Accounts\Services\AccountGrants;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
@@ -291,12 +292,22 @@ class AppServiceProvider extends ServiceProvider
          * Raising the production limit or retrying the test would both have been wrong: the first
          * weakens a real control, the second hides it.
          */
-        RateLimiter::for('registration', function (Request $request): Limit {
-            $perMinute = $this->app->environment('production')
-                ? (int) config('accounts.registration_throttle', 6)
-                : 60;
+        RateLimiter::for('registration', function (Request $request): array {
+            $production = $this->app->environment('production');
+            $perMinute = $production ? (int) config('accounts.registration_throttle', 6) : 60;
 
-            return Limit::perMinute($perMinute)->by((string) $request->ip());
+            $limits = [Limit::perMinute($perMinute)->by((string) $request->ip())];
+
+            // SIGNUP-VERIFY-POLICY-001 — with the email gate off an application costs nothing to open, so one address
+            // also gets an hourly ceiling. It does not exist while the gate is on.
+            if (! app(RegistrationVerificationSettings::class)->emailEnabled()) {
+                $limits[] = Limit::perHour($production
+                    ? (int) config('accounts.unverified_registration_per_hour', 20)
+                    : (int) config('accounts.unverified_registration_per_hour_local', 1000)
+                )->by('registration-unverified:'.$request->ip());
+            }
+
+            return $limits;
         });
 
         /*

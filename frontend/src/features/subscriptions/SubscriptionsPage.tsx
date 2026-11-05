@@ -24,6 +24,7 @@ export const COPY = {
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
     current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
     manage_note: 'تبديل الخطة يتطلّب صلاحية subscriptions.manage.',
+    basis_waived_by_admin: 'معفى من رسوم هذه الفترة', basis_admin_trial: 'فترة تجربة بقرار إداري', basis_external_settlement: 'سُدد خارج بوابة الدفع', comp_note: 'هذه المساحة بدخول مباشر دون دفع، وتدير المنصة باقتها.', basis_complimentary: 'دخول مباشر دون دفع، بلا تاريخ انتهاء', basis_admin_grant: 'مفعّل بقرار إداري دون دفع',
     st_active: 'نشِط', st_trialing: 'الشهر التمهيدي', st_past_due: 'متأخّر السداد', st_canceled: 'مُلغى',
     features: 'المزايا',
     m_projects: 'المشاريع', m_team_members: 'أعضاء الفريق', m_connections: 'الربط', m_reports_per_month: 'التقارير / شهر',
@@ -69,6 +70,7 @@ export const COPY = {
     unlimited: 'Unlimited', catalogue: 'Available plans', change: 'Switch to this plan',
     current_badge: 'Your current plan', grandfathered: 'Earlier plan — kept for you at your price and limits', changing: 'Switching…', changed: 'Subscription updated',
     manage_note: 'Changing the plan requires the subscriptions.manage permission.',
+    basis_waived_by_admin: 'This period\'s fee is waived', basis_admin_trial: 'Trial granted by an administrator', basis_external_settlement: 'Settled outside the payment gateway', comp_note: 'This workspace has direct entry with no payment, and the platform manages its plan.', basis_complimentary: 'Direct entry with no payment and no end date', basis_admin_grant: 'Activated by an administrator with no payment',
     st_active: 'Active', st_trialing: 'Introductory month', st_past_due: 'Past due', st_canceled: 'Canceled',
     features: 'Features',
     m_projects: 'Projects', m_team_members: 'Team members', m_connections: 'Connections', m_reports_per_month: 'Reports / month',
@@ -286,6 +288,7 @@ export function SubscriptionsPage() {
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
             {!canManage && <p className="text-xs text-text-muted">{c.manage_note}</p>}
+            {current.subscription?.commercial_basis === 'complimentary' && <p data-testid="subscription-comp-note" className="text-xs text-text-muted">{c.comp_note}</p>}
             {/* grid-cols-1 + min-w-0 on the cards: a card's badges must never widen a phone's page (sweep @390). */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {plans.map((plan) => (
@@ -293,7 +296,7 @@ export function SubscriptionsPage() {
                   key={plan.code}
                   plan={plan}
                   isCurrent={plan.code === currentCode}
-                  canManage={canManage}
+                  canManage={canManage && current.subscription?.commercial_basis !== 'complimentary'}
                   pending={changeM.isPending && changeM.variables === plan.code}
                   onChange={() => setChosen(plan)}
                   c={c}
@@ -384,8 +387,9 @@ function CurrentPlanCard({ current, c }: { current: CurrentSubscription; c: Copy
         {sub && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[sub.status] ?? 'bg-surface-secondary text-text-muted'}`}>{statusLabel(sub.status, c)}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-text-secondary">
-        {plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
+        {plan && sub?.commercial_basis !== 'complimentary' && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
         {sub && <span>{c.seats}: <span className="tnum font-semibold text-text-primary">{num(sub.seats, c.unlimited)}</span></span>}
+        {sub?.commercial_basis && <span data-testid="subscription-commercial-basis" className="font-semibold text-text-primary">{c[`basis_${sub.commercial_basis}`]}</span>}
         {sub?.current_period_end && <span>{c.period_end}: <span className="tnum font-semibold text-text-primary">{fmtDate(sub.current_period_end)}</span></span>}
       </div>
     </div>

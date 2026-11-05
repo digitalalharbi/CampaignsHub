@@ -288,7 +288,7 @@ final class SubscriptionService
             // A revoked connection is a connection somebody deliberately gave up; it must not go on
             // costing them a slot.
             'connections' => DB::table('provider_connections')->where('tenant_id', $id)
-                ->whereNotIn('status', ['revoked', 'disconnected'])->count(),
+                ->whereNotIn('status', ['revoked', 'disconnected'])->whereNull('removed_at')->count(),
 
             // The one genuine flow: what was produced this calendar month, from the reports rather
             // than from a tally of them.

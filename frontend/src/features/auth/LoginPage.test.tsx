@@ -29,6 +29,19 @@ function typeEmail(value: string) {
  * the server chose.
  */
 describe('LoginPage — the sign-in card', () => {
+  it('hides the code control when the server says the code is off, and keeps the password and the reset link', async () => {
+    vi.mocked(fetchSignInOptions).mockResolvedValueOnce({ providers: [
+      { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true },
+    ], emailCode: false })
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
+
+    await screen.findByTestId('login-google')
+    expect(screen.queryByTestId('login-email-code')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /forgot/i })).toBeInTheDocument()
+  })
+
   it('renders Google sign-in only as an available server-reported capability', async () => {
     renderWithProviders(<LoginPage />, { route: '/login', locale: 'en' })
 

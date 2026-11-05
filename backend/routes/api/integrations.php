@@ -100,6 +100,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
     Route::post('connections/{connection}/revoke', [ProviderConnectionController::class, 'revoke'])->name('connections.revoke');
+    // INTEG-SOURCE-REMOVAL-001 — take a source out of the hub (soft hide; history kept).
+    Route::post('connections/{connection}/remove', [ProviderConnectionController::class, 'remove'])->name('connections.remove');
 
     /*
      * ORCH-100 — the connection wizard's reads: the hierarchy an authorisation discovered, a page of

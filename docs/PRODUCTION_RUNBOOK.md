@@ -256,6 +256,60 @@ curl -fsS https://<api>/api/v1/ready
   whatever you back up the database with — a database dump without its key restores to nothing usable.
 - **Card details are never stored.** The payment method lives with the provider; this system keeps a
   reference.
+## 10. Provider capability declarations
+
+What each provider can do lives in one place: `ProviderCatalogue`, one declaration per provider. `ProviderCapabilityContractTest` holds every declaration to the code, so this table states what the code does today and not what a provider's API could do. No provider call is needed to check it.
+
+| provider | category | resource | auth | discovery | refresh_token | token_expiry | token_exchange | webhooks | hierarchy | entity_grains | creative_insights | period_reach | abandoned_carts | incremental_cursor | rate_limit_policy |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| snapchat | ads | ad_account | oauth | yes | yes | yes | no | no | yes | yes | yes | yes | no | no | yes |
+| tiktok | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | no | no | no | yes |
+| meta | ads | ad_account | oauth | yes | no | yes | yes | yes | yes | yes | yes | yes | no | no | yes |
+| google | ads | ad_account | oauth | yes | yes | yes | no | no | yes | yes | no | yes | no | no | yes |
+| x | ads | ad_account | oauth | yes | no | no | no | no | no | no | no | no | no | no | yes |
+| linkedin | ads | ad_account | oauth | yes | yes | yes | no | no | no | no | no | yes | no | no | yes |
+| openai_ads | ads | ad_account | api_key | yes | no | no | no | no | no | yes | no | no | no | no | yes |
+| salla | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | yes | no | yes |
+| zid | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | no | no | yes |
+| ga4 | analytics | property | oauth | yes | yes | yes | no | no | yes | no | no | no | no | no | yes |
+| sandbox | ads | ad_account | oauth | no | no | no | no | no | no | no | no | no | no | no | no |
+
+**`hierarchy`** means discovery records a parent on the row. The wizard draws a parent step only for Snapchat and Google (`parentStep`). Meta's business and GA4's Analytics account are recorded and have no step.
+
+**`token_exchange`** is Meta alone: no refresh token, and the long-lived token is renewed with `fb_exchange_token`.
+
+**`webhooks`** means an endpoint exists and verifies. Meta and Salla verify an HMAC. Zid is `requires_confirmation` and verifies HTTP Basic, so its poll stays authoritative.
+
+**`rate_limit_policy`** is one shared policy, `PlatformHttp`: bounded retries on a 429 or 5xx, honouring `Retry-After`. No provider has its own yet. See "Known gaps".
+
+**The sandbox** is declared but is not in `ProviderCatalogue::all()`, so setup screens do not list it, and production has no sandbox adapter.
+
+### Ask, do not branch
+
+```php
+ProviderCatalogue::supports($provider, ProviderCapability::AbandonedCarts);
+```
+
+A capability nothing declares answers no, and an adapter asked for one throws `CapabilityNotDeclared` before anything is sent. To add a provider, see [`integrations/ADDING_A_PROVIDER.md`](integrations/ADDING_A_PROVIDER.md).
+
+### Changing a declaration
+
+1. Change the code first. A declaration follows behaviour.
+2. Change the value in `ProviderCatalogue`.
+3. Update the row above. `test_the_runbook_table_is_the_registry` fails if it is stale.
+4. Run `ch-scripts/ptest.sh <worktree> --filter=ProviderCapabilityContractTest`. Only the literal `Tests:` line counts.
+
+Do not turn a capability on to make a screen show something. The contract test fails if the code does not back it, and if a guard is in the way, the guard is right.
+
+### Known gaps
+
+Recorded here so nobody relies on them. The code does not do these today:
+
+- **Meta usage throttling.** The `X-Business-Use-Case-Usage` header is read only by the Meta candidate test flow. Sync does not back off as usage climbs; it retries when refused.
+- **Incremental reads.** No provider declares `incremental_cursor`. Every sync re-asks a window, and pagination cursors are not stored between runs.
+- **Zid abandoned carts.** `syncAbandonedCarts()` returns an empty success, though `CommerceConnector` documents a failed result. Screens use the declaration, so they do not read it as zero.
+- **Meta parent step.** Discovery records the business, but the wizard shows Meta accounts as one flat list.
+
 ### Dependency advisories — release check
 
 `composer audit` and `npm audit --omit=dev` are part of every release check. State as of this commit:

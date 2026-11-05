@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ProjectsEstate } from './ProjectsEstate'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
-  fetchConnectionHub,
+  fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionHub } from './ConnectionHub'
@@ -77,6 +77,7 @@ export function IntegrationsPage() {
   const [picking, setPicking] = useState(false)
   const [drawer, setDrawer] = useState<{ id: string; tab: DrawerTab } | null>(null)
   const [menu, setMenu] = useState<HubConnection | null>(null)
+  const [removing, setRemoving] = useState<HubConnection | null>(null)
   const [inventoryOpen, setInventoryOpen] = useState(false)
 
   const connections = hub.data?.connections ?? []
@@ -121,6 +122,7 @@ export function IntegrationsPage() {
         onConnect={() => setPicking(true)}
         onOpen={(connection, tab) => setDrawer({ id: connection.id, tab: tab ?? 'overview' })}
         onAction={(connection) => setMenu(connection)}
+        onRemove={(connection) => setRemoving(connection)}
       />
 
       {/*
@@ -241,6 +243,21 @@ export function IntegrationsPage() {
             setFlow({ mode: 'manage', provider: null, connection: menu, projectId: manageDestination(menu) })
             setMenu(null)
           }}
+          onRemove={() => { setRemoving(menu); setMenu(null) }}
+        />
+      )}
+
+      {removing !== null && (
+        <RemoveSourceDialog
+          connection={removing}
+          ar={ar}
+          onClose={() => setRemoving(null)}
+          onRemoved={() => {
+            setRemoving(null)
+            void queryClient.invalidateQueries({ queryKey: ['connection-hub'] })
+            void queryClient.invalidateQueries({ queryKey: ['connectors'] })
+            void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+          }}
         />
       )}
     </div>
@@ -325,11 +342,12 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
  * confusion support transcripts are full of: an account made last week is missing, so somebody
  * re-authorises instead of re-reading the catalogue.
  */
-function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
+function ActionMenu({ ar, onClose, onOpen, onManageAccounts, onRemove }: {
   ar: boolean
   onClose: () => void
   onOpen: (tab: DrawerTab) => void
   onManageAccounts: () => void
+  onRemove: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">
@@ -347,6 +365,10 @@ function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
           {ar ? 'المزامنة وإعدادات الاتصال' : 'Sync and connection settings'}
         </MenuItem>
         <div className="my-1 border-t border-border" />
+        {/* INTEG-SOURCE-REMOVAL-001 — takes the source off this page for good; its stored figures stay. */}
+        <MenuItem testId="action-remove" onClick={onRemove}>
+          {ar ? 'إزالة المصدر' : 'Remove source'}
+        </MenuItem>
         <MenuItem testId="action-close" onClick={onClose}>
           {ar ? 'إغلاق' : 'Close'}
         </MenuItem>
@@ -365,5 +387,46 @@ function MenuItem({ onClick, testId, children }: { onClick: () => void; testId: 
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * INTEG-SOURCE-REMOVAL-001 — the confirmation, said as what it costs AND what it does not.
+ *
+ * Removing a source ends its data flow for every client it feeds, so the sentence names that. It also
+ * says the stored figures and reports stay, because «إزالة» sounds like deletion and the fear that
+ * stops people pressing it is losing a client's history.
+ */
+function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
+  connection: HubConnection
+  ar: boolean
+  onClose: () => void
+  onRemoved: () => void
+}) {
+  const remove = useMutation({ mutationFn: () => removeConnection(connection.id), onSuccess: onRemoved })
+  const name = ar ? connection.label_ar : connection.label
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl" data-testid="remove-source-dialog">
+        <h2 className="text-base font-bold text-text-primary">{ar ? `إزالة ${name}؟` : `Remove ${name}?`}</h2>
+        <p className="mt-2 text-xs text-text-secondary">
+          {ar
+            ? 'ستتوقف المزامنة وتُعطَّل ارتباطات الحسابات بكل المشاريع، ويُمسح رمز الوصول المخزَّن لدينا. تبقى الأرقام والتقارير المحفوظة كما هي. لإعادة الربط لاحقًا اضغط «ربط مصدر».'
+            : 'Syncing stops, the accounts are unlinked from every project, and the access token we hold is cleared. Stored figures and reports stay exactly as they are. To connect again later, press «Connect a source».'}
+        </p>
+        {remove.isError && (
+          <p className="mt-2 text-xs text-danger" data-testid="remove-source-error">
+            {ar ? 'تعذّرت الإزالة، حاول مرة أخرى.' : 'Could not remove it. Try again.'}
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} data-testid="remove-source-keep">{ar ? 'إبقاء' : 'Keep'}</Button>
+          <Button loading={remove.isPending} onClick={() => remove.mutate()} data-testid="remove-source-confirm">
+            {ar ? 'إزالة المصدر' : 'Remove source'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }

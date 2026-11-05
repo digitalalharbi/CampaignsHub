@@ -264,6 +264,18 @@ final class ClientPortalController
 
         // The same rule the password path applies: a second credential with a laxer opinion about suspension is a way around it.
         $account = $v->channel === 'email' ? User::query()->whereRaw('lower(email) = ?', [Str::lower((string) $v->destination)])->first() : null;
+
+        /*
+         * A code sent to an address nobody proved is not proof of the account (SIGNUP-VERIFY-POLICY-001). That address was typed at signup
+         * with no check, so its inbox may be a stranger's. The token is refused too, not only the session: `ClientPortalIdentity` resolves
+         * a token's address to that account's client-portal membership. Same answer as a wrong code, so this is no oracle.
+         */
+        if ($account?->emailUnprovenByPolicy() === true) {
+            $this->auditPortalLogin($request, 'auth.portal_code.unproven_address', ['destination' => (string) $v->destination], $account);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+
         abort_if($account !== null && ($account->disabled_at !== null || (! $account->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($account))), 403, __('auth.unavailable'));
 
         $tenant = $v->channel === 'email'

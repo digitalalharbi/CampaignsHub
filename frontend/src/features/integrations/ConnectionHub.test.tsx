@@ -90,7 +90,7 @@ describe('the Connection Hub', () => {
     expect(await screen.findByTestId('hub-accounts-c-1')).toHaveTextContent('1 of 17 accounts')
   })
 
-  it('names who authorised it rather than the connection record', async () => {
+  it('names who added it (the workspace user) as the secondary line', async () => {
     hub.data = { connections: [connection()], connectable: [] }
 
     renderWithProviders(<IntegrationsPage />)
@@ -104,7 +104,7 @@ describe('the Connection Hub', () => {
 
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('hub-open-c-1')).toHaveTextContent('Authoriser not recorded')
+    expect(await screen.findByTestId('hub-open-c-1')).toHaveTextContent('Added by: not recorded')
   })
 
   /**

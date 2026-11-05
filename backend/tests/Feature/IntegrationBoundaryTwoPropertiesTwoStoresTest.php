@@ -8,13 +8,16 @@ use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Jobs\ProcessWebhookEventJob;
 use App\Domains\Integrations\Measurement\Ga4NotSelected;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Measurement\Ga4PropertySync;
 use App\Domains\Integrations\Measurement\Jobs\SyncMeasurementPropertyJob;
 use App\Domains\Integrations\Measurement\MeasurementDailyMetric;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
+use App\Domains\Integrations\Webhooks\WebhookEventProcessor;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -91,6 +94,14 @@ final class IntegrationBoundaryTwoPropertiesTwoStoresTest extends TestCase
 
     public function test_only_the_selected_propertys_data_is_requested_stored_and_shown(): void
     {
+        /*
+         * The provider answers with the property's own day (Riyadh) and the stored row is read by the
+         * application's day (UTC). Between 21:00 and 24:00 UTC those are two different dates, and the
+         * test failed for three hours every night. The clock is held at an hour where both agree; the
+         * boundary between the two days is not what this test is about.
+         */
+        Carbon::setTestNow(Carbon::now('UTC')->setTime(9, 0));
+
         [$selected, $other] = $this->twoProperties();
         Http::preventStrayRequests();
         Http::fake(function (Request $r) {
@@ -243,14 +254,36 @@ final class IntegrationBoundaryTwoPropertiesTwoStoresTest extends TestCase
             ], $body)->assertOk();
         };
 
+        /*
+         * INTEG-WEBHOOK-ENGINE-001 changed HOW a delivery becomes a read: it is recorded and handed to the queue as a
+         * `ProcessWebhookEventJob`, and the worker reads the store itself; no `SyncStoreJob` is pushed any more. The
+         * boundary is the same and is asserted where it now lives: the worker for the unselected store's delivery
+         * reaches no provider and ends `ignored_unbound`; the selected store's delivery is one job and one read.
+         */
+        Http::preventStrayRequests();
+        Http::fake(fn (Request $r) => str_contains($r->url(), '/store/info')
+            ? Http::response(['data' => ['id' => 'store_1', 'name' => 'Main store']])
+            : Http::response(['data' => [], 'pagination' => ['currentPage' => 1, 'totalPages' => 1]]));
+        $work = function (string $eventId): IntegrationWebhookEvent {
+            $event = IntegrationWebhookEvent::query()->where('provider', 'salla')->where('external_event_id', $eventId)->firstOrFail();
+            (new ProcessWebhookEventJob((string) $event->getKey()))->handle(app(WebhookEventProcessor::class));
+
+            return $event->refresh();
+        };
+
         $deliver('store_2', 'evt-other');
         Queue::assertNotPushed(SyncStoreJob::class);
-        $event = IntegrationWebhookEvent::query()->where('provider', 'salla')->where('external_event_id', 'evt-other')->first();
-        $this->assertNotSame('processed', $event?->status, 'a delivery for an unselected store was processed as if it fed a project');
+        $event = $work('evt-other');
+        $this->assertSame(IntegrationWebhookEvent::IGNORED_UNBOUND, $event->status, 'a delivery for an unselected store was processed as if it fed a project');
+        $this->assertCount(0, Http::recorded(), 'a delivery for the unselected store reached the provider');
 
         $deliver('store_1', 'evt-main');
-        Queue::assertPushed(SyncStoreJob::class, 1);
-        Queue::assertPushed(SyncStoreJob::class, fn (SyncStoreJob $job) => str_contains($job->uniqueId(), (string) $selected->id));
-        Queue::assertNotPushed(SyncStoreJob::class, fn (SyncStoreJob $job) => str_contains($job->uniqueId(), (string) $other->id));
+        Queue::assertPushed(ProcessWebhookEventJob::class, 2); // one per delivery, never one per store
+        Queue::assertNotPushed(SyncStoreJob::class);
+        $this->assertSame(IntegrationWebhookEvent::PROCESSED, $work('evt-main')->status);
+        $this->assertGreaterThan(0, count(Http::recorded()), 'the selected store was not read');
+        // A store run is recorded per authorisation and project, not per store: exactly one, for the selected store's project.
+        $this->assertSame([(string) $this->project->id], IntegrationSyncRun::withoutGlobalScopes()->where('type', 'commerce')->pluck('project_id')->map(fn ($v) => (string) $v)->all(), 'the two deliveries did not end as exactly one read');
+        $this->assertStringNotContainsString('store_2', (string) json_encode(collect(Http::recorded())->map(fn (array $p): string => $p[0]->url().' '.$p[0]->body())->all()), 'the unselected store was named to the provider');
     }
 }

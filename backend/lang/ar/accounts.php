@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 return [
     'no_mobile_on_file' => 'لا يوجد رقم جوال مسجّل على هذا الطلب.',
+    'signup_capacity_reached' => 'التسجيل متوقف مؤقتًا لبلوغ حد الطلبات اليومي. حاول لاحقًا.',
 
     // 503 rather than 400: the request was fine, the capability is not switched on. Said as a state
     // of the platform, not as a mistake the caller made.

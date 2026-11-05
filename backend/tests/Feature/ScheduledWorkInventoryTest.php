@@ -41,6 +41,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
         'automation:evaluate',
         'commerce:sync',
+        // INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation, listed always and run only when WEBHOOK_RECONCILE_ENABLED is set.
+        'webhooks:reconcile',
         // SALLA-ONBOARD-001 — a Salla store uninstalled 30 days ago has its synced data removed (the retention promised to the merchant).
         'commerce:purge-uninstalled',
         // TIKTOK-MEDIA-002 — covers into our own storage, nightly at 03:30, after the structure sweep refreshed the links.
@@ -62,6 +64,8 @@ final class ScheduledWorkInventoryTest extends TestCase
          */
         'integrations:close-abandoned-runs',
         'integrations:prune-raw',
+        // INTEG-SOURCE-REMOVAL-001 — inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED; hides, never deletes.
+        'integrations:sweep-abandoned',
         'integrations:refresh-tokens',
         // Scheduled TWICE under one name (PERF-SYNC-ISOLATION-001): the half-hourly 3-day sweep and the 03:50 `--days=14` pass.
         'integrations:sync',

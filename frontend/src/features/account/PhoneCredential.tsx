@@ -157,7 +157,20 @@ export function PhoneCredentialCard() {
 
           {done && <Alert severity="positive" title={ar ? 'تم' : 'Done'}>{done}</Alert>}
 
-          {step === 'idle' ? (
+          {data.code_available === false ? (
+            <div data-testid="phone-code-off">
+              <Alert severity="info" title={ar ? 'إثبات الرقم متوقف حاليًا' : 'Proving a number is turned off'}>
+                {ar
+                  ? 'أوقفت إدارة المنصة إرسال رموز إثبات الجوال. يبقى الرقم الموثّق كما هو، وتبقى استعادة كلمة المرور عبر البريد.'
+                  : 'The platform administrator has turned off codes for proving a number. A confirmed number stays confirmed, and password recovery by email still works.'}
+              </Alert>
+              {data.confirmed && (
+                <Button data-testid="phone-revoke" className="mt-3" variant="ghost" onClick={revoke} loading={a.revoke.isPending}>
+                  {ar ? 'إيقاف استخدامه لتسجيل الدخول' : 'Stop using it to sign in'}
+                </Button>
+              )}
+            </div>
+          ) : step === 'idle' ? (
             <div className="space-y-4">
               <PhoneField
                 id="phone-credential-number"

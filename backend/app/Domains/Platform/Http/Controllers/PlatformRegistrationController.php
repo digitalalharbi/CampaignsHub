@@ -4,19 +4,27 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\AdvanceRegistration;
+use App\Domains\Accounts\Services\RegistrationDecisionService;
 use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -39,6 +47,8 @@ final class PlatformRegistrationController extends Controller
         private readonly RegistrationPolicy $policy,
         private readonly AuditLogger $audit,
         private readonly SubscriptionNotifier $notify,
+        private readonly RegistrationVerificationSettings $verificationSettings,
+        private readonly RegistrationDecisionService $decisions,
     ) {}
 
     /** GET /api/v1/admin/registrations */
@@ -104,21 +114,22 @@ final class PlatformRegistrationController extends Controller
         $this->tenants->enterPlatformScope();
         $data = $request->validate(['note' => ['sometimes', 'nullable', 'string', 'max:2000']]);
 
-        $this->refuseIfSettled($registration);
-
-        $registration->forceFill(['info_requested_at' => null])->save();
-
-        $registration = $this->advance->approved(
-            $registration->refresh(),
-            reviewerId: $request->user()?->id,
-            note: $data['note'] ?? null,
-        );
+        // The plain answer on the decision form: approved, and the payment is still owed.
+        $result = $this->decisions->decide($registration, [
+            'outcome' => RegistrationDecision::PAYMENT_REQUIRED,
+            'reason' => $data['note'] ?? 'Approved: payment required.',
+            'note' => $data['note'] ?? null,
+        ], $request->user());
+        $registration = $result['registration'];
 
         return ApiResponse::success(
-            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration)],
-            $registration->isProvisioned()
-                ? 'Approved. The workspace has been created.'
-                : 'Approved. The application is now waiting on payment.',
+            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration), 'no_change' => $result['no_change']],
+            match (true) {
+                // Said in words: an unchanged screen after a click reads as a broken button.
+                $result['no_change'] => 'Already approved. Nothing changed: what is outstanding is the payment.',
+                $registration->isProvisioned() => 'Approved. The workspace has been created.',
+                default => 'Approved. The application is now waiting on payment.',
+            },
         );
     }
 
@@ -132,7 +143,9 @@ final class PlatformRegistrationController extends Controller
 
         $this->refuseIfSettled($registration);
 
-        $registration = $this->advance->rejected($registration, $data['reason'], $request->user()?->id);
+        $registration = $this->decisions->decide($registration, [
+            'outcome' => RegistrationDecision::REJECT, 'reason' => $data['reason'],
+        ], $request->user())['registration'];
 
         return ApiResponse::success(['registration' => $this->row($registration, $request)], 'Application rejected.');
     }
@@ -182,6 +195,104 @@ final class PlatformRegistrationController extends Controller
         );
     }
 
+    /** @return array<string, mixed> */
+    private function decisionInput(Request $request): array
+    {
+        return $request->validate([
+            'outcome' => ['required', 'string', 'in:'.implode(',', [...RegistrationDecision::APPROVALS, RegistrationDecision::REQUEST_INFO, RegistrationDecision::DEFER, RegistrationDecision::REJECT])],
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+            'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'idempotency_key' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'expected_decision_id' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'discount_percent' => ['required_if:outcome,'.RegistrationDecision::DISCOUNT, 'nullable', 'integer', 'min:1', 'max:99'],
+            'trial_ends_on' => ['required_if:outcome,'.RegistrationDecision::TRIAL, 'nullable', 'date'],
+            'confirm_waiver' => ['sometimes', 'boolean'],
+            'confirm_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'confirm_complimentary' => ['sometimes', 'boolean'],
+            'evidence' => ['required_if:outcome,'.RegistrationDecision::EXTERNAL_SETTLEMENT, 'nullable', 'array'],
+            'evidence.reference' => ['sometimes', 'string', 'max:190'],
+            'evidence.amount' => ['sometimes', 'numeric', 'min:0'],
+            'evidence.currency' => ['sometimes', 'string', 'size:3'],
+            'evidence.paid_on' => ['sometimes', 'date', 'before_or_equal:today'],
+            'evidence.note' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'access' => ['sometimes', 'nullable', 'array'],
+            'access.mode' => ['sometimes', 'string', 'in:new_workspace,join_existing'],
+            'access.portal' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'access.modules' => ['sometimes', 'nullable', 'array'],
+            'access.modules.*' => ['string', 'max:64'],
+            'access.tenant_id' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'access.role' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'access.project_ids' => ['sometimes', 'nullable', 'array'],
+            'access.project_ids.*' => ['string', 'uuid'],
+            'access.client_ids' => ['sometimes', 'nullable', 'array'],
+            'access.client_ids.*' => ['string', 'uuid'],
+        ]);
+    }
+
+    /** GET /api/v1/admin/tenants/{tenant}/decision-targets — what a person joining this workspace could be given. */
+    public function decisionTargets(Tenant $tenant): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $tenantId = (string) $tenant->getKey();
+
+        return ApiResponse::success([
+            'roles' => Role::query()->where('tenant_id', $tenantId)->where('slug', '!=', 'tenant-owner')->get(['slug', 'name'])
+                ->map(fn (Role $r) => ['slug' => $r->slug, 'name' => $r->name])->values()->all(),
+            'projects' => Project::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->get(['id', 'name'])
+                ->map(fn (Project $p) => ['id' => (string) $p->id, 'name' => $p->name])->values()->all(),
+            'clients' => ClientWorkspace::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->get(['id', 'name'])
+                ->map(fn (ClientWorkspace $c) => ['id' => (string) $c->id, 'name' => $c->name])->values()->all(),
+        ], 'Decision targets.');
+    }
+
+    /** POST /api/v1/admin/registrations/{registration}/decision/preview — what a decision would do. Writes nothing. */
+    public function previewDecision(Request $request, RegistrationRequest $registration): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+
+        return ApiResponse::success($this->decisions->preview($registration, $this->decisionInput($request)), 'Decision preview.');
+    }
+
+    /** POST /api/v1/admin/registrations/{registration}/decision — the one decision form (SIGNUP-DECISION-001). */
+    public function decide(Request $request, RegistrationRequest $registration): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $input = $this->decisionInput($request);
+
+        if ($input['outcome'] === RegistrationDecision::REQUEST_INFO) {
+            $request->merge(['note' => $input['reason']]);
+
+            return $this->requestInfo($request, $registration);
+        }
+
+        $result = $this->decisions->decide($registration, $input, $request->user());
+        $registration = $result['registration']->refresh();
+
+        return ApiResponse::success([
+            'registration' => $this->row($registration, $request),
+            'policy' => $this->policy->for($registration),
+            'decision' => $result['no_change'] && $result['decision'] === null ? null : [
+                'id' => (string) $result['decision']?->getKey(), 'outcome' => $result['decision']?->outcome, 'status' => $result['decision']?->status,
+            ],
+            'replayed' => $result['replayed'],
+            'no_change' => $result['no_change'],
+        ], $result['no_change'] ? 'Already approved. Nothing changed: what is outstanding is the payment.' : 'The decision has been recorded.');
+    }
+
+    /** POST /api/v1/admin/registrations/{registration}/decisions/{decision}/verify-settlement */
+    public function verifySettlement(Request $request, RegistrationRequest $registration, RegistrationDecision $decision): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:2000']]);
+
+        $result = $this->decisions->verifySettlement($registration, $decision, $request->user(), $data['reason']);
+
+        return ApiResponse::success([
+            'registration' => $this->row($result['registration']->refresh(), $request),
+            'policy' => $this->policy->for($result['registration']),
+        ], 'The settlement has been confirmed.');
+    }
+
     /**
      * PATCH /api/v1/admin/registrations/{registration}
      *
@@ -204,6 +315,25 @@ final class PlatformRegistrationController extends Controller
         ]);
 
         $this->refuseIfSettled($registration);
+
+        /*
+         * A commercial concession is a scoped decision now (SIGNUP-DECISION-001). These three only ever stored a value that
+         * nothing read, or a bare `false` with no plan, period or amount, so they are refused rather than appearing to work.
+         */
+        abort_if(
+            ($data['requires_payment'] ?? null) === false
+                || (int) ($data['discount_percent'] ?? 0) > 0
+                || (int) ($data['trial_days'] ?? 0) > 0,
+            422,
+            'Discounts, fee waivers and trials are recorded through the registration decision, with their exact terms.',
+        );
+
+        // A mobile gate with no number on file is a step nobody could ever finish.
+        abort_if(
+            ($data['requires_mobile'] ?? false) === true && $registration->phone === null,
+            422,
+            __('accounts.no_mobile_on_file'),
+        );
 
         $concessions = $registration->review_concessions ?? [];
         $overrides = (array) ($concessions['policy'] ?? []);
@@ -246,6 +376,44 @@ final class PlatformRegistrationController extends Controller
     }
 
     /**
+     * POST /api/v1/admin/registrations/{registration}/reevaluate-verification
+     *
+     * An application keeps the verification policy it was opened under (SIGNUP-VERIFY-POLICY-001). This is the one way
+     * to move it to today's, for this application only and with a reason: a global switch never does it silently.
+     */
+    public function reevaluateVerification(Request $request, RegistrationRequest $registration): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:2000']]);
+
+        $this->refuseIfSettled($registration);
+
+        $snapshot = $this->verificationSettings->snapshot();
+
+        $registration = DB::transaction(function () use ($registration, $snapshot, $data, $request): RegistrationRequest {
+            /** @var RegistrationRequest $locked */
+            $locked = RegistrationRequest::query()->lockForUpdate()->findOrFail($registration->getKey());
+            $this->refuseIfSettled($locked);
+
+            // A mobile gate with no number on file is a step nobody could ever finish, so it is refused rather than made.
+            $probe = clone $locked;
+            $probe->effective_policy = $snapshot;
+            abort_if(
+                $locked->phone === null && $this->policy->for($probe)['requires_mobile'],
+                422,
+                __('accounts.no_mobile_on_file'),
+            );
+
+            return $this->advance->reevaluateVerification($locked, $snapshot, $data['reason'], $request->user()?->id);
+        });
+
+        return ApiResponse::success(
+            ['registration' => $this->row($registration, $request), 'policy' => $this->policy->for($registration)],
+            'This application now follows the current verification policy.',
+        );
+    }
+
+    /**
      * A decided application is not re-decidable here.
      *
      * Approving something that already has a workspace would run the whole path again; rejecting one
@@ -282,6 +450,15 @@ final class PlatformRegistrationController extends Controller
             'reviewed_at' => $registration->reviewed_at?->toIso8601String(),
             'reviewed_by' => $registration->reviewed_by,
             'concessions' => $registration->review_concessions,
+            'effective_policy' => $registration->effective_policy,
+            // Every decision, newest first, so a second administrator can find a settlement waiting on them.
+            'decisions' => RegistrationDecision::query()->where('registration_request_id', $registration->getKey())
+                ->latest('created_at')->limit(20)->get()
+                ->map(fn (RegistrationDecision $d) => [
+                    'id' => (string) $d->getKey(), 'outcome' => $d->outcome, 'status' => $d->status,
+                    'actor_id' => $d->actor_id, 'reason' => $d->reason, 'terms' => $d->terms, 'access' => $d->access,
+                    'verified_by' => $d->verified_by, 'created_at' => $d->created_at?->toIso8601String(),
+                ])->all(),
             'created_at' => $registration->created_at?->toIso8601String(),
             'tenant_id' => $registration->tenant_id,
         ];

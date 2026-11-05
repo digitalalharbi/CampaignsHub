@@ -6,12 +6,15 @@ namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Jobs\ProcessWebhookEventJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
+use App\Domains\Integrations\Webhooks\WebhookEventProcessor;
+use App\Domains\Integrations\Webhooks\WebhookSyncRunner;
+use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -78,14 +81,9 @@ final class WebhookAccountHeldByTwoTenantsTest extends TestCase
     {
         $this->signed(['entry' => [['id' => self::SHARED_ACCOUNT]], 'event_id' => 'evt-shared-1'])->assertOk();
 
-        $dispatched = [];
-        Queue::assertPushed(SyncAccountMetricsJob::class, function (SyncAccountMetricsJob $job) use (&$dispatched): bool {
-            $dispatched[] = $job->accountId;
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
+        $dispatched = $this->drain();
 
-            return true;
-        });
-
-        sort($dispatched);
         $expected = [$this->agencyCopy->getKey(), $this->advertiserCopy->getKey()];
         sort($expected);
 
@@ -98,7 +96,8 @@ final class WebhookAccountHeldByTwoTenantsTest extends TestCase
 
         $event = IntegrationWebhookEvent::query()->firstOrFail();
 
-        $this->assertSame('processed', $event->status);
+        // INTEG-WEBHOOK-ENGINE-001 — a 200 means recorded; «processed» is the worker's word, after the syncs ran.
+        $this->assertSame('queued', $event->status);
         $this->assertNull($event->tenant_id, 'a delivery two tenants are entitled to must not be filed under one of them');
         $this->assertNull($event->external_account_id);
     }
@@ -111,8 +110,8 @@ final class WebhookAccountHeldByTwoTenantsTest extends TestCase
 
         $this->signed(['entry' => [['id' => self::SHARED_ACCOUNT]], 'event_id' => 'evt-shared-3'])->assertOk();
 
-        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
-        Queue::assertPushed(SyncAccountMetricsJob::class, fn (SyncAccountMetricsJob $job): bool => $job->accountId === $this->agencyCopy->getKey());
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
+        $this->assertSame([$this->agencyCopy->getKey()], $this->drain());
     }
 
     public function test_an_account_held_by_one_tenant_is_still_attributed_to_that_tenant(): void
@@ -125,7 +124,30 @@ final class WebhookAccountHeldByTwoTenantsTest extends TestCase
 
         $this->assertSame($only->tenant_id, $event->tenant_id);
         $this->assertSame($only->getKey(), $event->external_account_id);
-        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
+        $this->assertSame([$only->getKey()], $this->drain());
+    }
+
+    /**
+     * Run the worker for the one recorded delivery with the metrics syncer faked, and say which accounts it synced.
+     *
+     * @return list<string>
+     */
+    private function drain(): array
+    {
+        $synced = [];
+        $this->mock(WebhookSyncRunner::class, function ($m) use (&$synced): void {
+            $m->shouldReceive('run')->andReturnUsing(function (ExternalAccount $a) use (&$synced): MetricSyncRun {
+                $synced[] = (string) $a->getKey();
+
+                return new MetricSyncRun(['status' => 'success']);
+            });
+        });
+
+        app(WebhookEventProcessor::class)->process((string) IntegrationWebhookEvent::query()->firstOrFail()->getKey());
+        sort($synced);
+
+        return $synced;
     }
 
     // ── fixture ────────────────────────────────────────────────────────────────────────────────────
