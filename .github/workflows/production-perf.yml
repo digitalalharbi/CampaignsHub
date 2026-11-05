@@ -54,6 +54,16 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS5"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'proj' as q, left(p.id::text,8) id, p.name, w.name ws from projects p left join client_workspaces w on w.id=p.client_workspace_id where p.id::text like any (array['e9268c59%','c36b2470%','2afc450d%','a8dcd0a4%']); ROLLBACK;
+            BEGIN READ ONLY; select 'campaigns' as q, left(c.project_id::text,8) proj, left(c.external_account_id::text,8) acct, c.status, count(*) n from external_campaigns c join external_accounts a on a.id=c.external_account_id where a.provider='openai_ads' group by 2,3,4 order by 2,3,4; ROLLBACK;
+            BEGIN READ ONLY; select 'cmp_spend' as q, left(m.project_id::text,8) proj, left(c.external_id::text,10) cmp, m.original_currency, round(sum(m.original_amount)::numeric,2) orig, round(sum(m.value)::numeric,2) usd from daily_metrics m join external_campaigns c on c.id=m.external_campaign_id where m.provider='openai_ads' and m.metric_key='spend' and m.metric_date between '2026-11-01' and '2026-11-05' group by 2,3,4 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'budget_cols' as q, string_agg(column_name, ',') from information_schema.columns where table_name='external_campaigns' and (column_name like '%budget%' or column_name like '%currency%'); ROLLBACK;
+            SQL
+            echo "== END FACTS5"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
