@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
+use App\Domains\Integrations\MetaCandidate\MetaAtomicReconnect;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateRoundTrip;
 use App\Domains\Integrations\MetaCandidate\MetaSaasTestWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -234,6 +235,62 @@ final class AdPlatformOAuthController extends Controller
         ], 'Meta apps for new connections.');
     }
 
+    /**
+     * POST /integrations/meta/connections/{connection}/reconnect — start an ATOMIC reconnect of an existing Meta connection.
+     *
+     * Always through the primary app (or the connection's own app, with the reason stated, while the SaaS app is not primary). Writes
+     * nothing to the connection: it only issues a single-use state bound to it. See {@see MetaAtomicReconnect}.
+     */
+    public function reconnectMeta(Request $request, string $connection, MetaAtomicReconnect $reconnect): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+        $row = ProviderConnection::query()->where('provider', 'meta')->findOrFail($connection);
+
+        try {
+            $started = $reconnect->start($row, $request->user()->getKey());
+        } catch (\RuntimeException $e) {
+            return ApiResponse::error(
+                message: 'This Meta connection cannot be reconnected right now.',
+                errors: ['connection' => [$e->getMessage()]],
+                meta: ['status' => $e->getMessage(), 'provider' => 'meta'],
+                status: 422,
+            );
+        }
+
+        return ApiResponse::success([
+            'provider' => 'meta',
+            'connection_id' => (string) $row->getKey(),
+            'app_profile' => $started['app_profile'],
+            'keeps_own_app' => $started['keeps_own_app'],
+            'reason' => $started['reason'],
+            'authorization_url' => $started['authorization_url'],
+            'expires_in_minutes' => (int) config('ad_platforms.state_ttl_minutes', 15),
+        ], 'Authorization URL issued.');
+    }
+
+    /** @param array<string,mixed> $record */
+    private function completeReconnect(Request $request, array $record, TenantContext $tenant, AuditLogger $audit): RedirectResponse
+    {
+        $tenant->setTenantId((string) $record['tenant_id']);
+        $connectionId = (string) $record['reconnect_connection_id'];
+
+        if ($request->has('error') || (string) $request->query('code', '') === '') {
+            return $this->back('meta', 'reconnect_failed', 'denied');
+        }
+
+        $result = app(MetaAtomicReconnect::class)->complete($record, (string) $request->query('code'));
+
+        $audit->log(
+            action: $result['ok'] ? 'integration.connection.reconnected_atomic' : 'integration.connection.reconnect_refused',
+            entityType: ProviderConnection::class,
+            entityId: $connectionId,
+            after: ['result' => $result['code'], 'app_profile' => (string) $record['profile']],
+        );
+
+        // Only a success reopens the connection's flow; a refusal lands on the page with its reason and nothing to resume.
+        return $this->back('meta', $result['ok'] ? 'reconnected' : 'reconnect_failed', $result['ok'] ? null : $result['code'], connectionId: $result['ok'] ? $connectionId : null);
+    }
+
     public function callback(Request $request, string $provider, TenantContext $tenant, AuditLogger $audit): RedirectResponse
     {
         $creds = $this->credentialsOr404($provider);
@@ -255,6 +312,11 @@ final class AdPlatformOAuthController extends Controller
                 return redirect()->away(Frontend::origin().'/admin/settings/integrations/'.$page.'?'.http_build_query([
                     'outcome' => $run === null ? 'invalid_state' : $run->status,
                 ]));
+            }
+
+            // META-MULTI-APP-001 — an atomic reconnect has its own all-or-nothing completion; it never reaches the open/refresh path below.
+            if ($record !== null && isset($record['reconnect_connection_id'])) {
+                return $this->completeReconnect($request, $record, $tenant, $audit);
             }
 
             if ($request->has('error')) {

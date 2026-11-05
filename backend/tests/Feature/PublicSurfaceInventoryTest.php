@@ -99,6 +99,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/salla/enter',
         'GET api/v1/salla/open',
         'GET api/v1/subscriptions/invoices/shared/{token}',
+        // The SaaS Meta app's own webhook endpoint: bound to that app's secret only, so each app has its own callback URL.
+        'GET api/v1/webhooks/ads/meta/saas',
         'GET api/v1/webhooks/{kind}/{provider}',
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
@@ -142,6 +144,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/requests/verify/check',
         'POST api/v1/requests/verify/start',
         'POST api/v1/support/tickets',
+        // The SaaS Meta app's own webhook endpoint: see the GET above. Unsigned or wrongly signed deliveries are refused.
+        'POST api/v1/webhooks/ads/meta/saas',
         'POST api/v1/webhooks/data-deletion/{provider}',
         'POST api/v1/webhooks/{kind}/{provider}',
     ];

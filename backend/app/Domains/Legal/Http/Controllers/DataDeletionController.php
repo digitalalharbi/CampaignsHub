@@ -47,6 +47,15 @@ use Illuminate\Validation\Rule;
  */
 final class DataDeletionController extends Controller
 {
+    /**
+     * A signed_request whose `issued_at` is older than this is a replay; 24 hours. `issued_at` sits INSIDE the signed payload, so it
+     * cannot be altered without breaking the signature; Meta does not guarantee it, so an absent one means no window (the
+     * (provider, user id) idempotency below still protects). Inbound webhooks have no signed timestamp and get no age limit.
+     */
+    public const SIGNED_REQUEST_MAX_AGE_SECONDS = 86400;
+
+    public const SIGNED_REQUEST_CLOCK_SKEW_SECONDS = 300;
+
     public function __construct(
         private readonly DeletionVerification $verification,
         private readonly DeletionBlockers $blockers,
@@ -230,7 +239,7 @@ final class DataDeletionController extends Controller
 
         $payload = $this->verifiedPayload((string) $request->input('signed_request'), $secret);
 
-        if ($payload === null) {
+        if ($payload === null || ! $this->payloadIsCurrentAndFor($payload, $provider)) {
             return ApiResponse::error(__('api.unauthenticated'), status: 401);
         }
 
@@ -318,6 +327,44 @@ final class DataDeletionController extends Controller
         $payload = json_decode($payloadJson, true);
 
         return is_array($payload) ? $payload : null;
+    }
+
+    /**
+     * META-MULTI-APP-001 — what the SIGNED payload itself must agree with, beyond its signature.
+     *
+     * - `issued_at` (Meta supplies it as a unix time): a request older than {@see self::SIGNED_REQUEST_MAX_AGE_SECONDS}, or issued in the
+     *   future, is a replay or a forgery. Absent, it is not enforced — only what Meta sends can be required.
+     * - `algorithm`, when present, must be HMAC-SHA256.
+     * - `app_id`, when present, must be THIS endpoint's app: the secret already bound the endpoint to one app, and this refuses a payload
+     *   that names another.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function payloadIsCurrentAndFor(array $payload, string $provider): bool
+    {
+        if (isset($payload['algorithm']) && strtoupper((string) $payload['algorithm']) !== 'HMAC-SHA256') {
+            return false;
+        }
+
+        if (isset($payload['issued_at'])) {
+            if (! is_numeric($payload['issued_at'])) {
+                return false;
+            }
+            $age = time() - (int) $payload['issued_at'];
+            if ($age > self::SIGNED_REQUEST_MAX_AGE_SECONDS || $age < -self::SIGNED_REQUEST_CLOCK_SKEW_SECONDS) {
+                return false;
+            }
+        }
+
+        if (isset($payload['app_id'])) {
+            $appId = $provider === 'meta-saas'
+                ? app(MetaSaasCredentials::class)->value('client_id')
+                : PlatformCredentials::forMeta(MetaCredentialProfile::Live)->get('client_id');
+
+            return is_string($appId) && hash_equals($appId, (string) $payload['app_id']);
+        }
+
+        return true;
     }
 
     private function base64UrlDecode(string $value): ?string

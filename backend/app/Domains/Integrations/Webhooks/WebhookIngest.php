@@ -43,7 +43,7 @@ final class WebhookIngest
      * @param  array<string,mixed>  $payload
      * @return array{event: IntegrationWebhookEvent, duplicate: bool, accounts: Collection<int, ExternalAccount>}
      */
-    public function record(string $provider, string $rawBody, array $payload, bool $verified): array
+    public function record(string $provider, string $rawBody, array $payload, bool $verified, ?string $app = null): array
     {
         $definition = ProviderCatalogue::get($provider);
         $externalId = $this->accountIdIn($payload);
@@ -72,6 +72,12 @@ final class WebhookIngest
                 ->orderBy('id')
                 ->get();
 
+        // META-MULTI-APP-001 — a delivery on a per-app endpoint concerns only the accounts that app's connections hold.
+        if ($app === 'saas') {
+            $accounts = $accounts->filter(static fn (ExternalAccount $a): bool => ProviderConnection::withoutGlobalScopes()
+                ->whereKey($a->provider_connection_id)->where('app_profile', 'saas')->exists())->values();
+        }
+
         $account = $accounts->count() === 1 ? $accounts->first() : null;
 
         $connection = $account === null
@@ -83,7 +89,8 @@ final class WebhookIngest
             'kind' => $definition->kind->value,
             'topic' => $this->topicIn($payload),
             'external_event_id' => $this->eventIdIn($payload),
-            'fingerprint' => $this->fingerprint($payload, $rawBody),
+            // A per-app endpoint salts the key with its app so the same body on two apps is two deliveries (64 chars either way).
+            'fingerprint' => $app === null ? $this->fingerprint($payload, $rawBody) : hash('sha256', $app.'|'.$this->fingerprint($payload, $rawBody)),
             'tenant_id' => $account?->tenant_id ?? $connection?->tenant_id,
             'provider_connection_id' => $connection?->getKey(),
             'external_account_id' => $account?->getKey(),

@@ -53,6 +53,18 @@ Route::prefix('webhooks/{kind}')->name('webhooks.')->group(function (): void {
         ->middleware('throttle:600,1')->name('receive');
 });
 
+/*
+ * META-MULTI-APP-001 — the SaaS Meta app's OWN callback URL (`/webhooks/ads/meta/saas`). Meta lets every app configure its own, so the
+ * endpoint — not the set of known secrets — says which app a delivery is for: the original `/webhooks/ads/meta` stays bound to the Live
+ * app exactly as before, and this one verifies against the SaaS app's secret ONLY. Same handler, throttles and CSRF exemption.
+ */
+Route::get('webhooks/ads/meta/saas', [IntegrationWebhookController::class, 'verify'])
+    ->defaults('kind', 'ads')->defaults('provider', 'meta')->defaults('app', 'saas')
+    ->middleware('throttle:60,1')->name('webhooks.saas.verify');
+Route::post('webhooks/ads/meta/saas', [IntegrationWebhookController::class, 'receive'])
+    ->defaults('kind', 'ads')->defaults('provider', 'meta')->defaults('app', 'saas')
+    ->middleware('throttle:600,1')->name('webhooks.saas.receive');
+
 // Tenant-level connector status board + provider connections.
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     Route::prefix('integrations')->name('integrations.')->group(function (): void {
@@ -77,6 +89,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
         // number written here.
         // META-SAAS-APP-001 — which Meta app a new connection may use (declared before `{provider}` routes; GET, so no overlap).
         Route::get('meta/apps', [AdPlatformOAuthController::class, 'metaApps'])->name('meta.apps');
+        // META-MULTI-APP-001 — atomic reconnect of an existing Meta connection through the primary app (writes nothing at start).
+        Route::post('meta/connections/{connection}/reconnect', [AdPlatformOAuthController::class, 'reconnectMeta'])->middleware('throttle:10,1')->name('meta.reconnect');
         Route::post('{provider}/oauth/start', [AdPlatformOAuthController::class, 'start'])->name('oauth.start');
 
         /*

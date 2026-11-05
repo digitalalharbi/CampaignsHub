@@ -28,6 +28,7 @@ use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
+use App\Domains\Integrations\Console\MetaAppAuditCommand;
 use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
@@ -175,6 +176,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
         GoogleAdsAccessCommand::class,
+        MetaAppAuditCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what

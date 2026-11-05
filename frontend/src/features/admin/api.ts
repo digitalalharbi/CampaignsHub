@@ -1066,6 +1066,8 @@ export interface MetaCandidateState {
   /** META-SAAS-APP-001 — the SaaS app only: which app NEW connections use, and whether the SaaS app may be chosen yet. */
   routing?: { default_for_new_connections: 'live' | 'saas'; eligible: boolean; reason: string | null }
   connections_by_app?: { live: number; saas: number }
+  /** META-MULTI-APP-001 — every registered Meta app with its role, public App ID and verified / unverified connection counts. */
+  registry?: MetaAppRegistryState
   /** META-SAAS-APP-001 — the SaaS app only: each readiness item and the status the server read from its own evidence. */
   readiness?: MetaSaasReadinessItem[]
   /** META-SAAS-APP-001 — the isolated test workspace and its journey, each step read from real rows. */
@@ -1073,6 +1075,15 @@ export interface MetaCandidateState {
   /** META-SAAS-APP-001 — Live / SaaS Test / SaaS Primary, Primary's preconditions and the preview of what it changes. */
   modes?: MetaSaasModesState
 }
+
+export type MetaAppRole = 'primary' | 'legacy_sync_only' | 'not_primary' | 'test_only'
+export interface MetaRegisteredApp {
+  profile: 'live' | 'saas' | 'candidate'; role: MetaAppRole
+  /** The public App ID only; never a secret. */
+  app_id: string | null; configured: boolean
+  connections: number; verified_connections: number; unverified_connections: number
+}
+export interface MetaAppRegistryState { apps: MetaRegisteredApp[]; unattributed: number }
 
 export interface MetaSaasModesState {
   current: 'live' | 'saas_test' | 'saas_primary'

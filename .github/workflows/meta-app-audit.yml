@@ -1,0 +1,51 @@
+name: Meta App Audit
+
+# META-MULTI-APP-001 — asks Meta, connection by connection, which app issued each stored token (debug_token).
+#
+# Manual only. `apply` is OFF by default and the run is then STRICTLY read-only: GET calls to Meta and SELECTs, no database write
+# of any kind. Ticking `apply` records the verified issuing app on each VERIFIED connection, one at a time; it needs the Owner's
+# explicit approval, given after reading a dry run. Unresolved connections are listed and never touched, and no token, profile or
+# secret is ever changed or printed. The input is a VALUE passed to a fixed command.
+
+on:
+  workflow_dispatch:
+    inputs:
+      connection:
+        description: 'Audit only this connection id (leave empty for every Meta connection)'
+        required: false
+        default: ''
+      apply:
+        description: 'Record verified issuing apps. Needs the Owner''s explicit approval; leave OFF for the read-only report'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Audit Meta connections on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          ONLY: ${{ inputs.connection }}
+          MODE: ${{ inputs.apply && '--apply' || '--dry-run' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: ONLY,MODE
+          script: |
+            set -Eeuo pipefail
+            cd /opt/campaignshub
+            ARGS="${MODE}"
+            if [ -n "${ONLY}" ]; then
+              ARGS="${ARGS} --connection=${ONLY}"
+            fi
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan integrations:meta-app-audit ${ARGS}
