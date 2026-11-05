@@ -13,6 +13,7 @@ use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
@@ -172,6 +173,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->name('projects.integrations.')
     ->group(function (): void {
         Route::get('/', [ProjectIntegrationController::class, 'index'])->middleware('project.can:integrations.manage')->name('index');
+        // INTEG-PROJECT-LINK-001 — is a link journey waiting for THIS project, and what has been linked to it. Read-only.
+        Route::get('link/{connection}', ProjectLinkController::class)->whereUuid('connection')->middleware('project.can:integrations.manage')->name('link');
         // PROJINT-001: the same project's integrations organised by the real ad platforms the registry
         // publishes — the count is `AdPlatforms::ORDER`'s to state, not this comment's.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');
