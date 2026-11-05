@@ -54,6 +54,16 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS10"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'src' as q, left(m.external_account_id::text,8), m.metric_date, m.original_currency, round(sum(m.original_amount),2), m.project_currency, round(sum(m.converted_amount),2), round(sum(m.value),2), min(m.exchange_rate), max(m.exchange_rate), count(*), max(m.data_freshness_at) from daily_metrics m where m.provider='openai_ads' and m.project_id::text like 'e9268c59%' and m.metric_key='spend' and m.metric_date between '2026-11-01' and '2026-11-05' group by 2,3,4,6 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'dup' as q, m.metric_date, m.external_campaign_id, count(*) from daily_metrics m where m.provider='openai_ads' and m.project_id::text like 'e9268c59%' and m.metric_key='spend' and m.metric_date between '2026-11-01' and '2026-11-05' group by 2,3 having count(*)>1; ROLLBACK;
+            BEGIN READ ONLY; select 'share' as q, left(s.id::text,8), s.mode, s.allow_download, s.password is not null, left(r.id::text,8) from report_shares s join reports r on r.id=s.report_id where s.token_hash in (encode(sha256('a1gKL8suPq2iKZR1OD0pL4'::bytea),'hex'),encode(sha256('kTHfK48MSbass17Bjk5omU'::bytea),'hex')); ROLLBACK;
+            BEGIN READ ONLY; select 'others' as q, left(r.id::text,8), r.status, r.generated_at, r.period_start, r.period_end, left(r.project_id::text,8) from reports r where r.project_id::text like 'e9268c59%' order by r.generated_at desc limit 12; ROLLBACK;
+            SQL
+            echo "== END FACTS10"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
