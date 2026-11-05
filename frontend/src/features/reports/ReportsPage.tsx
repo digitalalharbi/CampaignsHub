@@ -1002,6 +1002,8 @@ function EditOriginalDialog({ ar, report, onClose, onRename, onNames, onScope, o
         <button type="button" className={item} onClick={onNames} data-testid="edit-original-names"><Pencil size={15} /> {ar ? 'أسماء الهوية (مقدم إلى / من)' : 'Identity names (prepared for / by)'}</button>
         <button type="button" className={item} onClick={onScope} data-testid="edit-original-scope"><SlidersHorizontal size={15} /> {ar ? 'النطاق: الحسابات والحملات' : 'Scope: accounts and campaigns'}</button>
         <button type="button" className={item} onClick={onSections} data-testid="edit-original-sections"><ListChecks size={15} /> {ar ? 'الأقسام' : 'Sections'}</button>
+        {/* REPORT-SNAPSHOT-PROTECT-001 — putting an earlier copy back is an edit of this same report; opened in place, never a second dialog. */}
+        <ReportVersionHistory report={report} inline />
       </div>
     </Modal>
   )
