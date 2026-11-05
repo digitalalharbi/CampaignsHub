@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Sections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportReadMemo;
@@ -164,7 +165,8 @@ final class ReportSectionSurfaces
      */
     public function previewPayload(Report $report, array $data): array
     {
-        return $this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client'));
+        // REPORT-FILTERS-FUNCTIONAL-001 — the preview is the document a link of this report carries, so it carries the same cut; an internal report keeps everything.
+        return ChosenFigures::for($report, null)->cut($this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client')));
     }
 
     /**

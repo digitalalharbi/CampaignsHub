@@ -219,7 +219,9 @@ final class ReportResultStageTruthTest extends TestCase
                 'from' => '2026-09-01',
                 'to' => '2026-09-30',
                 'form' => $form,
-                'metrics' => ['spend', 'add_to_cart', 'purchases'],
+                // REPORT-FILTERS-FUNCTIONAL-001 (Owner 2026-11-05) — a stage of a KPI the link did not choose is no longer served, so the
+                // stages these tests read (impressions as well as the basket and the purchase) are chosen here.
+                'metrics' => ['spend', 'impressions', 'add_to_cart', 'purchases'],
             ])
             ->assertCreated()
             ->json('data');

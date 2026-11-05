@@ -79,7 +79,7 @@ final class ChosenFigures
     private const NOT_FIGURES = [
         'preview', 'disclaimer', 'freshness', 'freshness_summary', 'report_sections', 'report_views', 'sections', 'available', 'applied', 'settings',
         'links', 'outline', 'slides', 'columns', 'report_columns', 'breakdowns', 'reported', 'reported_by_platform', 'kpi_labels',
-        'store_funnel', 'site_measurement', 'objective_analytics', 'results',
+        'store_funnel', 'site_measurement', 'objective_analytics', 'results', 'verified_result',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */
@@ -350,20 +350,19 @@ final class ChosenFigures
      */
     private function withoutProse(array $payload, array $cut): array
     {
-        $keys = array_keys($cut);
+        // The generated summary states the period's money and cost in sentences with no statement of which; the same rule as a link hiding money.
         unset($payload['summary']);
 
         foreach (['findings', 'observations', 'recommendations', 'next_steps'] as $list) {
             if (is_array($payload[$list] ?? null)) {
-                $payload[$list] = array_values(array_filter($payload[$list], static fn ($item): bool => is_array($item)
-                    && ! (is_string($item['metric'] ?? null) && isset($cut[$item['metric']]))
-                    && ! HiddenMoney::revealsHidden($item, $keys)));
+                // Only an item that STATES an unchosen figure leaves; an operator's own note states none and stays (nothing hidden by default).
+                $payload[$list] = array_values(array_filter($payload[$list], static fn ($item): bool => ! is_array($item) || ! self::states($item, $cut)));
             }
         }
 
         if (is_array($payload['platform_notes'] ?? null)) {
             foreach ($payload['platform_notes'] as $provider => $note) {
-                if (is_array($note) && HiddenMoney::revealsHidden($note, $keys)) {
+                if (is_array($note) && self::states($note, $cut)) {
                     $neutral = (array) ($note['neutral'] ?? []);
                     $note['strengths'] = array_values((array) ($neutral['strengths'] ?? []));
                     $note['weaknesses'] = array_values((array) ($neutral['weaknesses'] ?? []));
@@ -496,7 +495,8 @@ final class ChosenFigures
     }
 
     /**
-     * Results and Leads are KPIs too, under the names the operator chooses them by.
+     * Results are not a card of the KPI list: the link's result events define them (`result_events`, `results_off`), and that definition is
+     * its own stated control. The list reaches only what divides back to an unchosen amount: a cost per result is spend over the count beside it.
      *
      * @param  array<string, mixed>  $results
      * @param  array<string, true>  $cut
@@ -504,45 +504,18 @@ final class ChosenFigures
      */
     private function resultsWithout(array $results, array $cut): array
     {
-        $count = in_array('results', $this->metrics, true);
-        $cost = in_array('cost_per_result', $this->metrics, true);
-        if (! $count && ! $cost) {
-            $results = ['configured' => false, 'total' => null, 'cost' => null, 'by_platform' => [], 'by_path' => [], 'events' => []] + $results;
-            $results['configured'] = false;
-        } else {
-            if (! $count) {
-                $results['total'] = null;
-            }
-            if (! $cost) {
-                $results['cost'] = null;
-            }
-            foreach (['by_platform', 'by_path'] as $list) {
-                foreach ((array) ($results[$list] ?? []) as $key => $row) {
-                    if (is_array($row)) {
-                        if (! $count) {
-                            unset($row['total'], $row['results'], $row['count']);
-                        }
-                        if (! $cost) {
-                            unset($row['cost']);
-                        }
-                        $results[$list][$key] = $this->walk($row, array_diff_key($cut, ['results' => true]));
-                    }
-                }
-            }
+        if (! isset($cut['spend'])) {
+            return $results;
         }
 
+        $results['cost'] = null;
         if (is_array($results['leads'] ?? null)) {
-            $leads = in_array('leads', $this->metrics, true) || in_array('landing_leads', $this->metrics, true) || in_array('native_leads', $this->metrics, true);
-            $cpl = in_array('cpl', $this->metrics, true);
-            if (! $leads && ! $cpl) {
-                $results['leads'] = ['configured' => false, 'total' => null, 'cost' => null, 'landing' => null, 'native' => null, 'by_platform' => [], 'by_path' => [], 'events' => []];
-            } else {
-                if (! $leads) {
-                    $results['leads']['total'] = $results['leads']['landing'] = $results['leads']['native'] = null;
-                }
-                if (! $cpl) {
-                    $results['leads']['cost'] = null;
-                }
+            $results['leads']['cost'] = null;
+        }
+        foreach ((array) ($results['by_platform'] ?? []) as $provider => $row) {
+            if (is_array($row)) {
+                unset($row['cost'], $row['spend']);
+                $results['by_platform'][$provider] = $row;
             }
         }
 
@@ -587,16 +560,12 @@ final class ChosenFigures
     {
         $payload = $this->withoutPlatformProse($payload, $cut);
 
-        if (is_array($payload['results'] ?? null)) {
-            foreach ((array) ($payload['results']['by_platform'] ?? []) as $provider => $row) {
+        // The platform's defined Result stays with its definition; its cost leaves with the spend column it divides back to.
+        if (isset($cut['spend']) && is_array($payload['results']['by_platform'] ?? null)) {
+            foreach ($payload['results']['by_platform'] as $provider => $row) {
                 if (is_array($row)) {
-                    if (isset($cut['results'])) {
-                        unset($row['total'], $row['results'], $row['count']);
-                    }
-                    if (isset($cut['cost_per_result'])) {
-                        unset($row['cost']);
-                    }
-                    $payload['results']['by_platform'][$provider] = $this->walk($row, array_diff_key($cut, ['results' => true]));
+                    unset($row['cost'], $row['spend']);
+                    $payload['results']['by_platform'][$provider] = $row;
                 }
             }
         }
@@ -628,10 +597,9 @@ final class ChosenFigures
      */
     private function withoutPlatformProse(array $payload, array $cut): array
     {
-        $keys = array_keys($cut);
         if (is_array($payload['platform_notes'] ?? null)) {
             foreach ($payload['platform_notes'] as $provider => $note) {
-                if (is_array($note) && HiddenMoney::revealsHidden($note, $keys)) {
+                if (is_array($note) && self::states($note, $cut)) {
                     $neutral = (array) ($note['neutral'] ?? []);
                     $note['strengths'] = array_values((array) ($neutral['strengths'] ?? []));
                     $note['weaknesses'] = array_values((array) ($neutral['weaknesses'] ?? []));
@@ -644,7 +612,7 @@ final class ChosenFigures
             if (is_array($payload[$list] ?? null)) {
                 $payload[$list] = array_values(array_filter($payload[$list], static fn ($item): bool => ! (is_array($item)
                     && (($item['platform'] ?? null) !== null || ($item['scope']['type'] ?? null) === 'platform')
-                    && HiddenMoney::revealsHidden($item, $keys))));
+                    && self::states($item, $cut))));
             }
         }
         if (is_array($payload['best'] ?? null) && isset($cut[(string) ($payload['best']['basis']['key'] ?? '')])) {
@@ -736,6 +704,26 @@ final class ChosenFigures
         }
 
         return $isList ? array_values($node) : $node;
+    }
+
+    /**
+     * Whether a sentence states an unchosen figure, by its own statement: `reveals`, its `metric`, or the KPI its label names. A sentence
+     * that says nothing about a figure states none — the cut happens only on what is stated, unlike hidden money, which fails closed.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  array<string, true>  $cut
+     */
+    private static function states(array $item, array $cut): bool
+    {
+        if (is_string($item['metric'] ?? null) && isset($cut[$item['metric']])) {
+            return true;
+        }
+        if (is_array($item['reveals'] ?? null)) {
+            return array_intersect($item['reveals'], array_keys($cut)) !== [];
+        }
+        $metric = is_string($item['kpi'] ?? null) ? HiddenMoney::metricForLabel($item['kpi']) : null;
+
+        return $metric !== null && isset($cut[$metric]);
     }
 
     /** @param  array<string, true>  $cut */

@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -85,7 +86,8 @@ final class ReportExporter
             $applied['kpi_allowlist'] = array_values($applied['metric_set']);
         }
 
-        return $applied;
+        // REPORT-FILTERS-FUNCTIONAL-001 — the file is built from the same cut document as the page and the PDF (four surfaces, one answer).
+        return ChosenFigures::for($report, $share)->cut($applied);
     }
 
     /**
