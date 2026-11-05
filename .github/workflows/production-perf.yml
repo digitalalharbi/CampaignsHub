@@ -54,6 +54,19 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS8"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'cols_reg' as q, string_agg(column_name, ',') from information_schema.columns where table_name='registration_requests'; ROLLBACK;
+            BEGIN READ ONLY; select 'cols_inv' as q, string_agg(column_name, ',') from information_schema.columns where table_name in ('invitations','tenant_invitations'); ROLLBACK;
+            BEGIN READ ONLY; select 'user' as q, left(u.id::text,8) id, u.email, u.name, u.email_verified_at is not null ver, u.created_at::date, u.is_platform_admin from users u where lower(u.email) in ('digital@smartcode.sa','al2020harbi@gmail.com','al2020harbidm@gmail.com'); ROLLBACK;
+            BEGIN READ ONLY; select 'member' as q, u.email, left(m.tenant_id::text,8) tenant, t.name, t.status, m.status mstatus, m.created_at::date from tenant_memberships m join users u on u.id=m.user_id join tenants t on t.id=m.tenant_id where lower(u.email) in ('digital@smartcode.sa','al2020harbi@gmail.com'); ROLLBACK;
+            BEGIN READ ONLY; select 'tenant' as q, left(id::text,8), name, slug, status, created_at from tenants where name ilike '%smart%' or name ilike '%nextad%' or name ilike 'Mohammed Alharbi%' order by created_at; ROLLBACK;
+            BEGIN READ ONLY; select 'reg' as q, left(id::text,8), email, company_name, status, plan_code, created_at::date from registration_requests where lower(email) in ('digital@smartcode.sa') or company_name ilike '%smart%' order by created_at; ROLLBACK;
+            BEGIN READ ONLY; select 'inv' as q, left(i.tenant_id::text,8), i.email, i.accepted_at, i.expires_at, i.created_at from invitations i where lower(i.email) in ('digital@smartcode.sa','al2020harbi@gmail.com') order by i.created_at desc limit 10; ROLLBACK;
+            SQL
+            echo "== END FACTS8"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
