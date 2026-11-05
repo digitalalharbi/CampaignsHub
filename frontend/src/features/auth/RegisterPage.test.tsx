@@ -5,10 +5,10 @@ import { renderWithProviders, signOut } from '@/test/utils'
 
 vi.mock('@/features/signup/api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, apply: vi.fn(), rememberRegistration: vi.fn(), fetchPlans: vi.fn() }
+  return { ...actual, apply: vi.fn(), rememberRegistration: vi.fn(), fetchPlans: vi.fn(), fetchRegistrationPolicy: vi.fn() }
 })
 
-import { apply, fetchPlans } from '@/features/signup/api'
+import { apply, fetchPlans, fetchRegistrationPolicy } from '@/features/signup/api'
 
 /**
  * The catalogue the packages step reads. Priced, because there is no free tier any more
@@ -452,5 +452,31 @@ describe('RegisterPage — the account step is validated before the packages ste
     // …and the plan chosen before going back is still chosen on the way forward.
     fireEvent.click(screen.getByRole('button', { name: /Continue/i }))
     expect(await screen.findByTestId('plan-starter')).toHaveAttribute('data-selected', 'true')
+  })
+
+  /* SIGNUP-VERIFY-POLICY-001 — the form asks for a number only when a mobile gate will use it. */
+  describe('the mobile number and the policy', () => {
+    it('asks for the number while the mobile gate is on', async () => {
+      vi.mocked(fetchRegistrationPolicy).mockResolvedValue({ requires_email: true, requires_mobile: true })
+      renderWithProviders(<RegisterPage />, { route: '/register' })
+
+      await waitFor(() => expect(fetchRegistrationPolicy).toHaveBeenCalled())
+      expect(await screen.findByTestId('phone')).toBeInTheDocument()
+    })
+
+    it('does not ask for it when the mobile gate is off', async () => {
+      vi.mocked(fetchRegistrationPolicy).mockResolvedValue({ requires_email: true, requires_mobile: false })
+      renderWithProviders(<RegisterPage />, { route: '/register' })
+
+      await waitFor(() => expect(screen.queryByTestId('phone')).not.toBeInTheDocument())
+    })
+
+    it('keeps the field when the policy could not be read', async () => {
+      vi.mocked(fetchRegistrationPolicy).mockRejectedValue(new Error('offline'))
+      renderWithProviders(<RegisterPage />, { route: '/register' })
+
+      await waitFor(() => expect(fetchRegistrationPolicy).toHaveBeenCalled())
+      expect(screen.getByTestId('phone')).toBeInTheDocument()
+    })
   })
 })

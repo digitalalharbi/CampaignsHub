@@ -48,6 +48,8 @@ final class UserResource extends JsonResource
             // SUPERADMIN-SUPPORT-ACCESS-001 — the visit this request runs under, for the banner and the way back; null otherwise.
             'support' => $this->supportVisit(),
             'email_verified' => $this->email_verified_at !== null,
+            // Unproved, and not owed: the wizard must not send this person to a screen policy said they can skip.
+            'email_verification_not_required' => $this->emailUnprovenByPolicy(),
             'two_factor_enabled' => (bool) $this->two_factor_enabled,
             // Personal preferences (distinct from tenant/workspace settings).
             'locale' => $this->locale ?? 'ar',

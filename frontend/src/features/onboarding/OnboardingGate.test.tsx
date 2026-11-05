@@ -101,4 +101,13 @@ describe('OnboardingGate', () => {
 
     expect(screen.getByText('dashboard')).toBeInTheDocument()
   })
+
+  /* SIGNUP-VERIFY-POLICY-001 — a policy that never asked is not a screen to be sent to, and it proves nothing either. */
+  it('does not send somebody to verify an address that policy did not ask them to prove', async () => {
+    signIn({ email_verified: false, email_verification_not_required: true })
+    gateAt('/app/dashboard')
+
+    expect(await screen.findByText('dashboard')).toBeInTheDocument()
+    expect(screen.queryByText('verify')).not.toBeInTheDocument()
+  })
 })

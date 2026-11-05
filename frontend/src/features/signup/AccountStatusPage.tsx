@@ -41,6 +41,11 @@ const COPY = {
     startOver: 'إنشاء حساب',
     awaitingProvider: 'لم يُفعَّل مزوّد الإرسال بعد (بانتظار بيانات الاعتماد)، لذلك لم تُرسل الرسالة فعليًا. استخدم زر التطوير أدناه مؤقتًا.',
     codeSent: 'أرسلنا رمز تحقق برسالة نصية إلى رقم جوالك.',
+    linkSent: 'أرسلنا رابط التأكيد إلى بريدك الإلكتروني.',
+    discounted: (percent: number, from: string, to: string) => `اعتُمد طلبك بخصم ${percent}% على الفترة الأولى: ${from} ← ${to}. يُفعَّل الحساب بعد تأكيد سداد المبلغ المتبقي.`,
+    waived: (date: string, renewal: string) => `اعتُمد طلبك بإعفاء من رسوم الفترة الأولى، وحسابك نشط. لم يُخصم أي مبلغ. ينتهي الإعفاء في ${date}، ثم يصبح الاشتراك مستحقًا بقيمة ${renewal}.`,
+    trial: (date: string, renewal: string) => `حسابك نشط بفترة تجربة تنتهي في ${date}. لا خصم تلقائي، وبعدها يصبح الدفع مستحقًا بقيمة ${renewal}.`,
+    sendLimit: 'لم تُرسل الرسالة: بلغ الإرسال حده الحالي. حاول لاحقًا أو تواصل معنا، ولن يتأثر طلبك.',
     deliveryFailed: 'تعذّر إرسال الرمز الآن. انتظر انتهاء المهلة ثم حاول مرة أخرى.',
     devVerify: 'تأكيد الآن (تطوير)',
     devCode: 'رمز التطوير',
@@ -75,6 +80,11 @@ const COPY = {
     startOver: 'Create an account',
     awaitingProvider: 'No delivery provider is configured yet (awaiting credentials), so the message was not actually sent. Use the dev button below for now.',
     codeSent: 'We sent a verification code by SMS to your mobile number.',
+    linkSent: 'We sent the confirmation link to your email address.',
+    discounted: (percent: number, from: string, to: string) => `Approved with ${percent}% off the first period: ${from} → ${to}. The account activates once the remainder is confirmed.`,
+    waived: (date: string, renewal: string) => `Approved with the first period's fee waived, and your account is active. Nothing was charged. The waiver ends on ${date}, then the subscription is due at ${renewal}.`,
+    trial: (date: string, renewal: string) => `Your account is active on a trial ending ${date}. Nothing is charged automatically, and after it ${renewal} is due.`,
+    sendLimit: 'The message was not sent: the sending limit has been reached. Try again later or contact us. Your application is not affected.',
     deliveryFailed: 'We could not send the code right now. Wait for the cooldown, then try again.',
     devVerify: 'Verify now (dev)',
     devCode: 'Dev code',
@@ -283,6 +293,7 @@ export function AccountStatusPage() {
   const devLink = issued?.dev_link ?? null
   const devCode = issued?.dev_code ?? null
   const mobileDelivery = issued?.channel === 'mobile' ? issued.delivery_status : reg.mobile_delivery_status
+  const emailDelivery = issued?.channel === 'email' ? issued.delivery_status : reg.email_delivery_status
 
   return (
     <AuthShell portal={reg.requested_portal === 'agency' ? 'agency' : 'default'}>
@@ -317,11 +328,18 @@ export function AccountStatusPage() {
           <p data-testid="registration-reason" className="rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">{reg.reason}</p>
         )}
 
+        <CommercialNote reg={reg} copy={c} />
+
         <ActivationSteps reg={reg} policy={policy} copy={c} />
 
         {reg.state === 'email_verification_required' && (
           <div className="flex flex-col items-center gap-3">
-            <p className="text-xs text-text-muted">{c.awaitingProvider}</p>
+            <p data-testid="registration-email-delivery" className="text-xs text-text-muted">
+              {emailDelivery === 'sent' || emailDelivery === 'queued' || emailDelivery === 'pending'
+                ? c.linkSent
+                : emailDelivery === 'blocked_by_send_limit' ? c.sendLimit
+                : emailDelivery === 'failed' ? c.deliveryFailed : c.awaitingProvider}
+            </p>
             {devLink && (
               <a data-testid="registration-dev-verify" href={devLink} className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
                 <ShieldCheck size={16} /> {c.devVerify}
@@ -346,6 +364,7 @@ export function AccountStatusPage() {
             <p className="text-xs text-text-muted">
               {mobileDelivery === 'sent' || mobileDelivery === 'pending' || mobileDelivery === 'queued'
                 ? c.codeSent
+                : mobileDelivery === 'blocked_by_send_limit' ? c.sendLimit
                 : mobileDelivery === 'failed' ? c.deliveryFailed : c.awaitingProvider}
             </p>
             {devCode && (
@@ -430,7 +449,8 @@ function PaymentStep({
     enabled: reg.plan_code !== null,
   })
 
-  const terms = quote.data?.quote ?? null
+  // A discount in force is quoted by the server too, so the figure shown is the figure charged.
+  const terms = reg.commercial?.quote ?? quote.data?.quote ?? null
   // A commitment nobody has agreed to blocks the charge — the server refuses it, so the button does.
   const blocked = terms !== null && terms.commitment_months > 0 && !agreed
 
@@ -498,6 +518,25 @@ function PaymentStep({
   )
 }
 
+/** What was decided, in words, so an active account is never read as a paid one (SIGNUP-DECISION-001). */
+function CommercialNote({ reg, copy }: { reg: RegistrationStatus; copy: typeof COPY['en'] | typeof COPY['ar'] }) {
+  const t = reg.commercial
+  if (!t) return null
+
+  const withCurrency = (amount?: string) => `${amount ?? ''} ${t.currency ?? ''}`.trim()
+  const text = t.outcome === 'approve_discount' && reg.state !== 'active'
+    ? copy.discounted(t.discount_percent ?? 0, withCurrency(t.list_amount), withCurrency(t.amount_due))
+    : t.outcome === 'approve_waiver' && reg.provisioned
+      ? copy.waived(t.renewal_on ?? '', withCurrency(t.renewal_amount))
+      : t.outcome === 'approve_trial' && reg.provisioned
+        ? copy.trial(t.renewal_on ?? '', withCurrency(t.renewal_amount))
+        : null
+
+  return text === null ? null : (
+    <p data-testid="registration-commercial" data-outcome={t.outcome} className="rounded-xl border border-border bg-surface-secondary px-4 py-3 text-center text-sm text-text-primary">{text}</p>
+  )
+}
+
 /**
  * The whole journey, with the steps this particular plan actually requires.
  *
@@ -507,15 +546,15 @@ function PaymentStep({
 function ActivationSteps({
   reg, policy, copy,
 }: {
-  reg: { email_verified: boolean; mobile_verified: boolean; state: RegistrationState; provisioned: boolean }
-  policy?: { requires_mobile: boolean; requires_approval: boolean; requires_payment: boolean }
+  reg: { email_verified: boolean; mobile_verified: boolean; state: RegistrationState; provisioned: boolean; commercial?: RegistrationStatus['commercial'] }
+  policy?: { requires_email?: boolean; requires_mobile: boolean; requires_approval: boolean; requires_payment: boolean }
   copy: typeof COPY['en'] | typeof COPY['ar']
 }) {
   const reached = (done: boolean) => (done ? 'text-[var(--positive-foreground)]' : 'text-text-muted')
 
-  const steps: Array<{ key: string; label: string; done: boolean }> = [
-    { key: 'email', label: copy.stepEmail, done: reg.email_verified },
-  ]
+  // A gate this application does not owe is no step at all. Never shown as done: nobody proved anything.
+  const steps: Array<{ key: string; label: string; done: boolean }> = []
+  if (policy?.requires_email !== false) steps.push({ key: 'email', label: copy.stepEmail, done: reg.email_verified })
   if (policy?.requires_mobile) steps.push({ key: 'mobile', label: copy.stepMobile, done: reg.mobile_verified })
   if (policy?.requires_approval) {
     steps.push({
@@ -524,7 +563,9 @@ function ActivationSteps({
       done: reg.provisioned || reg.state === 'approved_awaiting_payment' || reg.state === 'payment_pending',
     })
   }
-  if (policy?.requires_payment) steps.push({ key: 'payment', label: copy.stepPayment, done: reg.provisioned })
+  // A payment step ticked on a waived account would claim a payment. It is simply not on this journey.
+  const noPayment = reg.commercial?.outcome === 'approve_waiver' || reg.commercial?.outcome === 'approve_trial' || reg.commercial?.outcome === 'approve_join_existing'
+  if (policy?.requires_payment && !noPayment) steps.push({ key: 'payment', label: copy.stepPayment, done: reg.provisioned })
   steps.push({ key: 'active', label: copy.stepActive, done: reg.provisioned })
 
   return (
