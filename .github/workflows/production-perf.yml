@@ -54,6 +54,12 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== TINKER"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan tinker --execute='try { $r=\App\Domains\Accounts\Models\RegistrationRequest::query()->whereRaw("id::text like ?",["904ac4d5%"])->firstOrFail(); $actor=\App\Models\User::query()->where("is_platform_admin",true)->orderBy("id")->firstOrFail(); $s=app(\App\Domains\Accounts\Services\RegistrationDecisionService::class); $o=$s->decide($r,["outcome"=>"approve_waiver","reason"=>"Owner instruction 2026-11-05: release the SMARTCODE registration with a fee waiver for one period. Applied on the Owner behalf through the decision service; no price changed.","confirm_waiver"=>true,"confirm_amount"=>"17990.00","idempotency_key"=>"owner-smartcode-waiver-2026-11-05"],$actor); $g=$o["registration"]->fresh(); $u=\App\Models\User::query()->whereRaw("lower(email) = ?",["digital@smartcode.sa"])->first(); echo json_encode(["ok"=>true,"replayed"=>$o["replayed"],"decision"=>["id"=>substr((string)$o["decision"]->getKey(),0,8),"outcome"=>$o["decision"]->outcome,"status"=>$o["decision"]->status],"state"=>$g->state,"tenant_id"=>$g->tenant_id,"provisioned"=>$g->isProvisioned(),"provisioned_at"=>$g->provisioned_at,"user_exists"=>$u!==null,"user_verified"=>$u?->email_verified_at]); } catch (\Throwable $e) { echo json_encode(["ok"=>false,"class"=>get_class($e),"message"=>$e->getMessage(),"errors"=>method_exists($e,"errors")?$e->errors():null]); }' || echo "tinker failed"
+            echo
+            echo "== END TINKER"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
