@@ -370,13 +370,41 @@ final class ReportSourceIsolationTest extends TestCase
         $preview = $this->as($this->owner)->getJson($this->base($report))->assertOk()->json('data');
         $this->assertIsolated($preview, ['KEEPX'], $foreign, 'builder preview');
 
-        $copy = $this->as($this->owner)->postJson($this->base($report).'/duplicate', ['name' => 'Copy'])->assertCreated()->json('data');
-        $stored = Report::withoutGlobalScopes()->findOrFail($copy['id']);
-        $this->assertSame(['account_ids' => [$this->x]], $stored->scope, 'a copy names other sources than the report it was made from');
-        $this->assertIsolated((array) $stored->data, ['KEEPX'], $foreign, 'duplicate, stored data');
-        if (is_string($copy['link']['token'] ?? null)) {
-            $this->assertIsolated($this->getJson('/api/v1/reports/shared/'.$copy['link']['token'])->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, shared page');
+        /*
+         * REPORT-DUPLICATE-001 — Duplicate is «prefill → editor draft → publish». The containment is proved through every step of
+         * that path: the prefill hands the editor only the chosen account, the editor's preview and its saved draft are built from
+         * it, and the published report — a report scoped to account X, published, never holds account Y's or S's content on any
+         * surface.
+         */
+        $prefill = $this->as($this->owner)->postJson($this->base($report).'/duplicate', [])->assertOk()->json('data.draft');
+        $this->assertSame([$this->x], array_values((array) ($prefill['scope']['account_ids'] ?? [])), 'the prefill names other sources than the report it was made from');
+        $body = [
+            'name' => 'Copy', 'type' => $prefill['type'], 'mode' => $prefill['mode'], 'form' => $prefill['form'], 'detail_level' => $prefill['detail_level'],
+            'audience' => $prefill['audience'], 'period_start' => $prefill['period_start'], 'period_end' => $prefill['period_end'],
+            'period_mode' => $prefill['period_mode'], 'period_kind' => $prefill['period_kind'],
+            'section_settings' => ['sections' => $prefill['sections']], 'config' => ['columns' => $prefill['columns']],
+            'scope' => $prefill['scope'] ?? [], 'source_report_id' => (string) $report->getKey(),
+        ];
+
+        $previewed = $this->as($this->owner)->postJson($this->base().'/draft-preview', $body)->assertOk()->json('data');
+        $this->assertIsolated($previewed, ['KEEPX'], $foreign, 'duplicate, editor preview');
+
+        $draftId = $this->as($this->owner)->postJson($this->base(), $body + ['draft' => true])->assertCreated()->json('data.id');
+        $draft = Report::withoutGlobalScopes()->findOrFail($draftId);
+        $this->assertSame([$this->x], array_values((array) ($draft->scope['account_ids'] ?? [])), 'the saved draft names other sources than the report it was made from');
+
+        $this->as($this->owner)->postJson($this->base($draft).'/publish', $body)->assertOk();
+        $published = Report::withoutGlobalScopes()->findOrFail($draftId);
+        if ($published->status !== 'completed') {
+            $published = $this->generate($published);
         }
+        $this->assertSame([$this->x], array_values((array) ($published->scope['account_ids'] ?? [])), 'the published copy names other sources than the report it was made from');
+        $this->assertIsolated((array) $published->data, ['KEEPX'], $foreign, 'duplicate, published stored data');
+        $this->assertIsolated($this->as($this->owner)->getJson($this->base($published))->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, published builder view');
+
+        // A link made for the published copy afterwards (the only way it gets one) serves the same set.
+        [, $copyRaw] = app(ShareService::class)->create($published, [], null);
+        $this->assertIsolated($this->getJson('/api/v1/reports/shared/'.$copyRaw)->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, shared page');
 
         $this->as($this->owner)->postJson($this->base($report).'/regenerate', ['confirm' => true])->assertOk();
         $rebuilt = Report::withoutGlobalScopes()->findOrFail($report->getKey());

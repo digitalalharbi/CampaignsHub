@@ -424,18 +424,35 @@ final class ReportGenericLabelsTest extends TestCase
         $this->assertSame($names($control), $names($older), 'an existing link on the older switch shows content names it did not show before');
     }
 
-    public function test_a_duplicated_report_and_its_link_keep_their_name_switches(): void
+    /*
+     * Owner correction 2026-11-04 (§8.3): a duplicate is a draft saved from the editor, and it gets no link. The report's own
+     * name switches still travel with the copy (they are not something the editor shows, so they are kept as they were); the
+     * link half of the old assertion — «a copied link is never more open than the link it came from» — is now met by there
+     * being no copied link at all, which is asserted here in its place.
+     */
+    public function test_a_duplicated_report_keeps_its_name_switches_and_gets_no_link(): void
     {
         [$share] = $this->link(['content']);
         $this->operator();
         $report = Report::query()->findOrFail($share->report_id);
         $report->forceFill(['config' => ['generic_names' => ['account']] + (array) $report->config])->save();
+        $base = "/api/v1/projects/{$this->project->id}/reports";
 
-        $copy = $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/duplicate", ['name' => 'Copy', 'with_link' => true, 'share_id' => $share->id])->assertSuccessful()->json('data');
+        $draft = $this->postJson("{$base}/{$report->id}/duplicate", ['name' => 'Copy', 'with_link' => true, 'share_id' => $share->id])->assertSuccessful()->json('data.draft');
+        $this->context();
+        $this->assertSame(1, ReportShare::query()->count(), 'pressing Duplicate makes no link');
+
+        $accounts = (array) ($draft['scope']['account_ids'] ?? []);
+        $this->assertNotSame([], $accounts, 'the live link report’s sources are handed to the editor');
+        $copy = $this->postJson($base, [
+            'name' => 'Copy', 'type' => $draft['type'], 'mode' => $draft['mode'], 'detail_level' => $draft['detail_level'],
+            'period_start' => $draft['period_start'], 'period_end' => $draft['period_end'],
+            'scope' => ['account_ids' => $accounts], 'draft' => true, 'source_report_id' => $report->id,
+        ])->assertSuccessful()->json('data');
         $this->context();
 
-        $this->assertSame(['account'], Report::query()->findOrFail($copy['report']['id'] ?? $copy['id'])->config['generic_names'], 'a copy is never more open than the report it came from');
-        $this->assertSame(['content'], ReportShare::query()->where('report_id', $copy['report']['id'] ?? $copy['id'])->firstOrFail()->settings['generic_names'], 'a copied link is never more open than the link it came from');
+        $this->assertSame(['account'], Report::query()->findOrFail($copy['id'])->config['generic_names'], 'a copy is never more open than the report it came from');
+        $this->assertSame(0, ReportShare::query()->where('report_id', $copy['id'])->count(), 'no link is copied, so none can be more open than the one it came from');
     }
 
     public function test_every_generic_word_comes_from_one_place(): void

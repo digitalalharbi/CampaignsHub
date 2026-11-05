@@ -206,7 +206,16 @@ final class ReportGenerator
              * consulted. Adding a second `config['depth']` beside it — which is what I wrote first —
              * would have been the duplicate taxonomy this product has spent several units removing.
              */
-            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
+            /*
+             * REPORT-DUPLICATE-001 — the layout is ADDED to what the report was saved with, not written over it.
+             *
+             * This assigned the default layout as the whole config, so the first generation of a report dropped everything
+             * it had been created with: the identity choice, the typed names, the chosen columns, the period mode and the name
+             * switches. A copy published from the editor is generated for the first time like any new report, and it lost
+             * the «generic names» it carried from its original — it came out more open than the report it was copied from.
+             * The layout's own keys still win; every other key stays as saved.
+             */
+            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form) + (array) $config;
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         } else {
             /*
