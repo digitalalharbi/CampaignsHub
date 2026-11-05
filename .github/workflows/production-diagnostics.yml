@@ -466,3 +466,13 @@ jobs:
               -f deploy/docker-compose.production.yml \
               exec -T backend php artisan integrations:sync-census --hours=24 \
               || echo "SYNC CENSUS FAILED: see above — other sections are valid"
+
+            # MONEY-CURRENCY-NEVER-ASSUMED-001 — per provider: ad accounts with no currency (and how many of
+            # them a project is bound to), stored money whose currency differs from its account's, money
+            # rows with no currency at each grain, and currency pairs withheld for want of a rate. Read-only;
+            # masked ids, no names, no amounts. The way the Owner reads the currency state of Production.
+            docker compose \
+              --env-file deploy/backend.production.env \
+              -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan money:currency-audit \
+              || echo "CURRENCY AUDIT FAILED: see above — other sections are valid"

@@ -194,6 +194,39 @@ final class CurrencyRateFeed
             ];
         }
 
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — a rate dated TODAY converts nothing that was withheld LAST MONTH.
+         *
+         * The converter takes the nearest rate on or before the figure's own day, so the first import of a
+         * floating currency used to record one row dated today and leave every earlier withheld figure
+         * exactly as withheld, with a perfectly good rate in the table. The source is also asked for each
+         * pair's earliest withheld day (one extra call per distinct day, and only when it is earlier than
+         * the publication just received); a source whose history does not reach that far omits the pair,
+         * as the contract says, and nothing is invented for it.
+         */
+        $byEarliest = [];
+        foreach ($pairs as $pair) {
+            if ($pair['earliest'] !== null && $pair['earliest'] < $date->toDateString()) {
+                $byEarliest[(string) $pair['earliest']][] = ['base' => $pair['base'], 'quote' => $pair['quote']];
+            }
+        }
+        foreach ($byEarliest as $earliest => $asked) {
+            try {
+                $fetched = [...$fetched, ...$this->source->fetch($asked, Carbon::parse($earliest))];
+            } catch (Throwable $e) {
+                // Today's answer is still recorded; the history gap is reported with the rest.
+                $missing = array_map(static fn (array $p): string => $p['base'].'→'.$p['quote'], $asked);
+
+                return [
+                    'state' => 'ready',
+                    'requested' => count($pairs) + $pegged,
+                    'imported' => $pegged + $this->recordAll($fetched),
+                    'missing' => $missing,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
         $imported = 0;
         $answered = [];
 
@@ -227,6 +260,25 @@ final class CurrencyRateFeed
         }
 
         return ['state' => 'ready', 'requested' => count($pairs) + $pegged, 'imported' => $imported + $pegged, 'missing' => $missing, 'error' => null];
+    }
+
+    /**
+     * Record every usable row of a partial answer; the count is what the caller reports.
+     *
+     * @param  list<array{base: string, quote: string, rate: float, rate_date: string}>  $rows
+     */
+    private function recordAll(array $rows): int
+    {
+        $recorded = 0;
+        foreach ($rows as $row) {
+            if ((float) ($row['rate'] ?? 0) <= 0) {
+                continue;
+            }
+            $this->record((string) $row['base'], (string) $row['quote'], (float) $row['rate'], Carbon::parse((string) $row['rate_date']), (string) $this->source?->key());
+            $recorded++;
+        }
+
+        return $recorded;
     }
 
     /**

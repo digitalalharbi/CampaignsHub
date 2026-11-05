@@ -192,10 +192,26 @@ final class XConnector extends ApiAdvertisingConnector
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
-        $campaignIds = array_map(
-            static fn (array $c): string => $c['external_id'],
-            $this->fetchCampaigns($tokens, $adAccountId),
-        );
+        $campaigns = $this->fetchCampaigns($tokens, $adAccountId);
+        $campaignIds = array_map(static fn (array $c): string => $c['external_id'], $campaigns);
+
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — the unit of every `*_local_micro` figure, per campaign.
+         *
+         * The X account object carries no currency (docs.x.com/x-ads-api/campaign-management, Accounts:
+         * `name`, `timezone`, `timezone_switch_at`, `id`, `created_at`, `salt`, `updated_at`,
+         * `approval_status`, `deleted`), so `fetchAdAccounts()` can only ever record NULL, and the stats
+         * endpoint answers bare micros. The CAMPAIGN object does state `currency` (same page, Campaigns;
+         * ISO 4217, taken from its funding instrument), so each stats row is labelled from the campaign it
+         * belongs to. A campaign that states none gives a row with no `currency` key, and the pipeline
+         * withholds that money — it is never assumed to be the reporting currency.
+         */
+        $currencies = [];
+        foreach ($campaigns as $c) {
+            if (is_string($c['currency'] ?? null) && preg_match('/^[A-Za-z]{3}$/', $c['currency']) === 1) {
+                $currencies[$c['external_id']] = strtoupper($c['currency']);
+            }
+        }
 
         if ($campaignIds === []) {
             return []; // nothing to ask about; the account has no campaigns in this window
@@ -219,7 +235,12 @@ final class XConnector extends ApiAdvertisingConnector
             }
         }
 
-        return $rows;
+        return array_map(
+            static fn (array $row): array => isset($currencies[$row['campaign_id']])
+                ? ['currency' => $currencies[$row['campaign_id']], ...$row]
+                : $row,
+            $rows,
+        );
     }
 
     /**
