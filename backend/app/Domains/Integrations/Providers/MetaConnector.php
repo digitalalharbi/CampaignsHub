@@ -171,7 +171,25 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 continue;
             }
 
-            foreach ((array) ($body['data'] ?? []) as $item) {
+            /*
+             * META-NO-DATA-READING-001 — a 2xx answer with no `data` list is not an empty list.
+             *
+             * Every Graph collection edge answers `{"data":[…]}`, and `{"data":[]}` is how it says «nothing».
+             * A body with no such list — an async report handle, a proxy's page, an empty or unparseable
+             * body — used to be read as zero items, so an answer that said nothing at all was filed as
+             * «the account had no delivery» (or «no campaigns»). Refused in the platform's name instead,
+             * with the key names it did carry and never a value.
+             */
+            if (! is_array($body['data'] ?? null)) {
+                throw new \RuntimeException(sprintf(
+                    '%s could not return %s: the answer arrived without a `data` list (keys: %s).',
+                    $this->label(),
+                    $what,
+                    $body === [] ? 'none' : implode(', ', array_map(strval(...), array_slice(array_keys($body), 0, 8))),
+                ));
+            }
+
+            foreach ($body['data'] as $item) {
                 $items[] = (array) $item;
             }
 

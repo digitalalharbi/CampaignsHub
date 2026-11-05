@@ -44,7 +44,7 @@ final class MetaDiagnoseCommand extends Command
                     '  %s selected=%s health=%s creatives=%d expired=%d structure=%s (%s) metrics=%s (%s) media=%s renewal=%s',
                     $a['external_id'], $a['selected'] ? 'yes' : 'no', $a['health'], $a['creatives'], $a['expired_media'],
                     $a['structure']['status'] ?? 'none', $this->refusal($a['structure']['refusal']),
-                    $a['metrics']['status'] ?? 'none', $this->refusal($a['metrics']['refusal']),
+                    ($a['metrics']['status'] ?? 'none').$this->reading($a['metrics']), $this->refusal($a['metrics']['refusal']),
                     json_encode(array_diff_key((array) $a['structure']['media'], ['error' => true])),
                     json_encode($a['structure']['media_renewal']),
                 ));
@@ -52,6 +52,20 @@ final class MetaDiagnoseCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * META-NO-DATA-READING-001 — `no_data[no_delivery, last delivery 2026-10-28]`: which «nothing» it was.
+     *
+     * @param  array<string,mixed>  $metrics
+     */
+    private function reading(array $metrics): string
+    {
+        if (($metrics['reading'] ?? null) === null) {
+            return '';
+        }
+
+        return sprintf('[%s, last delivery %s]', $metrics['reading'], $metrics['last_delivery_date'] ?? 'none stored');
     }
 
     /** @param array<string,mixed>|null $refusal */

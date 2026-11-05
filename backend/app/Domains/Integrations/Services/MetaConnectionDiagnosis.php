@@ -10,6 +10,7 @@ use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\Support\MetaGraphRefusal;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Metrics\Support\NoDataReading;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -111,7 +112,10 @@ final class MetaConnectionDiagnosis
         $metrics = MetricSyncRun::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->orderByDesc('started_at')
-            ->first(['status', 'error', 'started_at']);
+            ->first(['id', 'external_account_id', 'status', 'error', 'started_at', 'window_start', 'provider_raw_rows', 'parsed_rows', 'meta']);
+
+        // META-NO-DATA-READING-001 — a quiet account and an unread answer are told apart here, not by the reader.
+        $reading = $metrics === null ? null : NoDataReading::for($metrics);
 
         $meta = $structure === null ? [] : (array) json_decode((string) $structure->meta, true);
 
@@ -138,6 +142,8 @@ final class MetaConnectionDiagnosis
                 'status' => $metrics === null ? null : $metrics->getRawOriginal('status'),
                 'at' => $metrics?->started_at?->toIso8601String(),
                 'refusal' => $this->refusal($metrics?->error),
+                'reading' => $reading['reading'] ?? null,
+                'last_delivery_date' => $reading['last_delivery_date'] ?? null,
             ],
         ];
     }
