@@ -486,6 +486,8 @@ export interface AccountRow {
   next_sync_at: string | null
   access_lost_at: string | null
   counts_toward_ad_account_quota: boolean
+  /** INTEG-STATUS-MODEL-001 — the five independent statuses of this resource and its link. */
+  statuses?: IntegrationStatuses | null
 }
 
 export type LinkFilter = 'linked' | 'unlinked'
@@ -689,6 +691,29 @@ export async function backfillAccount(
 
 
 /**
+ * INTEG-STATUS-MODEL-001 (contract §1.13) — one status, as the server states it.
+ *
+ * The words (`label_ar` / `label_en`) and the remedy (`action`) are the SERVER's: a surface that
+ * retyped them would be a second vocabulary for the same fact. `state` is only read here to pick a
+ * colour.
+ */
+export interface IntegrationStatus {
+  state: string
+  label_ar: string
+  label_en: string
+  since: string | null
+  as_of: string | null
+  /** A category code, never a provider's own message. */
+  detail: string | null
+  action: { code: string; label_ar: string; label_en: string } | null
+}
+
+/** The five, in the order the contract names them. None implies another; there is no combined «healthy». */
+export const STATUS_DIMENSIONS = ['authorisation', 'binding', 'sync', 'freshness', 'error'] as const
+export type StatusDimension = typeof STATUS_DIMENSIONS[number]
+export type IntegrationStatuses = Record<StatusDimension, IntegrationStatus>
+
+/**
  * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub: one row per AUTHORISATION.
  *
  * Not one per provider. Two Meta authorisations — the agency's own and a client's, granted by two
@@ -727,6 +752,10 @@ export interface HubConnection {
   has_parent: boolean
   discovery_blocked_reason: string | null
   token_expires_at: string | null
+  /** INTEG-STATUS-MODEL-001 — five independent statuses of this authorisation, resolved on the server. */
+  statuses?: IntegrationStatuses | null
+  /** What this provider can and cannot do, stated rather than hidden (an API-key source has no consent screen). */
+  status_profile?: { kind?: string; auth: string | null; refresh: boolean | null; token_expiry: boolean | null; webhooks: string | null; freshness_mode: string } | null
 }
 
 /** A provider a NEW authorisation can be started for: enabled, and with its system keys present. */
@@ -774,4 +803,42 @@ export async function removeConnection(
 ): Promise<{ removed: boolean; disabled_bindings: number }> {
   await ensureCsrfCookie()
   return postData(`/connections/${connectionId}/remove`, options.unconfirmedOnly ? { unconfirmed_only: true } : {})
+}
+
+/**
+ * INTEG-UNIFIED-002 — one row of the centre's «التدقيق» log.
+ *
+ * The tenant's own read of the existing audit trail. The server returns no payload, address or
+ * agent, and names the actor by NAME: a workspace email is not this page's business.
+ */
+export interface IntegrationAuditEntry {
+  id: string
+  action: string
+  category: 'authorisation' | 'binding' | 'sync' | null
+  actor_name: string | null
+  provider: string | null
+  provider_label: string | null
+  provider_label_ar: string | null
+  subject_kind: 'connection' | 'account' | 'project' | 'binding' | null
+  subject_name: string | null
+  created_at: string | null
+}
+
+export interface IntegrationAuditPage {
+  entries: IntegrationAuditEntry[]
+  page_sizes: number[]
+  meta: { total: number; per_page: number; current_page: number; last_page: number }
+}
+
+export function fetchIntegrationAudit(query: {
+  category?: 'authorisation' | 'binding' | 'sync' | null
+  page?: number
+  perPage?: number
+} = {}): Promise<IntegrationAuditPage> {
+  const params = new URLSearchParams()
+  if (query.category) params.set('category', query.category)
+  if (query.page) params.set('page', String(query.page))
+  if (query.perPage) params.set('per_page', String(query.perPage))
+  const qs = params.toString()
+  return getData<IntegrationAuditPage>(`/integrations/audit${qs === '' ? '' : `?${qs}`}`)
 }

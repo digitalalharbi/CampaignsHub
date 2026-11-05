@@ -7,6 +7,7 @@ use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
 use App\Domains\Integrations\Http\Controllers\ApiKeyConnectionController;
 use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
+use App\Domains\Integrations\Http\Controllers\IntegrationAuditController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
@@ -66,6 +67,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
          * Above `{key}` in the file so the literal segment is never read as a provider key.
          */
         Route::get('hub', ConnectionHubController::class)->name('hub');
+        // INTEG-UNIFIED-002 — the centre's «التدقيق» section: the tenant's own read of its integration audit rows.
+        Route::get('audit', IntegrationAuditController::class)->name('audit');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
         Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');

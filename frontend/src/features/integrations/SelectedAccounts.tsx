@@ -1,3 +1,5 @@
+import { PageSizer, type PageSize } from './PageSizer'
+import { StatusChips } from './StatusChips'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, Link2, RefreshCw, ScrollText, X } from 'lucide-react'
@@ -129,7 +131,6 @@ export type SelectedAccountsScope =
   | { project: string; connection?: string }
   | { connection: string; project?: string }
 
-const PER_PAGE = 10
 
 export function SelectedAccounts({ project, connection, onManage }: SelectedAccountsScope & {
   /** Opens the wizard in manage mode on that account's connection and project. */
@@ -138,19 +139,20 @@ export function SelectedAccounts({ project, connection, onManage }: SelectedAcco
   const ar = useUi((s) => s.locale) === 'ar'
   const c = COPY[ar ? 'ar' : 'en']
   const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState<PageSize>(10)
   const [logsFor, setLogsFor] = useState<AccountRow | null>(null)
   const [backfillFor, setBackfillFor] = useState<AccountRow | null>(null)
 
   const scoped = project !== undefined || connection !== undefined
 
   const accountsQuery = useQuery({
-    queryKey: ['integration-accounts', { project, connection, link: 'linked', page }],
+    queryKey: ['integration-accounts', { project, connection, link: 'linked', page, perPage }],
     queryFn: () => listAccounts({
       link: 'linked',
       ...(project === undefined ? {} : { project }),
       ...(connection === undefined ? {} : { connection }),
       page,
-      per_page: PER_PAGE,
+      per_page: perPage,
     }),
     enabled: scoped,
     placeholderData: (previous) => previous,
@@ -158,6 +160,7 @@ export function SelectedAccounts({ project, connection, onManage }: SelectedAcco
 
   const accounts = accountsQuery.data?.accounts ?? []
   const lastPage = accountsQuery.data?.meta.last_page ?? 1
+  const total = accountsQuery.data?.meta.total ?? accounts.length
 
   if (accountsQuery.isLoading) return <Skeleton className="h-20 w-full" />
 
@@ -180,6 +183,11 @@ export function SelectedAccounts({ project, connection, onManage }: SelectedAcco
             />
           ))}
         </ul>
+      )}
+
+      {/* The centre's tables page at 10 / 25 / 50; the control appears once there is a second page to ask for. */}
+      {total > 10 && (
+        <PageSizer value={perPage} onChange={(size) => { setPerPage(size); setPage(1) }} ar={ar} testId="selected-accounts-page-size" />
       )}
 
       {lastPage > 1 && (
@@ -229,6 +237,16 @@ function SelectedAccountItem({ account, ar, onLogs, onBackfill, onManage }: {
           {accountHealthLabel(account.health, ar)}
         </Badge>
       </div>
+
+      {/*
+        INTEG-UNIFIED-002 (§1.13) — the resource's own five statuses, each on its own chip. The single
+        word above is the older summary; these are the facts it summarised, and none implies another.
+      */}
+      {(account.statuses ?? null) !== null && (
+        <div className="mt-1.5 min-w-0">
+          <StatusChips statuses={account.statuses!} ar={ar} id={account.id} />
+        </div>
+      )}
 
       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
         <span className="font-mono" dir="ltr">{account.reference}</span>

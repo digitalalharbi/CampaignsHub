@@ -6,12 +6,17 @@ import {
   fetchConnectionHub, removeConnection,
   type AccountRow, type ConnectableProvider, type HubConnection,
 } from './api'
-import { ConnectionHub } from './ConnectionHub'
+import { ConnectionHub, HubSummary } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
+import { IntegrationAudit } from './IntegrationAudit'
+import { listProjects } from '@/features/projects/api'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { Skeleton } from '@/components/ui/States'
+import { Plus } from 'lucide-react'
 import { platformColor } from '@/features/analytics/components'
 import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
@@ -34,6 +39,23 @@ import { useProject } from '@/stores/project'
  * Tenant-level, deliberately: an authorisation belongs to the tenant and is LENT to projects
  * through a binding, so this page is reachable before any project is chosen.
  */
+/**
+ * INTEG-UNIFIED-002 (contract §1.12) — one centre, three sections, in this order:
+ *
+ *  1. «المشاريع» — Project-First: every project, what feeds it, and the link journey started from it.
+ *  2. «المصادر المرتبطة» — the actual resources: platform account, five independent statuses, controls.
+ *  3. «التدقيق» — health and authorisation that need action, and the log of who did what.
+ *
+ * The working sections come first and the figures that summarise them come last (feature first).
+ * `connection-hub` names the CENTRE — the whole three-section surface — because that is what the hub
+ * is now; the sources list inside it is `hub-section-sources`.
+ */
+export const HUB_SECTIONS: Array<{ key: 'projects' | 'sources' | 'audit'; target: string; ar: string; en: string }> = [
+  { key: 'projects', target: 'hub-projects', ar: 'المشاريع', en: 'Projects' },
+  { key: 'sources', target: 'hub-sources', ar: 'المصادر المرتبطة', en: 'Linked sources' },
+  { key: 'audit', target: 'hub-audit', ar: 'التدقيق', en: 'Audit' },
+]
+
 export function IntegrationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
@@ -117,20 +139,77 @@ export function IntegrationsPage() {
     void queryClient.invalidateQueries({ queryKey: ['connectors'] })
   }
 
+  /*
+   * Re-authorise — ONE way in, whichever control was pressed (the row, the menu, the drawer, the
+   * audit finding). It renews the grant through the centre's own flow and leaves the selection alone.
+   */
+  const reauthorise = (connection: HubConnection) => {
+    setDrawer(null)
+    setMenu(null)
+    setFlow({ mode: 'reauthorise', provider: null, connection, projectId: manageDestination(connection) })
+  }
+
+  const manage = (connection: HubConnection) => {
+    setMenu(null)
+    setFlow({ mode: 'manage', provider: null, connection, projectId: manageDestination(connection) })
+  }
+
+  const live = connections.filter((c) => (c.removed_at ?? null) === null && c.connection_state !== 'REVOKED')
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* INTEGRATION-ESTATE-001 — client first: what feeds each project, with linking and removing on the row. */}
-      <ProjectsEstate
-        connectable={hub.data?.connectable ?? []}
-        onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
-        onManage={manageAccount}
+    <div className="flex min-w-0 flex-col gap-6" data-testid="connection-hub" dir={ar ? 'rtl' : 'ltr'}>
+      {/*
+        UX-PAGE-HERO-001 — the page's one shared head. It carries the ONE connect entry (with nothing
+        connected the sources section's empty state carries it instead, so the button is never drawn
+        twice), and no figures: those are the summary under the work.
+      */}
+      <PageIntro
+        testid="integrations-intro"
+        title={ar ? 'مركز التكاملات' : 'Integrations Centre'}
+        purpose={ar
+          ? 'ابدأ من المشروع، اربط به مصدرًا، وتابع حالاته وسجله من مكان واحد.'
+          : 'Start from the project, link a source to it, and follow its statuses and its log in one place.'}
+        actions={live.length === 0 ? undefined : (
+          <Button onClick={() => setPicking(true)} data-testid="hub-connect">
+            <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
+          </Button>
+        )}
       />
 
+      {/* The three sections, named once and reachable in one press — on a phone they are a long way apart. */}
+      <nav aria-label={ar ? 'أقسام مركز التكاملات' : 'Centre sections'} data-testid="hub-sections">
+        <ul className="flex min-w-0 gap-1 overflow-x-auto rounded-[13px] border border-border bg-surface-secondary p-1">
+          {HUB_SECTIONS.map((section) => (
+            <li key={section.key} className="shrink-0">
+              <button
+                type="button"
+                data-testid={`hub-section-link-${section.key}`}
+                onClick={() => document.getElementById(section.target)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}
+                className="whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface hover:text-text-primary"
+              >
+                {ar ? section.ar : section.en}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* 1 — «المشاريع». INTEGRATION-ESTATE-001: client first, with linking and removing on the row. */}
+      <div data-testid="hub-section-projects" className="min-w-0">
+        <ProjectsEstate
+          connectable={hub.data?.connectable ?? []}
+          onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
+          onManage={manageAccount}
+        />
+      </div>
+
+      {/* 2 — «المصادر المرتبطة». */}
       <ConnectionHub
         onConnect={() => setPicking(true)}
         onOpen={(connection, tab) => setDrawer({ id: connection.id, tab: tab ?? 'overview' })}
         onAction={(connection) => setMenu(connection)}
         onRemove={(connection) => setRemoving(connection)}
+        onReauthorise={reauthorise}
       />
 
       {/*
@@ -151,13 +230,25 @@ export function IntegrationsPage() {
       */}
       <PropertiesPanel />
 
+      {/* 3 — «التدقيق». Reads the same hub rows the sources section draws, so the two cannot disagree. */}
+      <IntegrationAudit
+        connections={live}
+        onReauthorise={reauthorise}
+        onManage={manage}
+        onOpen={(connection) => setDrawer({ id: connection.id, tab: 'overview' })}
+      />
+
+      {/* Feature first: the figures that summarise the work come after it. */}
+      <HubSummary connections={connections} />
+
       {picking && (
         <ProviderPicker
           providers={hub.data?.connectable ?? []}
           ar={ar}
-          onPick={(provider) => {
+          initialProjectId={currentProjectId}
+          onPick={(provider, projectId) => {
             setPicking(false)
-            setFlow({ mode: 'connect', provider, connection: null, projectId: null })
+            setFlow({ mode: 'connect', provider, connection: null, projectId })
           }}
           onClose={() => setPicking(false)}
         />
@@ -189,15 +280,7 @@ export function IntegrationsPage() {
               projectId: projectId ?? manageDestination(connection),
             })
           }}
-          onReauthorise={(connection) => {
-            setDrawer(null)
-            setFlow({
-              mode: 'reauthorise',
-              provider: null,
-              connection,
-              projectId: manageDestination(connection),
-            })
-          }}
+          onReauthorise={reauthorise}
         />
       )}
 
@@ -206,10 +289,8 @@ export function IntegrationsPage() {
           ar={ar}
           onClose={() => setMenu(null)}
           onOpen={(tab) => { setDrawer({ id: menu.id, tab }); setMenu(null) }}
-          onManageAccounts={() => {
-            setFlow({ mode: 'manage', provider: null, connection: menu, projectId: manageDestination(menu) })
-            setMenu(null)
-          }}
+          onManageAccounts={() => manage(menu)}
+          onReauthorise={menu.status_profile?.auth === 'api_key' ? undefined : () => reauthorise(menu)}
           onRemove={() => { setRemoving(menu); setMenu(null) }}
         />
       )}
@@ -232,33 +313,78 @@ export function IntegrationsPage() {
 }
 
 /**
- * Which provider a new authorisation is for.
+ * INTEG-UNIFIED-002 (contract §1.3) — «ربط مصدر», Project-First: the project, THEN the platform.
  *
- * Deliberately a short list and not the card grid this page used to be: the grid was a catalogue,
- * and a reader who has pressed «Connect a source» has already decided to shop. Only providers this
- * install can actually start appear — offering one it cannot produces a request the server refuses.
+ * The picker used to ask only for a platform and leave the client to the flow's first step, which
+ * made the platform the first decision and the client an afterthought. The order is now the
+ * journey's: a platform cannot be pressed until a project is chosen, and the project rides into the
+ * flow — and through the provider's consent screen — as the destination every later step is fixed to.
  *
- * Each row says HOW it connects, because the two are different acts and the difference matters
- * before the press, not after: one hands you to the platform's own sign-in, the other asks for a key
- * you must already have. A reader who expected a consent screen and met a key box goes looking for
- * the key with the dialog open; one told beforehand brings it.
+ * A reader already standing in a project, or a workspace with exactly one, is not asked a question
+ * with one answer: that project is preselected and stays changeable.
+ *
+ * Deliberately a short list and not the card grid this page used to be: only providers this install
+ * can actually start appear — offering one it cannot produces a request the server refuses. Each row
+ * says HOW it connects, because the two are different acts and the difference matters before the
+ * press, not after: one hands you to the platform's own sign-in, the other asks for a key you must
+ * already have.
  */
-function ProviderPicker({ providers, ar, onPick, onClose }: {
+function ProviderPicker({ providers, ar, initialProjectId, onPick, onClose }: {
   providers: ConnectableProvider[]
   ar: boolean
-  onPick: (provider: ConnectableProvider) => void
+  initialProjectId: string | null
+  onPick: (provider: ConnectableProvider, projectId: string) => void
   onClose: () => void
 }) {
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
+  const [chosen, setChosen] = useState<string | null>(null)
+  const list = projects.data ?? []
+  const fallback = list.some((p) => p.id === initialProjectId) ? initialProjectId : (list.length === 1 ? list[0]!.id : null)
+  const projectId = chosen ?? fallback
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl" data-testid="provider-picker">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-text-primary">{ar ? 'اختر المنصة' : 'Choose a platform'}</h2>
+          <h2 className="text-base font-bold text-text-primary">{ar ? 'ربط مصدر' : 'Connect a source'}</h2>
           <Button variant="ghost" onClick={onClose} data-testid="provider-picker-close">{ar ? 'إغلاق' : 'Close'}</Button>
         </div>
 
+        <section className="mt-4 flex flex-col gap-1.5">
+          <label htmlFor="picker-project" className="text-sm font-bold text-text-primary">
+            <span className="tnum">1</span> · {ar ? 'اختر المشروع' : 'Choose the project'}
+          </label>
+          {projects.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : list.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-3 text-center text-xs text-text-secondary" data-testid="picker-no-project">
+              {ar ? 'لا يوجد مشروع بعد. أنشئ مشروعًا أولًا ثم اربط به مصدرًا.' : 'There is no project yet. Create one first, then link a source to it.'}
+            </p>
+          ) : (
+            <select
+              id="picker-project"
+              value={projectId ?? ''}
+              onChange={(e) => setChosen(e.target.value === '' ? null : e.target.value)}
+              data-testid="picker-project"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">{ar ? 'اختر المشروع' : 'Choose the project'}</option>
+              {list.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </section>
+
+        <h3 className="mt-4 text-sm font-bold text-text-primary">
+          <span className="tnum">2</span> · {ar ? 'اختر المنصة' : 'Choose the platform'}
+        </h3>
+        {projectId === null && providers.length > 0 && (
+          <p className="mt-1 text-xs text-text-secondary" data-testid="picker-project-first">
+            {ar ? 'اختر المشروع أولًا لتُتاح المنصات.' : 'Choose the project first to enable the platforms.'}
+          </p>
+        )}
+
         {providers.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="provider-picker-empty">
+          <p className="mt-2 rounded-xl border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="provider-picker-empty">
             {/*
               Said as the operator's business and not as the customer's fault: no system credential
               for any platform is a setup that has not happened, and nothing on this page can do it.
@@ -268,18 +394,19 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
               : 'No platform is set up for connecting yet. The platform operator is preparing them.'}
           </p>
         ) : (
-          <ul className="mt-4 flex flex-col gap-1.5">
+          <ul className="mt-2 flex flex-col gap-1.5">
             {sortByPlatform(providers, (p) => p.key).map((provider) => (
               <li key={provider.key}>
                 <button
                   type="button"
-                  onClick={() => onPick(provider)}
+                  disabled={projectId === null}
+                  onClick={() => { if (projectId !== null) onPick(provider, projectId) }}
                   data-testid={`provider-pick-${provider.key}`}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors hover:bg-surface-hover"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   <span className="h-7 w-1 shrink-0 rounded-full" style={{ background: platformColor(provider.key) }} aria-hidden />
                   <span className="flex min-w-0 flex-col">
-                    {/* «اختر المنصة» lists platforms. The interface's own name belongs on a hub row,
+                    {/* The picker lists platforms. The interface's own name belongs on a hub row,
                         which describes one authorisation, not here. */}
                     <span className="truncate text-sm font-semibold text-text-primary">
                       {platformLabel(provider.key, ar)}
@@ -309,11 +436,13 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
  * confusion support transcripts are full of: an account made last week is missing, so somebody
  * re-authorises instead of re-reading the catalogue.
  */
-function ActionMenu({ ar, onClose, onOpen, onManageAccounts, onRemove }: {
+function ActionMenu({ ar, onClose, onOpen, onManageAccounts, onReauthorise, onRemove }: {
   ar: boolean
   onClose: () => void
   onOpen: (tab: DrawerTab) => void
   onManageAccounts: () => void
+  /** Absent for an API-key source: it has no consent screen to return to. */
+  onReauthorise?: () => void
   onRemove: () => void
 }) {
   return (
@@ -325,6 +454,11 @@ function ActionMenu({ ar, onClose, onOpen, onManageAccounts, onRemove }: {
         <MenuItem testId="action-manage" onClick={onManageAccounts}>
           {ar ? 'تعديل الاختيار' : 'Edit the selection'}
         </MenuItem>
+        {onReauthorise !== undefined && (
+          <MenuItem testId="action-reauthorise" onClick={onReauthorise}>
+            {ar ? 'إعادة المصادقة' : 'Re-authorise'}
+          </MenuItem>
+        )}
         <MenuItem testId="action-history" onClick={() => onOpen('history')}>
           {ar ? 'سجل المزامنة' : 'Sync history'}
         </MenuItem>
