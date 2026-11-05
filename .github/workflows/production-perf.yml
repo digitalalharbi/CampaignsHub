@@ -54,6 +54,19 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS11"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'tenant' as q, left(id::text,8), name, slug, status, created_at from tenants where id::text like '1e1eac1c%'; ROLLBACK;
+            BEGIN READ ONLY; select 'mem' as q, u.email, m.role, m.status, m.portal, m.is_default from memberships m join users u on u.id=m.user_id where m.tenant_id::text like '1e1eac1c%'; ROLLBACK;
+            BEGIN READ ONLY; select 'subcols' as q, string_agg(column_name, ',') from information_schema.columns where table_name='subscriptions'; ROLLBACK;
+            BEGIN READ ONLY; select 'sub' as q, to_jsonb(s) - 'metadata' - 'meta' from subscriptions s where s.tenant_id::text like '1e1eac1c%'; ROLLBACK;
+            BEGIN READ ONLY; select 'proj' as q, count(*) from projects where tenant_id::text like '1e1eac1c%'; ROLLBACK;
+            BEGIN READ ONLY; select 'ws' as q, count(*) from workspaces where tenant_id::text like '1e1eac1c%'; ROLLBACK;
+            BEGIN READ ONLY; select 'othermem' as q, count(*) from memberships m join users u on u.id=m.user_id where lower(u.email)='digital@smartcode.sa'; ROLLBACK;
+            SQL
+            echo "== END FACTS11"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
