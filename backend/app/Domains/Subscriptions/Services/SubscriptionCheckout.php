@@ -6,6 +6,7 @@ namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Services\RegistrationCommercialGate;
 use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
 use App\Domains\Billing\Gateways\PaymentGatewaySettings;
 use App\Domains\Billing\Providers\PaymentProvider;
@@ -41,6 +42,7 @@ final class SubscriptionCheckout
         private readonly TrialEligibility $trials,
         private readonly SubscriptionInvoicing $invoices,
         private readonly RecurringBilling $recurring,
+        private readonly RegistrationCommercialGate $gate,
     ) {}
 
     /**
@@ -89,9 +91,14 @@ final class SubscriptionCheckout
             throw new RuntimeException('This plan is not sold on the requested term.');
         }
 
+        // SIGNUP-DECISION-001 — the discount in force is the amount charged, and a charge of its own: the key carries the
+        // decision, so a charge opened at the old price is not handed back at the new one.
+        $discount = $this->gate->discountInForce($request);
+
         return $this->open(
             purpose: 'subscription',
-            amount: $quote['due_now'],
+            amount: $discount !== null ? (string) $discount->terms['amount_due'] : $quote['due_now'],
+            keySuffix: $discount?->getKey(),
             currency: $quote['currency'],
             planCode: $plan->code,
             interval: $interval,
@@ -141,9 +148,12 @@ final class SubscriptionCheckout
             return ['payment' => $this->refusedPayment($request, $plan->code), 'status' => 'refused', 'checkout_url' => null, 'refused' => $refused];
         }
 
+        $discount = $this->gate->discountInForce($request);
+
         return $this->open(
             purpose: 'trial',
-            amount: (string) $plan->trial_fee,
+            amount: $discount !== null ? (string) $discount->terms['amount_due'] : (string) $plan->trial_fee,
+            keySuffix: $discount?->getKey(),
             currency: $plan->currency,
             planCode: $plan->code,
             interval: $interval,
@@ -238,6 +248,7 @@ final class SubscriptionCheckout
         ?RegistrationRequest $registration = null,
         ?Tenant $tenant = null,
         ?Subscription $subscription = null,
+        ?string $keySuffix = null,
     ): array {
         $key = $this->providers->defaultKey();
         // PAY-GATEWAY-CONSOLE-001 — a gateway the caller names is honoured only when the console has it enabled; anything else
@@ -252,7 +263,7 @@ final class SubscriptionCheckout
          * bug this is here to prevent. The period is part of it so next month's renewal is a
          * different charge and this month's retry is not.
          */
-        $idempotencyKey = $this->idempotencyKeyFor($purpose, $registration, $subscription, $planCode, $interval);
+        $idempotencyKey = ($keySuffix === null ? '' : $keySuffix.':').$this->idempotencyKeyFor($purpose, $registration, $subscription, $planCode, $interval);
 
         $existing = SubscriptionPayment::query()->where('idempotency_key', $idempotencyKey)->first();
 

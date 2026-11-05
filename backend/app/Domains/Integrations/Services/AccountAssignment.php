@@ -8,7 +8,9 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * PROJECT-INTEGRATION-ASSIGNMENT-001 — the one place that answers «which project owns this account».
@@ -60,6 +62,43 @@ final class AccountAssignment
             ->value('project_id');
 
         return is_string($projectId) && $projectId !== '' ? $projectId : null;
+    }
+
+    /**
+     * INTEG-UNIFIED-BOUNDARIES-001 — run a WRITE only while the binding that authorised the run still stands.
+     *
+     * A job proves the binding when it STARTS; a provider call then takes seconds to minutes, during which the customer may
+     * unlink the account, switch syncing off or move it to another project. A write guarded only by the start check lands
+     * a client's figures in a project they asked us to stop feeding, so every write set re-proves the binding at the moment
+     * it is made.
+     *
+     * The binding row is read with a shared row lock inside the transaction that holds the write: a detach (an UPDATE of
+     * that row) cannot commit between this check and the write, it waits for the write to finish. So the answer is not
+     * «was it bound a moment ago» but «it cannot stop being bound until this write is done».
+     *
+     * Returns false, and runs nothing, when the binding no longer stands. The caller records WHY nothing was stored.
+     *
+     * @param  Closure(): mixed  $write
+     */
+    public function whileBound(ExternalAccount $account, string $projectId, Closure $write): bool
+    {
+        return DB::transaction(function () use ($account, $projectId, $write): bool {
+            $held = ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->where('project_id', $projectId)
+                ->where('is_active', true)
+                ->where('sync_enabled', true)
+                ->sharedLock()
+                ->first(['id']);
+
+            if ($held === null) {
+                return false;
+            }
+
+            $write();
+
+            return true;
+        });
     }
 
     /**

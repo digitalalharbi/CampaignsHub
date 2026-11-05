@@ -212,7 +212,7 @@ final class ConnectionHubController extends Controller
 
         $removal = app(ConnectionRemoval::class);
 
-        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $syncEnabled, $statusRuns, $removal): array {
+        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $removal, $syncEnabled, $statusRuns): array {
             $mine = $accounts->get((string) $connection->getKey(), collect());
 
             // «Discovered» excludes an account whose access the provider has withdrawn: it is not one

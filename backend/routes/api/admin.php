@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\PlatformWebhookEventController;
 use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
@@ -11,6 +12,7 @@ use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
@@ -21,6 +23,7 @@ use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
@@ -127,6 +130,26 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.show');
         Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
             ->name('registrations.terms');
+        Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
+            ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
+        Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
+            ->name('registration-verification-policy.show');
+        Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
+            ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not on it.
+        Route::get('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'show'])->name('auth-code-switches.show');
+        Route::put('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'update'])
+            ->middleware('throttle:30,1')->name('auth-code-switches.update');
+        // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
+        Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
+            ->name('tenants.decision-targets');
+        Route::post('/registrations/{registration}/decision/preview', [PlatformRegistrationController::class, 'previewDecision'])
+            ->middleware('throttle:60,1')->name('registrations.decision.preview');
+        Route::post('/registrations/{registration}/decision', [PlatformRegistrationController::class, 'decide'])
+            ->middleware('throttle:30,1')->name('registrations.decision');
+        Route::post('/registrations/{registration}/decisions/{decision}/verify-settlement', [PlatformRegistrationController::class, 'verifySettlement'])
+            ->whereUuid('decision')->middleware('throttle:30,1')->name('registrations.decision.verify-settlement');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])
@@ -263,6 +286,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * products individually, X gates on a paid tier, and Salla and Zid each need a partner app.
          * A generic list would be wrong in both directions at once.
          */
+        // INTEG-WEBHOOK-ENGINE-001 — the webhook inbox: every delivery with its verdict and state, and a replay for a failed one.
+        Route::get('/webhook-events', [PlatformWebhookEventController::class, 'index'])->name('webhook-events.index');
+        Route::post('/webhook-events/{event}/replay', [PlatformWebhookEventController::class, 'replay'])
+            ->middleware('throttle:30,1')->name('webhook-events.replay');
+
         Route::get('/integrations/review', [ReviewChecklistController::class, 'index'])->name('integrations.review.index');
         Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
         Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])

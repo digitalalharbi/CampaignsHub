@@ -52,6 +52,9 @@ final class AccountMetricsSyncer
     /** `integrations:sync` runs every thirty minutes (routes/console.php) — this is that, named. */
     private const SWEEP_INTERVAL_MINUTES = 30;
 
+    /** INTEG-UNIFIED-BOUNDARIES-001 — what a run says when the binding went away while it was reading. */
+    private const UNLINKED_MID_RUN = 'The account was unlinked from this project (or syncing was switched off) while this run was reading from the provider, so what it read was not stored.';
+
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly UpsertDailyMetrics $upsert,
@@ -197,7 +200,23 @@ final class AccountMetricsSyncer
             $connection->forceFill(['insights_denied_at' => null])->save();
         }
 
-        [$upserted, $skipped, $misfiled, $unlabelled] = $this->ingest($account, $result->records, (string) $run->project_id);
+        /*
+         * INTEG-UNIFIED-BOUNDARIES-001 — the binding is re-proved AT the write, not only when the job started.
+         *
+         * The provider call above took as long as it took; the customer may have unlinked the account, switched syncing off or
+         * moved it to another project in the meantime. The write goes through `whileBound()`, which holds the binding row for
+         * the length of the write, so a detach cannot slip between the check and the rows.
+         */
+        $ingested = [0, 0, 0, 0];
+        $held = $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$ingested, $account, $result, $run): void {
+            $ingested = $this->ingest($account, $result->records, (string) $run->project_id);
+        });
+
+        if (! $held) {
+            return $this->finish($run, SyncRunStatus::AwaitingAssignment, 0, self::UNLINKED_MID_RUN, $account, $this->counts($connector));
+        }
+
+        [$upserted, $skipped, $misfiled, $unlabelled] = $ingested;
 
         /*
          * REACH-PERIOD-001 — a stored window reach that this sync may have changed is marked stale.
@@ -229,6 +248,7 @@ final class AccountMetricsSyncer
          * enrichment, and turning a healthy metrics run red because one extra call was throttled
          * would trade a working pipeline for a nicer screen.
          */
+        $unlinkedMidRun = false;
         if ($connector instanceof ReportsCreativeInsights) {
             try {
                 $creative = $connector->syncCreativeInsights(
@@ -237,8 +257,21 @@ final class AccountMetricsSyncer
                     $to->toDateString(),
                 );
 
-                if ($creative->success) {
-                    $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                $written = null;
+                $creativeHeld = $creative->success
+                    ? $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$written, $account, $creative): void {
+                        $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                    })
+                    : true;
+
+                if (! $creativeHeld) {
+                    $unlinkedMidRun = true;
+                    $run->forceFill([
+                        'creative_status' => 'failed',
+                        'creative_rows' => 0,
+                        'creative_error' => Str::limit(self::UNLINKED_MID_RUN, 480),
+                    ])->save();
+                } elseif ($creative->success) {
                     $unlabelled += $written['currency_unknown'];
 
                     /*
@@ -341,7 +374,9 @@ final class AccountMetricsSyncer
          * platform's.
          */
         $entityFailure = null;
-        if ($connector instanceof ReportsEntityGrains) {
+        if ($unlinkedMidRun) {
+            $entityFailure = self::UNLINKED_MID_RUN;
+        } elseif ($connector instanceof ReportsEntityGrains) {
             $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
             $unlabelled += (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0);
         }
@@ -684,13 +719,25 @@ final class AccountMetricsSyncer
         // SEC-CLUSTER-2 — only entities filed under the project the account is bound to are written to.
         $knownSquads = $this->filedUnder($knownSquads, (string) $run->project_id);
 
-        $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
-            $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
-        );
-        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted'], $squadResult['unkeyed'], $squadRows);
+        // INTEG-UNIFIED-BOUNDARIES-001 — each grain's write re-proves the binding, like the campaign write.
+        $unlinked = false;
+        $upsertGrain = function (string $type, array $rows, array $known) use ($account, $run, &$unlinked): array {
+            $result = ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0];
+            $held = $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$result, $account, $type, $rows, $known, $run): void {
+                $result = app(UpsertEntityDailyMetrics::class)->execute($account, $type, $rows, $known, (string) $run->getKey());
+            });
+            $unlinked = $unlinked || ! $held;
+
+            return $result;
+        };
+
+        $squadResult = $upsertGrain(EntityDailyMetric::AD_SET, $squadRows, $knownSquads);
+        $squadFailure = $unlinked
+            ? self::UNLINKED_MID_RUN
+            : ($squadFailure ?? $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted'], $squadResult['unkeyed'], $squadRows));
 
         $adThrown = null;
-        $adRows = $this->grain(
+        $adRows = $unlinked ? [] : $this->grain(
             /*
              * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
              *
@@ -708,7 +755,7 @@ final class AccountMetricsSyncer
             ),
             $adThrown,
         );
-        $adFailure = $adThrown ?? $connector->lastEntityFailure();
+        $adFailure = $unlinked ? self::UNLINKED_MID_RUN : ($adThrown ?? $connector->lastEntityFailure());
 
         $ads = ExternalAd::withoutGlobalScopes()
             ->whereIn('external_ad_set_id', $squads->modelKeys())
@@ -727,10 +774,12 @@ final class AccountMetricsSyncer
 
         $knownAds = $this->filedUnder($knownAds, (string) $run->project_id);
 
-        $adResult = app(UpsertEntityDailyMetrics::class)->execute(
-            $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
-        );
-        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted'], $adResult['unkeyed'], $adRows);
+        $adResult = $unlinked
+            ? ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0]
+            : $upsertGrain(EntityDailyMetric::AD, $adRows, $knownAds);
+        $adFailure = $unlinked
+            ? self::UNLINKED_MID_RUN
+            : ($adFailure ?? $this->nothingPlaced('ad', count($adRows), $adResult['upserted'], $adResult['unkeyed'], $adRows));
 
         /*
          * Record WHY the grains are empty, when they are.

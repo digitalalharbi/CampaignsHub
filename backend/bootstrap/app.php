@@ -34,6 +34,7 @@ use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
+use App\Domains\Integrations\Console\ReconcileWebhooksCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
@@ -185,6 +186,7 @@ return Application::configure(basePath: dirname(__DIR__))
         IdentityRefreshCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        ReconcileWebhooksCommand::class,
         PurgeUninstalledStoresCommand::class,
         // GA4-INTEGRATION-001 — the measurement sweep: a selected Analytics property's days, in the
         // property's own calendar. Only properties somebody bound to a project are read.

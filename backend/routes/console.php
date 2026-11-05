@@ -179,6 +179,16 @@ Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->wit
 Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
 
 /*
+ * INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation: read-only toward the provider, bounded, OFF by default.
+ *
+ * Listed unconditionally so the scheduled-work inventory sees it; `when()` is what keeps it quiet until the
+ * Owner sets WEBHOOK_RECONCILE_ENABLED. Every six hours at :40, clear of the :20 store sweep, and only the
+ * stores bound to a project, at most twenty per run.
+ */
+Schedule::command('webhooks:reconcile')->cron('40 */6 * * *')->withoutOverlapping()
+    ->when(static fn (): bool => (bool) config('integrations.webhooks.reconcile.enabled'));
+
+/*
  * GA4-INTEGRATION-001 — the measurement sweep.
  *
  * Four-hourly, not half-hourly. GA4 is not restated as often as an ad platform's spend, and the Data
