@@ -54,6 +54,16 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS4"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'acct' as q, left(id::text,8) id, currency from external_accounts where provider='openai_ads' order by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'daily' as q, left(external_account_id::text,8) acct, original_currency, count(*) n, round(sum(original_amount)::numeric,2) orig_sum, round(sum(value)::numeric,2) usd_sum, min(exchange_rate) r from daily_metrics where provider='openai_ads' and metric_key='spend' group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'runs' as q, status, count(*), max(created_at) from metric_sync_runs where external_account_id=(select id from external_accounts where id::text like '059c0c3e%') and created_at > now() - interval '30 minutes' group by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'ent' as q, entity_type, original_currency, count(*) from entity_daily_metrics where external_account_id=(select id from external_accounts where id::text like '059c0c3e%') group by 2,3 order by 2,3; ROLLBACK;
+            SQL
+            echo "== END FACTS4"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
