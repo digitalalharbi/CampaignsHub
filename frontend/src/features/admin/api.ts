@@ -560,7 +560,7 @@ export function fetchRegistration(id: string): Promise<{
   return getData(`/admin/registrations/${id}`)
 }
 
-export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration }> {
+export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
   return postData(`/admin/registrations/${id}/approve`, { note })
 }
 
@@ -596,7 +596,7 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
  */
 export type RegistrationDecisionOutcome =
   | 'approve_payment_required' | 'approve_discount' | 'approve_waiver' | 'approve_trial'
-  | 'approve_external_settlement' | 'approve_join_existing'
+  | 'approve_external_settlement' | 'approve_join_existing' | 'approve_complimentary'
 
 export interface RegistrationDecisionInput {
   outcome: RegistrationDecisionOutcome | 'request_info' | 'defer' | 'reject'
@@ -607,6 +607,7 @@ export interface RegistrationDecisionInput {
   trial_ends_on?: string
   confirm_waiver?: boolean
   confirm_amount?: string | null
+  confirm_complimentary?: boolean
   evidence?: { reference: string; amount: string; currency: string; paid_on: string; note?: string }
   access?: {
     mode: 'new_workspace' | 'join_existing'
@@ -629,6 +630,9 @@ export interface RegistrationDecisionTerms {
   discount_percent?: number
   vat?: { treatment: string; rate: number; tax: string }
   covered_by?: string
+  /** ADMIN-FULL-CONTROL-001 — open-ended direct entry: no period, no renewal and nothing due. */
+  complimentary?: boolean
+  scope?: string
 }
 
 export interface RegistrationDecisionPreview {
@@ -652,7 +656,7 @@ export function previewRegistrationDecision(id: string, input: RegistrationDecis
   return postData(`/admin/registrations/${id}/decision/preview`, input)
 }
 
-export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration }> {
+export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
   return postData(`/admin/registrations/${id}/decision`, input)
 }
 

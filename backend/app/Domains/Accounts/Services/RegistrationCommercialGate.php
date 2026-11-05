@@ -52,6 +52,7 @@ final class RegistrationCommercialGate
             RegistrationDecision::TRIAL => $this->trialHolds($request, $decision) ? RegistrationDecision::BASIS_TRIAL : null,
             RegistrationDecision::EXTERNAL_SETTLEMENT => $this->settlementHolds($request, $decision) ? RegistrationDecision::BASIS_EXTERNAL : null,
             RegistrationDecision::JOIN_EXISTING => $this->joinHolds($decision) ? self::EXISTING_SUBSCRIPTION : null,
+            RegistrationDecision::COMPLIMENTARY => $this->complimentaryHolds($request, $decision) ? RegistrationDecision::BASIS_COMPLIMENTARY : null,
             default => null,
         };
     }
@@ -117,6 +118,17 @@ final class RegistrationCommercialGate
         return $this->samePurchase($request, $decision)
             && isset($terms['trial_ends_at'])
             && Carbon::parse((string) $terms['trial_ends_at'])->isFuture()
+            && $this->decidedByAnAdministrator($decision);
+    }
+
+    /** No date to check, so what it says and who said it are all there is: open-ended, this purchase, an administrator. */
+    private function complimentaryHolds(RegistrationRequest $request, RegistrationDecision $decision): bool
+    {
+        $terms = (array) $decision->terms;
+
+        return ($terms['scope'] ?? null) === 'open_ended'
+            && ($terms['complimentary'] ?? null) === true
+            && $this->samePurchase($request, $decision)
             && $this->decidedByAnAdministrator($decision);
     }
 

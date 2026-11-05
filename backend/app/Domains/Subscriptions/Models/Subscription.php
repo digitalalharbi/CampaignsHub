@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Models;
 
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -61,6 +62,12 @@ final class Subscription extends Model
         'unit_amount' => 'decimal:2',
         'seats' => 'integer',
     ];
+
+    /** Open-ended access the platform owner granted (ADMIN-FULL-CONTROL-001): no end date, and nothing is ever charged while it stands. */
+    public function isComplimentary(): bool
+    {
+        return $this->commercial_basis === RegistrationDecision::BASIS_COMPLIMENTARY;
+    }
 
     /** Is this subscription still inside its paid trial? */
     public function isTrialing(): bool
