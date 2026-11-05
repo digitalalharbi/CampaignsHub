@@ -57,7 +57,7 @@ final class OpenAiAdsConnectorTest extends TestCase
     public function test_the_account_has_no_parent_because_the_provider_publishes_none(): void
     {
         Http::fake(['api.ads.openai.com/*' => Http::response([
-            'id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'SAR',
+            'id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'SAR',
             'timezone' => 'Asia/Riyadh', 'status' => 'ACTIVE',
         ])]);
 
