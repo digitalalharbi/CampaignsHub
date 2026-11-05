@@ -54,6 +54,17 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== GPT FX FACTS2"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'accounts_by_provider' as q, provider, count(*) total, count(*) filter (where currency is null) no_currency, string_agg(distinct currency, ',') currencies from external_accounts where account_type='ad_account' group by 2 order by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'entity_openai' as q, e.entity_type, e.original_currency, count(*) n, round(sum(e.spend_original)::numeric,2) orig_sum from entity_daily_metrics e join external_accounts a on a.id=e.external_account_id where a.provider='openai_ads' group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'openai_dates' as q, min(metric_date) d0, max(metric_date) d1, count(distinct metric_date) days from daily_metrics where provider='openai_ads' and metric_key='spend'; ROLLBACK;
+            BEGIN READ ONLY; select 'openai_bindings' as q, left(a.id::text,8) acct, left(b.project_id::text,8) proj, b.is_active from external_accounts a join project_integration_bindings b on b.external_account_id=a.id where a.provider='openai_ads' order by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'creative_openai' as q, c.original_currency, count(*) n from creative_daily_metrics c join external_accounts a on a.id=c.external_account_id where a.provider='openai_ads' group by 2; ROLLBACK;
+            SQL
+            echo "== END GPT FX FACTS2"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
