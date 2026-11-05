@@ -94,6 +94,14 @@ final class IntegrationBoundaryTwoPropertiesTwoStoresTest extends TestCase
 
     public function test_only_the_selected_propertys_data_is_requested_stored_and_shown(): void
     {
+        /*
+         * The provider answers with the property's own day (Riyadh) and the stored row is read by the
+         * application's day (UTC). Between 21:00 and 24:00 UTC those are two different dates, and the
+         * test failed for three hours every night. The clock is held at an hour where both agree; the
+         * boundary between the two days is not what this test is about.
+         */
+        Carbon::setTestNow(Carbon::now('UTC')->setTime(9, 0));
+
         [$selected, $other] = $this->twoProperties();
         Http::preventStrayRequests();
         Http::fake(function (Request $r) {
