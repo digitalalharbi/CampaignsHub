@@ -326,6 +326,30 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
   `/api/v1/reports/shared/${token}/download/${format}`
 
+/**
+ * SHARED-DOWNLOAD-PASSWORD-001 — the file of a password-protected link, taken with the password.
+ *
+ * A plain address cannot carry a header, and the password does not belong in an address (history,
+ * referrers, server logs). So a protected link fetches the file with the header the page already
+ * uses and hands the bytes to the browser under the name the server gave it.
+ */
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<void> {
+  const response = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  if (!response.ok) throw new Error(`download_failed_${response.status}`)
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const starred = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)
+  const name = starred ? decodeURIComponent(starred[1]) : plain ? plain[1] : `report.${format}`
+  const url = URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
 
