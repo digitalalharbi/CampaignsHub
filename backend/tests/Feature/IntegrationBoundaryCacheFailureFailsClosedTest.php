@@ -171,8 +171,13 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         // A job already in the queue for an unselected account reaches no provider.
         Http::preventStrayRequests();
         Http::fake();
-        SyncAccountMetricsJob::dispatchSync((string) $this->account['deselected']->id, self::FROM, self::TO);
-        SyncAccountMetricsJob::dispatchSync((string) $this->account['unbound']->id, self::FROM, self::TO);
+        foreach (['deselected', 'unbound'] as $kind) {
+            try {
+                SyncAccountMetricsJob::dispatchSync((string) $this->account[$kind]->id, self::FROM, self::TO);
+            } catch (\Throwable) {
+                // a store that is down may stop the job before it starts: refused, which is the closed direction
+            }
+        }
         Http::assertNothingSent();
 
         Queue::fake();
