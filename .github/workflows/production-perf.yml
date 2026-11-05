@@ -54,6 +54,12 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== TINKER"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T backend php artisan tinker --execute='$r=\App\Domains\Accounts\Models\RegistrationRequest::query()->whereRaw("id::text like ?",["904ac4d5%"])->firstOrFail(); $s=app(\App\Domains\Accounts\Services\RegistrationDecisionService::class); $p=$s->preview($r,["outcome"=>"approve_waiver","reason"=>"preview only"]); $a=\App\Models\User::query()->where("is_platform_admin",true)->orderBy("id")->get(["id","name"]); echo json_encode(["state"=>$r->state,"plan"=>$r->plan_code,"interval"=>$r->billing_interval,"tenant_id"=>$r->tenant_id,"provisioned"=>$r->isProvisioned(),"standing"=>$s->standing($r),"preview"=>$p,"admins"=>$a]);' || echo "tinker failed"
+            echo
+            echo "== END TINKER"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
