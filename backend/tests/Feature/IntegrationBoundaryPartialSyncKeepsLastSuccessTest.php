@@ -15,11 +15,13 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\MetricDefinitionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\BuildsBoundaryWorld;
 use Tests\TestCase;
@@ -153,7 +155,7 @@ final class IntegrationBoundaryPartialSyncKeepsLastSuccessTest extends TestCase
         // A wider window had been synced: 2026-08-01 and 2026-08-02 are both stored.
         DB::table('daily_metrics')->where('metric_key', 'spend')->get()->each(function (object $row): void {
             $copy = (array) $row;
-            $copy['id'] = (string) \Illuminate\Support\Str::uuid();
+            $copy['id'] = (string) Str::uuid();
             $copy['metric_date'] = '2026-08-02';
             $copy['value'] = 700;
             DB::table('daily_metrics')->insert($copy);
@@ -213,7 +215,7 @@ final class IntegrationBoundaryPartialSyncKeepsLastSuccessTest extends TestCase
                 return match ($mode) {
                     'page2_500' => Http::response(['error' => ['message' => 'Internal error', 'code' => 2]], 500),
                     'page2_429' => Http::response(['error' => ['message' => 'Too many calls', 'code' => 4]], 429, ['Retry-After' => '1']),
-                    'page2_timeout' => throw new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out'),
+                    'page2_timeout' => throw new ConnectionException('cURL error 28: Operation timed out'),
                     default => Http::response(['data' => []], 200),
                 };
             }

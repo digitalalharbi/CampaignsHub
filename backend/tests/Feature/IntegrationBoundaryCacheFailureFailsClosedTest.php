@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -82,8 +85,8 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         $this->bwBind($this->account['deselected'], $this->project, 'advertising', false);
         // `unbound`: no binding record at all.
 
-        app(\App\Domains\Tenancy\Context\TenantContext::class)->forget();
-        app(\App\Domains\Projects\Context\ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+        app(ProjectContext::class)->forget();
     }
 
     protected function tearDown(): void
@@ -108,7 +111,7 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         app('cache')->purge('scripted');
         // The contract binding (`Illuminate\Contracts\Cache\Repository`, what `SessionRevocations` is built from) caches the store it first resolved.
         app()->forgetInstance('cache.store');
-        app()->forgetInstance(\App\Domains\Identity\Support\SessionRevocations::class);
+        app()->forgetInstance(SessionRevocations::class);
 
         return $store;
     }
@@ -236,7 +239,7 @@ final class IntegrationBoundaryCacheFailureFailsClosedTest extends TestCase
         config(['cache.default' => 'array']);
         app('cache')->setDefaultDriver('array');
         app()->forgetInstance('cache.store');
-        app()->forgetInstance(\App\Domains\Identity\Support\SessionRevocations::class);
+        app()->forgetInstance(SessionRevocations::class);
     }
 
     /** @return array<mixed> */

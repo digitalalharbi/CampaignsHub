@@ -210,7 +210,7 @@ final class StoreSyncer
 
         if (! $unlinked) {
             $customers = $this->attempt(fn () => $connector->syncCustomers($storeId, ...$window), $problems, 'customers');
-            $customerCount = $customers === null || $unlinked ? 0 : (int) $write(fn () => $this->import->customers($store, $projectId, $customers->records));
+            $customerCount = $customers === null ? 0 : (int) $write(fn () => $this->import->customers($store, $projectId, $customers->records));
         }
 
         if (! $unlinked) {

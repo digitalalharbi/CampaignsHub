@@ -6,6 +6,7 @@ namespace Tests\Concerns;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -13,7 +14,11 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -127,7 +132,7 @@ trait BuildsBoundaryWorld
         $base = ['tenant_id' => $account->tenant_id, 'project_id' => $project->id, 'created_at' => now(), 'updated_at' => now()];
         [$campaign, $adSet, $ad, $creative] = [(string) Str::uuid(), (string) Str::uuid(), (string) Str::uuid(), (string) Str::uuid()];
 
-        $unified = \App\Domains\Campaigns\Models\UnifiedCampaign::withoutGlobalScopes()->create([
+        $unified = UnifiedCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $account->tenant_id, 'project_id' => $project->id, 'client_workspace_id' => $project->client_workspace_id,
             'name' => 'U '.$name, 'objective' => 'sales', 'status' => 'active', 'platforms' => [$provider],
         ]);
@@ -175,17 +180,17 @@ trait BuildsBoundaryWorld
     {
         $options = $this->bwAsOperator($operator, $project, 'reports/scope/options?axis=campaigns')['campaigns'] ?? [];
 
-        $report = \App\Domains\Reports\Models\Report::withoutGlobalScopes()->create([
+        $report = Report::withoutGlobalScopes()->create([
             'tenant_id' => $project->tenant_id, 'project_id' => $project->id, 'name' => 'R', 'type' => 'monthly',
             'status' => 'completed', 'currency' => 'SAR', 'period_start' => '2026-08-01', 'period_end' => '2026-08-31', 'data' => [],
         ]);
         app(TenantContext::class)->setTenantId((string) $project->tenant_id);
-        app(\App\Domains\Projects\Context\ProjectContext::class)->setProjectId((string) $project->id);
-        $report->forceFill(['data' => app(\App\Domains\Reports\Services\ReportGenerator::class)->generate($report)])->save();
-        app(\App\Domains\Projects\Context\ProjectContext::class)->forget();
+        app(ProjectContext::class)->setProjectId((string) $project->id);
+        $report->forceFill(['data' => app(ReportGenerator::class)->generate($report)])->save();
+        app(ProjectContext::class)->forget();
         app(TenantContext::class)->forget();
 
-        [, $raw] = app(\App\Domains\Reports\Services\ShareService::class)->create($report, [
+        [, $raw] = app(ShareService::class)->create($report, [
             'mode' => 'live',
             'allow_download' => true,
             'settings' => ['campaign_breakdown' => true],

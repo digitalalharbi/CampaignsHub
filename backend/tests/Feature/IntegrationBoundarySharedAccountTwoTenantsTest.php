@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Services\AccountMetricsSyncer;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -109,7 +110,7 @@ final class IntegrationBoundarySharedAccountTwoTenantsTest extends TestCase
             $side = $this->side[$key];
 
             // A test process keeps the previous request's project context (a real request is its own process): start each tenant clean.
-            app(\App\Domains\Projects\Context\ProjectContext::class)->forget();
+            app(ProjectContext::class)->forget();
             app(TenantContext::class)->forget();
             $client = $this->actingAs($side['user'], 'sanctum')
                 ->getJson('/api/v1/app/clients/'.$side['project']->client_workspace_id.'/analytics?from=2026-08-01&to=2026-08-31')->assertOk()->json('data');
