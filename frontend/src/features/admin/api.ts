@@ -83,6 +83,8 @@ export interface TenantPerson {
   roles?: string[]
   is_platform_admin?: boolean
   status: string
+  /** ADMIN-FULL-CONTROL-001 — the account itself, separate from this membership's status. */
+  disabled?: boolean
 }
 
 /** The four OPS-002 names, or null for everything else the platform records. */
@@ -139,16 +141,17 @@ export function fetchTenant(id: string): Promise<{
   client_workspaces: number
   /** SUPERADMIN-MEMBERS-001 — the workspace's own roles. */
   available_roles?: Array<{ slug: string; name: string }>
+  /** ADMIN-FULL-CONTROL-001 — asked and not answered yet. Never the token. */
+  pending_invitations?: PendingInvitation[]
 }> {
   return getData(`/admin/tenants/${id}`)
 }
 
 /**
- * Suspending locks every person whose only workspace is this one out of the product, so the reason
- * is required by the server rather than optional here — an audit entry with no reason explains
- * nothing to whoever reads it a year later.
+ * Either direction decides who can get in, so the reason is required by the server rather than optional here — an audit
+ * entry with no reason explains nothing to whoever reads it a year later.
  */
-export function setTenantStatus(id: string, status: 'active' | 'suspended', reason?: string): Promise<{
+export function setTenantStatus(id: string, status: 'active' | 'suspended', reason: string): Promise<{
   tenant: { id: string; status: string }
   public_intake_affected: boolean
 }> {
@@ -560,7 +563,7 @@ export function fetchRegistration(id: string): Promise<{
   return getData(`/admin/registrations/${id}`)
 }
 
-export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration }> {
+export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
   return postData(`/admin/registrations/${id}/approve`, { note })
 }
 
@@ -596,7 +599,7 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
  */
 export type RegistrationDecisionOutcome =
   | 'approve_payment_required' | 'approve_discount' | 'approve_waiver' | 'approve_trial'
-  | 'approve_external_settlement' | 'approve_join_existing'
+  | 'approve_external_settlement' | 'approve_join_existing' | 'approve_complimentary'
 
 export interface RegistrationDecisionInput {
   outcome: RegistrationDecisionOutcome | 'request_info' | 'defer' | 'reject'
@@ -607,6 +610,7 @@ export interface RegistrationDecisionInput {
   trial_ends_on?: string
   confirm_waiver?: boolean
   confirm_amount?: string | null
+  confirm_complimentary?: boolean
   evidence?: { reference: string; amount: string; currency: string; paid_on: string; note?: string }
   access?: {
     mode: 'new_workspace' | 'join_existing'
@@ -629,6 +633,9 @@ export interface RegistrationDecisionTerms {
   discount_percent?: number
   vat?: { treatment: string; rate: number; tax: string }
   covered_by?: string
+  /** ADMIN-FULL-CONTROL-001 — open-ended direct entry: no period, no renewal and nothing due. */
+  complimentary?: boolean
+  scope?: string
 }
 
 export interface RegistrationDecisionPreview {
@@ -652,7 +659,7 @@ export function previewRegistrationDecision(id: string, input: RegistrationDecis
   return postData(`/admin/registrations/${id}/decision/preview`, input)
 }
 
-export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration }> {
+export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
   return postData(`/admin/registrations/${id}/decision`, input)
 }
 
@@ -1268,7 +1275,7 @@ export function recordCurrencyRate(body: {
  * SUPERADMIN-ACCESS-001 — restore a person's access. A reason is always required; `password_link` and `reset_mfa` also need the
  * operator's own current password. A returned link is single use and shown once.
  */
-export type UserAccessAction = 'revoke_sessions' | 'password_link' | 'reset_mfa'
+export type UserAccessAction = 'revoke_sessions' | 'password_link' | 'reset_mfa' | 'deactivate' | 'activate'
 
 export function actOnUserAccess(userUuid: string, body: { action: UserAccessAction; reason: string; current_password?: string }): Promise<{
   action: UserAccessAction
@@ -1276,6 +1283,7 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
   delivery?: string | null
   sessions_revoked?: boolean
   mfa_enabled?: boolean
+  disabled?: boolean
 }> {
   return postData(`/admin/users/${userUuid}/access`, body)
 }
@@ -1283,10 +1291,79 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
 /** SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace. A reason is always required. */
 export type MembershipAction = 'change_role' | 'suspend' | 'reactivate' | 'remove'
 
-export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string }): Promise<{
+export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string; confirm_owner?: boolean }): Promise<{
   member: { roles: string[]; status: string | null; member: boolean }
 }> {
   return postData(`/admin/tenants/${tenantId}/members/${userUuid}`, body)
+}
+
+/*
+ * ADMIN-FULL-CONTROL-001 — a person into a workspace, a fresh link, and the subscription with no money moving. No password is set
+ * or shown by any of these, and every one needs a reason on the server.
+ */
+export interface PendingInvitation {
+  id: string
+  email: string
+  role: string
+  delivery_status: string | null
+  expires_at: string | null
+}
+
+export interface IssuedInvitation {
+  delivery_status: string | null
+  accept_link: string | null
+  expires_in_hours: number | null
+}
+
+export function addTenantMember(tenantId: string, body: { email: string; role: string; reason: string }): Promise<{
+  added: boolean
+  member: { roles: string[]; status: string | null; member: boolean } | null
+  invitation: IssuedInvitation | null
+}> {
+  return postData(`/admin/tenants/${tenantId}/members`, body)
+}
+
+export function reissueTenantInvitation(tenantId: string, invitationId: string, reason: string): Promise<{ invitation: IssuedInvitation | null }> {
+  return postData(`/admin/tenants/${tenantId}/invitations/${invitationId}/reissue`, { reason })
+}
+
+export type TenantSubscriptionAction = 'activate' | 'extend' | 'end' | 'complimentary' | 'convert_paid' | 'convert_discount' | 'change_plan'
+
+export interface TenantSubscriptionState {
+  status: string
+  plan_code: string | null
+  plan_name: string | null
+  billing_interval: string | null
+  unit_amount: string | null
+  currency: string | null
+  current_period_end: string | null
+  trial_ends_at: string | null
+  grace_ends_at: string | null
+  commercial_basis: string | null
+  open_ended: boolean
+  next_charge: { discount_percent: number; amount: string; currency: string | null } | null
+}
+
+export interface TenantSubscriptionOverview {
+  subscription: TenantSubscriptionState | null
+  plans: Array<{ code: string; name: string; currency: string; price_monthly: string | null; price_annual: string | null }>
+  history: Array<{ action: string; at: string | null; by: string | null; reason: string | null }>
+}
+
+export function fetchTenantSubscription(tenantId: string): Promise<TenantSubscriptionOverview> {
+  return getData(`/admin/tenants/${tenantId}/subscription`)
+}
+
+export function actOnTenantSubscription(tenantId: string, body: {
+  action: TenantSubscriptionAction
+  reason: string
+  plan_code?: string
+  interval?: 'monthly' | 'annual'
+  ends_on?: string
+  discount_percent?: number
+  confirm_complimentary?: boolean
+}): Promise<{ subscription: TenantSubscriptionState; public_intake_affected: boolean }> {
+  return postData(`/admin/tenants/${tenantId}/subscription`, body)
 }
 
 /*

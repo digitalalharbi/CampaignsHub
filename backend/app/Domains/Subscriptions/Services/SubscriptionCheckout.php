@@ -172,6 +172,11 @@ final class SubscriptionCheckout
     {
         $tenant = Tenant::withoutGlobalScopes()->findOrFail($subscription->tenant_id);
 
+        // The last line of defence: open-ended complimentary access has nothing to charge, and no caller may open a charge for it.
+        if ($subscription->isComplimentary()) {
+            throw new RuntimeException('Complimentary access is not charged.');
+        }
+
         /*
          * The amount comes from the SUBSCRIPTION, not from the catalogue.
          *
@@ -183,6 +188,11 @@ final class SubscriptionCheckout
 
         if ($amount === null) {
             throw new RuntimeException('This subscription has no agreed price to charge.');
+        }
+
+        // A discount the platform owner agreed comes off this one charge. It is cleared when the charge settles.
+        if ($subscription->next_charge_discount_percent !== null) {
+            $amount = AdminSubscriptionControl::discounted((string) $amount, (int) $subscription->next_charge_discount_percent);
         }
 
         return $this->open(
@@ -218,6 +228,10 @@ final class SubscriptionCheckout
         ?string $provider = null,
     ): array {
         $tenant = Tenant::withoutGlobalScopes()->findOrFail($subscription->tenant_id);
+
+        if ($subscription->isComplimentary()) {
+            throw new RuntimeException('Complimentary access is not charged.');
+        }
 
         if ((float) $amount <= 0) {
             throw new RuntimeException('A plan change with nothing to pay must not open a charge.');

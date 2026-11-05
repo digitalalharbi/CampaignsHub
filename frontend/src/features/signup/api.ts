@@ -59,6 +59,8 @@ export interface RegistrationCommercial {
   amount_due?: string
   discount_percent?: number
   waived_by_admin?: boolean
+  complimentary?: boolean
+  scope?: string
   fee?: string
   period_end?: string
   renewal_amount?: string

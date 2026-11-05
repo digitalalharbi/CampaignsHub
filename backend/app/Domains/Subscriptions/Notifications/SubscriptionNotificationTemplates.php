@@ -216,6 +216,14 @@ final class SubscriptionNotificationTemplates
                     ."The waiver ends on {$date}. After that the subscription is due at {$amount}.\n".$url,
             ],
 
+            'registration_approved_complimentary' => $ar ? [
+                'subject' => 'تمت الموافقة على طلبك: دخول مباشر دون دفع، وحسابك نشط',
+                'body' => "حسابك نشط الآن بدخول مباشر دون دفع، بلا تاريخ انتهاء ولا فاتورة. لم يُخصم منك أي مبلغ.\n".$url,
+            ] : [
+                'subject' => 'Approved: direct entry with no payment, and your account is active',
+                'body' => "Your account is active with direct entry and no payment, with no end date and no invoice. Nothing was charged.\n".$url,
+            ],
+
             'registration_approved_trial' => $ar ? [
                 'subject' => 'تم اعتماد طلبك بفترة تجربة، وحسابك نشط',
                 'body' => "حسابك نشط بفترة تجربة تنتهي في {$date}. لن يُخصم منك أي مبلغ تلقائيًا.\n"
@@ -273,7 +281,7 @@ final class SubscriptionNotificationTemplates
             'plan_changed', 'plan_change_scheduled',
             'registration_approved', 'registration_rejected', 'registration_information_requested',
             'registration_approved_steps_remain', 'registration_approved_discount', 'registration_approved_waived',
-            'registration_approved_trial', 'admin_trial_ending',
+            'registration_approved_trial', 'registration_approved_complimentary', 'admin_trial_ending',
         ];
     }
 }
