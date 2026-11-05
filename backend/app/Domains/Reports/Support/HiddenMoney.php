@@ -189,7 +189,7 @@ final class HiddenMoney
     }
 
     /** The metric key an Arabic KPI label names, or null when it names none this product ranks on. */
-    private static function metricForLabel(string $label): ?string
+    public static function metricForLabel(string $label): ?string
     {
         static $map = null;
         if ($map === null) {
