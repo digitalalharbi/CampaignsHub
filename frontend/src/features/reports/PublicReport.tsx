@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
-import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
+import { downloadSharedFile, fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
@@ -72,6 +72,24 @@ export function PublicReport() {
    * endpoint on every filter change would start 401-ing partway through a session that is working fine.
    */
   const [accepted, setAccepted] = useState<string | undefined>(undefined)
+
+  /*
+   * SHARED-DOWNLOAD-PASSWORD-001 — a password link's files are fetched, not navigated to.
+   *
+   * The download door now asks for the password like every other door, and a link's `href` cannot
+   * carry one. On a link with no password the anchors below stay plain navigations, exactly as before.
+   */
+  const [downloading, setDownloading] = useState<ReportFormat | null>(null)
+  const [downloadFailed, setDownloadFailed] = useState(false)
+
+  const takeFile = async (format: ReportFormat, pw: string) => {
+    if (downloading) return
+    setDownloading(format)
+    setDownloadFailed(false)
+    const result = await downloadSharedFile(token, format, pw)
+    setDownloading(null)
+    if (!result.ok) setDownloadFailed(true)
+  }
 
   const load = async (pw?: string) => {
     setState('loading')
@@ -209,10 +227,21 @@ export function PublicReport() {
                     </span>
                   )}
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                    <a
+                      key={f}
+                      href={sharedDownloadUrl(token, f)}
+                      data-testid={`shared-report-download-${f}`}
+                      aria-busy={downloading === f || undefined}
+                      onClick={accepted ? (e) => { e.preventDefault(); void takeFile(f, accepted) } : undefined}
+                      title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
                       <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}
+                  {downloadFailed && (
+                    <span role="alert" data-testid="shared-report-download-error" className="text-[11px] font-semibold text-danger">
+                      {locale === 'ar' ? 'تعذّر تنزيل الملف. حاول مرة أخرى.' : 'The file could not be downloaded. Try again.'}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

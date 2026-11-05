@@ -552,11 +552,25 @@ final class PublicReportController extends Controller
         ];
     }
 
-    public function download(Request $request, string $token, string $format): StreamedResponse
+    /**
+     * SHARED-DOWNLOAD-PASSWORD-001 — the file is behind the same gate as the page it is taken from.
+     *
+     * This read the link and went straight to «are downloads allowed», so a password-protected link
+     * handed the whole report, as a file, to anybody holding the address: every other door answered
+     * 401 and this one answered 200. It now passes `open()` like the rest — throttle, active link,
+     * password — and only then says anything about downloads or formats, so a reader without the
+     * password learns neither whether the link allows files nor which ones exist. A refusal is
+     * logged as `denied`, exactly as on the page.
+     *
+     * The PDF needs no gate of its own: the print token Chromium reads is minted below this line.
+     */
+    public function download(Request $request, string $token, string $format): StreamedResponse|JsonResponse
     {
-        $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
-        abort_if($share === null, 404, 'Link not found.');
+        [$share, $refused] = $this->open($request, $token);
+        if ($refused !== null || $share === null) {
+            return $refused ?? ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
+        }
+
         abort_unless($share->allow_download, 403, 'Downloads are disabled for this link.');
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);
 

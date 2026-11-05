@@ -9,6 +9,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -211,6 +212,84 @@ final class SharedLinkDownloadTest extends TestCase
     public function test_an_unknown_format_is_refused(): void
     {
         $this->get("/api/v1/reports/shared/{$this->link()}/download/docx")->assertNotFound();
+    }
+
+    /**
+     * SHARED-DOWNLOAD-PASSWORD-001 — the file is behind the same password as the page.
+     *
+     * Every other door on a password link (`show`, `attribution`, `widgets`, the creatives) answered
+     * 401 without the password; this one answered 200 and the whole report as a file, to anybody
+     * holding the address. The password the owner set protected the page and not its contents.
+     */
+    public function test_a_password_link_refuses_the_file_without_the_password(): void
+    {
+        [$share, $raw] = $this->passwordLink();
+
+        foreach (['csv', 'xlsx', 'pdf'] as $format) {
+            $this->getJson("/api/v1/reports/shared/{$raw}/download/{$format}")
+                ->assertStatus(401)
+                ->assertJsonPath('errors.password_required.0', true);
+        }
+
+        $this->assertSame(0, $share->logs()->where('action', 'download')->count(), 'a refused download was logged as a download');
+        $this->assertSame(3, $share->logs()->where('action', 'denied')->count(), 'a refused download left no denied row');
+    }
+
+    public function test_a_password_link_refuses_the_file_for_a_wrong_password_and_records_it(): void
+    {
+        [$share, $raw] = $this->passwordLink();
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/download/csv", ['X-Report-Password' => 'open-sesame-not'])
+            ->assertStatus(401)
+            ->assertJsonPath('errors.password_required.0', true);
+
+        $this->assertSame(1, $share->logs()->where('action', 'denied')->count(), 'a wrong password left no denied row');
+        $this->assertSame(0, $share->logs()->where('action', 'download')->count());
+    }
+
+    public function test_a_password_link_delivers_the_file_for_the_right_password(): void
+    {
+        [$share, $raw] = $this->passwordLink();
+
+        $csv = $this->get("/api/v1/reports/shared/{$raw}/download/csv", ['X-Report-Password' => 'open-sesame']);
+        $csv->assertOk();
+        $this->assertStringContainsString('Platforms', $csv->streamedContent());
+
+        $xlsx = $this->get("/api/v1/reports/shared/{$raw}/download/xlsx", ['X-Report-Password' => 'open-sesame']);
+        $xlsx->assertOk();
+        $this->assertSame("PK\x03\x04", substr($xlsx->streamedContent(), 0, 4), 'the xlsx is not a zip');
+
+        $this->assertSame(2, $share->logs()->where('action', 'download')->count());
+        $this->assertSame(0, $share->logs()->where('action', 'denied')->count());
+    }
+
+    /** The password comes before everything the link would otherwise disclose about itself. */
+    public function test_a_password_link_says_nothing_about_downloads_or_formats_before_the_password(): void
+    {
+        [, $raw] = app(ShareService::class)->create($this->report, ['password' => 'open-sesame', 'allow_download' => false], null);
+
+        $this->getJson("/api/v1/reports/shared/{$raw}/download/csv")->assertStatus(401);
+        $this->getJson("/api/v1/reports/shared/{$raw}/download/docx")->assertStatus(401);
+        $this->get("/api/v1/reports/shared/{$raw}/download/csv", ['X-Report-Password' => 'open-sesame'])->assertForbidden();
+    }
+
+    /** A revoked password link is gone, not locked: the order is link first, password second. */
+    public function test_a_revoked_password_link_is_not_found_rather_than_locked(): void
+    {
+        [$share, $raw] = $this->passwordLink();
+        $share->forceFill(['revoked_at' => now()])->save();
+
+        $this->get("/api/v1/reports/shared/{$raw}/download/csv", ['X-Report-Password' => 'open-sesame'])->assertNotFound();
+    }
+
+    /**
+     * @return array{0: ReportShare, 1: string}
+     */
+    private function passwordLink(): array
+    {
+        [$share, $raw] = app(ShareService::class)->create($this->report, ['password' => 'open-sesame', 'allow_download' => true], null);
+
+        return [$share, $raw];
     }
 
     private function link(): string
