@@ -58,21 +58,40 @@ final class MailShell
             'startSide' => $ar ? 'right' : 'left',
             'endSide' => $ar ? 'left' : 'right',
             'brand' => 'CampaignsHub',
-            'headerNote' => $ar
-                ? 'مساعدك لمتابعة كل حملاتك الإعلانية المدفوعة من مكان واحد'
-                : 'Your assistant for every paid campaign, in one place',
+            'headerNote' => $ar ? 'منصة إدارة الحملات المدفوعة' : 'Paid media in one place',
+            // Live text, never an image. The em dash is its own left-to-right island so it does not
+            // jump sides when an Arabic and a Latin name share a line. Both are constants, so unescaped is safe.
+            'wordmark' => self::wordmark($ar),
+            'wordmarkPlain' => self::wordmarkPlain($ar),
             'subject' => $subject,
             // The line an inbox shows beside the subject. Never the subject again — that is the only
             // preview a reader gets, and repeating the title wastes it.
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
-            // EMAIL-BRAND-001 — the official lockup for the reader's language, on the production origin.
-            'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+            // EMAIL-BRAND-002 — the transparent cream mark (112px, shown at 56), on the app origin.
+            'logoUrl' => MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png'),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
             't' => self::footerStrings($ar),
         ];
+    }
+
+    /**
+     * The header's name line: one name, in the reader's language, as the official lockup writes it.
+     *
+     * Owner, 2026-11-05: «إذا عربي اكتب كامبينز هب وإذا إنجليزي اكتب بالإنجليزي», and the lockup he approved
+     * the same day. Both names side by side read as a mistake in either language. Constant text.
+     */
+    public static function wordmark(bool $ar): string
+    {
+        return $ar ? 'كامبينز هَب' : 'CampaignsHub';
+    }
+
+    /** The footer's name line. */
+    public static function wordmarkPlain(bool $ar): string
+    {
+        return self::wordmark($ar);
     }
 
     /**
@@ -88,22 +107,22 @@ final class MailShell
     {
         return $ar
             ? [
-                'manage_preferences' => 'إدارة إشعاراتك',
+                'manage_preferences' => 'إدارة الإشعارات',
+                'unsubscribe' => 'إلغاء الاشتراك في هذا النوع',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
                 'support' => 'الدعم',
-                'sender' => 'أُرسلت هذه الرسالة من كامبينز هب — منصة إدارة الحملات الإعلانية المدفوعة.',
-                'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في كامبينز هب.',
+                'why' => 'وصلتك لأنك تتابع هذا المشروع.',
             ]
             : [
-                'manage_preferences' => 'Manage your notifications',
+                'manage_preferences' => 'Manage notifications',
+                'unsubscribe' => 'Unsubscribe from this type',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
                 'support' => 'Support',
-                'sender' => 'Sent by CampaignsHub — the paid-campaign management platform.',
-                'why' => 'You are receiving this because you follow this project in CampaignsHub.',
+                'why' => 'Sent because you follow this project.',
             ];
     }
 
@@ -117,7 +136,7 @@ final class MailShell
     public static function accountFootnote(bool $ar): string
     {
         return $ar
-            ? 'هذه رسالة تخص أمان حسابك، وتُرسل عند الحاجة فقط، ولا يمكن إيقافها من إعدادات الإشعارات.'
-            : 'This message is about the security of your account. It is sent only when needed, and cannot be turned off in notification settings.';
+            ? 'وصلتك لأنها تخص أمان حسابك، ولا يمكن إيقافها من إعدادات الإشعارات.'
+            : 'Sent because it concerns your account security. It cannot be turned off in notification settings.';
     }
 }

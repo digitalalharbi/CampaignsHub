@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { useAuth } from '@/stores/auth'
 import { fmtDateTime } from '@/lib/datetime'
+import { DELIVERY_LABEL, HOLD_REASON } from './scheduleDeliveryWords'
 
 const FREQUENCIES = [
   { value: 'daily', label: 'يومي' },
@@ -30,14 +31,6 @@ const AUDIENCES = [
   { value: 'internal', label: 'داخلي' },
   { value: 'executive', label: 'تنفيذي' },
 ]
-
-/** Delivery states as the ledger records them — never invented, never upgraded to "تم الإرسال". */
-const DELIVERY_LABEL: Record<string, { ar: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
-  sent: { ar: 'مُرسلة', tone: 'success' },
-  awaiting_provider_credentials: { ar: 'بانتظار مزود بريد', tone: 'warning' },
-  suppressed_internal: { ar: 'محجوبة (تقرير داخلي)', tone: 'neutral' },
-  failed: { ar: 'فاشلة', tone: 'danger' },
-}
 
 const freqLabel = (s: ReportScheduleRow) => {
   if (s.frequency === 'weekly') return `أسبوعي · ${WEEKDAYS.find((d) => d.value === s.day)?.label ?? s.day ?? ''}`
@@ -125,6 +118,9 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
                         const meta = DELIVERY_LABEL[status] ?? { ar: status, tone: 'neutral' as const }
                         return <Badge key={status} tone={meta.tone}>{meta.ar}: <span className="tnum">{count}</span></Badge>
                       })}
+                      {Object.entries(s.delivery_reasons ?? {}).map(([reason, count]) => (
+                        <span key={reason} className="text-xs text-text-secondary">{HOLD_REASON[reason] ?? reason}: <span className="tnum">{count}</span></span>
+                      ))}
                     </div>
                   )}
                 </div>

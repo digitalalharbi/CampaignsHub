@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Console;
 
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
+use App\Domains\Reports\Services\ScheduledReportMailer;
 use Illuminate\Console\Command;
 
 /** Dispatches due report schedules (snapshot + honest delivery ledger). Scheduled every 5 minutes. */
@@ -15,9 +16,11 @@ final class DispatchScheduledReports extends Command
 
     protected $description = 'Generate + queue delivery for due scheduled reports (honest delivery states).';
 
-    public function handle(ScheduledReportDispatcher $dispatcher): int
+    public function handle(ScheduledReportDispatcher $dispatcher, ScheduledReportMailer $mailer): int
     {
         $count = $dispatcher->dispatchDue();
+        // EMAIL-GAPS — the rows whose report has finished since the last run. Nothing is `queued` while the mail is off.
+        $mailed = $mailer->sendReady();
         /*
          * AUTOMATION-FIRST-OPERATIONS-001 — the count the ledger is supposed to hold.
          *
@@ -29,7 +32,7 @@ final class DispatchScheduledReports extends Command
          */
         app(ScheduledRunRows::class)->report($count);
 
-        $this->info("Dispatched {$count} scheduled report(s).");
+        $this->info("Dispatched {$count} scheduled report(s); handled the mail for {$mailed} recipient(s).");
 
         return self::SUCCESS;
     }
