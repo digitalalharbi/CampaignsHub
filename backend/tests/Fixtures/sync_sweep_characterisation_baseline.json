@@ -576,7 +576,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -602,7 +606,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -628,7 +636,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             }
         ],
         "period_reach": [
@@ -1791,7 +1803,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -1817,7 +1833,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -1843,7 +1863,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             }
         ],
         "period_reach": [
@@ -3375,7 +3399,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -3401,7 +3429,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -3427,7 +3459,11 @@
                 "insights_denied_at": null,
                 "uninstalled_at": null,
                 "app_profile": null,
-                "issuing_app_id": null
+                "issuing_app_id": null,
+                "removed_at": null,
+                "provider_identity_label": null,
+                "provider_identity_email": null,
+                "provider_identity_fetched_at": null
             }
         ],
         "period_reach": [
