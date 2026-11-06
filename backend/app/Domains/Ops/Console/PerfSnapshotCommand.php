@@ -143,7 +143,8 @@ final class PerfSnapshotCommand extends Command
     {
         $this->heading('QUEUES AND SYNC LOAD');
         $this->attempt(function (): void {
-            foreach (['default', 'reports'] as $queue) {
+            // `live-refresh` (PERF-RECOVERY-001) is listed so Production can read that it is worked, not only dispatched to.
+            foreach (['default', 'reports', 'sync', 'live-refresh'] as $queue) {
                 $this->line("  queue {$queue}: ".Queue::size($queue).' waiting');
             }
 

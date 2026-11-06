@@ -157,7 +157,12 @@ export function LiveKpiBoard({
  * pieces of content that ran.
  */
 export function LiveScopeCounts({ payload, ar }: { payload: LivePayload; ar: boolean }) {
-  const active = (payload.platforms ?? []).filter((p) => (Number(p.spend ?? 0) > 0) || Number(p.conversions ?? 0) > 0).length
+  const rows = payload.platforms ?? []
+  // REPORT-FILTERS-FUNCTIONAL-001 — a link that chose neither spend nor results still has active platforms: those with any figure it carries.
+  const carried = rows.some((p) => 'spend' in p || 'conversions' in p)
+  const active = rows.filter((p) => carried
+    ? (Number(p.spend ?? 0) > 0) || Number(p.conversions ?? 0) > 0
+    : Object.values(p).some((v) => typeof v === 'number' && v > 0)).length
   const content = payload.creatives_in_scope
 
   const items: Array<{ key: string; label: string; value: string }> = [

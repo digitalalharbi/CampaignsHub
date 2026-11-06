@@ -166,6 +166,8 @@ final class UpsertEntityDailyMetrics
                 'spend_original', 'revenue_original', 'original_currency', 'project_currency',
                 'external_campaign_id', 'external_ad_set_id', 'sync_run_id', 'updated_at',
             ],
+            // PERF-RECOVERY-001 — a row the provider repeated keeps the run and the moment that last changed it.
+            stamps: ['sync_run_id', 'updated_at'],
         );
 
         return ['upserted' => count($payload), 'skipped' => $skipped, 'unkeyed' => $unkeyed, 'currency_unknown' => $unlabelled];

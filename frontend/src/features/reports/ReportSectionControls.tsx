@@ -7,6 +7,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { providerLabel } from '@/features/campaigns/labels'
 import { fmtDate } from '@/lib/datetime'
+import { KeptCopyNote } from './ReportVersionHistory'
 import {
   getReportSections,
   getShareSections,
@@ -432,6 +433,8 @@ function StreamsEditor({
           {ar ? 'حفظ المسارات' : 'Save streams'}
         </button>
       </div>
+      {/* A changed stream rebuilds a stored report; the other switches on this panel do not. */}
+      <KeptCopyNote className="mt-2" />
     </div>
   )
 }

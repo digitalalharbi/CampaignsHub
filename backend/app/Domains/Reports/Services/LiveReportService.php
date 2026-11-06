@@ -29,9 +29,11 @@ use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ClientAccountRows;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -275,15 +277,26 @@ final class LiveReportService
     {
         $shareList = fn (string $key): array => $this->shareList($share, $key);
 
+        // The account ceiling, through the same rule `SharedCreativeView` applies to the same link.
+        $campaigns = AccountCampaignCeiling::campaigns(
+            $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
+            array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            $scope['project_id'],
+        );
+
         return [
             'project_ids' => $scope['project_id'] === '' ? [ReportScope::IMPOSSIBLE] : [$scope['project_id']],
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
-            // The account ceiling, through the same rule `SharedCreativeView` applies to the same link.
-            'campaign_ids' => AccountCampaignCeiling::campaigns(
-                $applied['campaigns'] !== [] ? $applied['campaigns'] : $scope['campaign_ids'],
-                array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
-                $scope['project_id'],
-            ),
+            /*
+             * REPORT-FILTERS-FUNCTIONAL-001 — a ceiling that names no campaign and no account is «nothing» for the content too.
+             *
+             * The figures already read it that way (`MetricsAggregator::forCampaigns([])` matches nothing). The content filter
+             * read the same empty list as «no bound on this axis», so such a link drew empty totals above the whole project's
+             * content. No door stores an empty ceiling as a choice: the share form falls back to the report's campaigns, the live
+             * builder requires an account, and a link that follows its accounts resolves to their campaigns or to the impossible
+             * id. Empty is what a report with nothing in its period, or an older row, leaves behind, and it fails closed.
+             */
+            'campaign_ids' => $campaigns === [] ? [ReportScope::IMPOSSIBLE] : $campaigns,
             /*
              * REPORT-SOURCE-ISOLATION-001 — the account axis itself, beside the campaigns it resolved to.
              *
@@ -939,7 +952,8 @@ final class LiveReportService
              */
             'conversions_basis' => $engine->conversionsBasis($from, $to),
             // REPORT-RESULT-KIND-001 — what ONE result is called for the campaigns in scope.
-            'result_kind' => $this->resultKind($scope, $applied['campaigns']),
+            // A ceiling that names nothing reads no campaign's destination either (REPORT-FILTERS-FUNCTIONAL-001).
+            'result_kind' => $this->namesNothing($share, $scope) ? null : $this->resultKind($scope, $applied['campaigns']),
             /*
              * LEAD-EVIDENCE-001 — which base metrics any connected platform actually SENT for this window.
              *
@@ -1168,7 +1182,8 @@ final class LiveReportService
              *
              * Never blended with the ad figures above — see `SiteMeasurementService`.
              */
-            'site_measurement' => $this->siteMeasurement($share, $scope['project_id'], $from, $to),
+            // REPORT-FILTERS-FUNCTIONAL-001 — a link whose ceiling names nothing vouches for no source of the project, this one included.
+            'site_measurement' => $this->namesNothing($share, $scope) ? null : $this->siteMeasurement($share, $scope['project_id'], $from, $to),
             'freshness' => $freshness = $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
             // REPORT-FRESHNESS-STAMP-001 — the page-level stamp: oldest confirmed sync, worst platform status, Riyadh clock.
             'freshness_summary' => app(ReportDataFreshness::class)->summary($freshness),
@@ -1439,22 +1454,7 @@ final class LiveReportService
      */
     private function clientAccountRows(array $rows, ReportShare $share): array
     {
-        // REPORT-GENERIC-LABELS-001 — a name switch on the link or the report outranks the disclosure.
-        if ($share->sectionVisibility()->account_names && ! GenericNames::for($this->reportOf($share), $share)->chose('account')) {
-            return $rows;
-        }
-
-        $ordinal = [];
-        foreach ($rows as $i => $row) {
-            $provider = (string) ($row['provider'] ?? '');
-            $ordinal[$provider] = ($ordinal[$provider] ?? 0) + 1;
-            $rows[$i]['account_name'] = GenericNames::accountRow($provider, $ordinal[$provider], 'ar');
-            $rows[$i]['account_name_en'] = GenericNames::accountRow($provider, $ordinal[$provider], 'en');
-            $rows[$i]['external_account_id'] = null;
-            $rows[$i]['account_name_withheld'] = true;
-        }
-
-        return $rows;
+        return ClientAccountRows::for($rows, $share, $this->reportOf($share));
     }
 
     /**
@@ -1489,6 +1489,10 @@ final class LiveReportService
          * accounts is already bounded by them.
          */
         $named = array_values(array_filter((array) ($share->scope['campaign_ids'] ?? [])));
+        // REPORT-FILTERS-FUNCTIONAL-001 — a ceiling that names nothing compares no formats (see `contentFilters()`).
+        if ($this->namesNothing($share, $scope)) {
+            return null;
+        }
         $answer = app(CreativeFormatIntelligence::class)->forScope($projectId, $from, $to, ceiling: [
             'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
             'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
@@ -1506,6 +1510,20 @@ final class LiveReportService
         }
 
         return $answer;
+    }
+
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — whether this link's ceiling names no campaign and no ad account at all.
+     *
+     * `$scope` is the resolved ceiling: a link that follows its accounts has their campaigns (or the impossible id) in it by now,
+     * so empty here is the stored default, never an operator's «everything». Every reader that takes an empty list for «no
+     * bound» asks this first.
+     *
+     * @param  array<string, mixed>  $scope
+     */
+    private function namesNothing(ReportShare $share, array $scope): bool
+    {
+        return ($scope['campaign_ids'] ?? []) === [] && array_filter((array) ($share->scope['account_ids'] ?? [])) === [];
     }
 
     /**
@@ -1687,6 +1705,11 @@ final class LiveReportService
                     $payload[$key] = $empty;
                 }
             }
+        }
+
+        // REPORT-FILTERS-FUNCTIONAL-001 — and each platform's own movement, which the map above never reached: one rule with the stored copy.
+        if (! ($sections['previous_comparison'] ?? true)) {
+            $payload = PreviousComparison::strip($payload);
         }
 
         return $payload;
@@ -2075,6 +2098,11 @@ final class LiveReportService
     /** @param array{project_id: string, campaign_ids: list<string>} $scope */
     private function storeFunnel(ReportShare $share, array $scope, Carbon $from, Carbon $to): ?array
     {
+        // REPORT-FILTERS-FUNCTIONAL-001 — a link whose ceiling names nothing shows no store either: nobody chose the whole project.
+        if ($this->namesNothing($share, $scope)) {
+            return null;
+        }
+
         // SECURITY CLUSTER 5 — the ad side (spend, ROAS, per-platform spend) is the LINK'S accounts and campaigns, not the whole project's.
         $funnel = app(StoreFunnelService::class)->build((string) $share->tenant_id, $scope['project_id'], $from, $to, [
             'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),

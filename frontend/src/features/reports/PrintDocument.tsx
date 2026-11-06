@@ -1,4 +1,5 @@
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { carries } from './chosenFigures'
 import { selectColumns } from './reportColumns'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -291,7 +292,7 @@ export function PrintDocument({
   // The platform's DEFINED result from the resolver; no Results column at all where the link defines none (never generic conversions).
   const definedFor = (p: Row) => (data.results as { by_platform?: Record<string, { results?: number | null }> } | undefined)?.by_platform?.[String(p.provider ?? p.platform ?? '').toLowerCase()]?.results
   const platformRows = (data.platforms ?? []).map((p: Row) => [
-    platformCell(p.platform ?? p.name ?? '—'),
+    platformCell(p.platform ?? p.provider ?? p.name ?? '—'),
     money(Number(p.spend ?? 0), currency),
     money(Number(p.revenue ?? 0), currency),
     ...(resultsDefined ? [definedFor(p) === null || definedFor(p) === undefined ? '—' : nfmt(Number(definedFor(p)))] : []),
@@ -348,6 +349,8 @@ export function PrintDocument({
   */
   const linkRows = ((data.links ?? []) as LinkRow[]).slice(0, 20)
 
+  // REPORT-FILTERS-FUNCTIONAL-001 — a spend column only where the ads carry spend; a link that did not choose it sends no key.
+  const adSpend = ((data.ads ?? []) as AdRow[]).length === 0 || ((data.ads ?? []) as AdRow[]).some((ad) => carries(ad, 'spend'))
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
     /*
       CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks, not a second chain.
@@ -757,7 +760,7 @@ export function PrintDocument({
           <table className="doc-table doc-ads">
             <thead>
               {/* No «Campaign» column — CLIENT-REPORT-ENTITY-BOUNDARY-001. */}
-              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Spend</th></tr>
+              <tr><th>Preview</th><th>Ad</th><th>Platform</th>{adSpend && <th>Spend</th>}</tr>
             </thead>
             <tbody>
               {adRows.map((ad, i) => (
@@ -787,7 +790,7 @@ export function PrintDocument({
                   </td>
                   <td>{ad.name}</td>
                   <td>{platformCell(ad.provider)}</td>
-                  <td>{ad.spend}</td>
+                  {adSpend && <td>{ad.spend}</td>}
                 </tr>
               ))}
             </tbody>
