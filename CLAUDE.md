@@ -12,22 +12,94 @@ git log --oneline -10 origin/main
 git status
 ```
 
-Then read, in this order — they are the project's own record and they outrank any recollection:
+Then read, in this order — they are the project's own record and they outrank any recollection.
 
-- @docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md — the Owner's permanent, cumulative requirements index and completion gate: READ FIRST
-- @docs/RESUME_STATE.md — the live state, under **START HERE**
+**Six of them are loaded automatically, and the rest are read on demand.** The difference is not a ranking of
+importance; it is a budget, and §Context budget below says why it exists and what each one costs.
+
+Loaded into every message (`@`):
+
+- @docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md — **READ FIRST.** The Owner's permanent
+  execution guard: §0 the product and the eight fundamental rules, §1 sources, precedence and the canonical
+  statuses, §2 the acceptance mechanism, §17 the completion gate, §18 the session-start instruction
+  (~2,700 tokens)
+- @docs/RESUME_STATE.md — the live state, under the top **CURRENT STATE** block, and the roster of registered binding families (~3,700 tokens)
 - @docs/PROJECT_STATE.md — the recovery checkpoint: last verified commit, open pull requests, the
-  commands that verify, the safe next action
-- @docs/REQUIREMENTS_TRACEABILITY_MATRIX.md — every requirement, its status, its commit, its tests
-- @docs/MASTER_EXECUTION_CONTRACT.md — the standing contract for how work is accepted
-- @HANDOFF_MANIFEST.md — the map: architecture, portals, setup, integration readiness
-- @docs/PRODUCTION_HANDOFF.md — what exists, what does not, and the money rules
-- @docs/INTEGRATION_CREDENTIALS_CHECKLIST.md — every provider, its variables, its URLs, its state
-- @docs/CHANGE_MANAGEMENT.md — how a change gets from an issue to production
-- @docs/ENGINEERING_GUIDE.md — architecture, tenancy, security, frontend and the definition of done
+  commands that verify, the safe next action (~1,600 tokens)
+- @docs/MASTER_EXECUTION_CONTRACT.md — the standing contract for how work is accepted (~5,700 tokens)
+- @docs/CHANGE_MANAGEMENT.md — how a change gets from an issue to production (~2,100 tokens)
+- @docs/ENGINEERING_GUIDE.md — architecture, tenancy, security, frontend and the definition of done (~1,600 tokens)
+
+Read on demand — **open these yourself, with a tool, at the point you need them.** Every one of them still binds;
+what changed on 2026-11-06 is *when* it is read, never *whether* it applies. Each row carries its measured size
+and why it is not `@`-loaded, and nobody should add an `@` here without reading §Context budget first:
+
+| Document | What it is | Size | When to read it |
+|---|---|---|---|
+| `docs/PERMANENT_REQUIREMENTS_INDEX_2026-10-22.md` | §3–§16 of the guard: the per-module requirement index — portals and tenancy, navigation, campaigns, analytics, reports, stores, tracking, attribution, creatives, agency operations, budgets, integrations, client reports, production operations | 26 KB · ~6,600 tokens | **It binds exactly as it did when it was one file.** Whole, when planning a batch that spans modules; otherwise the sections for the modules you are touching. The guard's rules kept their `@`; this index is what moved |
+| `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` | Every requirement, its status, its commit, its tests. The only status ledger | **2.3 MB · ~567,000 tokens** | **Never open whole.** `grep` it for the requirement you are working on — `grep -n 'REQUIREMENT-ID' docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`, then read around the hit with `sed -n`. Opening it costs more than half the context window |
+| `docs/OWNER_OBSERVED_DEFECTS.md` | The Owner's observed defects | 212 KB · ~53,000 tokens | `grep` it the same way. Never `@` it |
+| `docs/RESUME_STATE_HISTORY.md` | Every earlier `RESUME_STATE` checkpoint, verbatim | 177 KB · ~44,000 tokens | When you need the reasoning behind something already landed, or a requirement's state at a date |
+| `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md` | Every provider, its variables, its URLs, its state | 28 KB · ~7,100 tokens | When you touch a provider, a credential or an integration |
+| `HANDOFF_MANIFEST.md` | The map: architecture, portals, setup, integration readiness | 18 KB · ~4,400 tokens | When you need the shape of the system rather than its state |
+| `docs/PRODUCTION_HANDOFF.md` | What exists, what does not, and the money rules | 10 KB · ~2,600 tokens | Before touching money, billing or a payment path |
+| `docs/DEPLOYMENT_CHECKLIST.md` | The deploy, the smoke tests in §6, and the two migrations in §7 that rewrite existing rows | 11 KB · ~2,800 tokens | Before every deploy, and before writing a migration. `docs/CHANGE_MANAGEMENT.md` §8 sends you here and that is unchanged |
 
 Work from what those say. If a document contradicts the code, the code is the fact and the document
 is a defect worth fixing.
+
+## Context budget — measured 2026-11-06
+
+An `@` reference does not point at a document. **It loads the whole file into the context of every message of every
+session**, so its cost is its size multiplied by the length of the conversation, and almost all of that is the same
+bytes read again on every turn.
+
+This file used to `@` ten documents. Measured from disk on `origin/main` that morning:
+
+| Document | Bytes | ~tokens, on every message |
+|---|---|---|
+| `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` | 2,268,883 | ~567,200 |
+| `docs/RESUME_STATE.md` | 188,349 | ~47,100 |
+| `docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md` | 34,725 | ~8,700 |
+| `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md` | 28,298 | ~7,100 |
+| `docs/MASTER_EXECUTION_CONTRACT.md` | 22,863 | ~5,700 |
+| `HANDOFF_MANIFEST.md` | 17,619 | ~4,400 |
+| `docs/PRODUCTION_HANDOFF.md` | 10,258 | ~2,600 |
+| `docs/CHANGE_MANAGEMENT.md` | 8,223 | ~2,100 |
+| `docs/PROJECT_STATE.md` | 6,291 | ~1,600 |
+| `docs/ENGINEERING_GUIDE.md` | 6,222 | ~1,600 |
+| **Total `@` autoload** | **2,591,731** | **~648,000** |
+
+**That is 65% of a one-million-token context window spent before anybody types a word** — and spent again on every
+message after it. The matrix alone was 87% of it: 2.3 MB of historical record, re-read on every turn, to answer
+questions that a `grep` answers in a few hundred tokens.
+
+The rule, and it is the owner's policy in `~/.claude/CLAUDE.md` §7 as well as this file's:
+
+- **Total `@` autoload stays under ~15,000 tokens**, unless keeping a safeguard in front of every message costs
+  more — and then the safeguard wins and the excess is named. It is now **~17,300**, and the ~2,700 of that
+  which is the execution guard is the deliberate overrun: unhooking it would have put the total at ~14,600 and
+  left the eight fundamental rules, the canonical statuses and the acceptance mechanism dependent on a session
+  remembering to open a file. The guard was split instead, so the rules kept their `@` and the ~6,600-token
+  requirement index did not. **The next lever, if this has to come down further, is
+  `docs/MASTER_EXECUTION_CONTRACT.md` (~5,700):** its first eleven sections are the binding contract and its
+  three addenda are product specification, so it splits along the same line. That is a separate change.
+- **Never `@` a changelog, a traceability matrix, a requirements index, a defect log or any file over ~20 KB.** Name
+  it in the read-on-demand table above instead, with its size, so the next session knows what restoring the `@` would
+  cost.
+- When a document must be read every session *and* is large, **the document is the defect**: split the live part out
+  and `@` that. `docs/RESUME_STATE.md` was split that way on 2026-11-06 — the live checkpoints stayed, the earlier
+  record moved verbatim to `docs/RESUME_STATE_HISTORY.md`, and nothing was edited or deleted.
+
+**What this change does and does not claim.** The figures above and below are the measured weight of what loads
+on every message, before and after — `wc -c` on the files themselves. They are not a claim about consumption:
+**what this actually returns can only be measured on later sessions**, because the realised cost of context is
+its weight multiplied by how long a conversation runs, and neither that nor the cache behaviour is measured
+here. Do not restate the before/after as a percentage saved on a bill.
+
+**Honest limit of these figures.** The token counts are derived from file size at roughly four bytes to the token, so
+they carry about ±15%. The exact tokenisation is not measured here, and the point does not depend on it: the error bar
+is a few per cent of a number that is two orders of magnitude too large.
 
 ## The owner's global policy, and what this repository overrides
 
@@ -40,6 +112,9 @@ are deliberate and binding:
   development, so the long-running path in this repository is the container plus CI/CD.
 - The global policy asks for durable progress in `docs/PROJECT_STATE.md`. Here that file is the
   mechanical checkpoint only, and it sits *below* the matrix and `RESUME_STATE` in the order above.
+
+One part of it is **adopted here rather than overridden**: §7, the context budget. §Context budget above is this
+repository's own statement of it, with the measurement that made it necessary.
 
 ## Execution policy — owner decision, 2026-08-20
 
@@ -129,7 +204,7 @@ about completeness.
 
 Laravel 12 · PHP 8.4 · PostgreSQL 16 · Redis · Sanctum SPA cookie auth · DDD under `app/Domains/*`
 — and React 19 · TypeScript strict · Vite · TanStack Query · Tailwind v4, Arabic-first RTL with a
-complete English mirror. Four portals behind one `/login`. Details: @HANDOFF_MANIFEST.md.
+complete English mirror. Four portals behind one `/login`. Details: `HANDOFF_MANIFEST.md` (read on demand).
 
 ## Running and verifying
 
@@ -144,4 +219,16 @@ exit code, which is always 0, and that has produced a false green in this reposi
 
 ## Permanent execution guard — read FIRST, every session
 
-`docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md` is the Owner's cumulative requirements index and completion gate. Every session: `git fetch`; read the guard, `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` (the only status ledger), `docs/OWNER_OBSERVED_DEFECTS.md` and `docs/RESUME_STATE.md`; reconcile ALL open rows and PRs, not only the latest message; then execute the next highest-value bounded batch (code → tests → CI → merge → deploy → real Production verification → update the EXISTING ledger rows). A later explicit Owner correction overrides only the precise part it contradicts. Never mark VERIFIED without Production evidence; never redo VERIFIED work.
+**This document keeps its `@`, and that is deliberate.** It is the one file whose rules decide whether work counts
+as done, so it is in front of a session on every message rather than depending on somebody remembering to open it.
+What it cost to keep is written in §Context budget above: it is ~2,700 tokens of a ~17,300-token autoload, which is
+over the ~15,000 target, and the safeguard was ranked above the number.
+
+It fits because it was **split, not shortened** (2026-11-06): §3–§16, the per-module requirement index, moved
+verbatim to `docs/PERMANENT_REQUIREMENTS_INDEX_2026-10-22.md` and are read when you work on the module they
+describe. **They bind exactly as they did when it was one file.** What stayed here is the part that has to be read on
+every message — §0 and its eight fundamental rules, §1 precedence and the canonical statuses, §2 the acceptance
+mechanism, §17 the completion gate, §18 the session-start instruction. Nothing was edited, and reassembling the two
+files reproduces the original byte for byte.
+
+`docs/PERMANENT_REQUIREMENTS_AND_EXECUTION_GUARD_2026-10-22.md` is the Owner's cumulative requirements index and completion gate. Every session: `git fetch`; read the guard, `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md` (the only status ledger — `grep` it for the rows you are reconciling, never open it whole: it is 2.3 MB), `docs/OWNER_OBSERVED_DEFECTS.md` (212 KB — `grep` it the same way) and `docs/RESUME_STATE.md`; reconcile ALL open rows and PRs, not only the latest message; then execute the next highest-value bounded batch (code → tests → CI → merge → deploy → real Production verification → update the EXISTING ledger rows). A later explicit Owner correction overrides only the precise part it contradicts. Never mark VERIFIED without Production evidence; never redo VERIFIED work.

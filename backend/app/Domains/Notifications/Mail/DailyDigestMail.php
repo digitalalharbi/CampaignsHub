@@ -241,7 +241,7 @@ final class DailyDigestMail extends Mailable
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
                 // EMAIL-BRAND-002 — the transparent mark and the live-text wordmark, same as every other message.
-                'logoUrl' => MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png'),
+                'logoUrl' => MailShell::logoUrl($ar),
                 'wordmark' => MailShell::wordmark($ar),
                 'wordmarkPlain' => MailShell::wordmarkPlain($ar),
                 // The shared footer words (support, sender) under the digest's own copy.
@@ -1141,7 +1141,7 @@ final class DailyDigestMail extends Mailable
             'worst' => 'الأضعف',
             'open_dashboard' => 'افتح لوحة التحكم',
             'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
-            'manage_preferences' => 'تفضيلات الإشعارات',
+            'manage_preferences' => 'إعدادات الإشعارات',
             'privacy' => 'الخصوصية',
             'terms' => 'الشروط',
             'security' => 'الأمان',
@@ -1192,7 +1192,7 @@ final class DailyDigestMail extends Mailable
             'worst' => 'Weakest',
             'open_dashboard' => 'Open the dashboard',
             'footer_note' => 'Sent because you chose the '.$this->rhythmName(false).'. Change the projects or the time, or turn it off, in your notification preferences.',
-            'manage_preferences' => 'Notification preferences',
+            'manage_preferences' => 'Notification settings',
             'privacy' => 'Privacy',
             'terms' => 'Terms',
             'security' => 'Security',

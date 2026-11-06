@@ -56,6 +56,9 @@ final class MailTestSendTest extends TestCase
         $this->admin = User::create(['name' => 'Platform', 'email' => 'owner@campaignshub.test', 'password' => 'secret123']);
         // Neither is mass-assignable, on purpose.
         $this->admin->forceFill(['is_platform_admin' => true, 'email_verified_at' => now()])->save();
+        // The platform mailbox is whatever the environment says it is, and CI's says `info@campaignshub.io`.
+        // Every test here that needs one sets it; the rest start with none, so nothing reads the environment.
+        config(['mail.reply_to.address' => null]);
     }
 
     private function live(string $transport = 'array'): void
@@ -132,7 +135,7 @@ final class MailTestSendTest extends TestCase
         $this->live();
 
         $res = $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, [
-            'to' => 'customer@victim.test', 'recipient' => 'customer@victim.test', 'email' => 'customer@victim.test',
+            'recipient' => 'customer@victim.test', 'email' => 'customer@victim.test', 'address' => 'customer@victim.test',
             'cc' => 'customer@victim.test', 'bcc' => 'customer@victim.test', 'lang' => 'en',
         ])->assertOk();
 
@@ -142,6 +145,135 @@ final class MailTestSendTest extends TestCase
         $this->assertSame([], $message->getCc());
         $this->assertSame([], $message->getBcc());
         $this->assertSame(0, DB::table('mail_deliveries')->where('recipient', 'customer@victim.test')->count());
+    }
+
+    /**
+     * EMAIL-TEST-SEND-002 (Owner, Production 2026-11-06) — «ولا وصل البريد … عندي انفو فقط».
+     *
+     * The admin's sign-in address had no mailbox behind it, so an accepted test proved nothing he could
+     * open. `to` chooses between two addresses the SERVER knows; it is never read as an address.
+     */
+    public function test_the_platform_mailbox_target_sends_to_the_reply_to_address_and_records_it(): void
+    {
+        $this->live();
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+
+        $data = $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'ar', 'to' => 'platform_mailbox'])->assertOk()->json('data');
+
+        $this->assertSame('info@campaignshub.test', $data['recipient']);
+        $this->assertSame('platform_mailbox', $data['to']);
+        $this->assertSame('accepted', $data['delivery_state']);
+        [$message] = $this->wire();
+        $this->assertSame(['info@campaignshub.test'], array_map(fn ($a) => $a->getAddress(), $message->getTo()));
+        $this->assertSame([], $message->getCc());
+        $this->assertSame([], $message->getBcc());
+
+        $row = DB::table('mail_deliveries')->where('id', $data['delivery_id'])->first();
+        $this->assertSame('info@campaignshub.test', $row->recipient);
+        $this->assertSame(TransactionalMailer::TEST_KIND, $row->kind);
+        $this->assertNull($row->tenant_id);
+        $this->assertSame((int) $this->admin->id, (int) $row->user_id);
+
+        $audit = DB::table('audit_logs')->where('action', 'mail.test_send')->first();
+        $after = json_decode((string) $audit->after, true);
+        $this->assertSame('platform_mailbox', $after['target']);
+        $this->assertSame('i***@campaignshub.test', $after['recipient']);
+        $this->assertStringNotContainsString('info@campaignshub.test', (string) json_encode($audit));
+    }
+
+    /** The two targets are two messages: testing one must not read as a repeat of the other. */
+    public function test_both_targets_can_be_tested_inside_a_minute_and_self_is_unchanged(): void
+    {
+        $this->live();
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+
+        $implicit = $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'ar'])->assertOk()->json('data');
+        $mailbox = $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'ar', 'to' => 'platform_mailbox'])->assertOk()->json('data');
+        $explicit = $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'ar', 'to' => 'self'])->assertOk()->json('data');
+
+        $this->assertSame(['owner@campaignshub.test', 'self', 'sent'], [$implicit['recipient'], $implicit['to'], $implicit['state']]);
+        $this->assertSame(['info@campaignshub.test', 'platform_mailbox', 'sent'], [$mailbox['recipient'], $mailbox['to'], $mailbox['state']]);
+        // An explicit `self` IS the default: the same message in the same minute, so the same attempt.
+        $this->assertSame('already_sent', $explicit['state']);
+        $this->assertSame($implicit['delivery_id'], $explicit['delivery_id']);
+        $this->assertCount(2, $this->wire());
+        $targets = DB::table('audit_logs')->where('action', 'mail.test_send')->pluck('after')->map(fn ($after) => json_decode((string) $after, true)['target'])->sort()->values()->all();
+        $this->assertSame(['platform_mailbox', 'self', 'self'], $targets);
+    }
+
+    /** `to` is a choice of two words. Anything else, an address above all, is refused before anything is built. */
+    public function test_an_address_in_to_is_refused_and_nothing_is_sent(): void
+    {
+        $this->live();
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+
+        // Three, because the route allows three a minute: a stranger, the mailbox's own address typed out, and a list.
+        foreach (['customer@victim.test', 'info@campaignshub.test', ['platform_mailbox']] as $to) {
+            $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'en', 'to' => $to])
+                ->assertStatus(422)->assertJsonValidationErrors('to');
+        }
+
+        $this->assertSame([], $this->wire());
+        $this->assertSame(0, DB::table('mail_deliveries')->count());
+    }
+
+    public function test_the_platform_mailbox_is_refused_when_no_reply_to_is_configured(): void
+    {
+        $this->live();
+
+        foreach ([null, '', 'not-an-address'] as $unset) {
+            config(['mail.reply_to.address' => $unset]);
+            $this->actingAs($this->admin, 'sanctum')->postJson(self::ROUTE, ['lang' => 'en', 'to' => 'platform_mailbox'])
+                ->assertStatus(422)->assertJsonPath('errors.code', 'platform_mailbox_not_configured');
+        }
+
+        $this->assertSame([], $this->wire());
+        $this->assertSame(0, DB::table('mail_deliveries')->count());
+        $audit = DB::table('audit_logs')->where('action', 'mail.test_send.refused')->first();
+        $this->assertNotNull($audit);
+        $this->assertSame('platform_mailbox', json_decode((string) $audit->after, true)['target']);
+    }
+
+    /** The proof is about the admin's OWN address. The platform's mailbox is the platform's, whoever asks. */
+    public function test_an_unproven_admin_address_stops_self_only(): void
+    {
+        $this->live();
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+        $this->admin->forceFill(['email_verified_at' => null])->save();
+
+        $this->actingAs($this->admin->fresh(), 'sanctum')->postJson(self::ROUTE, ['lang' => 'en', 'to' => 'self'])
+            ->assertStatus(422)->assertJsonPath('errors.code', 'address_not_proven');
+        $this->actingAs($this->admin->fresh(), 'sanctum')->postJson(self::ROUTE, ['lang' => 'en', 'to' => 'platform_mailbox'])
+            ->assertOk()->assertJsonPath('data.recipient', 'info@campaignshub.test');
+
+        $this->assertCount(1, $this->wire());
+    }
+
+    public function test_the_platform_mailbox_target_is_still_the_super_admins_alone(): void
+    {
+        $this->live();
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+
+        $this->postJson(self::ROUTE, ['to' => 'platform_mailbox'])->assertStatus(401);
+        $this->actingAs($this->member('member@acme.test'), 'sanctum')->postJson(self::ROUTE, ['to' => 'platform_mailbox'])->assertStatus(403);
+        $this->actingAs($this->member('manager@acme.test', true), 'sanctum')
+            ->withHeader('X-Tenant-Id', (string) $this->tenant->id)
+            ->postJson(self::ROUTE, ['to' => 'platform_mailbox'])->assertStatus(403);
+
+        $this->assertSame([], $this->wire());
+        $this->assertSame(0, DB::table('mail_deliveries')->count());
+    }
+
+    /** The page shows both addresses before anybody presses anything, from the one place the server reads. */
+    public function test_the_page_is_told_both_targets(): void
+    {
+        $list = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/email/previews')->assertOk()->json('data.test_send');
+        $this->assertNull($list['platform_mailbox']);
+
+        config(['mail.reply_to.address' => 'info@campaignshub.test']);
+        $list = $this->actingAs($this->admin, 'sanctum')->getJson('/api/v1/admin/email/previews')->assertOk()->json('data.test_send');
+        $this->assertSame('info@campaignshub.test', $list['platform_mailbox']);
+        $this->assertSame('owner@campaignshub.test', $list['recipient']);
     }
 
     public function test_an_address_nobody_proved_is_refused_and_the_refusal_is_audited(): void
