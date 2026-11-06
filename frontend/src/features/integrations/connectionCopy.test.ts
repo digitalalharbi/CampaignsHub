@@ -22,6 +22,7 @@ const SOURCES: Record<string, string> = import.meta.glob('/src/features/integrat
 const SURFACES: Record<string, string[]> = {
   '/src/features/integrations/ConnectionHub.tsx': ['./connectionCopy'],
   '/src/features/integrations/ConnectionWizard.tsx': ['./connectionCopy', './accountHealth'],
+  '/src/features/integrations/ProjectsEstate.tsx': ['./connectionCopy', './accountHealth'],
   '/src/features/integrations/SelectedAccounts.tsx': ['./accountHealth'],
   '/src/features/integrations/ConnectionDrawer.tsx': ['./connectionCopy'],
 }
