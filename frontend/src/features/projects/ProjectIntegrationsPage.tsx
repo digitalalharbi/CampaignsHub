@@ -124,7 +124,7 @@ export function ProjectIntegrationsPage() {
   useEffect(() => {
     if (resumed.data === undefined || !resumed.data.pending) return
     const { connection } = resumed.data
-    setLinking({ resume: { id: connection.id, provider: connection.provider, has_parent: connection.has_parent, projects: [] } })
+    setLinking({ resume: { id: connection.id, provider: connection.provider, has_parent: connection.has_parent, projects: [], kind: connection.kind ?? null } })
     setReturned(null)
   }, [resumed.data])
 
