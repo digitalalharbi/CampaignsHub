@@ -121,6 +121,6 @@ test('a connection with discovered accounts offers the selection step rather tha
   expect(
     text,
     'the page neither offers the selection step nor states an honest alternative',
-    // INTEG-PROJECT-SPACE-001 — in the project's space the honest statements are the count of LINKED accounts, the «اختر الحسابات» way back, or the empty state.
-  ).toMatch(/اختيار الحسابات|اختر الحسابات|Choose accounts|حسابًا متاحًا|available|بانتظار|Awaiting|لم يربط|not connected|مربوط|accounts? connected|لا مصدر بعد|No source yet/i)
+    // INTEG-PROJECT-SPACE-001 — what the project's space really prints: the count of LINKED accounts on a row («1 حساب مربوط»), or the empty state.
+  ).toMatch(/مربوط|accounts? connected|لا مصدر بعد|No source yet/)
 })

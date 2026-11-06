@@ -56,9 +56,8 @@ test.describe('the integrations surface', () => {
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-    await page.getByTestId(
-      (await page.getByTestId('hub-connect').count()) > 0 ? 'hub-connect' : 'hub-connect-empty',
-    ).click()
+    // Whichever of the two the space settles on once its sources have loaded — read after the load, never during it.
+    await page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]').click()
 
     // INTEG-PROJECT-SPACE-001 — the platform is chosen inside the project's own journey.
     const picker = page.getByTestId('project-link-flow')
@@ -136,8 +135,11 @@ test.describe('the integrations surface', () => {
     await expect(page.locator('[data-testid="inventory-row"]')).toHaveCount(0)
     expect(await page.locator('main').innerText()).not.toMatch(/جميع الحسابات المكتشفة|Every discovered account/)
 
-    const connects = await page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]').count()
-    expect(connects, 'the hub must draw one connect button, never two').toBe(1)
+    // Awaited: while the sources are still loading the space draws neither, and a count read then is zero.
+    await expect(
+      page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]'),
+      'the hub must draw one connect button, never two',
+    ).toHaveCount(1, { timeout: 20000 })
   })
 })
 

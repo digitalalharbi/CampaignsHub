@@ -461,7 +461,8 @@ function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
   onRemoved: () => void
 }) {
   const remove = useMutation({ mutationFn: () => removeConnection(connection.id), onSuccess: onRemoved })
-  const name = ar ? connection.label_ar : connection.label
+  // The short platform name, as the row is titled — never the API's own title.
+  const name = platformLabel(connection.provider, ar)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">

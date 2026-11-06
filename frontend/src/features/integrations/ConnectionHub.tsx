@@ -335,7 +335,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
             : null
 
   const relink = relinkable && (
-    <Button size="sm" variant={primary === 'relink' ? 'primary' : 'ghost'} onClick={() => onRelink!(connection)} data-testid={`hub-relink-${connection.id}`}>
+    <Button size="sm" variant={disconnected ? 'primary' : 'ghost'} onClick={() => onRelink!(connection)} data-testid={`hub-relink-${connection.id}`}>
       <Link2 size={13} /> {ar ? 'إعادة الربط' : 'Re-link'}
     </Button>
   )
