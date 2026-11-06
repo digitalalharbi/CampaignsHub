@@ -110,7 +110,7 @@ final class MailUnsubscribeTest extends TestCase
         sort($exempt);
 
         $this->assertSame([
-            'email_verification', 'invitation', 'member_setup', 'member_welcome', 'password_reset',
+            'email_verification', 'invitation', 'member_setup', 'member_welcome', 'oauth_link', 'password_reset',
             'role_changed', 'security_alert', 'sign_in_code', 'subscription',
         ], $exempt);
 

@@ -342,6 +342,13 @@ final class MailGallery
                 workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
             ),
 
+            'account-oauth-link' => new CredentialMail(
+                purpose: CredentialMail::OAUTH_LINK, lang: $locale,
+                url: "{$app}/login?oauth=link&confirm={$token}",
+                expiresInMinutes: 10,
+                provider: 'Google',
+            ),
+
             'account-invitation' => new InvitationMail(
                 workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
                 roleSlug: 'manager',
