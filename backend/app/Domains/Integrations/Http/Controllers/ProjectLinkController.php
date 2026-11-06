@@ -104,6 +104,8 @@ final class ProjectLinkController extends Controller
                 'label' => $known ? ProviderCatalogue::get($provider)->label : $provider,
                 'label_ar' => $known ? ProviderCatalogue::get($provider)->labelAr : $provider,
                 'status' => (string) $model->status,
+                // INTEG-PROJECT-LINK-STORES-GA4-001 — which journey resumes: an ad platform's, a store's or a property's.
+                'kind' => $known ? ProviderCatalogue::get($provider)->kind->value : null,
                 'has_parent' => ProviderHierarchy::hasParent($provider),
                 // The PLATFORM account the grant was made with. Never the workspace user's email.
                 'platform_account' => $model->provider_identity_label === null && $model->provider_identity_email === null

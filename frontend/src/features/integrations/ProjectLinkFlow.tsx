@@ -1,18 +1,28 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchConnectionHub, type ConnectableProvider, type HubConnection } from './api'
 import { ConnectionFlow } from './ConnectionFlow'
 import { ProjectAccountPicker } from './ProjectAccountPicker'
+import { ProjectSourcePicker } from './ProjectSourcePicker'
+import { listStoreProviders, startStoreOAuth } from '@/features/commerce/api'
+import { listMeasurementProviders, startMeasurementOAuth } from '@/features/measurement/api'
 import { listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { ProviderMark } from '@/components/ProviderMark'
+import { toApiError } from '@/lib/api/client'
 import { platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 
 /** A connection the flow can continue on: only what it reads. */
-export type LinkConnection = Pick<HubConnection, 'id' | 'provider' | 'has_parent' | 'projects'>
+export type LinkConnection = Pick<HubConnection, 'id' | 'provider' | 'has_parent' | 'projects'> & {
+  /** INTEG-PROJECT-LINK-STORES-GA4-001 — which journey resumes; absent is an ad platform's. */
+  kind?: 'advertising' | 'commerce' | 'measurement' | null
+}
+
+/** A store platform or a measurement provider this install can start: enabled, and with its system keys present. */
+const STARTABLE = (state: string): boolean => state !== 'awaiting_credentials' && state !== 'unavailable'
 
 /**
  * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — «المشاريع > ربط المصادر > تسجيل الدخول > اختيار المنظمة >
@@ -32,6 +42,12 @@ export type LinkConnection = Pick<HubConnection, 'id' | 'provider' | 'has_parent
  * An authorisation that already exists is never offered for reuse here. Each project's link goes through
  * the platform's own sign-in (or its key entry) FOR THAT PROJECT, so a link is always a deliberate,
  * project-scoped act and never a selection out of somebody else's sign-in.
+ *
+ * ## Stores and GA4 take the same journey
+ *
+ * INTEG-PROJECT-LINK-STORES-GA4-001 — سلة, زد and GA4 are chosen from the same list. They have no
+ * organisation and no ad account, so their journey is shorter — منصة ← متجر ← تم, منصة ← خاصية ← تم — and
+ * «التالي» leaves straight for the platform's own page, for this project.
  *
  * ## The project never changes
  *
@@ -59,23 +75,56 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   const projectName = project?.name ?? null
   const Arrow = ar ? ArrowLeft : ArrowRight
 
+  /*
+   * The stores and the measurement provider, read through THIS project's own lists. Which of them this
+   * install can start is the server's answer; nothing here names a system key.
+   */
+  const stores = useQuery({ queryKey: ['commerce-stores', projectId], queryFn: () => listStoreProviders(projectId), retry: false, enabled: resume === null })
+  const measurement = useQuery({ queryKey: ['measurement-properties', projectId], queryFn: () => listMeasurementProviders(projectId), retry: false, enabled: resume === null })
+
+  const leave = useMutation({
+    mutationFn: (pick: ConnectableProvider) => {
+      const journey = { projectId, returnPortal: window.location.pathname.startsWith('/agency') ? 'agency' as const : 'app' as const }
+      const workspace = projects.data?.find((p) => p.id === projectId)?.client_workspace_id ?? null
+      return pick.kind === 'commerce' ? startStoreOAuth(pick.key, workspace, journey) : startMeasurementOAuth(pick.key, workspace, journey)
+    },
+    onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
+  })
+
+  // Back from a store's or Google's own page: the store / the property → done.
+  if (resume !== null && (resume.kind === 'commerce' || resume.kind === 'measurement')) {
+    return <ProjectSourcePicker projectId={projectId} projectName={projectName} connection={{ id: resume.id, provider: resume.provider, kind: resume.kind }} onClose={onClose} onReturn={onReturn} />
+  }
+
   // Back from the platform's sign-in: organisation → account → done, asked on demand for this project's own connection.
   if (resume !== null) {
     return <ProjectAccountPicker projectId={projectId} projectName={projectName} connection={resume} onClose={onClose} onReturn={onReturn} />
   }
 
   // The platform is known: straight to its own sign-in (or key entry), for this project. Never a reuse.
-  if (chosen !== null) {
+  if (chosen !== null && chosen.kind === 'advertising') {
     return <ConnectionFlow mode="connect" provider={chosen} connection={null} projectId={projectId} onClose={onClose} onDone={onReturn} />
   }
 
-  const providers = sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key)
+  const sources: ConnectableProvider[] = [
+    ...(stores.data ?? []).filter((p) => STARTABLE(p.state)).map((p) => ({ key: p.key, label: p.label, label_ar: platformLabel(p.key, true), kind: 'commerce' as const, has_parent: false, auth: 'oauth' as const })),
+    ...(measurement.data ?? []).filter((p) => STARTABLE(p.state)).map((p) => ({ key: p.key, label: p.label, label_ar: p.label_ar, kind: 'measurement' as const, has_parent: false, auth: 'oauth' as const })),
+  ]
+  // Ad platforms in the product's order, then the stores, then measurement.
+  const providers = [...sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key), ...sources]
   const step: LinkStep = 'platform'
+  const pick = providers.find((p) => p.key === marked) ?? (chosen !== null && chosen.key === marked ? chosen : undefined)
   const next = () => {
-    const pick = providers.find((p) => p.key === marked)
-    if (pick !== undefined) setChosen(pick)
+    if (pick === undefined) return
+    // A store or a property has no step of ours before the platform's own page: «التالي» leaves for it.
+    if (pick.kind === 'advertising') setChosen(pick)
+    else leave.mutate(pick)
   }
-  const canAdvance = marked !== null
+  const canAdvance = pick !== undefined && !leave.isPending
+  const steps: LinkStep[] = pick?.kind === 'commerce' ? ['platform', 'store', 'done']
+    : pick?.kind === 'measurement' ? ['platform', 'property', 'done']
+      : ['platform', 'organisation', 'account', 'done']
+  const refusal = leave.isError ? toApiError(leave.error) : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true" aria-labelledby="project-link-title">
@@ -95,9 +144,9 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
           <Button type="button" variant="ghost" onClick={onClose} data-testid="project-link-close">{ar ? 'إغلاق' : 'Close'}</Button>
         </header>
 
-        <LinkSteps steps={['platform', 'organisation', 'account', 'done']} current={step} ar={ar} />
+        <LinkSteps steps={steps} current={step} ar={ar} />
 
-        {hub.isLoading || projects.isLoading ? (
+        {hub.isLoading || projects.isLoading || stores.isLoading || measurement.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : hub.isError ? (
           <ErrorState title={ar ? 'تعذّر تحميل المنصات المتاحة.' : 'Could not load the available platforms.'} onRetry={() => void hub.refetch()} />
@@ -125,8 +174,10 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
                 <ProviderMark provider={p.key} size={22} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-semibold text-text-primary">{platformLabel(p.key, ar)}</span>
-                  <span className="truncate text-xs text-text-secondary">
-                    {p.auth === 'api_key' ? (ar ? 'مفتاح API' : 'API key') : (ar ? 'تسجيل دخول' : 'Sign-in')}
+                  <span className="truncate text-xs text-text-secondary" data-kind={p.kind}>
+                    {p.kind === 'commerce' ? (ar ? 'متجر' : 'Store')
+                      : p.kind === 'measurement' ? (ar ? 'قياس' : 'Measurement')
+                        : p.auth === 'api_key' ? (ar ? 'مفتاح API' : 'API key') : (ar ? 'تسجيل دخول' : 'Sign-in')}
                   </span>
                 </span>
               </label>
@@ -134,9 +185,13 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
           </fieldset>
         )}
 
+        {refusal !== null && (
+          <p role="alert" className="text-xs font-semibold text-danger" data-testid="link-start-refused">{refusal.message}</p>
+        )}
+
         <footer className="flex items-center justify-between gap-2">
           <span />
-          <Button type="submit" disabled={!canAdvance} data-testid="link-next">
+          <Button type="submit" disabled={!canAdvance} loading={leave.isPending} data-testid="link-next">
             {ar ? 'التالي' : 'Next'} <Arrow size={15} />
           </Button>
         </footer>
@@ -145,12 +200,14 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   )
 }
 
-export type LinkStep = 'platform' | 'organisation' | 'account' | 'done'
+export type LinkStep = 'platform' | 'organisation' | 'account' | 'store' | 'property' | 'done'
 
 const STEP_WORDS: Record<LinkStep, { ar: string; en: string }> = {
   platform: { ar: 'منصة', en: 'Platform' },
   organisation: { ar: 'منظمة', en: 'Organisation' },
   account: { ar: 'حساب', en: 'Account' },
+  store: { ar: 'متجر', en: 'Store' },
+  property: { ar: 'خاصية', en: 'Property' },
   done: { ar: 'تم', en: 'Done' },
 }
 

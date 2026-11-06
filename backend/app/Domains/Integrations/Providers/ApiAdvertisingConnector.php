@@ -92,6 +92,9 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
      */
     protected array $callLog = [];
 
+    /** @var list<string> reads cut off at a page ceiling in the current sync; see {@see self::takeTruncatedReads()} */
+    private array $truncatedReads = [];
+
     /**
      * How many data records the platform actually handed this connector in the current sync.
      *
@@ -474,7 +477,7 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
     protected function api(OAuthTokens $tokens): PendingRequest
     {
         $creds = $this->credentials();
-        $request = PlatformHttp::client($this->platform());
+        $request = PlatformHttp::budgeted(PlatformHttp::client($this->platform()), $this->platform(), $this->connection?->getKey());
 
         return match ($this->platform()) {
             // TikTok authenticates with its own header and no scheme.
@@ -717,6 +720,30 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         $this->callLog = [];
 
         return $log;
+    }
+
+    /**
+     * INTEG-SYNC-ENGINE-001 — a read stopped at a connector's page ceiling while the provider still had more.
+     *
+     * The rows that were read are real and stay. But the window was not fully read, and without this a capped read is
+     * indistinguishable from a complete one: the run said success and the missing pages took their spend out of every total.
+     */
+    protected function noteTruncatedRead(string $what): void
+    {
+        $this->truncatedReads[] = $what;
+    }
+
+    /**
+     * Take the reads cut off at a page ceiling, and forget them. Drained like the call log, and for the same reason.
+     *
+     * @return list<string>
+     */
+    public function takeTruncatedReads(): array
+    {
+        $reads = $this->truncatedReads;
+        $this->truncatedReads = [];
+
+        return $reads;
     }
 
     /** Record that the platform returned `$count` of its own data records. */

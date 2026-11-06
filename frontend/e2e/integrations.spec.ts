@@ -21,10 +21,10 @@ test.describe('the integrations surface', () => {
   /** The two stores, which complete the eight this product integrates with. */
   const STORES = ['salla', 'zid']
 
-  /** The STORE CARDS — a separate section, and deliberately not part of the ad-account journey. */
-  async function storeKeys(page: import('@playwright/test').Page): Promise<string[]> {
-    return page.locator('[data-testid="store-card"]').evaluateAll((els) =>
-      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
+  /** The STORE and MEASUREMENT rows of the project's «المنصات» — linked like an ad platform, never an ad source. */
+  async function sourceRows(page: import('@playwright/test').Page, kind: 'commerce' | 'measurement'): Promise<string[]> {
+    return page.locator(`[data-testid^="hub-platform-"][data-kind="${kind}"]`).evaluateAll((els) =>
+      els.map((el) => ((el as HTMLElement).dataset.testid ?? '').replace('hub-platform-', '')).filter(Boolean),
     )
   }
 
@@ -78,22 +78,48 @@ test.describe('the integrations surface', () => {
   })
 
   /**
-   * The other two of the eight — INTEG-STORES-001.
+   * The other two of the eight, and GA4 — INTEG-STORES-001, INTEG-PROJECT-LINK-STORES-GA4-001.
    *
-   * Salla and Zid are commerce connectors with a store and no ad accounts, so they keep their own
-   * section and their own journey (§7). They were reachable only through a separate panel once, so a
-   * customer saw six of the eight things this product integrates with.
+   * Salla, Zid and GA4 are rows of the project's «المنصات», beside the ad platforms, and are linked the
+   * same way: from the project, through the platform's own page, back to the project. The older connect
+   * step is gone with its three dropdowns and its list of every property a sign-in could see.
    */
-  test('the two stores complete the eight, in their own section', async ({ page }) => {
+  test('the two stores and GA4 are rows of the project\'s platforms, with no connect step of their own', async ({ page }) => {
     await selectFirstProject(page)
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
-    // Stores are on the project's «المنصات» tab, asked for this project alone.
     await page.getByTestId('hub-section-link-platforms').click()
-    await expect.poll(async () => (await storeKeys(page)).length, { timeout: 20000 }).toBe(2)
+    await expect.poll(async () => (await sourceRows(page, 'commerce')).length, { timeout: 20000 }).toBe(2)
 
-    expect((await storeKeys(page)).sort()).toEqual([...STORES].sort())
-    await expect(page.getByTestId('stores-heading')).toBeVisible()
+    expect((await sourceRows(page, 'commerce')).sort()).toEqual([...STORES].sort())
+    await expect.poll(async () => sourceRows(page, 'measurement'), { timeout: 20000 }).toEqual(['ga4'])
+
+    // The older step is not on the page in any form.
+    for (const gone of ['store-client-workspace', 'measurement-client-workspace', 'measurement-project']) {
+      await expect(page.getByTestId(gone)).toHaveCount(0)
+    }
+    await expect(page.locator('[data-testid^="ga4-select-"], [data-testid^="store-project-"], [data-testid^="connect-store-"], [data-testid^="measurement-connect-"]')).toHaveCount(0)
+    await expect(page.getByTestId('hub-platforms').locator('select')).toHaveCount(0)
+    expect(await page.locator('main').innerText()).not.toMatch(/المتجر يخصّ العميل|الخاصية تخصّ العميل|الاختيار لمشروع|اختر لهذا المشروع/)
+
+    // Each row either links through the project's journey or says, in one chip, that it is not available here.
+    for (const key of [...STORES, 'ga4']) {
+      const row = page.getByTestId(`hub-platform-${key}`)
+      await expect(row.locator(`[data-testid="hub-platform-link-${key}"], [data-testid="hub-platform-unavailable-${key}"]`)).toHaveCount(1)
+    }
+
+    // A row that can be linked opens THIS project's journey with the platform already marked and its own short steps.
+    for (const key of [...STORES, 'ga4']) {
+      const button = page.getByTestId(`hub-platform-link-${key}`)
+      if (await button.count() === 0) continue
+      await button.click()
+      await expect(page.getByTestId('project-link-flow')).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId(`link-platform-${key}`)).toBeChecked()
+      await expect(page.getByTestId(key === 'ga4' ? 'link-step-property' : 'link-step-store')).toBeVisible()
+      await expect(page.getByTestId('link-step-organisation')).toHaveCount(0)
+      await page.getByTestId('project-link-close').click()
+      await expect(page.getByTestId('project-link-flow')).toHaveCount(0)
+    }
   })
 
   /** A store is never dragged through the ad-account flow: it has no ad account to be asked about. */
