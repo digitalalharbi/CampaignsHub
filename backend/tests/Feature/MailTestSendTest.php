@@ -56,6 +56,9 @@ final class MailTestSendTest extends TestCase
         $this->admin = User::create(['name' => 'Platform', 'email' => 'owner@campaignshub.test', 'password' => 'secret123']);
         // Neither is mass-assignable, on purpose.
         $this->admin->forceFill(['is_platform_admin' => true, 'email_verified_at' => now()])->save();
+        // The platform mailbox is whatever the environment says it is, and CI's says `info@campaignshub.io`.
+        // Every test here that needs one sets it; the rest start with none, so nothing reads the environment.
+        config(['mail.reply_to.address' => null]);
     }
 
     private function live(string $transport = 'array'): void
