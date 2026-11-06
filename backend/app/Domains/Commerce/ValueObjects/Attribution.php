@@ -55,6 +55,18 @@ final readonly class Attribution
         'msclkid' => 'microsoft',
     ];
 
+    /**
+     * GA4-ATTRIBUTION-MATCH-001 — the click-id parameter → platform map, for the one canonical matcher.
+     * ScCid is Snapchat's documented spelling (developers.snap.com, Conversions API); parameters
+     * are matched case-insensitively by the reader.
+     *
+     * @return array<string,string>
+     */
+    public static function clickIdFamilies(): array
+    {
+        return self::CLICK_IDS;
+    }
+
     public function __construct(
         public ?string $source = null,
         public ?string $medium = null,

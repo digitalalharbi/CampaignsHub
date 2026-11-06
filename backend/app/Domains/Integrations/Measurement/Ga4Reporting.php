@@ -42,6 +42,9 @@ final class Ga4Reporting
     /** GA4's own cap on a single `runReport` response. */
     private const ROW_LIMIT = 100000;
 
+    /** The busiest landing queries kept per read; the long tail is click-id noise. */
+    private const FOLDED_ROW_LIMIT = 20000;
+
     /** The Data API's cap on metrics in one report; the daily set is asked in batches of this size. */
     private const MAX_METRICS_PER_REPORT = 10;
 
@@ -192,6 +195,7 @@ final class Ga4Reporting
             return [];
         }
         $metrics = Ga4Breakdowns::metricsFor($breakdown);
+        $folded = in_array($breakdown, Ga4Breakdowns::FOLDED, true);
 
         $tokens = $this->vault->fresh($connection);
         $response = PlatformHttp::client('ga4')
@@ -200,7 +204,9 @@ final class Ga4Reporting
                 'dateRanges' => [['startDate' => $from->toDateString(), 'endDate' => $to->toDateString()]],
                 'dimensions' => array_map(static fn (string $d): array => ['name' => $d], ['date', ...$dimensions]),
                 'metrics' => array_map(static fn (string $m): array => ['name' => $m], array_keys($metrics)),
-                'limit' => self::ROW_LIMIT,
+                'limit' => $folded ? self::FOLDED_ROW_LIMIT : self::ROW_LIMIT,
+                // A folded breakdown is high-cardinality (one row per distinct landing query): the busiest first.
+                ...($folded ? ['orderBys' => [['metric' => ['metricName' => 'sessions'], 'desc' => true]]] : []),
             ]);
 
         if ($response->failed()) {
@@ -222,14 +228,28 @@ final class Ga4Reporting
                     $values[$key] = (float) $cell['value'];
                 }
             }
+            $day = substr($date, 0, 4).'-'.substr($date, 4, 2).'-'.substr($date, 6, 2);
+            if ($folded) {
+                // Folded to the click-id family + UTMs, summed per day: a click id's value is never stored.
+                $sig = (new Ga4LandingQuery)->signature($dims[1] ?? '');
+                $k = $day.'|'.$sig;
+                foreach ($values as $mk => $mv) {
+                    $out[$k]['values'][$mk] = ($out[$k]['values'][$mk] ?? 0.0) + $mv;
+                }
+                $out[$k]['date'] = $day;
+                $out[$k]['d1'] = mb_substr($sig, 0, 512);
+                $out[$k]['d2'] = '';
+
+                continue;
+            }
             $out[] = [
-                'date' => substr($date, 0, 4).'-'.substr($date, 4, 2).'-'.substr($date, 6, 2),
+                'date' => $day,
                 'd1' => mb_substr($dims[1] ?? '', 0, 512),
                 'd2' => mb_substr($dims[2] ?? '', 0, 512),
                 'values' => $values,
             ];
         }
 
-        return $out;
+        return array_values($out);
     }
 }
