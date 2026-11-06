@@ -191,7 +191,7 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('ga4-tile-revenue')).toBeVisible()
   })
 
-  test('the live link carries the new parts for a client without a campaign name or a spend figure', async ({ page }) => {
+  test('the live link carries the attribution part for a client, scoped to what it names, without a campaign name or a spend figure', async ({ page }) => {
     test.setTimeout(120_000)
     await page.context().clearCookies()
     await page.goto(`/r/${LIVE_TOKEN}?view=dashboard`)
@@ -199,8 +199,10 @@ test.describe('GA4 store analytics', () => {
     await expect(ga4).toBeVisible({ timeout: 30000 })
 
     await expect(ga4.getByTestId('report-ga4-attribution')).toBeVisible()
-    await expect(ga4.getByTestId('report-ga4-reasons')).toBeVisible()
-    await expect(ga4.getByTestId('report-ga4-pulse')).toBeVisible()
+    // The demo link names campaigns, so the store-wide parts (pulse, classification, products, reasons) are not its to carry.
+    await expect(ga4.getByTestId('report-ga4-reasons')).toHaveCount(0)
+    await expect(ga4.getByTestId('report-ga4-pulse')).toHaveCount(0)
+    await expect(ga4.getByTestId('report-ga4-classification')).toHaveCount(0)
     for (const campaign of ['eid_collection', 'retargeting_30d', 'abaya_search', 'new_arrivals']) {
       await expect(ga4).not.toContainText(campaign)
     }
