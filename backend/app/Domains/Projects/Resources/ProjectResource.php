@@ -20,8 +20,8 @@ final class ProjectResource extends JsonResource
             'client_workspace_id' => $this->client_workspace_id,
             'name' => $this->name,
             // PROJECT-LIFECYCLE-DERIVED-001 — derived on read from what the project really has; the columns are not rewritten.
-            'status' => ProjectLifecycle::status((string) $this->status, $this->list_summary),
-            'setup_completion' => ProjectLifecycle::setupCompletion((int) $this->setup_completion, $this->list_summary),
+            'status' => ProjectLifecycle::status((string) $this->status, $this->list_summary ?? $this->lifecycle_facts),
+            'setup_completion' => ProjectLifecycle::setupCompletion((int) $this->setup_completion, $this->list_summary ?? $this->lifecycle_facts),
             'account_manager_id' => $this->account_manager_id,
             'created_at' => optional($this->created_at)->toIso8601String(),
             /*

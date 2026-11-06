@@ -11,6 +11,8 @@ return [
     'linkedin' => 'LinkedIn',
     'google_ads' => 'Google Ads',
     'google' => 'Google Ads',
+    'openai_ads' => 'ChatGPT Ads',
+    'ga4' => 'Google Analytics 4',
     'salla' => 'Salla',
     'zid' => 'Zid',
     'sandbox' => 'Sandbox',

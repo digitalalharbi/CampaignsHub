@@ -579,6 +579,31 @@ describe('the Integrations Centre: one project at a time', () => {
     expect(screen.getAllByTestId(/^hub-row-/)).toHaveLength(1)
   })
 
+  /** A source authorised workspace-wide, before connections belonged to a project, re-links through THIS project's journey. */
+  it('offers «إعادة الربط» on a legacy workspace-wide row only, and walks the project journey with the platform known', async () => {
+    hub.byProject = {
+      'p-1': {
+        connections: [
+          connection({ id: 'c-legacy', provider: 'meta', label: 'Meta Ads', label_ar: 'ميتا', project_id: null }),
+          connection({ id: 'c-own', provider: 'snapchat', project_id: 'p-1' }),
+        ],
+        connectable: [META],
+      },
+    }
+    renderWithProviders(<IntegrationsPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('hub-relink-c-legacy')).toHaveTextContent('إعادة الربط')
+    // A connection that already belongs to this project has nothing to re-link.
+    expect(screen.queryByTestId('hub-relink-c-own')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('hub-relink-c-legacy'))
+    // Straight to the platform's own sign-in for this project: the platform step is not asked again.
+    expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razzah Avenue')
+    expect(screen.queryByTestId('project-link-flow')).toBeNull()
+    fireEvent.click(screen.getByTestId('flow-authorise'))
+    await waitFor(() => expect(calls.started).toEqual([{ provider: 'meta', projectId: 'p-1' }]))
+  })
+
   it('states the journey as four words — منصة، منظمة، حساب، تم — and no explanatory text', async () => {
     renderWithProviders(<IntegrationsPage />, { locale: 'ar' })
 

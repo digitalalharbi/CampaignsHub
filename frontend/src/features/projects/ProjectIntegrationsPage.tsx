@@ -29,6 +29,8 @@ import { listExternalCampaigns } from '@/features/campaigns/api'
 import { fmtClock, fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { CopyId } from '@/components/ui/CopyId'
+import { sortBySource } from '@/lib/sourceOrder'
 
 /**
  * What a connection's state means to somebody reading a project's account list.
@@ -384,7 +386,7 @@ export function ProjectIntegrationsPage() {
                 {`${tasks.data?.tasks.length} / ${tasks.data?.total}`}
               </p>
             )}
-            {bindings.data?.map((b) => (
+            {sortBySource(bindings.data ?? [], (b) => ({ platform: b.provider, account: b.account?.name ?? null }), lang === 'ar').map((b) => (
               <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[9px] border border-border p-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -411,7 +413,7 @@ export function ProjectIntegrationsPage() {
                     )}
                   </div>
                   <span className="break-words text-xs text-text-muted">
-                    {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>
+                    {b.account?.external_id && <CopyId value={b.account.external_id} testId={`binding-copy-id-${b.id}`} className="align-middle" />}
                     {b.account?.last_synced_at && (
                       <>
                         {' '}

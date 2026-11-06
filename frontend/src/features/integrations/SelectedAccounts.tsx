@@ -16,6 +16,7 @@ import {
   type AccountRow,
 } from './api'
 import { accountHealthBadgeTone, accountHealthLabel } from './accountHealth'
+import { CopyId } from '@/components/ui/CopyId'
 
 /**
  * INTEGRATIONS-CENTRE-001 — the accounts that were CHOSEN, and nothing else.
@@ -249,7 +250,8 @@ function SelectedAccountItem({ account, ar, onLogs, onBackfill, onManage }: {
       )}
 
       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
-        <span className="font-mono" dir="ltr">{account.reference}</span>
+        {/* The provider's id is for pasting into its console, not for reading: one press copies it. */}
+        <CopyId value={account.reference} testId={`account-copy-id-${account.id}`} />
         {account.assigned_project_name !== null && (
           <span className="text-success">{c.project}: {account.assigned_project_name}</span>
         )}

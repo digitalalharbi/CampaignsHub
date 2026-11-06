@@ -278,6 +278,27 @@ final class ProjectListSurfaceTest extends TestCase
         $this->assertSame(0, $cards['عميل آخر']['setup_completion']);
     }
 
+    /** The project's own page reads the same derived status and setup as its card — and gains no `summary` key. */
+    public function test_the_show_endpoint_derives_status_and_setup_like_the_list(): void
+    {
+        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->neighbour->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: null));
+
+        $card = $this->cards()['رزة أفينيو'];
+        $shown = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/projects/'.$this->mine->id)->assertOk()->json('data');
+
+        $this->assertSame('onboarding', $shown['status']);
+        $this->assertSame($card['status'], $shown['status']);
+        $this->assertSame($card['setup_completion'], $shown['setup_completion']);
+        $this->assertArrayNotHasKey('summary', $shown);
+
+        // A project with nothing stays what was stored, and nothing is written by reading.
+        $bare = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/projects/'.$this->neighbour->id)->assertOk()->json('data');
+        $this->assertSame('draft', $bare['status']);
+        $this->assertSame('draft', (string) $this->mine->refresh()->status);
+    }
+
     /** A status somebody CHOSE is not overridden by what the project happens to hold. */
     public function test_a_paused_project_stays_paused_however_much_it_has_synced(): void
     {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { ProjectAccountPicker } from './ProjectAccountPicker'
 import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
   connectWithApiKey, fetchMetaApps, removeConnection, startPlatformOAuth, type ConnectableProvider, type HubConnection,
@@ -85,6 +86,7 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
    * would put a spinner between «connected» and the question it unblocks.
    */
   const [openedByKey, setOpenedByKey] = useState<string | null>(null)
+  const projectNames = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: projectFixed })
 
   const hasParent = connection?.has_parent ?? provider?.has_parent ?? false
   const stages: Stage[] = mode === 'reauthorise'
@@ -110,11 +112,30 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
   const providerKey = connection?.provider ?? provider?.key ?? ''
   const connectionId = connection?.id ?? openedByKey
 
+  /*
+   * INTEG-PROJECT-LINK-001 — a key pasted FOR a project opens that project's own connection, and the
+   * steps after it are the project's: organisation → account → «تم», asked of the provider on demand,
+   * storing only the account that is confirmed. The estate wizard is for a workspace-wide connection.
+   */
+  const keyedForProject = projectFixed && openedByKey !== null && destination !== null
+
   const cancel = useMutation({
     mutationFn: () => removeConnection(connectionId ?? '', { unconfirmedOnly: true }),
     // Whatever the server answered, the dialog ends: a refusal means the source is in use and was kept.
     onSettled: onClose,
   })
+
+  if (keyedForProject) {
+    return (
+      <ProjectAccountPicker
+        projectId={destination}
+        projectName={projectNames.data?.find((p) => p.id === destination)?.name ?? null}
+        connection={{ id: openedByKey, provider: providerKey }}
+        onClose={onClose}
+        onReturn={onDone}
+      />
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true">

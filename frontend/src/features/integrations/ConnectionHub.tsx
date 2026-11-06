@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
+import { Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
 import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
 import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { StatusChips } from './StatusChips'
@@ -12,6 +12,7 @@ import { platformColor } from '@/features/analytics/components'
 import { connectedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
+import { sortBySource } from '@/lib/sourceOrder'
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub.
@@ -61,7 +62,8 @@ export function sourceNeedsAction(connection: HubConnection): boolean {
 }
 
 export function sortSources(connections: HubConnection[], sort: SourceSort, ar: boolean): HubConnection[] {
-  if (sort === 'provider') return connections
+  // The one ordering every source list shares: platform, then the organisation and account the row reads.
+  if (sort === 'provider') return sortBySource(connections, (c) => ({ platform: c.provider, organisation: c.accounts?.[0]?.organisation ?? null, account: c.accounts?.[0]?.name ?? null }), ar)
   const rows = [...connections]
   if (sort === 'attention') return rows.sort((a, b) => Number(sourceNeedsAction(b)) - Number(sourceNeedsAction(a)))
   // Never synced sorts last: «newest first» is a question about sources that have a sync to compare.
@@ -69,7 +71,7 @@ export function sortSources(connections: HubConnection[], sort: SourceSort, ar: 
   return rows.sort((a, b) => (ar ? a.label_ar : a.label).localeCompare(ar ? b.label_ar : b.label, ar ? 'ar' : 'en'))
 }
 
-export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, onRemove, onReauthorise }: {
+export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, onRemove, onReauthorise, onRelink }: {
   /** INTEG-PROJECT-SPACE-001 — the project whose space this is. Part of every query key, so nothing of another project is ever shown from cache. */
   projectId?: string | null
   onConnect: () => void
@@ -79,6 +81,12 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
   onRemove?: (connection: HubConnection) => void
   /** INTEG-UNIFIED-002 — re-authorise ON the row: the same flow the drawer opens, one press nearer. */
   onReauthorise?: (connection: HubConnection) => void
+  /**
+   * «إعادة الربط» on a LEGACY row — a source that was authorised workspace-wide, before a connection
+   * belonged to one project. It walks the project's own journey (sign-in → organisation → account), which
+   * leaves this project reading the account through a connection of its own.
+   */
+  onRelink?: (connection: HubConnection) => void
 }) {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
@@ -183,6 +191,7 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
               onAction={onAction}
               onRemove={onRemove}
               onReauthorise={onReauthorise}
+              onRelink={projectId === null ? undefined : onRelink}
             />
           ))}
           {shown.length === 0 && (
@@ -213,14 +222,17 @@ function isGone(connection: HubConnection): boolean {
   return (connection.removed_at ?? null) !== null || connection.connection_state === 'REVOKED'
 }
 
-function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise }: {
+function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise, onRelink }: {
   connection: HubConnection
   ar: boolean
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
   onAction: (connection: HubConnection) => void
   onRemove?: (connection: HubConnection) => void
   onReauthorise?: (connection: HubConnection) => void
+  onRelink?: (connection: HubConnection) => void
 }) {
+  // A workspace-wide source seen from a project's space: the row offers the project's own journey.
+  const legacy = onRelink !== undefined && (connection.project_id ?? null) === null
   const auth = CONNECTION_COPY[connection.connection_state]
   const data = SYNC_COPY[connection.sync_state]
   const gone = isGone(connection)
@@ -274,7 +286,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
               {/* INTEG-PROJECT-SPACE-001 — what this source reads, by name: two rows of one platform are told apart here. */}
               {(connection.accounts?.length ?? 0) > 0 && (
                 <span className="mt-0.5 flex min-w-0 flex-wrap gap-1" data-testid={`hub-accounts-${connection.id}`}>
-                  {connection.accounts!.slice(0, 3).map((a) => (
+                  {sortBySource(connection.accounts!, (a) => ({ organisation: a.organisation, account: a.name }), ar).slice(0, 3).map((a) => (
                     <span key={a.id} className="max-w-full truncate rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-primary">
                       {a.organisation === null ? a.name : `${a.organisation} · ${a.name}`}
                     </span>
@@ -366,8 +378,13 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
           Neither is a new endpoint. A source that needs re-authorising gets the filled button, so the
           remedy is the loudest thing on a broken row; a working one gets the quiet one.
         */}
-        {!gone && (reauthorisable || (onRemove !== undefined && connection.abandoned !== true)) && (
+        {!gone && (legacy || reauthorisable || (onRemove !== undefined && connection.abandoned !== true)) && (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {legacy && (
+              <Button size="sm" variant="ghost" onClick={() => onRelink!(connection)} data-testid={`hub-relink-${connection.id}`}>
+                <Link2 size={13} /> {ar ? 'إعادة الربط' : 'Re-link'}
+              </Button>
+            )}
             {reauthorisable && (
               <Button
                 size="sm"

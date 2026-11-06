@@ -115,7 +115,7 @@ describe('SelectedAccounts', () => {
   })
 
   /** Latin digits in the Arabic interface: the product-wide numeral rule. */
-  it('prints the reference and the page counter with Latin digits', async () => {
+  it('keeps the reference behind a copy icon, and prints the page counter with Latin digits', async () => {
     vi.mocked(listAccounts).mockResolvedValue({
       ...page([account({ is_linked: true, assigned_project_id: 'p-1', reference: 'snap-12345' })]),
       meta: { total: 25, per_page: 10, current_page: 1, last_page: 3 },
@@ -123,7 +123,11 @@ describe('SelectedAccounts', () => {
 
     renderWithProviders(<SelectedAccounts connection="c1" />, { locale: 'ar' })
 
-    await screen.findByText('snap-12345')
+    // The provider's id is not printed on the row: the copy icon carries it.
+    const copy = await screen.findByTestId(/^account-copy-id-/)
+    expect(copy).toHaveAttribute('title', 'snap-12345')
+    expect(copy).toHaveAccessibleName('نسخ المعرّف')
+    expect(screen.queryByText('snap-12345')).toBeNull()
     expect(screen.getByTestId('selected-accounts-pager')).toHaveTextContent('1 / 3')
     expect(document.body.textContent).not.toMatch(/[\u0660-\u0669]/)
   })

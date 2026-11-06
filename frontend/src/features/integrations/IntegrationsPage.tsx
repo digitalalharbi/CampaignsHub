@@ -255,6 +255,8 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
           onAction={(connection) => setMenu(connection)}
           onRemove={(connection) => setRemoving(connection)}
           onReauthorise={reauthorise}
+          // A legacy (workspace-wide) row re-links through this project's own journey, platform already known.
+          onRelink={(connection) => startLink((hub.data?.connectable ?? []).find((p) => p.key === connection.provider) ?? null)}
         />
       )}
 
@@ -454,8 +456,8 @@ function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
         <h2 className="text-base font-bold text-text-primary">{ar ? `إزالة ${name}؟` : `Remove ${name}?`}</h2>
         <p className="mt-2 text-xs text-text-secondary">
           {ar
-            ? 'ستتوقف المزامنة وتُعطَّل ارتباطات الحسابات بكل المشاريع، ويُمسح رمز الوصول المخزَّن لدينا. تبقى الأرقام والتقارير المحفوظة كما هي. لإعادة الربط لاحقًا اضغط «ربط مصدر».'
-            : 'Syncing stops, the accounts are unlinked from every project, and the access token we hold is cleared. Stored figures and reports stay exactly as they are. To connect again later, press «Connect a source».'}
+            ? 'ستتوقف المزامنة وتُعطَّل ارتباطات الحسابات بكل المشاريع، ويُمسح رمز الوصول المخزَّن لدينا. تبقى الأرقام والتقارير المحفوظة كما هي. لإعادة الربط لاحقًا اضغط «ربط».'
+            : 'Syncing stops, the accounts are unlinked from every project, and the access token we hold is cleared. Stored figures and reports stay exactly as they are. To link again later, press «Link».'}
         </p>
         {remove.isError && (
           <p className="mt-2 text-xs text-danger" data-testid="remove-source-error">
