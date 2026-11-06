@@ -87,6 +87,9 @@ class DatabaseSeeder extends Seeder
                 // BEFORE the reports: this is what selects the accounts, and a report generated while
                 // nothing is selected is a report of nothing under deny by default.
                 DemoIntegrationsSeeder::class,
+                // GA4-STORE-ANALYTICS-001 — the demo store's GA4 property (demo-labelled). BEFORE the reports, so the
+                // seeded saved report freezes its GA4 sections like a real one generated after a sync would.
+                DemoGa4Seeder::class,
                 DemoReportsSeeder::class,
             ]);
         }
@@ -149,8 +152,6 @@ class DatabaseSeeder extends Seeder
             // them every order would seed as unattributed and the store half of the funnel, and
             // REPORT-OBJECTIVE-005's Store-Confirmed block, would still have nothing to show.
             $this->call(DemoCommerceSeeder::class);
-            // GA4-STORE-ANALYTICS-001 — the demo store's GA4 property, demo-labelled; AFTER the store, on the same project.
-            $this->call(DemoGa4Seeder::class);
             // ADMIN-100 — spread the demo tenants' creation dates back across ten months, so the
             // platform growth chart shows a shape instead of one spike in the current month. LAST
             // among the demo seeders, because it rewrites what they have just created.

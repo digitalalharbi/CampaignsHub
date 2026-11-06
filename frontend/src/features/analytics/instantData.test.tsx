@@ -26,6 +26,12 @@ function ga4(range: { from: string; to: string }, sessions: number) {
   }
 }
 
+/** GA4-STORE-ANALYTICS-001 — the tab's figures are the store reading's tiles; one answer per address. */
+function store(range: { from: string; to: string }, sessions: number) {
+  return { state: 'ready', period: range, previous_period: range, currency: 'SAR', kpis: [{ key: 'sessions', kind: 'count', current: sessions, previous: null, change_pct: null, currency: null }], series: [], channels: null, devices: null, funnel: [], tables: {} }
+}
+const answer = (range: { from: string; to: string }, sessions: number) => async (url: string) => (url.includes('/measurement/store') ? store(range, sessions) : ga4(range, sessions))
+
 function mount(client: QueryClient, ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/agency/analytics']}>{ui}</MemoryRouter></QueryClientProvider>)
 }
@@ -47,46 +53,46 @@ describe('GA4 tab — instant data', () => {
 
   it('a revisit paints the cached figures on the first frame and revalidates behind them', async () => {
     const client = newClient()
-    vi.mocked(getData).mockResolvedValue(ga4(R1, 1000))
+    vi.mocked(getData).mockImplementation(answer(R1, 1000) as never)
     const first = mount(client, <SiteAnalyticsTab projectId="p1" range={R1} />)
-    expect(await screen.findByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
     first.unmount()
 
     vi.mocked(getData).mockImplementation(() => new Promise(() => {}))
     client.invalidateQueries() // the entry is stale now, as after staleTime
     mount(client, <SiteAnalyticsTab projectId="p1" range={R1} />)
 
-    expect(screen.getByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
     expect(screen.queryByTestId('site-skeleton')).toBeNull()
     expect(screen.getByTestId('refresh-note')).toHaveAttribute('data-state', 'refreshing')
   })
 
   it('changing the period keeps the figures and names the period they belong to; nothing is emptied', async () => {
     const client = newClient()
-    vi.mocked(getData).mockResolvedValue(ga4(R1, 1000))
+    vi.mocked(getData).mockImplementation(answer(R1, 1000) as never)
     const { rerender } = mount(client, <SiteAnalyticsTab projectId="p1" range={R1} />)
-    expect(await screen.findByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
 
-    let release: (v: unknown) => void = () => {}
-    vi.mocked(getData).mockImplementation(() => new Promise((r) => { release = r }))
+    const pending: Array<[string, (v: unknown) => void]> = []
+    vi.mocked(getData).mockImplementation((url: string) => new Promise((r) => { pending.push([url, r]) }))
     rerender(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/agency/analytics']}><SiteAnalyticsTab projectId="p1" range={R2} /></MemoryRouter></QueryClientProvider>)
 
-    expect(screen.getByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
     const note = screen.getByTestId('refresh-note')
     expect(note).toHaveAttribute('data-state', 'previous')
     expect(note).toHaveTextContent('2026-10-01')
     expect(note).toHaveTextContent('2026-10-10')
 
-    await act(async () => { release(ga4(R2, 222)) })
-    await waitFor(() => expect(screen.getByTestId('site-kpi-sessions')).toHaveTextContent('222'))
+    await act(async () => { for (const [url, r] of pending) r(url.includes('/measurement/store') ? store(R2, 222) : ga4(R2, 222)) })
+    await waitFor(() => expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('222'))
     expect(screen.queryByTestId('refresh-note')).toBeNull()
   })
 
   it('another project never shows the previous project’s figures, not even on the first frame', async () => {
     const client = newClient()
-    vi.mocked(getData).mockResolvedValue(ga4(R1, 1000))
+    vi.mocked(getData).mockImplementation(answer(R1, 1000) as never)
     const { rerender } = mount(client, <SiteAnalyticsTab projectId="p1" range={R1} />)
-    expect(await screen.findByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
 
     vi.mocked(getData).mockImplementation(() => new Promise(() => {}))
     rerender(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/agency/analytics']}><SiteAnalyticsTab projectId="p2" range={R1} /></MemoryRouter></QueryClientProvider>)
@@ -97,14 +103,14 @@ describe('GA4 tab — instant data', () => {
 
   it('a failed refresh keeps the figures and says so; a failed cold open is an explicit error, not a spinner', async () => {
     const client = newClient()
-    vi.mocked(getData).mockResolvedValue(ga4(R1, 1000))
+    vi.mocked(getData).mockImplementation(answer(R1, 1000) as never)
     mount(client, <SiteAnalyticsTab projectId="p1" range={R1} />)
-    expect(await screen.findByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
 
     vi.mocked(getData).mockRejectedValue(new Error('down'))
     await act(async () => { await client.refetchQueries() })
     await waitFor(() => expect(screen.getByTestId('refresh-note')).toHaveAttribute('data-state', 'failed'))
-    expect(screen.getByTestId('site-kpi-sessions')).toHaveTextContent('1,000')
+    expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
 
     const cold = newClient()
     mount(cold, <SiteAnalyticsTab projectId="p9" range={R1} />)
