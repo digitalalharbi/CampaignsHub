@@ -779,7 +779,7 @@ export interface ConnectableProvider {
   key: string
   label: string
   label_ar: string
-  kind: 'advertising' | 'commerce'
+  kind: 'advertising' | 'commerce' | 'measurement'
   has_parent: boolean
   /**
    * Which of the two ways this provider is connected — the catalogue's answer, never inferred.
@@ -896,6 +896,8 @@ export interface ProjectLink {
     label: string
     label_ar: string
     status: string
+    /** INTEG-PROJECT-LINK-STORES-GA4-001 — which journey resumes: an ad platform's, a store's or a property's. */
+    kind?: 'advertising' | 'commerce' | 'measurement' | null
     has_parent: boolean
     platform_account: { label: string | null; email: string | null } | null
   }
@@ -941,6 +943,43 @@ export function fetchLinkAccounts(
   const qs = query.toString()
 
   return getData(`/projects/${projectId}/integrations/link/${connectionId}/accounts${qs === '' ? '' : `?${qs}`}`)
+}
+
+/**
+ * INTEG-PROJECT-LINK-STORES-GA4-001 (Owner 2026-11-06) — the step after the platform's own page when the
+ * source is a STORE or a GA4 PROPERTY: what this project's own sign-in reaches (asked of the platform,
+ * stored nowhere), then one confirmation, which stores and binds exactly that one.
+ */
+export interface LinkSourceOption {
+  external_id: string
+  name: string
+  /** A store's domain, a property's Analytics account: what tells two names apart. */
+  detail: string | null
+  currency: string | null
+  /** `here` — already linked to this project; `elsewhere` — feeds another project and cannot be chosen. */
+  linked: 'here' | 'elsewhere' | null
+}
+
+export function fetchLinkSources(
+  projectId: string,
+  connectionId: string,
+  params: { q?: string; page?: number } = {},
+): Promise<{ kind: 'commerce' | 'measurement'; sources: LinkSourceOption[]; total: number; page: number; per_page: number }> {
+  const query = new URLSearchParams()
+  if (params.q) query.set('q', params.q)
+  if (params.page && params.page > 1) query.set('page', String(params.page))
+  const qs = query.toString()
+
+  return getData(`/projects/${projectId}/integrations/link/${connectionId}/sources${qs === '' ? '' : `?${qs}`}`)
+}
+
+export async function confirmLinkSource(input: {
+  projectId: string
+  connectionId: string
+  externalId: string
+}): Promise<{ account_id: string; relinked: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${input.projectId}/integrations/link/${input.connectionId}/sources`, { external_id: input.externalId })
 }
 
 export async function confirmLinkAccount(input: {

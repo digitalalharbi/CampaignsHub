@@ -28,8 +28,9 @@ use Tests\TestCase;
  * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — «شاشة التكاملات هي مساحة المشروع المحدد».
  *
  * Stores and GA4 properties are part of a project's space like its ad accounts: asked for one project, the
- * two lists carry that project's own and what nobody has taken yet — never what another project reads.
- * Unasked, both answer exactly as before.
+ * store list carries that project's own and what nobody has taken yet, the property list carries that
+ * project's own (INTEG-PROJECT-LINK-STORES-GA4-001: a property is chosen in the project's journey, not from
+ * a catalogue) — never what another project reads. Unasked, both answer exactly as before.
  */
 final class ProjectSpaceStoresAndPropertiesTest extends TestCase
 {
@@ -96,7 +97,11 @@ final class ProjectSpaceStoresAndPropertiesTest extends TestCase
         $forA = $this->actingAs($this->operator)->getJson('/api/v1/measurement/properties?project_id='.$this->a->id)->assertOk();
 
         $this->assertStringContainsString('Alpha Site', $forA->getContent());
-        $this->assertStringContainsString('Unchosen Site', $forA->getContent());
+        // INTEG-PROJECT-LINK-STORES-GA4-001 — this read «and the ones nobody has taken yet». A property is chosen in
+        // the project's own journey now, from what that sign-in can read, so a catalogue row nobody chose is not a
+        // list to pick from any more: the space carries the property this project reads and nothing else.
+        $this->assertStringNotContainsString('Unchosen Site', $forA->getContent());
+        $this->assertSame(1, collect($forA->json('data'))->firstWhere('key', 'ga4')['selected_count'], 'another project\'s selection was counted');
         $this->assertStringNotContainsString('Beta Site', $forA->getContent());
         $this->assertStringNotContainsString((string) $this->b->id, $forA->getContent());
 

@@ -68,11 +68,19 @@ export function listMeasurementProviders(projectId?: string | null): Promise<Mea
 export async function startMeasurementOAuth(
   provider: string,
   clientWorkspaceId?: string | null,
+  /**
+   * INTEG-PROJECT-LINK-STORES-GA4-001 — the PROJECT this Google sign-in is opened for, and the portal whose
+   * project page it returns to. Both ride the server's single-use state.
+   */
+  journey?: { projectId: string; returnPortal: 'app' | 'agency' } | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(
     `/integrations/measurement/${provider}/oauth/start`,
-    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
+    {
+      ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
+      ...(journey ? { project_id: journey.projectId, return_portal: journey.returnPortal } : {}),
+    },
   )
 }
 
