@@ -53,6 +53,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Rates/CurrencyRateFeed.php' => 'which currencies exist, not whose figures',
         'Domains/Integrations/Console/DiagnoseSyncCommand.php' => 'read-only diagnosis of what is STORED',
         'Domains/Integrations/Console/ProbeInsightsCommand.php' => 'read-only probe',
+        // META-NO-DATA-READING-001 — the sync pipeline asks, for the account it is syncing, the last day that account holds
+        // any stored figure, to say «no delivery since …» on its own run record. A date, never a figure, for the operator's
+        // diagnosis and no project viewer; it must see every stored row of the account or «never delivered» would be a guess.
+        'Domains/Metrics/Support/NoDataReading.php' => 'the last stored day of the syncing account, for its own run record; a date, never a figure',
         'Domains/Campaigns/Console/ReconcileContentMetricsCommand.php' => 'walks one creative through the product\'s own services, which apply the rule',
         'Domains/Campaigns/Console/ContentDefectCensusCommand.php' => 'lists through CreativeRows::present(), which applies the rule',
         'Domains/Campaigns/Console/SnapchatLpvProvenanceCommand.php' => 'counts stored rows by provenance',
