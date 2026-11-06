@@ -791,6 +791,8 @@ export interface LivePayload {
    */
   attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
+  /** STORE-ANALYTICS-DEPTH-001 §3.1 — absent unless the operator switched the category on for this report. */
+  store_analytics?: import('./StoreAnalyticsBlock').StoreAnalyticsPayload | null
   /**
    * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
    *

@@ -156,6 +156,12 @@ final class LeadController extends Controller
             $query->whereNull('canonical_lead_id');
         }
 
+        // TABLE-SERVER-PAGING-001 — a whitelisted sort, on the same scoped builder; ties break on the key so pages never overlap.
+        $sort = $request->string('sort')->toString();
+        if (in_array($sort, ['name', 'source', 'status', 'created_at'], true)) {
+            $query->reorder($sort, $request->string('dir')->toString() === 'desc' ? 'desc' : 'asc')->orderBy('id');
+        }
+
         $perPage = min(max((int) $request->integer('per_page', 15), 1), 100);
         $leads = $query->paginate($perPage)->withQueryString();
 

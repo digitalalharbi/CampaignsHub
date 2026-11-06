@@ -130,6 +130,20 @@ final class ReportSectionRegistry
                 clientDefault: false,
                 view: 'dashboard',
             ),
+            /*
+             * STORE-ANALYTICS-DEPTH-001 §3.1 — the store and its traffic as one category to show or hide, live and snapshot.
+             *
+             * OFF on a client-facing report until an operator switches it on: no link in existence gains a
+             * section because this shipped, and turning it on keeps the link's address and scope.
+             */
+            new ReportSection(
+                key: 'store_analytics',
+                titleAr: 'تحليلات المتجر والزيارات',
+                titleEn: 'Store & traffic analytics',
+                payloadKeys: ['store_analytics'],
+                clientDefault: false,
+                view: 'dashboard',
+            ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -260,6 +274,8 @@ final class ReportSectionRegistry
          * facts that are both «no section», and neither of which is a zero.
          */
         $this->availableWhen('site_measurement', 'has_measured_days', static fn (SectionContext $c): bool => is_array($c->value('site_measurement')));
+
+        $this->availableWhen('store_analytics', 'has_store_or_site_figures', static fn (SectionContext $c): bool => is_array($c->value('store_analytics')));
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 

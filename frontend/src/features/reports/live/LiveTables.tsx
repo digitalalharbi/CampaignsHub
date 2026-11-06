@@ -12,6 +12,25 @@ import { resultWords } from './leadResults'
 type Reader = ReturnType<typeof useLiveMetricReader>
 type Row = Record<string, unknown>
 
+/**
+ * PERF-RENDER-001 — a component TYPE declared outside the render, so React can keep its tree.
+ *
+ * `Block` was a `const` inside `TablesView`, which made it a NEW component type on every render.
+ * React compares types by identity, so each re-render of the parent — the refresh dimming, a content
+ * dialog opening, a sort elsewhere — unmounted all four tables and mounted them again from scratch:
+ * every row rebuilt, every `MetricTable` sort state reset to its initial column. Hoisted, the blocks
+ * are updated in place like any other element.
+ */
+function Block({ ar, title, testid, empty, children }: { ar: boolean; title: string; testid: string; empty: boolean; children: React.ReactNode }) {
+  return (
+    <ChartCard title={title}>
+      <div data-testid={testid} className="min-w-0">
+        {empty ? <p className="text-sm text-text-muted">{ar ? 'لا صفوف في هذه الفترة.' : 'No rows in this period.'}</p> : children}
+      </div>
+    </ChartCard>
+  )
+}
+
 const num = (row: Row, key: string): number | null => (typeof row[key] === 'number' ? (row[key] as number) : null)
 
 /**
@@ -144,40 +163,32 @@ export function TablesView({
       : null,
   ], roster)
 
-  const Block = ({ title, testid, empty, children }: { title: string; testid: string; empty: boolean; children: React.ReactNode }) => (
-    <ChartCard title={title}>
-      <div data-testid={testid} className="min-w-0">
-        {empty ? <p className="text-sm text-text-muted">{ar ? 'لا صفوف في هذه الفترة.' : 'No rows in this period.'}</p> : children}
-      </div>
-    </ChartCard>
-  )
-
   return (
     <div data-testid="live-mode-tables" className="flex flex-col gap-5">
       <p className="text-sm text-text-secondary">{ar ? 'جداول تحليلية قابلة للفرز — كل صف من أرقام هذا التقرير نفسه.' : 'Sortable analytical tables — every row from this report’s own figures.'}</p>
 
       {/* NASEL 2026-10-29 — a table of the «detailed tables» component: the switch that names it is the one that hides it. */}
       {sectionShown(payload, 'detailed_tables') && (
-        <Block title={ar ? 'كل منصة مقابل الفترة السابقة' : 'Every platform against the previous period'} testid="tables-platforms" empty={platforms.length === 0}>
+        <Block ar={ar} title={ar ? 'كل منصة مقابل الفترة السابقة' : 'Every platform against the previous period'} testid="tables-platforms" empty={platforms.length === 0}>
           <MetricTable head={platTable.head} rows={platTable.rows} values={platTable.values} initialSort={{ column: sortIndex(platTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
       {sectionShown(payload, 'account_breakdown') && (
-        <Block title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
+        <Block ar={ar} title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
           <MetricTable head={accTable.head} rows={accTable.rows} values={accTable.values} initialSort={{ column: sortIndex(accTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
       {/* REPORT-COMPOSITION-CONTROL-001 — the ledger is its own component, off for a new client report. */}
       {sectionShown(payload, 'daily_records') && (
-        <Block title={ar ? 'السجل اليومي' : 'Day-by-day record'} testid="tables-days" empty={days.length === 0}>
+        <Block ar={ar} title={ar ? 'السجل اليومي' : 'Day-by-day record'} testid="tables-days" empty={days.length === 0}>
           <MetricTable head={dayTable.head} rows={dayTable.rows} values={dayTable.values} initialSort={{ column: 0, dir: 'desc' }} />
         </Block>
       )}
 
       {sectionShown(payload, 'content_performance') && (
-        <Block title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
+        <Block ar={ar} title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
           <MetricTable head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { convertLead, listLeads } from './api'
 import { LeadAttributionTrail } from './LeadAttributionTrail'
@@ -12,7 +12,7 @@ import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { DataTable, type Column } from '@/components/ui/DataTable'
+import { DataTable, type Column, type TableLabels, type TableState } from '@/components/ui/DataTable'
 import { Modal } from '@/components/ui/Modal'
 import { ReferralLinkModal } from '@/features/forms/ReferralLinkModal'
 import { Select } from '@/components/ui/Select'
@@ -31,6 +31,8 @@ export function LeadsPage() {
   const [status, setStatus] = useState('')
   const [source, setSource] = useState('')
   const [uniqueOnly, setUniqueOnly] = useState(false)
+  // TABLE-SERVER-PAGING-001 — the server owns the page: asking for the first hundred and paging those hid every lead after them.
+  const [table, setTable] = useState<TableState>({ page: 1, pageSize: 10, sort: null, query: '' })
   const [modalOpen, setModalOpen] = useState(false)
   const [referring, setReferring] = useState<Lead | null>(null)
   const [trail, setTrail] = useState<Lead | null>(null)
@@ -70,15 +72,26 @@ export function LeadsPage() {
   }
 
   const leadsQuery = useQuery({
-    queryKey: ['leads', { status, source, uniqueOnly }],
+    queryKey: ['leads', { status, source, uniqueOnly, table }],
     queryFn: () =>
       listLeads({
         status: status || undefined,
         source: source || undefined,
         unique: uniqueOnly ? 1 : undefined,
-        per_page: 100,
+        search: table.query.trim() || undefined,
+        sort: table.sort?.key,
+        dir: table.sort?.dir,
+        page: table.page,
+        per_page: table.pageSize,
       }),
+    placeholderData: keepPreviousData,
   })
+
+  // The search box is part of the redaction: the server refuses it to a reader who may not see identities.
+  const canSearch = useAuth((s) => s.hasPermission('leads.pii.view'))
+  const tableLabels: Partial<TableLabels> = locale === 'ar'
+    ? { search: 'ابحث…', rowsPerPage: 'صفوف في الصفحة', previous: 'السابق', next: 'التالي', total: 'إجمالي', page: 'صفحة' }
+    : {}
 
   const counts = leadsQuery.data?.counts ?? null
   const stages = leadsQuery.data?.stages ?? null
@@ -351,6 +364,9 @@ export function LeadsPage() {
         error={leadsQuery.isError}
         onRetry={() => leadsQuery.refetch()}
         emptyTitle={t('no_leads')}
+        searchable={canSearch}
+        labels={tableLabels}
+        server={{ total: leadsQuery.data?.pagination.total ?? 0, state: table, onChange: setTable }}
       />
 
       {/*

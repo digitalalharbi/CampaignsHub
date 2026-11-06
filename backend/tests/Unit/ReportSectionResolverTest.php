@@ -45,6 +45,7 @@ final class ReportSectionResolverTest extends TestCase
                predicate is «is there a measurement payload», and without one «everything on» cannot
                include it. */
             'site_measurement' => ['property' => ['id' => '111', 'name' => 'Site', 'timezone' => 'Asia/Riyadh'], 'days' => 2],
+            'store_analytics' => ['not_summed' => true, 'store' => null, 'site' => null],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -68,7 +69,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'store_analytics', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

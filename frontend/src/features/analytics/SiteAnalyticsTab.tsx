@@ -1,17 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
-import { EmptyState, Skeleton } from '@/components/ui/States'
+import { EmptyState } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { DataFreshness } from '@/components/ui/PageIntro'
 import { Badge } from '@/components/ui/Badge'
+import { RefreshNote } from '@/components/ui/RefreshNote'
+import { ChartBodySkeleton, KpiRowSkeleton } from '@/components/ui/Skeletons'
+import { useSwrQuery } from '@/lib/query/swr'
 import { ChartCard, ConversionFunnelChart, MetricLineChart, RankingBarChart } from './charts'
 import { money, num, percent } from './format'
 import { providerLabel } from '@/features/campaigns/labels'
 import { usePortalBase } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
+import { SiteKpis, type SiteKpi } from './SiteKpis'
+import { ThreeSourcesPanel } from './ThreeSourcesPanel'
+import { TrafficExplorer } from './TrafficExplorer'
 
 /**
  * GA4-ANALYTICS-PRODUCT-001 — what the SITE measured, from the project's own GA4 property.
@@ -33,6 +38,8 @@ interface SitePayload {
   last_synced_at?: string | null
   currency?: string | null
   totals?: Record<string, number | null>
+  kpis?: SiteKpi[]
+  previous_period?: { from: string; to: string }
   trend?: Array<{ date: string; sessions: number; engaged_sessions: number; purchases: number; revenue: number }>
   funnel?: Array<{ stage: string; count: number | null; step_rate: number | null; exceeds_previous: boolean }>
   paid?: { available: boolean; sessions?: number; purchases?: number; revenue?: number; session_share?: number | null; purchase_share?: number | null; revenue_share?: number | null; platforms?: Array<{ platform: string; sessions: number; purchases: number; revenue: number }> }
@@ -63,18 +70,25 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
   const ar = useUi((s) => s.locale) === 'ar'
   const locale = ar ? 'ar' : 'en'
   const portal = usePortalBase()
-  const q = useQuery({
-    queryKey: ['site-analytics', projectId, range.from, range.to],
+  // PERF-INSTANT-DATA-001 — scope = the project; the period is the only thing an old answer may bridge.
+  const q = useSwrQuery({
+    name: 'site-analytics',
+    scope: [projectId],
+    window: [range.from, range.to],
     queryFn: () => getData<SitePayload>(`/projects/${projectId}/measurement/analytics?from=${range.from}&to=${range.to}`),
     enabled: Boolean(projectId),
   })
 
-  if (q.isLoading) return <Skeleton className="h-96" />
+  if (q.isLoading) return <SiteSkeleton ar={ar} />
   if (q.isError || !q.data) {
     return <QueryFailure error={q.error} ar={ar} testId="site-failure" onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّرت قراءة تحليلات الموقع' : 'Site analytics could not be read'} />
   }
 
   const d = q.data
+  const note = (
+    <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
+      updatedAt={q.updatedAt} shownPeriod={`${d.period.from} → ${d.period.to}`} onRetry={() => void q.refetch()} />
+  )
   if (d.state !== 'ready') {
     const text = {
       not_connected: ar ? ['لم يُربط Google Analytics 4 بعد', 'اربط خاصية GA4 لترى الجلسات والقمع ومصادر الزيارات ومساهمة الإعلانات المدفوعة.'] : ['Google Analytics 4 is not connected', 'Connect a GA4 property to see sessions, the funnel, traffic sources and the paid-traffic contribution.'],
@@ -84,6 +98,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
 
     return (
       <div data-testid={`site-state-${d.state}`}>
+        {note}
         <EmptyState title={text[0]} description={text[1]} />
         {d.state !== 'empty' && (
           <p className="mt-3 text-center text-sm"><Link to={`${portal}/integrations`} className="font-bold text-brand-600 hover:underline">{ar ? 'افتح التكاملات' : 'Open Integrations'}</Link></p>
@@ -98,12 +113,13 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
   const label = (map: Record<string, { ar: string; en: string }>, v: string) => map[v]?.[locale] ?? v
 
   return (
-    <div data-testid="site-analytics" className="space-y-4">
+    <div data-testid="site-analytics" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
         <Badge tone="info">{ar ? 'ما قاسه الموقع (GA4)' : 'Site-measured (GA4)'}</Badge>
         <span>{d.property?.name} <span dir="ltr">· {d.property?.id}</span></span>
         <DataFreshness lastSyncAt={d.last_synced_at ?? null} ar={ar} staleAfterHours={36} testid="site-freshness" />
         <span>{ar ? 'لا يُجمع مع أرقام المنصات الإعلانية.' : 'Never added to the ad platforms’ figures.'}</span>
+        {note}
       </div>
 
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
@@ -112,6 +128,8 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
         <StatCard testid="site-kpi-purchases" tone="success" label={ar ? 'المشتريات' : 'Purchases'} value={<span dir="ltr">{num(t.purchases)}</span>} hint={ar ? `${num(t.key_events)} حدث رئيسي` : `${num(t.key_events)} key events`} />
         <StatCard testid="site-kpi-revenue" tone="neutral" label={ar ? 'الإيراد' : 'Revenue'} value={<span dir="ltr">{t.revenue != null ? money(t.revenue, cur) : '—'}</span>} hint={paid.available && paid.revenue_share != null ? (ar ? `${percent(paid.revenue_share, 0)} من زيارات مدفوعة` : `${percent(paid.revenue_share, 0)} from paid visits`) : undefined} />
       </StatGrid>
+
+      {d.kpis && d.previous_period && <SiteKpis kpis={d.kpis} previous={d.previous_period} ar={ar} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والمشتريات يوميًا' : 'Sessions and purchases by day'} subtitle={ar ? 'يوم بلا قياس لا يُرسم صفرًا.' : 'A day with no measurement is not drawn as zero.'}>
@@ -157,11 +175,10 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
         </ChartCard>
       )}
 
+      {projectId && <TrafficExplorer projectId={projectId} range={range} ar={ar} />}
+      {projectId && <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />}
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <BreakdownCard testId="site-source-medium" title={ar ? 'المصدر / الوسيط' : 'Source / medium'} table={d.breakdowns?.source_medium ?? null} ar={ar} cur={cur} name={(r) => `${r.dimension_1} / ${r.dimension_2 ?? ''}`} />
-        <BreakdownCard testId="site-campaign" title={ar ? 'الحملات (UTM)' : 'Campaigns (UTM)'} table={d.breakdowns?.campaign ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
-        <BreakdownCard testId="site-landing-page" title={ar ? 'صفحات الهبوط' : 'Landing pages'} table={d.breakdowns?.landing_page ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
-        <BreakdownCard testId="site-campaign-landing" title={ar ? 'الحملة ← صفحة الهبوط ← الشراء' : 'Campaign → landing page → purchase'} table={d.breakdowns?.campaign_landing ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
         <BreakdownCard testId="site-country" title={ar ? 'الدول' : 'Countries'} table={d.breakdowns?.country ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
         <BreakdownCard testId="site-device" title={ar ? 'الأجهزة' : 'Devices'} table={d.breakdowns?.device ?? null} ar={ar} cur={cur} name={(r) => label(DEVICE, r.dimension_1)} />
         <BreakdownCard testId="site-user-type" title={ar ? 'جديد مقابل عائد' : 'New vs returning'} table={d.breakdowns?.user_type ?? null} ar={ar} cur={cur} name={(r) => label(USER_TYPE, r.dimension_1)} />
@@ -215,5 +232,25 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
         </div>
       )}
     </ChartCard>
+  )
+}
+
+/**
+ * The cold open — the page's own parts at their final size, no spinner and no single slab.
+ * The KPI row is the real card; the chart cards keep their titles and only the body waits.
+ */
+function SiteSkeleton({ ar }: { ar: boolean }) {
+  return (
+    <div data-testid="site-skeleton" aria-busy="true" aria-label={ar ? 'جارٍ تحميل تحليلات الموقع' : 'Loading site analytics'} className="space-y-4">
+      <KpiRowSkeleton idPrefix="site-kpi" columns="grid-cols-2 lg:grid-cols-4" labels={ar ? ['الجلسات', 'معدل التفاعل', 'المشتريات', 'الإيراد'] : ['Sessions', 'Engagement rate', 'Purchases', 'Revenue']} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والمشتريات يوميًا' : 'Sessions and purchases by day'}>
+          <ChartBodySkeleton height={240} testid="site-trend-skeleton" />
+        </ChartCard>
+        <ChartCard title={ar ? 'قمع التسوق' : 'Shopping funnel'}>
+          <ChartBodySkeleton height={240} testid="site-funnel-skeleton" />
+        </ChartCard>
+      </div>
+    </div>
   )
 }

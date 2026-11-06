@@ -21,6 +21,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -1184,6 +1185,7 @@ final class LiveReportService
              */
             // REPORT-FILTERS-FUNCTIONAL-001 — a link whose ceiling names nothing vouches for no source of the project, this one included.
             'site_measurement' => $this->namesNothing($share, $scope) ? null : $this->siteMeasurement($share, $scope['project_id'], $from, $to),
+            'store_analytics' => $this->namesNothing($share, $scope) ? null : $this->storeAnalytics($share, $scope['project_id'], $from, $to),
             'freshness' => $freshness = $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
             // REPORT-FRESHNESS-STAMP-001 — the page-level stamp: oldest confirmed sync, worst platform status, Riyadh clock.
             'freshness_summary' => app(ReportDataFreshness::class)->summary($freshness),
@@ -2093,6 +2095,17 @@ final class LiveReportService
         }
 
         return $measured;
+    }
+
+    /** STORE-ANALYTICS-DEPTH-001 §3.1 — only for a report whose operator switched the category on; nothing is read otherwise. */
+    private function storeAnalytics(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        if ($report === null || ! app(ReportSectionSurfaces::class)->operatorAllows('store_analytics', $report, $share)) {
+            return null;
+        }
+
+        return app(StoreAnalyticsSection::class)->build((string) $share->tenant_id, $projectId, $from, $to, (bool) $share->hide_revenue, ! $share->narrowerThanItsProject());
     }
 
     /** @param array{project_id: string, campaign_ids: list<string>} $scope */
