@@ -128,7 +128,7 @@ final class ReviewAccountProvisioner
             $role = Role::firstOrCreate(['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'], ['name' => 'Tenant Owner', 'is_system' => true]);
             $role->givePermissionTo(...Permission::pluck('key')->all());
             $user->assignRole($role);
-            $this->grants->execute(new MembershipGrant(user: $user, tenant: $tenant, portal: Portal::forAccountType('self_serve_company'), role: 'owner'));
+            $this->grants->execute(new MembershipGrant(user: $user, tenant: $tenant, portal: Portal::forAccountType('self_serve_company'), role: 'owner', enrolNotifications: false)); // a demo/test account's address is never mailed
 
             $this->seedDemo($tenant, $user);
 

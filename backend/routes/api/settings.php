@@ -9,6 +9,7 @@ use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
 use App\Domains\Settings\Http\Controllers\NotificationChannelTestController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
+use App\Domains\Settings\Http\Controllers\NotificationVerifyController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
@@ -64,6 +65,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // sends only to the signed-in person's OWN proved address, on the mail-test limiter; the platform mailbox stays the admin's alone.
     // One test notification to the signed-in person, per channel; and their WhatsApp opt-in.
     Route::post('notifications/channel-test', NotificationChannelTestController::class)->middleware('throttle:mail-test-send')->name('notifications.channel-test');
+    // NOTIFICATION-ENROLMENT-001 — «send me this now»: one real digest / one marked sample alert, to the signed-in person's own proved address only.
+    Route::post('notifications/digest-now/{kind}', [NotificationVerifyController::class, 'digest'])->middleware('throttle:mail-test-send')->name('notifications.digest-now');
+    Route::post('notifications/sample-alert', [NotificationVerifyController::class, 'alert'])->middleware('throttle:mail-test-send')->name('notifications.sample-alert');
     Route::post('notifications/whatsapp/start', [WhatsAppOptInController::class, 'start'])->middleware('throttle:5,1')->name('notifications.whatsapp.start');
     Route::post('notifications/whatsapp/confirm', [WhatsAppOptInController::class, 'confirm'])->middleware('throttle:10,1')->name('notifications.whatsapp.confirm');
     Route::delete('notifications/whatsapp', [WhatsAppOptInController::class, 'destroy'])->name('notifications.whatsapp.destroy');
