@@ -54,15 +54,14 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "== FACTS-DIGEST"
+            echo "== FACTS-DIGEST2"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
-            BEGIN READ ONLY; select 'prefs' as q, count(*), count(*) filter (where (channels->>'email')::bool is true), count(*) filter (where digests is not null), count(distinct tenant_id) from notification_preferences; ROLLBACK;
-            BEGIN READ ONLY; select 'digest_by' as q, kind, status, count(*), max(created_at) from digest_sends where created_at > now() - interval '21 days' group by 2,3 order by 2,3; ROLLBACK;
-            BEGIN READ ONLY; select 'mail_by' as q, kind, status, count(*), max(created_at) from mail_deliveries where created_at > now() - interval '14 days' and kind not in ('test') group by 2,3 order by 2,3; ROLLBACK;
-            BEGIN READ ONLY; select 'digest_cfg' as q, digest_hour, timezone, locale, count(*) from notification_preferences group by 2,3,4 order by 5 desc limit 6; ROLLBACK;
+            BEGIN READ ONLY; select 'cfg' as q, frequency, channels::text, digests::text, quiet_hours::text from notification_preferences; ROLLBACK;
+            BEGIN READ ONLY; select 'digest_any' as q, kind, status, count(*), min(created_at), max(created_at) from digest_sends group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'users' as q, count(*) filter (where email_verified_at is not null), count(*) from users; ROLLBACK;
             SQL
-            echo "== END FACTS-DIGEST"
+            echo "== END FACTS-DIGEST2"
             exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
