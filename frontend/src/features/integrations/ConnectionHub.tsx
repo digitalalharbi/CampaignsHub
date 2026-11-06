@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, Plus } from 'lucide-react'
-import { fetchConnectionHub, type HubConnection } from './api'
+import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
 import { CONNECTION_COPY, SYNC_COPY } from './connectionCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -41,14 +42,21 @@ import { useUi } from '@/stores/ui'
  * Meta grant, so the card announced «المزامنة جارية الآن» over an action area with no Reconnect
  * button. Two chips cannot do that to each other.
  */
-export function ConnectionHub({ onConnect, onOpen, onAction }: {
+export function ConnectionHub({ onConnect, onOpen, onAction, onRemove }: {
   onConnect: () => void
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
   onAction: (connection: HubConnection) => void
+  /** INTEG-SOURCE-REMOVAL-001 — asks the page to confirm and remove a source. */
+  onRemove?: (connection: HubConnection) => void
 }) {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub })
+  /* INTEG-SOURCE-REMOVAL-001 — removed and revoked sources are hidden unless asked for; the default key is the page's own. */
+  const [showRemoved, setShowRemoved] = useState(false)
+  const hub = useQuery({
+    queryKey: showRemoved ? ['connection-hub', 'with-removed'] : ['connection-hub'],
+    queryFn: showRemoved ? fetchConnectionHubWithRemoved : fetchConnectionHub,
+  })
 
   if (hub.isLoading) {
     return (
@@ -69,7 +77,8 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
     )
   }
 
-  const connections = hub.data?.connections ?? []
+  const listed = hub.data?.connections ?? []
+  const connections = listed.filter((c) => !isGone(c))
   /*
    * The hub's own three figures. Counted from the rows it is about to draw, so the head and the
    * list cannot disagree — and «need reconnecting» counts the authorisations that cannot work at
@@ -134,7 +143,7 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
         )}
       />
 
-      {connections.length === 0 ? (
+      {listed.length === 0 ? (
         <div
           className="rounded-2xl border border-dashed border-border px-6 py-10 text-center"
           data-testid="connection-hub-empty"
@@ -157,29 +166,51 @@ export function ConnectionHub({ onConnect, onOpen, onAction }: {
           a table that reflows into blocks stops being a table for assistive technology halfway down.
         */
         <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-          {connections.map((connection) => (
+          {listed.map((connection) => (
             <ConnectionRow
               key={connection.id}
               connection={connection}
               ar={ar}
               onOpen={onOpen}
               onAction={onAction}
+              onRemove={onRemove}
             />
           ))}
         </ul>
       )}
+
+      {/* The way back to a removed source's record — off by default, so the list stays the live estate. */}
+      <label className="flex w-fit items-center gap-2 text-xs text-text-secondary">
+        <input
+          type="checkbox"
+          checked={showRemoved}
+          onChange={(e) => setShowRemoved(e.target.checked)}
+          data-testid="hub-show-removed"
+          className="h-4 w-4 accent-brand-600"
+        />
+        {ar ? 'إظهار المصادر المُزالة والملغاة' : 'Show removed and revoked sources'}
+      </label>
     </section>
   )
 }
 
-function ConnectionRow({ connection, ar, onOpen, onAction }: {
+/** A source that was removed, or whose authorisation was revoked: history only, nothing to operate. */
+function isGone(connection: HubConnection): boolean {
+  return (connection.removed_at ?? null) !== null || connection.connection_state === 'REVOKED'
+}
+
+function ConnectionRow({ connection, ar, onOpen, onAction, onRemove }: {
   connection: HubConnection
   ar: boolean
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
   onAction: (connection: HubConnection) => void
+  onRemove?: (connection: HubConnection) => void
 }) {
   const auth = CONNECTION_COPY[connection.connection_state]
   const data = SYNC_COPY[connection.sync_state]
+  const gone = isGone(connection)
+  const account = connection.provider_account ?? null
+  const platformAccount = account === null ? null : (account.email ?? account.label)
 
   return (
     <li
@@ -211,23 +242,34 @@ function ConnectionRow({ connection, ar, onOpen, onAction }: {
           <span className="block truncate text-sm font-bold text-text-primary">
             {ar ? connection.label_ar : connection.label}
           </span>
-          <span className="block truncate text-xs text-text-secondary">
+          {/*
+            INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with, first. The workspace user who
+            pressed connect stays, as the secondary line: it is a different fact, not a substitute.
+          */}
+          <span className="block truncate text-xs text-text-secondary" data-testid={`hub-platform-account-${connection.id}`}>
+            {platformAccount === null
+              ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')
+              : `${ar ? 'حساب المنصة' : 'Platform account'}: ${platformAccount}`}
+          </span>
+          <span className="block truncate text-[11px] text-text-muted" data-testid={`hub-added-by-${connection.id}`}>
             {connection.authorised_by === null
-              ? (ar ? 'لم يُسجَّل من صرّح بالربط' : 'Authoriser not recorded')
-              : `${ar ? 'صرّح به' : 'Authorised by'} ${connection.authorised_by.email}`}
+              ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
+              : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.email}`}
           </span>
         </span>
       </button>
 
-        <button
-          type="button"
-          onClick={() => onAction(connection)}
-          aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
-          data-testid={`hub-actions-${connection.id}`}
-          className="shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary sm:hidden"
-        >
-          <MoreHorizontal size={18} />
-        </button>
+        {!gone && (
+          <button
+            type="button"
+            onClick={() => onAction(connection)}
+            aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
+            data-testid={`hub-actions-${connection.id}`}
+            className="shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary sm:hidden"
+          >
+            <MoreHorizontal size={18} />
+          </button>
+        )}
       </div>
 
       {/*
@@ -259,7 +301,27 @@ function ConnectionRow({ connection, ar, onOpen, onAction }: {
           connection and naming no provider; here it is the row's own state, and the way back is the
           control beside it rather than a menu a reader has to think to open.
         */}
-        {connection.selected_accounts === 0 && (
+        {gone && (
+          <Badge tone="neutral" data-testid={`hub-removed-${connection.id}`}>
+            {(connection.removed_at ?? null) !== null ? (ar ? 'مُزال' : 'Removed') : (ar ? 'أُلغيت المصادقة' : 'Revoked')}
+          </Badge>
+        )}
+
+        {/*
+          INTEG-SOURCE-REMOVAL-001 — started and never finished: the way out is ON the row, not behind a menu.
+        */}
+        {!gone && connection.abandoned === true && onRemove !== undefined && (
+          <button
+            type="button"
+            onClick={() => onRemove(connection)}
+            data-testid={`hub-remove-${connection.id}`}
+            className="rounded-[var(--radius-pill)] bg-[var(--danger-background)] px-2.5 py-0.5 text-xs font-bold text-danger hover:underline"
+          >
+            {ar ? 'إلغاء/إزالة' : 'Cancel / remove'}
+          </button>
+        )}
+
+        {!gone && connection.selected_accounts === 0 && (
           <button
             type="button"
             onClick={() => onOpen(connection, 'accounts')}
@@ -297,15 +359,17 @@ function ConnectionRow({ connection, ar, onOpen, onAction }: {
       </dl>
 
       {/* The same control at desktop width, where it belongs at the end of the row instead. */}
-      <button
-        type="button"
-        onClick={() => onAction(connection)}
-        aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
-        data-testid={`hub-actions-desktop-${connection.id}`}
-        className="hidden shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary sm:block"
-      >
-        <MoreHorizontal size={18} />
-      </button>
+      {!gone && (
+        <button
+          type="button"
+          onClick={() => onAction(connection)}
+          aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
+          data-testid={`hub-actions-desktop-${connection.id}`}
+          className="hidden shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary sm:block"
+        >
+          <MoreHorizontal size={18} />
+        </button>
+      )}
     </li>
   )
 }
