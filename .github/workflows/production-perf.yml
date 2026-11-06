@@ -54,6 +54,17 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            echo "== FACTS975"
+            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
+            BEGIN READ ONLY; select 'ckpt_total' as q, count(*), count(distinct external_account_id), min(created_at), max(completed_at) from metric_sync_checkpoints; ROLLBACK;
+            BEGIN READ ONLY; select 'ckpt_by' as q, provider, grain, count(*), max(completed_at), count(*) filter (where unread_from is not null) from metric_sync_checkpoints group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'runs_6h' as q, provider, status, count(*) from metric_sync_runs where created_at > now() - interval '6 hours' group by 2,3 order by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'dead' as q, dead_letter_category, count(*), max(dead_lettered_at) from metric_sync_runs where dead_lettered_at is not null group by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'ckpt_unbound' as q, count(*) from metric_sync_checkpoints c where not exists (select 1 from account_project_bindings b where b.external_account_id=c.external_account_id and b.project_id=c.project_id and b.is_active); ROLLBACK;
+            SQL
+            echo "== END FACTS975"
+            exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
             echo "── app"
