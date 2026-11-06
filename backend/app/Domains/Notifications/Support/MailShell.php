@@ -22,10 +22,10 @@ namespace App\Domains\Notifications\Support;
  * ## `$showPreferences`
  *
  * The one decision this class makes rather than passes through. An account message — a code, a reset,
- * a security alert, an invitation — must not offer «إدارة إشعاراتك», because the product will not
- * honour it: nothing in the preference centre can switch off a password reset, and pretending
- * otherwise is a promise broken the next time somebody needs one. The footnote says so in words
- * instead.
+ * a security alert, an invitation — never offers «إلغاء الاشتراك»: nothing can switch off a password
+ * reset, and pretending otherwise is a promise broken the next time somebody needs one. Its footnote
+ * says so in words. It does still link to «إعدادات الإشعارات» (EMAIL-FOOTER-001, Owner 2026-11-06),
+ * so a reader manages the optional mail there instead of blocking the sender.
  */
 final class MailShell
 {
