@@ -180,7 +180,8 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $plain = $this->createLink(['metrics' => ['impressions', 'clicks']])->assertCreated()->json('data.token');
         $payload = $this->live($plain)->assertOk()->json('data');
         $this->assertSame([], $payload['campaign_rows']);
-        $this->assertNull($payload['totals']['spend']);
+        // REPORT-FILTERS-FUNCTIONAL-001 (Owner 2026-11-05) — this link chose impressions and clicks: spend is not a null under its key, it is not in the answer.
+        $this->assertArrayNotHasKey('spend', $payload['totals']);
     }
 
     private function structureOnly(ExternalAccount $account, string $name): UnifiedCampaign

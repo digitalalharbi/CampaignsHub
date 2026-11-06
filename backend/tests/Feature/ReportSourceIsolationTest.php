@@ -370,13 +370,41 @@ final class ReportSourceIsolationTest extends TestCase
         $preview = $this->as($this->owner)->getJson($this->base($report))->assertOk()->json('data');
         $this->assertIsolated($preview, ['KEEPX'], $foreign, 'builder preview');
 
-        $copy = $this->as($this->owner)->postJson($this->base($report).'/duplicate', ['name' => 'Copy'])->assertCreated()->json('data');
-        $stored = Report::withoutGlobalScopes()->findOrFail($copy['id']);
-        $this->assertSame(['account_ids' => [$this->x]], $stored->scope, 'a copy names other sources than the report it was made from');
-        $this->assertIsolated((array) $stored->data, ['KEEPX'], $foreign, 'duplicate, stored data');
-        if (is_string($copy['link']['token'] ?? null)) {
-            $this->assertIsolated($this->getJson('/api/v1/reports/shared/'.$copy['link']['token'])->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, shared page');
+        /*
+         * REPORT-DUPLICATE-001 — Duplicate is «prefill → editor draft → publish». The containment is proved through every step of
+         * that path: the prefill hands the editor only the chosen account, the editor's preview and its saved draft are built from
+         * it, and the published report — a report scoped to account X, published, never holds account Y's or S's content on any
+         * surface.
+         */
+        $prefill = $this->as($this->owner)->postJson($this->base($report).'/duplicate', [])->assertOk()->json('data.draft');
+        $this->assertSame([$this->x], array_values((array) ($prefill['scope']['account_ids'] ?? [])), 'the prefill names other sources than the report it was made from');
+        $body = [
+            'name' => 'Copy', 'type' => $prefill['type'], 'mode' => $prefill['mode'], 'form' => $prefill['form'], 'detail_level' => $prefill['detail_level'],
+            'audience' => $prefill['audience'], 'period_start' => $prefill['period_start'], 'period_end' => $prefill['period_end'],
+            'period_mode' => $prefill['period_mode'], 'period_kind' => $prefill['period_kind'],
+            'section_settings' => ['sections' => $prefill['sections']], 'config' => ['columns' => $prefill['columns']],
+            'scope' => $prefill['scope'] ?? [], 'source_report_id' => (string) $report->getKey(),
+        ];
+
+        $previewed = $this->as($this->owner)->postJson($this->base().'/draft-preview', $body)->assertOk()->json('data');
+        $this->assertIsolated($previewed, ['KEEPX'], $foreign, 'duplicate, editor preview');
+
+        $draftId = $this->as($this->owner)->postJson($this->base(), $body + ['draft' => true])->assertCreated()->json('data.id');
+        $draft = Report::withoutGlobalScopes()->findOrFail($draftId);
+        $this->assertSame([$this->x], array_values((array) ($draft->scope['account_ids'] ?? [])), 'the saved draft names other sources than the report it was made from');
+
+        $this->as($this->owner)->postJson($this->base($draft).'/publish', $body)->assertOk();
+        $published = Report::withoutGlobalScopes()->findOrFail($draftId);
+        if ($published->status !== 'completed') {
+            $published = $this->generate($published);
         }
+        $this->assertSame([$this->x], array_values((array) ($published->scope['account_ids'] ?? [])), 'the published copy names other sources than the report it was made from');
+        $this->assertIsolated((array) $published->data, ['KEEPX'], $foreign, 'duplicate, published stored data');
+        $this->assertIsolated($this->as($this->owner)->getJson($this->base($published))->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, published builder view');
+
+        // A link made for the published copy afterwards (the only way it gets one) serves the same set.
+        [, $copyRaw] = app(ShareService::class)->create($published, [], null);
+        $this->assertIsolated($this->getJson('/api/v1/reports/shared/'.$copyRaw)->assertOk()->json('data'), ['KEEPX'], $foreign, 'duplicate, shared page');
 
         $this->as($this->owner)->postJson($this->base($report).'/regenerate', ['confirm' => true])->assertOk();
         $rebuilt = Report::withoutGlobalScopes()->findOrFail($report->getKey());
@@ -532,6 +560,87 @@ final class ReportSourceIsolationTest extends TestCase
         $this->assertStringNotContainsString($raw, Artisan::output());
 
         $this->assertEquals($data, Report::withoutGlobalScopes()->findOrFail($report->getKey())->data, 'the stored copy was rewritten; containment is a read, never a write');
+    }
+
+    // ---------------------------------------------------------------- restoring an earlier copy (REPORT-SNAPSHOT-PROTECT-001)
+
+    /**
+     * The history keeps copies as they were stored, and an older copy may hold what the report no longer covers: it was built
+     * when the report named more accounts, or before content was bounded by them at all. Putting one back must not put that
+     * content back in front of a client, must not loosen the link, and must not lose the copy it replaces.
+     */
+    public function test_restoring_an_earlier_copy_stays_inside_the_chosen_accounts_keeps_the_links_switches_and_keeps_the_replaced_copy(): void
+    {
+        // The copy on show: account X only. The earlier copy in the history: the same figures with the content of X and Y.
+        $current = (array) $this->generate($this->report([$this->x]))->data;
+        $wide = (array) $this->generate($this->report([$this->x, $this->y]))->data;
+        $earlier = $current;
+        foreach (['ads', 'ads_roster', 'ads_groups', 'ads_platform_groups', 'ads_reading', 'ads_level', 'creatives_in_scope', 'creatives_unmeasured', 'creatives_withheld', 'slides'] as $key) {
+            $earlier[$key] = $wide[$key] ?? null;
+        }
+        $this->assertStringContainsString('LEAKY', self::text($earlier), 'the earlier copy holds nothing outside the chosen account, so restoring it proves nothing');
+        $this->assertStringNotContainsString('LEAKY', self::text($current));
+
+        $report = $this->report([$this->x], ['data' => $current, 'generated_at' => '2026-11-02 10:00:00']);
+        $kept = ReportVersion::create(['tenant_id' => $report->tenant_id, 'project_id' => $report->project_id, 'report_id' => $report->getKey(), 'data' => $earlier, 'generated_at' => '2026-11-01 10:00:00']);
+        [$closed, $closedRaw] = app(ShareService::class)->create($report, ['allow_download' => true, 'hide_spend' => true, 'hide_revenue' => true, 'hide_campaign_names' => true, 'password' => 'secret1'], null);
+        [, $openRaw] = app(ShareService::class)->create($report, ['allow_download' => true], null);
+        $switchKeys = ['hide_spend', 'hide_revenue', 'hide_campaign_names', 'allow_download', 'watermark', 'password_hash', 'token_hash', 'settings', 'scope', 'mode', 'form', 'expires_at', 'revoked_at', 'paused_at'];
+        $switches = $closed->fresh()->only($switchKeys);
+        $scope = $report->fresh()->scope;
+
+        // Nothing is restored without the confirmation, and nothing moved.
+        $restore = $this->base($report)."/versions/{$kept->getKey()}/restore";
+        $this->as($this->owner)->postJson($restore, [])->assertStatus(409)->assertJsonPath('errors.code', 'report_restore_needs_confirmation');
+        $this->assertEquals($current, Report::withoutGlobalScopes()->findOrFail($report->getKey())->data);
+        $this->assertSame(1, ReportVersion::withoutGlobalScopes()->where('report_id', $report->getKey())->count());
+
+        $this->as($this->owner)->postJson($restore, ['confirm' => true])->assertOk();
+        app(TenantContext::class)->setTenantId((string) $this->tenant->getKey());
+        app(ProjectContext::class)->setProjectId((string) $this->a->getKey());
+
+        // The earlier copy is the current one, exactly as it was kept, and the report's sources did not widen to fit it.
+        $restored = Report::withoutGlobalScopes()->findOrFail($report->getKey());
+        $this->assertEquals($earlier, $restored->data, 'the restored copy is not the copy that was kept');
+        $this->assertSame('completed', $restored->status);
+        $this->assertEquals($scope, $restored->scope, 'a restore changed which accounts the report covers');
+
+        // Nothing overwritten silently: the copy that was on show is in the history, as it was, beside the one restored from.
+        $versions = ReportVersion::withoutGlobalScopes()->where('report_id', $report->getKey())->get();
+        $this->assertCount(2, $versions, 'the copy the restore replaced was not kept exactly once');
+        $replaced = $versions->first(fn (ReportVersion $v): bool => (string) $v->getKey() !== (string) $kept->getKey());
+        $this->assertNotNull($replaced);
+        $this->assertEquals($current, $replaced->data, 'the kept copy is not the copy the restore replaced');
+        $this->assertSame('2026-11-02 10:00:00', $replaced->generated_at->format('Y-m-d H:i:s'));
+        $this->assertEquals($earlier, ReportVersion::withoutGlobalScopes()->findOrFail($kept->getKey())->data, 'the copy restored from was changed by restoring it');
+
+        // The link is the same link with the same switches, and its password still stands.
+        $this->assertEquals($switches, ReportShare::withoutGlobalScopes()->findOrFail($closed->getKey())->only($switchKeys), 'a restore changed the link');
+        $this->getJson("/api/v1/reports/shared/{$closedRaw}")->assertStatus(401);
+        $closedPage = self::text($this->getJson("/api/v1/reports/shared/{$closedRaw}?password=secret1")->assertOk()->json('data'));
+
+        // Every door of the report serves the restored copy without the content of the account it does not name.
+        $open = $this->getJson("/api/v1/reports/shared/{$openRaw}")->assertOk()->json('data');
+        $this->assertIsolated($open, ['KEEPX'], ['LEAKY'], 'shared page after a restore');
+        $this->assertIsolated($this->get("/api/v1/reports/shared/{$openRaw}/download/csv")->assertOk()->streamedContent(), [], ['LEAKY'], 'csv after a restore');
+        $this->assertIsolated(self::xlsxText($this->get("/api/v1/reports/shared/{$openRaw}/download/xlsx")->assertOk()->streamedContent()), [], ['LEAKY'], 'xlsx after a restore');
+        foreach ([null, (string) $closed->getKey()] as $shareId) {
+            $token = 'tok-'.uniqid();
+            Cache::put('report-print:'.hash('sha256', $token), [
+                'report_id' => (string) $report->getKey(), 'type' => 'presentation', 'theme' => 'light', 'audience' => 'client',
+            ] + ($shareId === null ? [] : ['share_id' => $shareId]), 600);
+            $this->assertIsolated($this->getJson("/api/v1/reports/print/{$token}")->assertOk()->json(), ['KEEPX'], ['LEAKY'], 'print after a restore');
+        }
+        $this->assertIsolated($this->as($this->owner)->getJson($this->base($report))->assertOk()->json('data'), ['KEEPX'], ['LEAKY'], 'builder preview after a restore');
+
+        // And the closed link still hides what it hid: the open link shows the spend, the closed one does not. (A client page
+        // names no campaign on either link, so for names the proof is the switch itself, asserted unchanged above.)
+        $this->assertStringContainsString('111.5', self::text($open), 'the open link shows no spend, so the closed link hiding it proves nothing');
+        $this->assertStringNotContainsString('KEEPX-campaign', $closedPage, 'the restored copy shows a campaign name the link hides');
+        $this->assertStringNotContainsString('111.5', $closedPage, 'the restored copy shows the spend the link hides');
+        foreach ($this->needles['LEAKY'] as $needle) {
+            $this->assertStringNotContainsString($needle, $closedPage, 'the closed link serves content of an account the report does not name');
+        }
     }
 
     public function test_a_report_that_names_no_account_is_read_back_as_it_was_stored(): void

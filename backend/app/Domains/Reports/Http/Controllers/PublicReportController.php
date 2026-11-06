@@ -11,12 +11,14 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\LiveDrilldown;
+use App\Domains\Reports\Services\LiveReportCache;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportCreativeMedia;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\SharedCreativeView;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -58,7 +60,7 @@ final class PublicReportController extends Controller
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
         // REPORT-SNAPSHOT-PROTECT-001 — while a stored copy is rebuilt, that copy keeps answering.
-        if (! $report || ($report->status !== 'completed' && ! ($report->status === 'processing' && $report->hasStoredCopy()))) {
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
@@ -120,6 +122,8 @@ final class PublicReportController extends Controller
             $data = $this->shares->sanitize($data, $share);
             // REPORT-SECTION-SURFACES-001 — the same resolver as the live page, the print route and the export.
             $data = app(ReportSectionSurfaces::class)->apply($data, $report, $share, 'shared');
+            // REPORT-FILTERS-FUNCTIONAL-001 — a KPI or a column nobody chose leaves the answer, not only the list; the stored copy is not written.
+            $data = ChosenFigures::for($report, $share)->cut($data);
         }
 
         return ApiResponse::success([
@@ -161,7 +165,7 @@ final class PublicReportController extends Controller
              * to open should never appear as a control that then refuses, and a metric column that
              * is withheld should not be drawn as an empty column with a name on it.
              */
-            'creatives' => $share->creativeVisibility()->toArray(),
+            'creatives' => ChosenFigures::for($report, $share)->narrowPermissions($share->creativeVisibility()->toArray()),
             /*
              * Which optional sections this link may open — ATTRIB-VIS-001.
              *
@@ -269,7 +273,18 @@ final class PublicReportController extends Controller
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
-        $payload = $live->build($share, $request->query(), (string) $report->currency);
+        /*
+         * PERF-RECOVERY-001 — every gate above has already run on THIS request: throttle, active
+         * (revoked, paused, expired), password and live mode. Only then may a stored build answer,
+         * and the access log below is written for it like any other read. Off by default.
+         */
+        $delivery = null;
+        if (LiveReportCache::enabled()) {
+            [$payload, $delivery] = app(LiveReportCache::class)->answer($share, $report, $request->query(), (string) $report->currency);
+            $request->attributes->set('perf_variant', $delivery['source']);
+        } else {
+            $payload = $live->build($share, $request->query(), (string) $report->currency);
+        }
 
         /*
          * No refresh here — REPORT-CREATIVE-MEDIA-001.
@@ -284,11 +299,14 @@ final class PublicReportController extends Controller
         // Sanitised with the same hide-flags as the snapshot path: a live link that leaks spend a
         // snapshot link would have hidden is the same disclosure, arriving by a newer route.
         $payload = $this->shares->sanitizeLive($payload, $share);
+        // REPORT-FILTERS-FUNCTIONAL-001 — the values of what the link did not choose leave with the lists; `metrics` and `columns` state the choice.
+        $payload = ChosenFigures::forLive($share)->cut($payload);
 
         $this->shares->log($share, 'view', $request, 'live');
 
         return ApiResponse::success(
-            $payload + ['is_demo' => $report->is_demo, 'form' => $report->form],
+            // `delivery` says whether this is a fresh build or the last confirmed one, and when it ran.
+            $payload + ['is_demo' => $report->is_demo, 'form' => $report->form] + ($delivery === null ? [] : ['delivery' => $delivery]),
             'Live figures.',
         );
     }
@@ -365,7 +383,8 @@ final class PublicReportController extends Controller
         }
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        if (! $report || $report->status !== 'completed') {
+        // REPORT-SNAPSHOT-PROTECT-001 — the same answer as the page: the stored copy while it is rebuilt, nothing where there is none.
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
@@ -384,10 +403,10 @@ final class PublicReportController extends Controller
          * before this it showed revenue anyway.
          */
         return ApiResponse::success(
-            GenericNames::for($report, $share)->apply($this->shares->sanitizeAttribution(
+            GenericNames::for($report, $share)->apply(ChosenFigures::for($report, $share)->cutSection($this->shares->sanitizeAttribution(
                 $transparency->build((string) $report->tenant_id, (string) $report->project_id, $from, $to),
                 $share,
-            )),
+            ))),
             'Shared attribution.',
         );
     }
@@ -408,11 +427,12 @@ final class PublicReportController extends Controller
         }
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        if (! $report || $report->status !== 'completed') {
+        // REPORT-SNAPSHOT-PROTECT-001 — the same answer as the page: the stored copy while it is rebuilt, nothing where there is none.
+        if (! $report || ! $report->servesStoredCopy()) {
             return ApiResponse::error('التقرير غير متاح.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for($report, $share)->apply(['widgets' => $widgets->forShare($share, $report)]), 'Shared widgets.');
+        return ApiResponse::success(GenericNames::for($report, $share)->apply(ChosenFigures::for($report, $share)->cutSection(['widgets' => $widgets->forShare($share, $report)])), 'Shared widgets.');
     }
 
     public function creatives(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -428,7 +448,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creatives');
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->library($share, $request->query())), 'Shared creatives.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $creatives->library($share, $request->query()))), 'Shared creatives.');
     }
 
     public function creativeSummary(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -444,7 +464,7 @@ final class PublicReportController extends Controller
 
         $this->shares->log($share, 'view', $request, 'creative-summary');
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($creatives->summary($share, $request->query())), 'Shared creative summary.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $creatives->summary($share, $request->query()))), 'Shared creative summary.');
     }
 
     public function creative(Request $request, string $token, string $creative, SharedCreativeView $creatives): JsonResponse
@@ -462,7 +482,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('هذا المحتوى غير متاح ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $payload)), 'Shared creative.');
     }
 
     public function creativeComparison(Request $request, string $token, SharedCreativeView $creatives): JsonResponse
@@ -485,7 +505,7 @@ final class PublicReportController extends Controller
             return ApiResponse::error('المقارنة غير متاحة ضمن هذا الرابط.', status: 404);
         }
 
-        return ApiResponse::success(GenericNames::for(null, $share)->apply($payload), 'Shared creative comparison.');
+        return ApiResponse::success(GenericNames::for(null, $share)->apply($this->chosenContent($share, $payload)), 'Shared creative comparison.');
     }
 
     /**
@@ -540,6 +560,19 @@ final class PublicReportController extends Controller
         return $report !== null && app(ReportSectionSurfaces::class)->operatorAllows('content_performance', $report, $share);
     }
 
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — the content section's answers, cut to the same choice as the page around them.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function chosenContent(ReportShare $share, array $payload): array
+    {
+        $report = Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report === null ? $payload : ChosenFigures::for($report, $share)->cutContent($payload);
+    }
+
     private function branding(Report $report): array
     {
         $config = (array) ($report->config ?? []);
@@ -570,7 +603,8 @@ final class PublicReportController extends Controller
         abort_unless(in_array($format, ['pdf', 'xlsx', 'csv'], true), 404);
 
         $report = Report::withoutGlobalScopes()->find($share->report_id);
-        abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        // REPORT-SNAPSHOT-PROTECT-001 — the file is made from the stored copy while that copy is rebuilt, as the page is.
+        abort_if($report === null || ! $report->servesStoredCopy(), 404, 'Report not available.');
 
         /*
          * ONE share-filtered document for every file this link produces — SHARED-PDF-HIDE-FLAGS-001.

@@ -96,6 +96,30 @@ final class LiveReportPayloadIdentityTest extends TestCase
         $this->assertSame(array_keys($stored), array_keys($now));
     }
 
+    /**
+     * PERF-RECOVERY-001 — with the last-build store ON, the cold read and the served read are the baseline's bytes
+     * plus ONE key, `delivery` (fresh | last_confirmed, its build time, whether a refresh is queued). Time is frozen
+     * here, so the per-platform ages a served copy re-reads at serve time are the build's own and do not move.
+     */
+    public function test_with_the_last_build_store_on_every_payload_is_the_baseline_plus_delivery(): void
+    {
+        config(['reports.live_cache.enabled' => true]);
+        [, $raw] = $this->liveLink();
+        $stored = json_decode((string) file_get_contents(self::BASELINE), true, flags: JSON_THROW_ON_ERROR);
+
+        foreach (['fresh', 'last_confirmed'] as $expected) {
+            $now = $this->payloads($raw);
+            foreach ($now as $name => $json) {
+                $data = json_decode($json, true);
+                if (in_array($name, ['live', 'live_narrowed'], true)) {
+                    $this->assertSame($expected, $data['delivery']['source'] ?? null, "«{$name}» read as {$expected}");
+                    unset($data['delivery']);
+                }
+                $this->assertSame($stored[$name], (string) json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "«{$name}» ({$expected}) differs from the baseline beyond `delivery`");
+            }
+        }
+    }
+
     public function test_two_builds_of_the_same_link_agree(): void
     {
         [, $raw] = $this->liveLink();

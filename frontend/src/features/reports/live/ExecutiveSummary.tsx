@@ -411,6 +411,8 @@ function PlatformComparison({
   const extra = (['impressions', 'clicks'] as const).filter((k) => k !== result)
   const maxResult = Math.max(0, ...rows.map((p) => Number(source.of(p) ?? 0)))
   const ctrText = (p: Record<string, unknown>) => (p.ctr === null || p.ctr === undefined ? '—' : `${(Number(p.ctr) * 100).toFixed(2)}%`)
+  // REPORT-FILTERS-FUNCTIONAL-001 — no CTR column where the rows carry no CTR (not chosen): a column of dashes says a figure is withheld.
+  const ctrShown = rows.length === 0 || rows.some((p) => 'ctr' in p)
 
   return (
     <Panel
@@ -428,7 +430,7 @@ function PlatformComparison({
       ) : (
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
-            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ar ? 'نسبة النقر' : 'CTR']}
+            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'نسبة النقر' : 'CTR'] : [])]}
             rows={rows.map((p) => {
               const key = canonicalPlatform(p.provider)
               const value = source.of(p)
@@ -455,14 +457,14 @@ function PlatformComparison({
                   {mov !== undefined && mov !== null && <TrendPill delta={mov} calm />}
                 </span>,
                 ...extra.map((k) => <span key={k} className="text-text-primary"><Num>{num(count(p[k]))}</Num></span>),
-                <span key="ctr" className="text-text-secondary"><Num>{ctrText(p)}</Num></span>,
+                ...(ctrShown ? [<span key="ctr" className="text-text-secondary"><Num>{ctrText(p)}</Num></span>] : []),
               ]
             })}
             values={rows.map((p): SortValues => [
               providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'),
               source.of(p),
               ...extra.map((k) => count(p[k])),
-              count(p.ctr),
+              ...(ctrShown ? [count(p.ctr)] : []),
             ])}
             initialSort={{ column: 1, dir: 'desc' }}
           />

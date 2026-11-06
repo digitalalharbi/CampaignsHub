@@ -137,22 +137,58 @@ final class ReportDataFreshness
             }
         }
 
-        $age = $success === null ? null : max(0, (int) floor($success->diffInSeconds($now, false) / 60));
-
-        $status = match (true) {
-            $success === null => $attemptStatus === 'failed' ? 'failed' : 'unknown',
-            $age <= self::FRESH_MINUTES => 'fresh',
-            $attemptStatus === 'failed' => 'failed',
-            $age <= self::STALE_MINUTES => 'delayed',
-            default => 'stale',
-        };
+        $age = self::ageMinutes($success, $now);
 
         return [
             'last_success_at' => $success?->toIso8601ZuluString(),
             'last_attempt_at' => $attemptAt?->toIso8601ZuluString(),
             'last_attempt_status' => $attemptStatus,
             'age_minutes' => $age,
-            'data_status' => $status,
+            'data_status' => self::status($age, $attemptStatus),
         ];
+    }
+
+    /**
+     * PERF-RECOVERY-001 — a stored build's per-platform ages, read again at the moment it is SERVED.
+     *
+     * A build answered from the last confirmed copy carries ages computed when it ran. Left alone, a
+     * platform confirmed 85 minutes before the build would still read «fresh» ten minutes later, when
+     * it is 95 minutes old — a copy claiming to be newer than it is. Only the two DERIVED fields move,
+     * by the same rule as `entry()`: `last_success_at`, `last_attempt_*` and the build's own
+     * `generated_at` are never touched, so a served copy can only ever read older, never newer.
+     *
+     * @param  array<int, array<string, mixed>>  $entries  payload `freshness` rows
+     * @return array<int, array<string, mixed>>
+     */
+    public function reage(array $entries, Carbon $now): array
+    {
+        return array_map(static function (array $entry) use ($now): array {
+            if (($entry['data_status'] ?? null) === null || ! array_key_exists('age_minutes', $entry)) {
+                return $entry;
+            }
+            $success = is_string($entry['last_success_at'] ?? null) ? Carbon::parse($entry['last_success_at'])->utc() : null;
+            $age = self::ageMinutes($success, $now);
+            $entry['age_minutes'] = $age;
+            $entry['data_status'] = self::status($age, (string) ($entry['last_attempt_status'] ?? 'none'));
+
+            return $entry;
+        }, $entries);
+    }
+
+    private static function ageMinutes(?Carbon $success, Carbon $now): ?int
+    {
+        return $success === null ? null : max(0, (int) floor($success->diffInSeconds($now, false) / 60));
+    }
+
+    /** One verdict rule for a fresh build and a served copy alike; null age means no success was ever recorded. */
+    private static function status(?int $age, string $attemptStatus): string
+    {
+        return match (true) {
+            $age === null => $attemptStatus === 'failed' ? 'failed' : 'unknown',
+            $age <= self::FRESH_MINUTES => 'fresh',
+            $attemptStatus === 'failed' => 'failed',
+            $age <= self::STALE_MINUTES => 'delayed',
+            default => 'stale',
+        };
     }
 }

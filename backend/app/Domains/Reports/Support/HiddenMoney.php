@@ -173,7 +173,7 @@ final class HiddenMoney
      * @param  array<string, mixed>  $item
      * @param  list<string>  $keys
      */
-    private static function revealsHidden(array $item, array $keys): bool
+    public static function revealsHidden(array $item, array $keys): bool
     {
         if (isset($item['reveals']) && is_array($item['reveals'])) {
             return array_intersect($item['reveals'], $keys) !== [];
@@ -189,7 +189,7 @@ final class HiddenMoney
     }
 
     /** The metric key an Arabic KPI label names, or null when it names none this product ranks on. */
-    private static function metricForLabel(string $label): ?string
+    public static function metricForLabel(string $label): ?string
     {
         static $map = null;
         if ($map === null) {

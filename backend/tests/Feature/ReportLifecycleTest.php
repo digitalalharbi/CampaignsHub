@@ -177,46 +177,46 @@ final class ReportLifecycleTest extends TestCase
 
     // ---------------------------------------------------------------- duplicate (8.3)
 
-    public function test_duplicate_makes_an_independent_report_and_link_and_leaves_the_original_alone(): void
+    /*
+     * Owner correction 2026-11-04 (§8.3): «تكرار» no longer makes a report and a link at once. It hands the editor a
+     * pre-filled draft and stores nothing; the copy exists only after «حفظ كمسودة» or «نشر». The four tests below used to
+     * assert the immediate copy. Each keeps what it guarded — the original and its link untouched, a copy never more open
+     * than its source, scope never widened, roles and isolation — against the new flow. The whole flow is in
+     * ReportDuplicateDraftTest.
+     */
+    public function test_duplicate_makes_nothing_at_once_and_leaves_the_original_and_its_link_alone(): void
     {
         $r = $this->report();
         [$src, $rawSrc] = $this->link($r, ['hide_spend' => true, 'watermark' => true, 'password' => 'secret1']);
         $beforeReport = $r->fresh()->toArray();
         $beforeShare = $src->fresh()->toArray();
 
-        $res = $this->as($this->owner)->postJson($this->base($r).'/duplicate', ['name' => 'August copy', 'share_id' => (string) $src->getKey()])->assertCreated();
-        $newId = $res->json('data.id');
-        $this->assertNotSame((string) $r->getKey(), $newId);
-        $res->assertJsonPath('data.name', 'August copy');
+        $res = $this->as($this->owner)->postJson($this->base($r).'/duplicate', ['name' => 'August copy', 'share_id' => (string) $src->getKey()])->assertOk();
 
-        $copy = Report::query()->findOrFail($newId);
-        $this->assertSame($r->config, $copy->config, 'identity and settings are copied');
-        $this->assertSame($r->section_settings, $copy->section_settings, 'sections are copied');
-        $this->assertSame($r->period_start->toDateString(), $copy->period_start->toDateString());
-
-        $newLink = ReportShare::query()->where('report_id', $newId)->get();
-        $this->assertCount(1, $newLink, 'a new link was made');
-        $this->assertNotSame($src->token_hash, $newLink[0]->token_hash, 'a new token');
-        $this->assertTrue($newLink[0]->watermark);
-        $this->assertNotNull($newLink[0]->password_hash, 'a copied link is never more open than its source');
-        $this->assertNotNull($res->json('data.link.url'));
-        $this->assertNotNull($res->json('data.link.token'));
+        $this->assertSame(1, Report::query()->count(), 'no report is made by pressing Duplicate');
+        $this->assertSame(1, ReportShare::query()->count(), 'and no link');
+        $this->assertNull($res->json('data.draft.id'));
+        $this->assertSame('نسخة من August', $res->json('data.suggested_name.ar'));
+        $this->assertSame('agency', $res->json('data.draft.branding_identity'), 'identity and settings are handed to the editor');
+        $this->assertFalse($res->json('data.draft.sections.trends'), 'sections are handed to the editor');
+        $this->assertSame('2026-08-01', $res->json('data.draft.period_start'));
+        // Nothing of the source link travels: not its token, not its password, not a new link in its image.
+        $this->assertNull($res->json('data.link'));
+        $this->assertStringNotContainsString($rawSrc, (string) json_encode($res->json()));
+        $this->assertStringNotContainsString('password', (string) json_encode($res->json()));
 
         $this->assertEquals($beforeReport, $r->fresh()->toArray(), 'the original is unchanged');
         $this->assertEquals($beforeShare, $src->fresh()->toArray(), 'the original link is unchanged');
-        $this->assertSame(1, ReportShare::query()->where('report_id', $r->getKey())->count());
         $this->withHeader('X-Report-Password', 'secret1')->getJson("/api/v1/reports/shared/{$rawSrc}")->assertOk();
-        $this->assertSame(1, AuditLog::query()->where('action', 'report.duplicated')->count());
+        $this->assertSame(0, AuditLog::query()->where('action', 'report.duplicated')->count(), 'nothing was made, so nothing is recorded as made');
     }
 
-    public function test_a_duplicate_without_a_source_link_starts_closed(): void
+    public function test_a_duplicate_starts_with_no_link_at_all(): void
     {
+        // It used to start with a CLOSED link (spend, revenue and campaign names hidden). No link is stricter than a closed one.
         $r = $this->report();
-        $res = $this->as($this->owner)->postJson($this->base($r).'/duplicate', [])->assertCreated();
-        $link = ReportShare::query()->where('report_id', $res->json('data.id'))->firstOrFail();
-        $this->assertTrue($link->getRawOriginal('hide_spend') === true || (bool) $link->getRawOriginal('hide_spend'));
-        $this->assertTrue((bool) $link->hide_revenue);
-        $this->assertTrue((bool) $link->hide_campaign_names, 'a client report carries no campaign names');
+        $this->as($this->owner)->postJson($this->base($r).'/duplicate', [])->assertOk();
+        $this->assertSame(0, ReportShare::query()->count());
     }
 
     public function test_duplicate_does_not_widen_scope_and_refuses_a_foreign_one(): void
@@ -228,11 +228,16 @@ final class ReportLifecycleTest extends TestCase
         $this->assertSame($before, Report::query()->count(), 'nothing was made');
 
         $ok = $this->report(['name' => 'Bound', 'scope' => null]);
-        $res = $this->as($this->owner)->postJson($this->base($ok).'/duplicate', [])->assertCreated();
-        $this->assertNull(Report::query()->find($res->json('data.id'))->scope, 'no scope in, no scope out: never widened or invented');
+        $res = $this->as($this->owner)->postJson($this->base($ok).'/duplicate', [])->assertOk();
+        $this->assertNull($res->json('data.draft.scope'), 'no scope in, no scope out: never widened or invented');
+        // And a copy saved with a foreign account is refused where it is stored, not only where the editor opens.
+        $this->as($this->owner)->postJson("/api/v1/projects/{$this->project->getKey()}/reports", [
+            'name' => 'Copy', 'type' => 'monthly', 'draft' => true, 'source_report_id' => (string) $ok->getKey(), 'scope' => ['account_ids' => [$foreign]],
+        ])->assertStatus(422);
+        $this->assertSame($before + 1, Report::query()->count(), 'nothing was made');
     }
 
-    public function test_duplicate_needs_manage_and_a_link_needs_share_and_never_crosses_projects(): void
+    public function test_duplicate_needs_manage_and_makes_no_link_for_anyone_and_never_crosses_projects(): void
     {
         $r = $this->report();
         $viewer = $this->userWith(['reports.view'], 'viewer');
@@ -240,18 +245,21 @@ final class ReportLifecycleTest extends TestCase
 
         $manager = $this->userWith(['reports.view', 'reports.create'], 'manager');
         $res = $this->as($manager)->postJson($this->base($r).'/duplicate', []);
-        $res->assertCreated();
-        $this->assertNull($res->json('data.link'), 'no share permission, no link');
-        $this->assertSame(0, ReportShare::query()->where('report_id', $res->json('data.id'))->count());
+        $res->assertOk();
+        $this->assertNull($res->json('data.link'), 'no link, with or without the share permission');
+        $this->assertSame(0, ReportShare::query()->count());
 
         $stranger = $this->userWithin(Tenant::create(['name' => 'Other', 'slug' => 'o-'.uniqid(), 'status' => 'active']));
         $this->actingAs($stranger, 'sanctum')->withHeader('X-Project-Id', (string) $this->project->getKey())
             ->postJson($this->base($r).'/duplicate', [])->assertStatus(404);
 
-        // A source link of another report is not reachable through this one.
+        // A link of another report was once reachable as a «source link» only through its own report. No link is a source now.
         $other = $this->report(['name' => 'Other']);
         [$otherLink] = $this->link($other);
-        $this->as($this->owner)->postJson($this->base($r).'/duplicate', ['share_id' => (string) $otherLink->getKey()])->assertStatus(404);
+        $before = $otherLink->fresh()->toArray();
+        $this->as($this->owner)->postJson($this->base($r).'/duplicate', ['share_id' => (string) $otherLink->getKey()])->assertOk()->assertJsonMissingPath('data.link');
+        $this->assertEquals($before, $otherLink->fresh()->toArray());
+        $this->assertSame(1, ReportShare::query()->count());
     }
 
     // ---------------------------------------------------------------- Live <-> Snapshot (8.4)
