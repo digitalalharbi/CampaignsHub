@@ -119,10 +119,10 @@ describe('the Connection Hub: removing a source', () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
-    fireEvent.click(await screen.findByTestId('hub-actions-desktop-c-1'))
+    fireEvent.click(await screen.findByTestId('hub-actions-c-1'))
     fireEvent.click(screen.getByTestId('action-remove'))
 
-    expect(screen.getByTestId('remove-source-dialog')).toHaveTextContent('Stored figures and reports stay')
+    expect(screen.getByTestId('remove-source-dialog')).toHaveTextContent('Its history stays, and it can be linked again.')
     expect(removals.calls).toHaveLength(0)
 
     fireEvent.click(screen.getByTestId('remove-source-confirm'))
@@ -135,7 +135,7 @@ describe('the Connection Hub: removing a source', () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
-    fireEvent.click(await screen.findByTestId('hub-actions-desktop-c-1'))
+    fireEvent.click(await screen.findByTestId('hub-actions-c-1'))
     fireEvent.click(screen.getByTestId('action-remove'))
     fireEvent.click(screen.getByTestId('remove-source-keep'))
 
@@ -161,8 +161,8 @@ describe('the Connection Hub: removing a source', () => {
     fireEvent.click(screen.getByTestId('hub-show-removed'))
 
     expect(await screen.findByTestId('hub-removed-c-gone')).toHaveTextContent('Removed')
-    expect(screen.queryByTestId('hub-actions-desktop-c-gone')).not.toBeInTheDocument()
-    expect(screen.getByTestId('hub-actions-desktop-c-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('hub-actions-c-gone')).not.toBeInTheDocument()
+    expect(screen.getByTestId('hub-actions-c-1')).toBeInTheDocument()
   })
 })
 

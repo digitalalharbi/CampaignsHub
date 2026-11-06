@@ -127,7 +127,7 @@ describe('the Connection Hub', () => {
 
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('hub-open-c-1')).toHaveTextContent('Added by: not recorded')
+    expect(await screen.findByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: not recorded')
   })
 
   /**

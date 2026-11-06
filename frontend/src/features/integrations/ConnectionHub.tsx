@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
-import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
+import { fetchConnectionHub, fetchConnectionHubWithRemoved, unlinkAccount, STATUS_DIMENSIONS, type HubConnection } from './api'
 import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
-import { StatusChips } from './StatusChips'
+import { StatusChips, statusTone } from './StatusChips'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { ErrorState, Skeleton } from '@/components/ui/States'
-import { platformColor } from '@/features/analytics/components'
-import { connectedAccounts } from '@/lib/counted'
+import { ProviderMark } from '@/components/ProviderMark'
+import { CopyId } from '@/components/ui/CopyId'
+import { lastNDays, useAccounts, useSummary, type AccountRow } from '@/features/analytics/api'
+import { money, moneyFromTotals } from '@/features/analytics/format'
+import { aggregateMoney, type MoneyTotals } from '@/lib/money/contract'
+import { platformLabel } from '@/lib/platforms'
+import { campaigns as countedCampaigns, connectedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
 import { sortBySource } from '@/lib/sourceOrder'
@@ -101,6 +106,7 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
     queryFn: () => (showRemoved ? fetchConnectionHubWithRemoved(projectId) : fetchConnectionHub(projectId)),
   })
 
+  const spend = useProjectSpend(projectId)
   const listed = useMemo(() => hub.data?.connections ?? [], [hub.data])
   const shown = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -141,7 +147,7 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={ar ? 'ابحث بالمنصة أو حساب المنصة أو المشروع' : 'Search by platform, platform account or project'}
+                placeholder={ar ? 'بحث' : 'Search'}
                 data-testid="hub-search"
                 className="w-full min-w-0 rounded-lg border border-border bg-background py-1.5 pe-3 ps-8 text-sm text-text-primary focus:border-brand-500 focus:outline-none sm:w-72"
               />
@@ -192,6 +198,8 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
               onRemove={onRemove}
               onReauthorise={onReauthorise}
               onRelink={projectId === null ? undefined : onRelink}
+              projectId={projectId}
+              spend={spend}
             />
           ))}
           {shown.length === 0 && (
@@ -217,12 +225,70 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
   )
 }
 
-/** A source that was removed, or whose authorisation was revoked: history only, nothing to operate. */
-function isGone(connection: HubConnection): boolean {
-  return (connection.removed_at ?? null) !== null || connection.connection_state === 'REVOKED'
+/** A link that still exists through a connection somebody disconnected: listed in the project's space, to be linked again. */
+function isDisconnected(connection: HubConnection): boolean {
+  return connection.status === 'disconnected' && (connection.removed_at ?? null) === null
 }
 
-function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise, onRelink }: {
+/** A source that was removed, or whose authorisation was revoked: history only, nothing to operate. */
+export function isGone(connection: HubConnection): boolean {
+  return (connection.removed_at ?? null) !== null || (connection.connection_state === 'REVOKED' && !isDisconnected(connection))
+}
+
+const SPEND_DAYS = 30
+
+/**
+ * The project's last 30 days of spend, per linked account and in total — read from the metrics endpoints
+ * the analytics pages read, so the centre cannot state a figure they would not. Nothing is summed here that
+ * the money contract refuses to sum: a withheld amount stays in its own currency, and «no single figure» is
+ * a dash, never a zero.
+ */
+export function useProjectSpend(projectId: string | null) {
+  const range = useMemo(() => lastNDays(SPEND_DAYS), [])
+  const summary = useSummary(projectId, range)
+  const accounts = useAccounts(projectId, range)
+  const currency = summary.data?.currency ?? null
+  const rows: AccountRow[] = Array.isArray(accounts.data) ? accounts.data : []
+
+  return {
+    currency,
+    total: summary.data?.current === undefined ? null : summary.data.current as MoneyTotals,
+    of: (accountIds: string[]): string | null => {
+      const mine = rows.filter((r) => r.account_id !== null && accountIds.includes(r.account_id))
+      if (mine.length === 0) return null
+      if (mine.length === 1) return moneyFromTotals(mine[0] as MoneyTotals, 'spend', true, currency).text
+      const sum = aggregateMoney(mine as MoneyTotals[], 'spend', currency)
+      return sum === null ? '—' : money(sum.amount, sum.currency)
+    },
+  }
+}
+
+type ProjectSpend = ReturnType<typeof useProjectSpend>
+
+/**
+ * The ONE chip a collapsed row carries. Not a sixth status: it is the first of the server's five that asks
+ * for something, in that status's own words — authorisation first, so a running sync can never stand in
+ * front of a refused grant — and the authorisation itself when nothing asks. All five are one press away.
+ */
+function RowState({ connection, ar }: { connection: HubConnection; ar: boolean }) {
+  const statuses = connection.statuses ?? null
+  const id = `hub-state-${connection.id}`
+
+  if (isDisconnected(connection)) return <Badge tone="danger" data-testid={id}>{ar ? 'مفصول' : 'Disconnected'}</Badge>
+
+  if (statuses !== null) {
+    const dimension = STATUS_DIMENSIONS.find((d) => statuses[d].action !== null && statuses[d].action?.code !== 'wait') ?? 'authorisation'
+    const status = statuses[dimension]
+    return <Badge tone={statusTone(dimension, status.state)} data-testid={id} data-dimension={dimension}>{ar ? status.label_ar : status.label_en}</Badge>
+  }
+
+  const copy = !needsReauthorising(connection.connection_state) && connection.sync_state === 'FAILED'
+    ? SYNC_COPY[connection.sync_state]
+    : CONNECTION_COPY[connection.connection_state]
+  return <Badge tone={copy.tone} data-testid={id}>{ar ? copy.ar : copy.en}</Badge>
+}
+
+function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise, onRelink, projectId, spend }: {
   connection: HubConnection
   ar: boolean
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
@@ -230,280 +296,317 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
   onRemove?: (connection: HubConnection) => void
   onReauthorise?: (connection: HubConnection) => void
   onRelink?: (connection: HubConnection) => void
+  projectId: string | null
+  spend: ProjectSpend
 }) {
-  // A workspace-wide source seen from a project's space: the row offers the project's own journey.
-  const legacy = onRelink !== undefined && (connection.project_id ?? null) === null
+  const [expanded, setExpanded] = useState(false)
+  const [unlinking, setUnlinking] = useState<{ id: string; name: string } | null>(null)
+  const disconnected = isDisconnected(connection)
+  // A workspace-wide source seen from a project's space, or one that was disconnected: the row offers the project's own journey.
+  const relinkable = onRelink !== undefined && ((connection.project_id ?? null) === null || disconnected)
   const auth = CONNECTION_COPY[connection.connection_state]
   const data = SYNC_COPY[connection.sync_state]
   const gone = isGone(connection)
   const statuses = connection.statuses ?? null
   /*
-   * Re-authorising is offered on the row only where it is the consent screen that answers it. An
-   * API-key source has no consent screen — its remedy is a new key — so its row does not promise one.
+   * Re-authorising is offered only where it is the consent screen that answers it. An API-key source has
+   * no consent screen — its remedy is a new key — and a disconnected one is linked again, not renewed.
    */
-  const reauthorisable = !gone && onReauthorise !== undefined && connection.status_profile?.auth !== 'api_key'
+  const reauthorisable = !gone && !disconnected && onReauthorise !== undefined && connection.status_profile?.auth !== 'api_key'
   const reauthDue = statuses === null
     ? needsReauthorising(connection.connection_state)
     : (statuses.authorisation.action?.code ?? '').startsWith('reauthorize')
   const account = connection.provider_account ?? null
   const platformAccount = account === null ? null : (account.email ?? account.label)
+  const accounts = connection.accounts ?? []
+  const removable = !gone && onRemove !== undefined
+  const abandoned = removable && connection.abandoned === true
+  const unfinished = !gone && connection.selected_accounts === 0
+
+  /*
+   * ONE primary action on the row — the remedy, when there is one. Every other act this source admits is
+   * in the panel under it or behind «…», so a row is a name, its numbers, a state and at most one button.
+   */
+  const primary: 'relink' | 'reauth' | 'remove' | 'choose' | null = gone ? null
+    : relinkable ? 'relink'
+      : reauthorisable && reauthDue ? 'reauth'
+        : abandoned ? 'remove'
+          : unfinished ? 'choose'
+            : null
+
+  const relink = relinkable && (
+    <Button size="sm" variant={primary === 'relink' ? 'primary' : 'ghost'} onClick={() => onRelink!(connection)} data-testid={`hub-relink-${connection.id}`}>
+      <Link2 size={13} /> {ar ? 'إعادة الربط' : 'Re-link'}
+    </Button>
+  )
+  const reauth = reauthorisable && (
+    <Button
+      size="sm"
+      variant={reauthDue ? 'primary' : 'ghost'}
+      onClick={() => onReauthorise!(connection)}
+      data-testid={`hub-reauth-${connection.id}`}
+      data-due={reauthDue ? 'true' : 'false'}
+    >
+      <RefreshCcw size={13} /> {ar ? 'إعادة المصادقة' : 'Re-authorise'}
+    </Button>
+  )
+  // INTEG-SOURCE-REMOVAL-001 — started and never finished: the way out is ON the row, not behind a menu.
+  const cancel = abandoned && (
+    <button
+      type="button"
+      onClick={() => onRemove!(connection)}
+      data-testid={`hub-remove-${connection.id}`}
+      className="rounded-[var(--radius-pill)] bg-[var(--negative-background)] px-2.5 py-0.5 text-xs font-bold text-danger hover:underline"
+    >
+      {ar ? 'إلغاء/إزالة' : 'Cancel / remove'}
+    </button>
+  )
+  // Consent completed and not one account chosen: nothing syncs until somebody chooses here.
+  const choose = unfinished && (
+    <button
+      type="button"
+      onClick={() => onOpen(connection, 'accounts')}
+      data-testid={`hub-unfinished-${connection.id}`}
+      className="rounded-[var(--radius-pill)] bg-[var(--warning-background)] px-2.5 py-0.5 text-xs font-bold text-warning hover:underline"
+    >
+      {ar ? 'اختر الحسابات' : 'Choose accounts'}
+    </button>
+  )
+
+  const rowSpend = projectId === null || accounts.length === 0 ? null : spend.of(accounts.map((a) => a.id))
+  const panelId = `hub-detail-${connection.id}`
 
   return (
-    <li
-      className="group flex min-w-0 flex-col gap-3 p-4 transition-colors hover:bg-surface-hover"
-      data-testid={`hub-row-${connection.id}`}
-      data-provider={connection.provider}
-    >
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
-        {/*
-          Identity and the menu share a line, and on a phone that line is the row's header.
-
-          Measured at 390px: with the menu as the last child of a wrapping row it fell to a line of its
-          own at the very bottom, four stacked facts away from the source it acts on. The name and its
-          «…» belong together at every width — one says what this is, the other is everything you can
-          do to it.
-        */}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+    <li className="group flex min-w-0 flex-col" data-testid={`hub-row-${connection.id}`} data-provider={connection.provider}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 transition-colors hover:bg-surface-hover">
+        <div className="flex min-w-0 flex-1 basis-40 items-center gap-1.5">
           <button
             type="button"
-            onClick={() => onOpen(connection)}
-            className="flex min-w-0 flex-1 items-center gap-3 text-start"
-            data-testid={`hub-open-${connection.id}`}
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            aria-label={ar ? 'الحسابات' : 'Accounts'}
+            data-testid={`hub-expand-${connection.id}`}
+            className="shrink-0 rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
           >
-            <span
-              className="h-9 w-1 shrink-0 rounded-full"
-              style={{ background: platformColor(connection.provider) }}
-              aria-hidden
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-bold text-text-primary">
-                {ar ? connection.label_ar : connection.label}
-              </span>
-              {/*
-                INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with, first: the
-                email the platform reported, or its display name where it gave no email.
-              */}
-              {/* INTEG-PROJECT-SPACE-001 — what this source reads, by name: two rows of one platform are told apart here. */}
-              {(connection.accounts?.length ?? 0) > 0 && (
-                <span className="mt-0.5 flex min-w-0 flex-wrap gap-1" data-testid={`hub-accounts-${connection.id}`}>
-                  {sortBySource(connection.accounts!, (a) => ({ organisation: a.organisation, account: a.name }), ar).slice(0, 3).map((a) => (
-                    <span key={a.id} className="max-w-full truncate rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-primary">
-                      {a.organisation === null ? a.name : `${a.organisation} · ${a.name}`}
-                    </span>
-                  ))}
-                  {connection.accounts!.length > 3 && (
-                    <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">+{(connection.accounts!.length - 3).toLocaleString('en-US')}</span>
-                  )}
-                </span>
-              )}
-              <span className="block truncate text-xs text-text-secondary" data-testid={`hub-platform-account-${connection.id}`}>
-                {platformAccount === null
-                  ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')
-                  : `${ar ? 'حساب المنصة' : 'Platform account'}: ${platformAccount}`}
-              </span>
-              {/*
-                INTEG-UNIFIED-002 — the workspace user who pressed connect is named by NAME. Their
-                CampaignsHub email is not an identity of this source and is not shown on this page at
-                all: beside a platform account it read as a second login for the same grant.
-              */}
-              <span className="block truncate text-[11px] text-text-muted" data-testid={`hub-added-by-${connection.id}`}>
-                {connection.authorised_by === null
-                  ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
-                  : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.name}`}
-              </span>
-            </span>
+            <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden />
           </button>
+          {/* The platform by its short name and its own mark: «سناب شات», never the API's title. */}
+          <button type="button" onClick={() => onOpen(connection)} className="flex min-w-0 flex-1 items-center gap-2 text-start" data-testid={`hub-open-${connection.id}`}>
+            <ProviderMark provider={connection.provider} size={22} />
+            <span className="min-w-0 truncate text-sm font-bold text-text-primary">{platformLabel(connection.provider, ar)}</span>
+          </button>
+        </div>
 
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
+          {/*
+            INTEG-PROJECT-LINK-001 — LINKED accounts only: what a sign-in could see but nobody chose is not
+            counted. The count opens what it counts — the list under the row where the row carries one.
+          */}
+          <button
+            type="button"
+            onClick={() => (accounts.length > 0 ? setExpanded((v) => !v) : onOpen(connection, 'accounts'))}
+            data-testid={`hub-accounts-${connection.id}`}
+            className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-text-primary hover:underline"
+          >
+            {connectedAccounts(connection.selected_accounts, ar ? 'ar' : 'en')}
+          </button>
+          {connection.campaigns !== undefined && (
+            <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5" data-testid={`hub-campaigns-${connection.id}`}>
+              {countedCampaigns(connection.campaigns, ar ? 'ar' : 'en')}
+            </span>
+          )}
+          {rowSpend !== null && (
+            <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-text-primary" dir="ltr" data-testid={`hub-spend-${connection.id}`}>{rowSpend}</span>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {gone ? (
+            <Badge tone="neutral" data-testid={`hub-removed-${connection.id}`}>
+              {(connection.removed_at ?? null) !== null ? (ar ? 'مُزال' : 'Removed') : (ar ? CONNECTION_COPY.REVOKED.ar : CONNECTION_COPY.REVOKED.en)}
+            </Badge>
+          ) : <RowState connection={connection} ar={ar} />}
+          {primary === 'relink' && relink}
+          {primary === 'reauth' && reauth}
+          {primary === 'remove' && cancel}
+          {primary === 'choose' && choose}
           {!gone && (
             <button
               type="button"
               onClick={() => onAction(connection)}
               aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
               data-testid={`hub-actions-${connection.id}`}
-              className="shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary lg:hidden"
+              className="shrink-0 rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
             >
               <MoreHorizontal size={18} />
             </button>
           )}
         </div>
+      </div>
+
+      {/* Under the row: its linked accounts, one per line — then the five statuses and who authorised it. */}
+      <div id={panelId} hidden={!expanded} className="min-w-0 flex-col gap-3 border-t border-border bg-surface-secondary/40 px-3 py-3 [&:not([hidden])]:flex" data-testid={panelId}>
+        {accounts.length > 0 && (
+          <ul className="flex min-w-0 flex-col divide-y divide-border rounded-xl border border-border bg-surface" data-testid={`hub-account-list-${connection.id}`}>
+            {sortBySource(accounts, (a) => ({ organisation: a.organisation, account: a.name }), ar).map((a) => {
+              const accountSpend = projectId === null ? null : spend.of([a.id])
+              return (
+                <li key={a.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2" data-testid={`hub-account-${a.id}`}>
+                  <ProviderMark provider={connection.provider} size={16} />
+                  <span className="min-w-0 flex-1 basis-32 truncate text-xs font-semibold text-text-primary">
+                    {a.organisation === null ? a.name : `${a.organisation} · ${a.name}`}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-text-muted">
+                    <span className="tnum" dir="ltr">{shortId(a.external_id)}</span>
+                    <CopyId value={a.external_id} testId={`hub-account-id-${a.id}`} />
+                  </span>
+                  {a.campaigns !== undefined && (
+                    <span className="tnum shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">{countedCampaigns(a.campaigns, ar ? 'ar' : 'en')}</span>
+                  )}
+                  {accountSpend !== null && <span className="tnum shrink-0 text-[11px] font-semibold text-text-primary" dir="ltr" data-testid={`hub-account-spend-${a.id}`}>{accountSpend}</span>}
+                  {projectId !== null && !gone && (
+                    <button
+                      type="button"
+                      onClick={() => setUnlinking({ id: a.id, name: a.name })}
+                      data-testid={`hub-unlink-${a.id}`}
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-danger hover:bg-[var(--negative-background)]"
+                    >
+                      {ar ? 'فصل' : 'Unlink'}
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         {/*
-          «1 of 17 accounts» is a CONTROL, not a label: it is the shortest path to the thing a reader
-          wants after reading it, which is the list of the seventeen.
+          INTEG-UNIFIED-002 (§1.13) — FIVE chips, the server's own five statuses, none implying another.
+          The two-chip pair is what an older response without `statuses` still gets.
         */}
-        <button
-          type="button"
-          onClick={() => onOpen(connection, 'accounts')}
-          data-testid={`hub-accounts-${connection.id}`}
-          className="inline-flex w-fit shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-text-primary underline-offset-4 hover:bg-surface-secondary hover:underline"
-        >
-          {/*
-            INTEG-PROJECT-LINK-001 — LINKED accounts only. What a sign-in could see but nobody chose is
-            not a source of this workspace and is not counted on the centre: «1 of 309» read as 309
-            accounts being synced, which they never were.
-          */}
-          <span className="tnum">{connectedAccounts(connection.selected_accounts, ar ? 'ar' : 'en')}</span>
-        </button>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {statuses !== null ? (
+            <StatusChips
+              statuses={statuses}
+              ar={ar}
+              id={connection.id}
+              legacyIds={{ authorisation: `hub-auth-${connection.id}`, sync: `hub-sync-${connection.id}` }}
+            />
+          ) : (
+            <>
+              <Badge tone={auth.tone} data-testid={`hub-auth-${connection.id}`}>{ar ? auth.ar : auth.en}</Badge>
+              <Badge tone={data.tone} data-testid={`hub-sync-${connection.id}`}>{ar ? data.ar : data.en}</Badge>
+            </>
+          )}
+        </div>
 
-        {/*
-          Both times, small and tabular. «Last» without «next» leaves a reader who sees an old
-          timestamp unable to tell a broken integration from one merely between runs — the question
-          that used to be answered by pressing «Sync now» for reassurance.
-        */}
-        <dl className="flex shrink-0 flex-col gap-0.5 text-[11px] text-text-secondary lg:w-44 lg:text-end">
-          <div className="flex gap-1 lg:justify-end">
-            <dt>{ar ? 'آخر مزامنة' : 'Last sync'}</dt>
-            <dd className="tnum font-semibold text-text-primary">
-              {connection.last_success_at === null
-                ? (ar ? 'لم تتم' : 'None')
-                : fmtDateTime(connection.last_success_at)}
-            </dd>
-          </div>
-          <div className="flex gap-1 lg:justify-end">
-            <dt>{ar ? 'التالية' : 'Next'}</dt>
-            <dd className="tnum font-semibold text-text-primary">
-              {/* Null is «it is not going to», never «unknown» — the server only states a real one. */}
-              {connection.next_sync_at === null
-                ? (ar ? 'متوقفة' : 'Paused')
-                : fmtDateTime(connection.next_sync_at)}
-            </dd>
-          </div>
-        </dl>
+        <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-secondary">
+          {/* INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with; never the workspace email. */}
+          <span className="min-w-0 truncate" data-testid={`hub-platform-account-${connection.id}`}>
+            {platformAccount === null
+              ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')
+              : `${ar ? 'حساب المنصة' : 'Platform account'}: ${platformAccount}`}
+          </span>
+          <span className="min-w-0 truncate" data-testid={`hub-added-by-${connection.id}`}>
+            {connection.authorised_by === null
+              ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
+              : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.name}`}
+          </span>
+          <span className="flex gap-1">
+            <span>{ar ? 'آخر مزامنة' : 'Last sync'}</span>
+            <span className="tnum font-semibold text-text-primary">{connection.last_success_at === null ? (ar ? 'لم تتم' : 'None') : fmtDateTime(connection.last_success_at)}</span>
+          </span>
+          <span className="flex gap-1">
+            <span>{ar ? 'التالية' : 'Next'}</span>
+            {/* Null is «it is not going to», never «unknown» — the server only states a real one. */}
+            <span className="tnum font-semibold text-text-primary">{connection.next_sync_at === null ? (ar ? 'متوقفة' : 'Paused') : fmtDateTime(connection.next_sync_at)}</span>
+          </span>
+        </div>
 
-        {/*
-          INTEG-UNIFIED-002 — the two acts a reader comes to this section for, ON the row.
-
-          Re-authorise opens the centre's one flow in `reauthorise` mode (it renews the grant and
-          leaves the selection alone); remove asks the page for the same confirmation the menu does.
-          Neither is a new endpoint. A source that needs re-authorising gets the filled button, so the
-          remedy is the loudest thing on a broken row; a working one gets the quiet one.
-        */}
-        {!gone && (legacy || reauthorisable || (onRemove !== undefined && connection.abandoned !== true)) && (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            {legacy && (
-              <Button size="sm" variant="ghost" onClick={() => onRelink!(connection)} data-testid={`hub-relink-${connection.id}`}>
-                <Link2 size={13} /> {ar ? 'إعادة الربط' : 'Re-link'}
-              </Button>
-            )}
-            {reauthorisable && (
-              <Button
-                size="sm"
-                variant={reauthDue ? 'primary' : 'ghost'}
-                onClick={() => onReauthorise!(connection)}
-                data-testid={`hub-reauth-${connection.id}`}
-                data-due={reauthDue ? 'true' : 'false'}
-              >
-                <RefreshCcw size={13} /> {ar ? 'إعادة المصادقة' : 'Re-authorise'}
-              </Button>
-            )}
-            {onRemove !== undefined && connection.abandoned !== true && (
-              <Button size="sm" variant="ghost" onClick={() => onRemove(connection)} data-testid={`hub-detach-${connection.id}`}>
+        {!gone && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {primary !== 'relink' && relink}
+            {primary !== 'reauth' && reauth}
+            {primary !== 'remove' && cancel}
+            {primary !== 'choose' && choose}
+            {removable && !abandoned && (
+              <Button size="sm" variant="ghost" onClick={() => onRemove!(connection)} data-testid={`hub-detach-${connection.id}`}>
                 <Unplug size={13} /> {ar ? 'إزالة المصدر' : 'Remove source'}
               </Button>
             )}
           </div>
         )}
-
-        {/* The same control at desktop width, where it belongs at the end of the row instead. */}
-        {!gone && (
-          <button
-            type="button"
-            onClick={() => onAction(connection)}
-            aria-label={ar ? 'إجراءات المصدر' : 'Source actions'}
-            data-testid={`hub-actions-desktop-${connection.id}`}
-            className="hidden shrink-0 rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary lg:block"
-          >
-            <MoreHorizontal size={18} />
-          </button>
-        )}
       </div>
 
-      {/*
-        The states get a line of their own. Five chips do not fit beside an identity, a count, two
-        times and the controls at any width this page is opened at, and a chip that wraps under a
-        button stops reading as a state of the row.
-      */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {/*
-          INTEG-UNIFIED-002 (§1.13) — FIVE chips, the server's own five statuses, none implying another.
-          The two-chip pair below is what an older response without `statuses` still gets: the same two
-          facts, in the words this page already used for them.
-        */}
-        {statuses !== null ? (
-          <StatusChips
-            statuses={statuses}
-            ar={ar}
-            id={connection.id}
-            legacyIds={{ authorisation: `hub-auth-${connection.id}`, sync: `hub-sync-${connection.id}` }}
-          />
-        ) : (
-          <>
-            <Badge tone={auth.tone} data-testid={`hub-auth-${connection.id}`}>{ar ? auth.ar : auth.en}</Badge>
-            <Badge tone={data.tone} data-testid={`hub-sync-${connection.id}`}>{ar ? data.ar : data.en}</Badge>
-          </>
-        )}
-
-        {gone && (
-          <Badge tone="neutral" data-testid={`hub-removed-${connection.id}`}>
-            {(connection.removed_at ?? null) !== null ? (ar ? 'مُزال' : 'Removed') : (ar ? CONNECTION_COPY.REVOKED.ar : CONNECTION_COPY.REVOKED.en)}
-          </Badge>
-        )}
-
-        {/*
-          INTEG-SOURCE-REMOVAL-001 — started and never finished: the way out is ON the row, not behind a menu.
-        */}
-        {!gone && connection.abandoned === true && onRemove !== undefined && (
-          <button
-            type="button"
-            onClick={() => onRemove(connection)}
-            data-testid={`hub-remove-${connection.id}`}
-            className="rounded-[var(--radius-pill)] bg-[var(--negative-background)] px-2.5 py-0.5 text-xs font-bold text-danger hover:underline"
-          >
-            {ar ? 'إلغاء/إزالة' : 'Cancel / remove'}
-          </button>
-        )}
-
-        {/*
-          An authorisation nobody finished, with the way to finish it ON the row.
-
-          Consent completed, catalogue full, and not one account chosen — so nothing syncs and the
-          page otherwise looks complete. Discovery is not a link: the accounts this sign-in can see
-          are not bound to any project and are not synced until somebody chooses them here.
-        */}
-        {!gone && connection.selected_accounts === 0 && (
-          <button
-            type="button"
-            onClick={() => onOpen(connection, 'accounts')}
-            data-testid={`hub-unfinished-${connection.id}`}
-            className="rounded-[var(--radius-pill)] bg-[var(--warning-background)] px-2.5 py-0.5 text-xs font-bold text-warning hover:underline"
-          >
-            {ar ? 'اختر الحسابات' : 'Choose accounts'}
-          </button>
-        )}
-      </div>
+      {unlinking !== null && projectId !== null && (
+        <UnlinkDialog projectId={projectId} account={unlinking} ar={ar} onClose={() => setUnlinking(null)} />
+      )}
     </li>
   )
 }
 
+/** A long platform number is shown by its end — the part people read out — with the whole of it behind the copy icon. */
+function shortId(id: string): string {
+  return id.length > 10 ? `…${id.slice(-8)}` : id
+}
+
 /**
- * INTEG-PROJECT-SPACE-001 — the project's four figures, on top of its space: linked accounts, platforms,
- * campaigns, and how many sources need an action. Figures only — a tile carries a word and a number.
+ * «فصل» — one account off THIS project, through the unlink endpoint the inventory already uses. Two
+ * buttons and one line: what the reader fears losing stays, and the act can be undone by linking again.
  */
-export function HubSummary({ connections, campaigns = null }: { connections: HubConnection[]; campaigns?: number | null }) {
+function UnlinkDialog({ projectId, account, ar, onClose }: {
+  projectId: string
+  account: { id: string; name: string }
+  ar: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const unlink = useMutation({
+    mutationFn: () => unlinkAccount(projectId, account.id),
+    onSuccess: async () => {
+      onClose()
+      await Promise.all(['connection-hub', 'projects', 'metrics', 'integration-accounts', 'integration-estate', 'connection-hierarchy']
+        .map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl" data-testid="unlink-account-dialog">
+        <h2 className="truncate text-base font-bold text-text-primary">{ar ? `فصل ${account.name}؟` : `Unlink ${account.name}?`}</h2>
+        <p className="mt-2 text-xs text-text-secondary">{ar ? 'يبقى السجل، ويمكن ربطه من جديد.' : 'Its history stays, and it can be linked again.'}</p>
+        {unlink.isError && <p className="mt-2 text-xs text-danger" role="alert" data-testid="unlink-account-error">{ar ? 'تعذّر الفصل' : 'Could not unlink'}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} data-testid="unlink-account-keep">{ar ? 'إبقاء' : 'Keep'}</Button>
+          <Button loading={unlink.isPending} onClick={() => unlink.mutate()} data-testid="unlink-account-confirm">{ar ? 'فصل' : 'Unlink'}</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * INTEG-PROJECT-SPACE-001 — the project's four figures, on top of its space: linked accounts, campaigns,
+ * the last 30 days of spend, and how many sources need an action. Figures only — a word and a number.
+ */
+export function HubSummary({ connections, campaigns = null, projectId = null }: { connections: HubConnection[]; campaigns?: number | null; projectId?: string | null }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const spend = useProjectSpend(projectId)
   const live = connections.filter((c) => !isGone(c))
   if (live.length === 0) return null
 
-  const attention = live.filter(sourceNeedsAction).length
+  const attention = live.filter((c) => isDisconnected(c) || sourceNeedsAction(c)).length
   const accounts = live.reduce((n, c) => n + c.selected_accounts, 0)
-  const platforms = new Set(live.map((c) => c.provider)).size
+  // Withheld money is stated in its own currency and «no single figure» is a dash: never a zero.
+  const reading = spend.total === null ? null : moneyFromTotals(spend.total, 'spend', ar, spend.currency)
 
   return (
     <section className="min-w-0" data-testid="hub-summary" aria-label={ar ? 'ملخص' : 'Summary'}>
       <StatGrid columns="grid-cols-2 sm:grid-cols-4">
         <StatCard label={ar ? 'الحسابات' : 'Accounts'} value={accounts.toLocaleString('en-US')} tone="brand" dot testid="hub-kpi-accounts" />
-        <StatCard label={ar ? 'المنصات' : 'Platforms'} value={platforms.toLocaleString('en-US')} tone="neutral" dot testid="hub-kpi-platforms" />
         <StatCard label={ar ? 'الحملات' : 'Campaigns'} value={campaigns === null ? '—' : campaigns.toLocaleString('en-US')} tone="neutral" dot testid="hub-kpi-campaigns" />
+        <StatCard label={ar ? 'إنفاق 30 يومًا' : '30-day spend'} value={<span dir="ltr">{reading === null ? '—' : reading.text}</span>} exact={reading?.exact ?? undefined} tone="neutral" dot testid="hub-kpi-spend" />
         <StatCard label={ar ? 'تحتاج إجراء' : 'Need action'} value={attention.toLocaleString('en-US')} tone={attention > 0 ? 'danger' : 'success'} dot testid="hub-kpi-attention" />
       </StatGrid>
     </section>

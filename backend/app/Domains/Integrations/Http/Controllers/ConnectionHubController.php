@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\ProviderHierarchy;
 use App\Domains\Integrations\Catalogue\ProviderKind;
@@ -90,9 +91,17 @@ final class ConnectionHubController extends Controller
 
         $tenantId = (string) $this->tenant->tenantId();
 
+        $inProjectSpace = is_string($request->query('project_id')) && $request->query('project_id') !== '';
+
         $connections = ProviderConnection::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereNotIn('status', ['disconnected'])
+            /*
+             * `disconnected` stays off the workspace-wide board. A PROJECT's space lists it when the project
+             * still holds an active link through it: the project's card counts that account, and a count the
+             * space cannot show is a number with nothing behind it. Everything a project is not linked to is
+             * dropped further down, so this adds a row only where a link exists.
+             */
+            ->when(! $inProjectSpace, fn ($q) => $q->whereNotIn('status', ['disconnected']))
             /*
              * INTEG-SOURCE-REMOVAL-001 — a removed source, and one whose authorisation was revoked, are
              * not listed by default: they stayed on this page for ever and nothing could take them off.
@@ -215,6 +224,22 @@ final class ConnectionHubController extends Controller
         $selectedIds = $selected->pluck('external_account_id')->map(strval(...))->unique();
 
         /*
+         * Campaigns per linked account, from the canonical rows — the same definition the project's card
+         * counts with (`unlinked_at` null), and bounded by the same projects the links above are: this
+         * project alone in its space, and never a project the reader cannot reach.
+         */
+        $campaignsByAccount = $selectedIds->isEmpty() ? [] : ExternalCampaign::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('external_account_id', $selectedIds->values()->all())
+            ->whereIn('project_id', $selected->pluck('project_id')->map(strval(...))->unique()->values()->all())
+            ->whereNull('unlinked_at')
+            ->groupBy('external_account_id')
+            ->selectRaw('external_account_id, count(*) as total')
+            ->pluck('total', 'external_account_id')
+            ->map(static fn (mixed $n): int => (int) $n)
+            ->all();
+
+        /*
          * INTEG-STATUS-MODEL-001 — the five-status object's inputs, read once for the whole page.
          * `sync_enabled` per selected account, and the newest open / finished / failed run of each.
          */
@@ -246,7 +271,7 @@ final class ConnectionHubController extends Controller
 
         $removal = app(ConnectionRemoval::class);
 
-        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $removal, $syncEnabled, $statusRuns): array {
+        $rows = $connections->map(function (ProviderConnection $connection) use ($accounts, $selectedIds, $runs, $projects, $projectByAccount, $authors, $removal, $syncEnabled, $statusRuns, $campaignsByAccount): array {
             $mine = $accounts->get((string) $connection->getKey(), collect());
 
             // «Discovered» excludes an account whose access the provider has withdrawn: it is not one
@@ -321,7 +346,11 @@ final class ConnectionHubController extends Controller
                     'organisation' => $a->parent_name,
                     'external_id' => (string) $a->external_id,
                     'currency' => $a->currency,
+                    'campaigns' => $campaignsByAccount[(string) $a->getKey()] ?? 0,
                 ])->values()->all(),
+                'campaigns' => $chosen->sum(fn (ExternalAccount $a): int => $campaignsByAccount[(string) $a->getKey()] ?? 0),
+                // The stored word, beside the two truths: a project's space tells «disconnected» from «revoked» by it.
+                'status' => (string) $connection->status,
                 'selected_accounts' => $chosen->count(),
                 'discovered_accounts' => $discovered->count(),
                 'connection_state' => $connectionState,

@@ -730,7 +730,11 @@ export interface HubConnection {
   /** The ONE project a link journey opened this connection for; null or absent is a workspace-wide connection. */
   project_id?: string | null
   /** What the reader's projects read through this source, by name — what tells two rows of one platform apart. */
-  accounts?: Array<{ id: string; name: string; organisation: string | null; external_id: string; currency: string | null }>
+  accounts?: Array<{ id: string; name: string; organisation: string | null; external_id: string; currency: string | null; campaigns?: number }>
+  /** Campaigns THIS reader's projects run through the linked accounts of this source. */
+  campaigns?: number
+  /** The stored status word. `disconnected` with a live link is listed in a project's space, to be linked again. */
+  status?: string
   id: string
   provider: string
   label: string

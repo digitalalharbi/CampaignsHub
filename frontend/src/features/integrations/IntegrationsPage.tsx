@@ -5,7 +5,7 @@ import {
   fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
 } from './api'
-import { ConnectionHub, HubSummary } from './ConnectionHub'
+import { ConnectionHub, HubSummary, isGone } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { IntegrationAudit } from './IntegrationAudit'
@@ -222,7 +222,7 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
     setFlow({ mode: 'manage', provider: null, connection, projectId: manageDestination(connection) })
   }
 
-  const live = connections.filter((c) => (c.removed_at ?? null) === null && c.connection_state !== 'REVOKED')
+  const live = connections.filter((c) => !isGone(c))
 
   return (
     <div className="flex min-w-0 flex-col gap-6" data-testid="connection-hub" dir={ar ? 'rtl' : 'ltr'}>
@@ -243,7 +243,7 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
         )}
       />
 
-      <HubSummary connections={connections} campaigns={project?.summary?.campaigns ?? null} />
+      <HubSummary connections={connections} campaigns={project?.summary?.campaigns ?? null} projectId={currentProjectId} />
 
       <div role="tablist" aria-label={ar ? 'التكاملات' : 'Integrations'} data-testid="hub-sections" className="flex min-w-0 gap-1 overflow-x-auto rounded-[13px] border border-border bg-surface-secondary p-1">
         {HUB_SECTIONS.map((section) => (
@@ -449,11 +449,10 @@ function MenuItem({ onClick, testId, children }: { onClick: () => void; testId: 
 }
 
 /**
- * INTEG-SOURCE-REMOVAL-001 — the confirmation, said as what it costs AND what it does not.
+ * INTEG-SOURCE-REMOVAL-001 — the confirmation: two buttons and one line.
  *
- * Removing a source ends its data flow for every client it feeds, so the sentence names that. It also
- * says the stored figures and reports stay, because «إزالة» sounds like deletion and the fear that
- * stops people pressing it is losing a client's history.
+ * «إزالة» sounds like deletion, and the fear that stops people pressing it is losing a client's history —
+ * so the one line says the history stays and the source can be linked again.
  */
 function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
   connection: HubConnection
@@ -470,8 +469,8 @@ function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
         <h2 className="text-base font-bold text-text-primary">{ar ? `إزالة ${name}؟` : `Remove ${name}?`}</h2>
         <p className="mt-2 text-xs text-text-secondary">
           {ar
-            ? 'ستتوقف المزامنة وتُعطَّل ارتباطات الحسابات بكل المشاريع، ويُمسح رمز الوصول المخزَّن لدينا. تبقى الأرقام والتقارير المحفوظة كما هي. لإعادة الربط لاحقًا اضغط «ربط».'
-            : 'Syncing stops, the accounts are unlinked from every project, and the access token we hold is cleared. Stored figures and reports stay exactly as they are. To link again later, press «Link».'}
+            ? 'يبقى السجل، ويمكن ربطه من جديد.'
+            : 'Its history stays, and it can be linked again.'}
         </p>
         {remove.isError && (
           <p className="mt-2 text-xs text-danger" data-testid="remove-source-error">

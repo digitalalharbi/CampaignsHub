@@ -216,10 +216,11 @@ describe('the Integrations Centre: the project space — three tabs, Arabic and 
     expect(summary.compareDocumentPosition(screen.getByTestId('hub-sections')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     expect(within(summary).getByTestId('hub-kpi-accounts')).toHaveTextContent('3')
-    expect(within(summary).getByTestId('hub-kpi-platforms')).toHaveTextContent('2')
+    // The last 30 days of spend is the fourth figure; with nothing reported it is a dash, never a zero.
+    expect(within(summary).getByTestId('hub-kpi-spend')).toHaveTextContent('—')
     await waitFor(() => expect(within(summary).getByTestId('hub-kpi-campaigns')).toHaveTextContent('14'))
     expect(within(summary).getByTestId('hub-kpi-attention')).toHaveTextContent('1')
-    expect(within(summary).getAllByTestId(/^hub-kpi-(accounts|platforms|campaigns|attention)$/)).toHaveLength(4)
+    expect(within(summary).getAllByTestId(/^hub-kpi-(accounts|campaigns|spend|attention)$/)).toHaveLength(4)
   })
 
   it('writes every count with Latin digits in Arabic', async () => {
@@ -245,6 +246,9 @@ describe('the Integrations Centre: five independent statuses', () => {
     expect(screen.getByTestId('status-sync-c-1')).toHaveTextContent('المزامنة: نجحت آخر مزامنة')
     expect(screen.getByTestId('status-freshness-c-1')).toHaveTextContent('حداثة البيانات: حديثة')
     expect(screen.getByTestId('status-error-c-1')).toHaveTextContent('الخطأ: لا خطأ')
+    // The five sit under the row; the row itself carries one chip, in the server's words.
+    expect(screen.getByTestId('hub-state-c-1')).toHaveTextContent('مفوَّض')
+    fireEvent.click(screen.getByTestId('hub-expand-c-1'))
     expect(within(screen.getByTestId('status-chips-c-1')).getAllByRole('listitem')).toHaveLength(5)
   })
 
@@ -430,12 +434,12 @@ describe('the Integrations Centre: linked sources — search, sort, re-authorise
     await screen.findByTestId('hub-reauth-c-1')
     expect(screen.queryByTestId('hub-reauth-c-key')).toBeNull()
 
-    fireEvent.click(screen.getByTestId('hub-actions-desktop-c-key'))
+    fireEvent.click(screen.getByTestId('hub-actions-c-key'))
     expect(await screen.findByTestId('hub-action-menu')).toBeInTheDocument()
     expect(screen.queryByTestId('action-reauthorise')).toBeNull()
     fireEvent.click(screen.getByTestId('action-close'))
 
-    fireEvent.click(screen.getByTestId('hub-actions-desktop-c-1'))
+    fireEvent.click(screen.getByTestId('hub-actions-c-1'))
     fireEvent.click(await screen.findByTestId('action-reauthorise'))
     expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Reconnect — Snapchat')
   })
@@ -445,7 +449,7 @@ describe('the Integrations Centre: linked sources — search, sort, re-authorise
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-detach-c-1'))
-    expect(await screen.findByTestId('remove-source-dialog')).toHaveTextContent('Stored figures and reports stay')
+    expect(await screen.findByTestId('remove-source-dialog')).toHaveTextContent('Its history stays, and it can be linked again.')
     expect(calls.removed).toEqual([])
 
     fireEvent.click(screen.getByTestId('remove-source-confirm'))
