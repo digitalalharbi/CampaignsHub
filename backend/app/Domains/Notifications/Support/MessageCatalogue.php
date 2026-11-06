@@ -165,6 +165,17 @@ final class MessageCatalogue
             'journey_transition' => self::event('operations', null, 'RequestJourneyService'),
             'client_needs_attention' => self::event('operations', null, 'ClientManagementService'),
             /*
+             * NOTIFICATION-CHANNELS-001 — a rule the person built, matched something.
+             *
+             * It reached the bell only: the type was in no list, so the dispatcher wrote `in_app_only`.
+             * Email is ON by default because this goes to the rule's author alone, about a rule they
+             * wrote to be told. `legacy` is `performance` — the category it was ACTUALLY resolved under
+             * until now — so a person who switched «الأداء» email off keeps it off rather than being
+             * surprised by a new mail; the category here is `operations` so that a manager's
+             * «performance» recipient arrangement does not start including it.
+             */
+            'automation_rule' => self::event('operations', 'performance', 'RuleEvaluator', defaultEmail: true),
+            /*
              * LEAD-SLA-NOTIFICATION-001 — a promise to a buyer that has not been kept.
              *
              * Email is ON by default, which is deliberate and rare here. The other operations types

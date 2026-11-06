@@ -7,10 +7,12 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
+use App\Domains\Settings\Http\Controllers\NotificationChannelTestController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
+use App\Domains\Settings\Http\Controllers\WhatsAppOptInController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +60,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');
     Route::match(['put', 'patch'], 'notifications', [NotificationPreferenceController::class, 'update'])->name('notifications.update');
+    // NOTIFICATION-CHANNELS-001 — NOT `notifications/test`: that path was withdrawn on purpose (MailTestSendTest) and stays 404. This one
+    // sends only to the signed-in person's OWN proved address, on the mail-test limiter; the platform mailbox stays the admin's alone.
+    // One test notification to the signed-in person, per channel; and their WhatsApp opt-in.
+    Route::post('notifications/channel-test', NotificationChannelTestController::class)->middleware('throttle:mail-test-send')->name('notifications.channel-test');
+    Route::post('notifications/whatsapp/start', [WhatsAppOptInController::class, 'start'])->middleware('throttle:5,1')->name('notifications.whatsapp.start');
+    Route::post('notifications/whatsapp/confirm', [WhatsAppOptInController::class, 'confirm'])->middleware('throttle:10,1')->name('notifications.whatsapp.confirm');
+    Route::delete('notifications/whatsapp', [WhatsAppOptInController::class, 'destroy'])->name('notifications.whatsapp.destroy');
     // §17.4.5 — a manager's preview of the templates. Sending one is the platform admin's alone (EMAIL-TEST-SEND-001).
     Route::get('notifications/previews', [NotificationPreferenceController::class, 'previews'])->name('notifications.previews');
     Route::get('notifications/previews/{key}', [NotificationPreferenceController::class, 'preview'])->name('notifications.preview');

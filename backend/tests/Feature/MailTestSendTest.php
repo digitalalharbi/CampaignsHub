@@ -583,6 +583,9 @@ final class MailTestSendTest extends TestCase
             'Domains/Notifications/Services/TransactionalMailer.php',
             'Domains/Platform/Http/Controllers/PlatformEmailController.php',
             'Domains/Platform/Services/OperationalReadiness.php',
+            // NOTIFICATION-CHANNELS-001 — the Owner asked for a test button per channel on the settings screen. It mails only the
+            // signed-in person's own PROVED address, marked as a test, on the same limiter; the platform mailbox is still the admin's alone.
+            'Domains/Settings/Http/Controllers/NotificationChannelTestController.php',
         ], $senders);
 
         Mail::fake();
