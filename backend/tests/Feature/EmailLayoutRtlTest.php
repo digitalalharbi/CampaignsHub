@@ -50,14 +50,16 @@ final class EmailLayoutRtlTest extends TestCase
         $this->assertMatchesRegularExpression('/<td class="ch-hdr" align="'.$align.'"[^>]*bgcolor="#0b1a16"[^>]*border-bottom:3px solid #0b7a62/', $html);
         $this->assertStringContainsString($ar ? 'كامبينز هَب' : 'CampaignsHub', $html);
         // One name, in the reader's language (Owner, 2026-11-05): never both side by side.
-        $this->assertStringNotContainsString($ar ? 'CampaignsHub ·' : 'كامبينز', $html);
-        $this->assertMatchesRegularExpression('/<img src="[^"]*\/brand\/email\/banner-'.($ar ? 'ar' : 'en').'\.png" width="600" alt="/', $html);
+        // The one exception is the footer's copyright line, in the Owner's own words (2026-11-06): «© 2026 CampaignsHub · campaignshub.io».
+        $withoutCopyright = (string) preg_replace('#<td data-footer-line="copyright".*?</td>#s', '', $html);
+        $this->assertStringNotContainsString($ar ? 'CampaignsHub ·' : 'كامبينز', $ar ? $withoutCopyright : (string) preg_replace('#<td data-footer-line="sender".*?</td>#s', '', $html));
+        $this->assertMatchesRegularExpression('/<img src="[^"]*\/brand\/email\/banner-'.($ar ? 'ar' : 'en').'\.png" width="600" height="150" alt="/', $html);
         $this->assertDoesNotMatchRegularExpression('/lockup|\.jpe?g/i', $html);
         $this->assertStringContainsString('<meta name="color-scheme" content="light dark" />', $html);
         $this->assertStringContainsString('<meta name="supported-color-schemes" content="light dark" />', $html);
         $this->assertStringContainsString('[data-ogsc] .ch-hdr', $html);
         $this->assertMatchesRegularExpression('/<td class="ch-pad" dir="'.($ar ? 'rtl' : 'ltr').'" align="'.$align.'"[^>]*text-align:'.$align.'/', $html);
-        $this->assertSame(2, preg_match_all('/<td class="ch-pad" dir="[a-z]+" align="'.$align.'"/', $html));
+        $this->assertSame(2, preg_match_all('/<td class="ch-pad(?: ch-ftr)?" dir="[a-z]+" align="'.$align.'"/', $html));
         $this->assertStringNotContainsString('align="'.($ar ? 'left' : 'right').'" bgcolor', $html);
         $this->assertDoesNotMatchRegularExpression('/[٠-٩]/u', $html);
         $this->assertStringContainsString('Segoe UI', $html);

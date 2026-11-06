@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Mail } from 'lucide-react'
-import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews, sendTestEmail, type EmailDelivery, type EmailLedger, type TestSendResult } from './api'
+import { fetchEmailLedger, fetchEmailPreview, fetchEmailPreviews, sendTestEmail, type EmailDelivery, type EmailLedger, type EmailPreviewList, type TestSendResult, type TestSendTarget } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Alert } from '@/components/ui/Alert'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { useUi } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
-import { FAILURE_WORDS, stageWords, SUPPRESSION_WORDS } from '@/features/settings/deliveryWords'
+import { FAILURE_WORDS, stageWords, SUPPRESSION_WORDS, type StageWords } from '@/features/settings/deliveryWords'
 import { mailTemplateLabel } from '@/features/settings/mailTemplateLabels'
 import { toApiError } from '@/lib/api/client'
 
@@ -36,8 +37,43 @@ import { toApiError } from '@/lib/api/client'
  * No resend and no delete: a ledger an operator can edit stops being evidence, and a resend button
  * that reaches every tenant's recipients is a way to mail thousands of people by mis-click. The
  * gallery below renders FIXTURES — what a message looks like — never a customer's actual mail. The one
- * thing that sends is a test, to the signed-in admin's own proven address (EMAIL-TEST-SEND-001).
+ * thing that sends is a test, to the signed-in admin's own proven address (EMAIL-TEST-SEND-001) or to
+ * the platform's own mailbox (EMAIL-TEST-SEND-002).
+ *
+ * ## Chips, not paragraphs
+ *
+ * Owner: «اعتمد دائمًا الاختصارات … الفكرة أن الخطوة تكون واضحة، لا حاجة لشرح». The page says each thing
+ * once, in a chip or one short line. The one distinction it never drops is «قبِلها الخادم» against
+ * «تأكّد الاستلام»: an accepted message is never shown as a delivered one.
  */
+
+/** This page's short words for the two stages that must never be confused. Every other stage keeps the shared word. */
+const PAGE_STAGE: Record<string, { ar: string; en: string }> = {
+  accepted: { ar: 'قبِلها الخادم', en: 'Server accepted' },
+  delivered: { ar: 'تأكّد الاستلام', en: 'Receipt confirmed' },
+}
+const word = (state: string): StageWords => ({ ...stageWords(state), ...PAGE_STAGE[state] })
+const stageTone = (state: string) => (state === 'delivered' ? 'success' : state === 'accepted' ? 'info' : state === 'failed' ? 'danger' : state === 'suppressed' ? 'warning' : 'neutral')
+
+const domainOf = (address: string) => address.slice(address.lastIndexOf('@') + 1).trim().toLowerCase()
+
+/**
+ * EMAIL-TEST-SEND-002 — where a test goes before anybody chooses.
+ *
+ * The platform's mailbox when the admin's own address is on the platform's domain and is not that
+ * mailbox: a sign-in identity on the product's own domain is the case with no inbox behind it (Owner,
+ * Production 2026-11-06: «عندي انفو فقط»). An address anywhere else is a real inbox, so it stays `self`.
+ */
+export function defaultTestTarget(test?: EmailPreviewList['test_send']): TestSendTarget {
+  const mailbox = (test?.platform_mailbox ?? '').trim()
+  if (!test || mailbox === '') return 'self'
+  if (!test.address_proven) return 'platform_mailbox'
+  const own = test.recipient.trim().toLowerCase()
+  return own !== mailbox.toLowerCase() && domainOf(own) === domainOf(mailbox) ? 'platform_mailbox' : 'self'
+}
+
+interface TestTarget { list?: EmailPreviewList; target: TestSendTarget; choose: (t: TestSendTarget) => void; canSend: boolean }
+
 export function EmailOperationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
 
@@ -52,7 +88,17 @@ export function EmailOperationsPage() {
     queryFn: () => fetchEmailLedger({ state, source, recipient, days, page }),
   })
 
-  const word = stageWords
+  // One choice for both test buttons, read from the one list the server answers.
+  const previews = useQuery({ queryKey: ['admin', 'email', 'previews'], queryFn: fetchEmailPreviews })
+  const [chosen, setChosen] = useState<TestSendTarget | null>(null)
+  const target = chosen ?? defaultTestTarget(previews.data?.test_send)
+  const testSend = previews.data?.test_send
+  const testTarget: TestTarget = {
+    list: previews.data,
+    target,
+    choose: setChosen,
+    canSend: target === 'self' ? (testSend?.address_proven ?? true) : Boolean(testSend?.platform_mailbox),
+  }
 
   return (
     <div className="w-full">
@@ -60,11 +106,10 @@ export function EmailOperationsPage() {
         <h1 className="flex items-center gap-2 font-heading text-3xl font-extrabold tracking-tight text-text-primary">
           <Mail size={22} /> {ar ? 'البريد والتسليم' : 'Email & delivery'}
         </h1>
-        <p className="mt-1 max-w-3xl text-sm leading-7 text-text-secondary">
-          {ar
-            ? 'سجل ما حاولت المنصة إرساله فعلًا — الرسائل الفردية والملخصات معًا — ومعرض يعرض شكل كل رسالة. لا إعادة إرسال ولا حذف؛ الإرسال الوحيد هنا رسالة اختبار إلى بريدك أنت.'
-            : 'What the platform actually attempted to send — transactional messages and digests together — and a gallery of what each one looks like. No resend and no delete; the only thing that sends here is a test to your own address.'}
-        </p>
+        <div data-testid="mail-page-chips" className="mt-2 flex flex-wrap gap-2">
+          <Badge>{ar ? 'سجل للقراءة فقط' : 'Read-only log'}</Badge>
+          <Badge>{ar ? 'الإرسال: اختبار فقط' : 'Sends: tests only'}</Badge>
+        </div>
       </header>
 
       {ledger.isLoading ? (
@@ -74,7 +119,7 @@ export function EmailOperationsPage() {
       ) : (
         <div className="space-y-6">
           <TransportBanner transport={ledger.data.transport} ar={ar} />
-          <MailSettingsCard transport={ledger.data.transport} ar={ar} />
+          <MailSettingsCard transport={ledger.data.transport} ar={ar} test={testTarget} />
 
           {/* Counted over the whole window, not the page. */}
           <div className="flex flex-wrap gap-3">
@@ -169,9 +214,7 @@ export function EmailOperationsPage() {
                     </td>
                     <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
                     <td className="p-3 text-[13px] text-text-primary">{row.tenant_name ?? '—'}</td>
-                    <td className={`p-3 text-[13px] font-semibold ${word(row.state).tone}`}>
-                      {ar ? word(row.state).ar : word(row.state).en}
-                    </td>
+                    <td className="p-3"><Badge tone={stageTone(row.state)}>{ar ? word(row.state).ar : word(row.state).en}</Badge></td>
                     <td className="p-3 text-[13px] text-text-primary">{row.attempts}</td>
                     <td className="max-w-[320px] p-3 text-[13px] leading-6 text-text-secondary"><RowReason row={row} ar={ar} /></td>
                   </tr>
@@ -209,7 +252,7 @@ export function EmailOperationsPage() {
             </div>
           )}
 
-          <PreviewGallery ar={ar} />
+          <PreviewGallery ar={ar} test={testTarget} />
         </div>
       )}
     </div>
@@ -242,16 +285,21 @@ function RowReason({ row, ar }: { row: EmailDelivery; ar: boolean }) {
 /**
  * What this install can do with an email, said before the table is read.
  *
- * Three states and three different sentences. `sandbox` gets a warning rather than a neutral note
- * because it is the one that looks like success in every row below it.
+ * Three states, each a title and chips. `sandbox` gets a warning rather than a neutral note because it
+ * is the one that looks like success in every row below it.
  */
 function TransportBanner({ transport, ar }: { transport: { state: string; provider_configured: boolean; driver: string }; ar: boolean }) {
+  const driver = <Badge><span dir="ltr">{transport.driver}</span></Badge>
+
   if (transport.state === 'live' && transport.provider_configured) {
     return (
       <Alert severity="positive" title={ar ? 'الإرسال مفعّل' : 'Sending is live'}>
-        {ar
-          ? `مزوّد البريد مربوط عبر «${transport.driver}». «قبلها خادم البريد» لا تعني أنها وصلت إلى صندوق الوارد؛ تأكيد الاستلام يحتاج إلى دليل.`
-          : `A mail provider is wired through “${transport.driver}”. “Accepted” does not mean it reached an inbox; confirming receipt takes evidence.`}
+        <span data-testid="mail-stage-legend" className="flex flex-wrap items-center gap-2">
+          {driver}
+          <Badge tone="info">{ar ? PAGE_STAGE.accepted.ar : PAGE_STAGE.accepted.en}</Badge>
+          <span aria-hidden>≠</span>
+          <Badge tone="success">{ar ? PAGE_STAGE.delivered.ar : PAGE_STAGE.delivered.en}</Badge>
+        </span>
       </Alert>
     )
   }
@@ -259,18 +307,19 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
   if (transport.state === 'sandbox') {
     return (
       <Alert severity="warning" title={ar ? 'وضع الاختبار — لا تصل الرسائل إلى أحد' : 'Sandbox — nothing reaches anybody'}>
-        {ar
-          ? `المُرسِل المضبوط هو «${transport.driver}»، وهو ينجح دائمًا ولا يوصل شيئًا. أي رسالة أدناه تعني «كُتبت في السجل»، لا «وصلت».`
-          : `The configured mailer is “${transport.driver}”, which always succeeds and delivers nothing. Nothing below reached a person.`}
+        <span className="flex flex-wrap items-center gap-2">
+          {driver}
+          <Badge tone="warning">{ar ? 'تُكتب في السجل فقط' : 'Written to the log only'}</Badge>
+        </span>
       </Alert>
     )
   }
 
   return (
     <Alert severity="warning" title={ar ? 'لا يوجد مزوّد بريد مربوط' : 'No mail provider is wired'}>
-      {ar
-        ? 'تُسجَّل كل محاولة بحالة «بانتظار بيانات الاعتماد» ولا يغادر شيء. القوالب والجدولة والتفضيلات جاهزة وتعمل فور ربط المزوّد.'
-        : 'Every attempt is recorded as awaiting credentials and nothing leaves. The templates, the schedule and the preferences are ready and take effect the moment a provider is wired.'}
+      <span className="flex flex-wrap items-center gap-2">
+        <Badge tone="warning">{ar ? 'لا يغادر شيء' : 'Nothing leaves'}</Badge>
+      </span>
     </Alert>
   )
 }
@@ -279,19 +328,17 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
  * EMAIL-SETTINGS-PAGE-001 — who the mail is from, when it last worked, when it last failed, and a test.
  *
  * Addresses and timestamps only: no host, port, user or key ever reaches this page, so a screenshot of
- * it is safe to send to the person fixing the mail. The test message goes to the signed-in operator and
- * nobody else, and its outcome is whatever the ledger recorded — `awaiting credentials` is a result, not
- * an error, and is said as one.
+ * it is safe to send to the person fixing the mail. The test goes to one of two addresses the server
+ * holds, and its outcome is whatever the ledger recorded — `awaiting credentials` is a result, not an
+ * error, and is said as one.
  */
-function MailSettingsCard({ transport, ar }: { transport: EmailLedger['transport']; ar: boolean }) {
+function MailSettingsCard({ transport, ar, test: target }: { transport: EmailLedger['transport']; ar: boolean; test: TestTarget }) {
   const qc = useQueryClient()
-  const list = useQuery({ queryKey: ['admin', 'email', 'previews'], queryFn: fetchEmailPreviews })
   const test = useMutation({
-    mutationFn: () => sendTestEmail(ar ? 'ar' : 'en'),
+    mutationFn: () => sendTestEmail(ar ? 'ar' : 'en', target.target),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
   })
   const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB') : (ar ? 'لم يحدث بعد' : 'Never'))
-  const proven = list.data?.test_send?.address_proven ?? true
 
   return (
     <section data-testid="mail-settings" className="grid gap-4 rounded-2xl border border-border bg-surface p-5 md:grid-cols-2">
@@ -304,32 +351,53 @@ function MailSettingsCard({ transport, ar }: { transport: EmailLedger['transport
           value={transport.last_failure ? `${when(transport.last_failure.at)} · ${transport.last_failure.kind} — ${(() => { const f = transport.last_failure?.failure_code ? FAILURE_WORDS[transport.last_failure.failure_code] : undefined; return f ? (ar ? f.ar : f.en) : (transport.last_failure?.error ?? '') })()}` : (ar ? 'لا يوجد' : 'None')}
         />
       </dl>
-      <div className="flex flex-col items-start gap-2">
-        <Button variant="secondary" disabled={test.isPending || !proven} onClick={() => test.mutate()} data-testid="mail-test-send">
-          {ar ? 'أرسل لي رسالة اختبار' : 'Send me a test email'}
+      <div className="flex min-w-0 flex-col items-start gap-3">
+        <TestTargetPicker test={target} ar={ar} testId="mail-test-target" />
+        <Button variant="secondary" disabled={test.isPending || !target.canSend} onClick={() => test.mutate()} data-testid="mail-test-send">
+          {ar ? 'أرسل اختبار' : 'Send test'}
         </Button>
-        <TestSendNote list={list.data} ar={ar} />
         <TestSendOutcome result={test.data} error={test.error} ar={ar} testId="mail-test-result" />
       </div>
     </section>
   )
 }
 
-/** Where a test goes, said before anybody presses the button. */
-function TestSendNote({ list, ar }: { list?: { test_send?: { recipient: string; address_proven: boolean } }; ar: boolean }) {
-  if (list?.test_send?.address_proven === false) {
-    return (
-      <p data-testid="mail-test-unproven" className="text-xs text-warning">
-        {ar ? 'لم يُؤكَّد بريد حسابك بعد، ولا تُرسل رسائل الاختبار إلا إلى بريد مؤكَّد.' : 'Your account address has not been verified, and a test only goes to a verified address.'}
-      </p>
-    )
-  }
+/**
+ * EMAIL-TEST-SEND-002 — the two places a test may go, each shown as the address it is.
+ *
+ * Two radio chips and no text field: the choice is a word the server resolves, so this page cannot be
+ * used to mail anybody else. An option that cannot be used says why in one chip and cannot be picked.
+ */
+function TestTargetPicker({ test, ar, testId }: { test: TestTarget; ar: boolean; testId: string }) {
+  const info = test.list?.test_send
+  if (!info) return null
+
+  const mailbox = info.platform_mailbox ?? ''
+  const options: Array<{ value: TestSendTarget; label: string; address: string; blocked: string | null }> = [
+    { value: 'platform_mailbox', label: ar ? 'بريد المنصة' : 'Platform mailbox', address: mailbox, blocked: mailbox === '' ? (ar ? 'غير مضبوط' : 'Not set') : null },
+    { value: 'self', label: ar ? 'بريدي' : 'Mine', address: info.recipient, blocked: info.address_proven ? null : (ar ? 'غير مؤكَّد' : 'Not verified') },
+  ]
 
   return (
-    <p className="text-xs text-text-muted">
-      {ar ? 'ببيانات تجريبية، وعنوانها يحمل كلمة «اختبار»، وتصل إلى بريدك أنت فقط' : 'With fixture data, marked as a test in its subject, and only to your own address'}
-      {list?.test_send && <> — <span dir="ltr" className="break-all">{list.test_send.recipient}</span></>}
-    </p>
+    <div role="radiogroup" aria-label={ar ? 'وجهة الاختبار' : 'Test destination'} data-testid={testId} className="flex w-full min-w-0 flex-wrap gap-2">
+      {options.map((o) => {
+        const on = test.target === o.value
+        return (
+          <button
+            key={o.value} type="button" role="radio" aria-checked={on} disabled={o.blocked !== null}
+            data-testid={`${testId}-${o.value}`} onClick={() => test.choose(o.value)}
+            className={`flex min-h-11 min-w-0 max-w-full flex-col items-start rounded-xl border px-3 py-1.5 text-start text-[13px] disabled:cursor-not-allowed disabled:opacity-60 ${on ? 'border-brand-primary bg-brand-primary-soft text-text-primary' : 'border-border text-text-secondary'}`}
+          >
+            <span className="flex items-center gap-2 font-semibold">
+              <span className={`h-2 w-2 rounded-full ${on ? 'bg-brand-primary' : 'border border-border'}`} aria-hidden />
+              {o.label}
+              {o.blocked && <span data-testid={o.value === 'self' ? 'mail-test-unproven' : 'mail-test-no-mailbox'} className="text-xs font-bold text-warning">{o.blocked}</span>}
+            </span>
+            {o.address !== '' && <span dir="ltr" className="max-w-full break-all text-text-muted">{o.address}</span>}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -337,43 +405,40 @@ function TestSendNote({ list, ar }: { list?: { test_send?: { recipient: string; 
  * What the transport answered — EMAIL-TEST-SEND-001.
  *
  * «ولا تعتبر الرسائل مرسلة دون دليل»: `accepted` is the mail server taking the message and nothing after
- * that, so it is never said without the sentence that says so. Each other outcome names its reason.
+ * that, so it is shown as its own chip, «قبِلها الخادم», and never as «تأكّد الاستلام». The line names the
+ * address it went to; each other outcome names its reason.
  */
 function TestSendOutcome({ result, error, ar, testId }: { result?: TestSendResult; error: unknown; ar: boolean; testId: string }) {
   if (error) {
-    const status = toApiError(error).status
+    const failure = toApiError(error)
+    const code = (failure.errors as Record<string, unknown> | null)?.code
     return (
       <p role="alert" data-testid={`${testId}-error`} className="text-sm text-danger">
-        {status === 429
-          ? (ar ? 'بلغت حد رسائل الاختبار: 3 في الدقيقة و20 في اليوم. حاول لاحقًا.' : 'You reached the test limit: 3 a minute and 20 a day. Try again later.')
-          : status === 422
-            ? (ar ? 'لم يُؤكَّد بريد حسابك، فلم تُرسل الرسالة.' : 'Your account address is not verified, so nothing was sent.')
-            : (ar ? 'تعذّر تنفيذ الاختبار، ولم تُرسل الرسالة.' : 'The test could not be run, and nothing was sent.')}
+        {failure.status === 429
+          ? (ar ? 'الحد: 3 في الدقيقة و20 في اليوم.' : 'Limit: 3 a minute, 20 a day.')
+          : code === 'platform_mailbox_not_configured'
+            ? (ar ? 'بريد المنصة غير مضبوط. لم تُرسل.' : 'No platform mailbox is set. Not sent.')
+            : code === 'address_not_proven'
+              ? (ar ? 'بريدك غير مؤكَّد. لم تُرسل.' : 'Your address is not verified. Not sent.')
+              : (ar ? 'تعذّر الاختبار. لم تُرسل.' : 'The test failed to run. Not sent.')}
       </p>
     )
   }
   if (!result) return null
 
-  const stage = stageWords(result.delivery_state)
+  const stage = word(result.delivery_state)
   const pick = (w?: { ar: string; en: string }) => (w ? (ar ? w.ar : w.en) : null)
-  const why = result.delivery_state === 'accepted'
-    ? (ar
-        ? 'هذا قبول خادم البريد وليس وصولها. افتح صندوق الوارد للتأكد؛ لا تتحول إلى «تأكّد استلامها» إلا بدليل مسجَّل.'
-        : 'This is the mail server taking it, not it arriving. Check your inbox to be sure; it only becomes “Receipt confirmed” with recorded evidence.')
-    : pick(result.failure_code ? (FAILURE_WORDS[result.failure_code] ?? FAILURE_WORDS.unknown) : undefined)
-      ?? pick(result.suppression_reason ? SUPPRESSION_WORDS[result.suppression_reason] : undefined)
+  const why = pick(result.failure_code ? (FAILURE_WORDS[result.failure_code] ?? FAILURE_WORDS.unknown) : undefined)
+    ?? pick(result.suppression_reason ? SUPPRESSION_WORDS[result.suppression_reason] : undefined)
 
   return (
-    <div data-testid={testId} className="text-sm">
-      <p className={`font-semibold ${stage.tone}`}>
-        {ar ? stage.ar : stage.en} — <span dir="ltr" className="break-all">{result.recipient}</span>
+    <div data-testid={testId} className="min-w-0 text-sm">
+      <p className="flex flex-wrap items-center gap-2">
+        <Badge tone={stageTone(result.delivery_state)} data-testid={`${testId}-stage`}>{ar ? stage.ar : stage.en}</Badge>
+        <span dir="ltr" data-testid={`${testId}-recipient`} className="break-all font-semibold text-text-primary">{result.recipient}</span>
+        {result.state === 'already_sent' && <Badge>{ar ? 'محاولة سابقة' : 'Earlier attempt'}</Badge>}
       </p>
       {why && <p className="mt-1 text-[13px] leading-6 text-text-secondary">{why}</p>}
-      {result.state === 'already_sent' && (
-        <p className="mt-1 text-[13px] leading-6 text-text-secondary">
-          {ar ? 'جُرّبت هذه الرسالة قبل لحظات، وهذه نتيجة تلك المحاولة.' : 'This message was tried a moment ago, and this is that attempt’s result.'}
-        </p>
-      )}
       {result.provider_message_id && (
         <p className="mt-1 text-xs text-text-muted">Message-ID: <span dir="ltr" className="break-all">{result.provider_message_id}</span></p>
       )}
@@ -399,7 +464,7 @@ function Row({ label, value, ltr }: { label: string; value: string; ltr?: boolea
  * The frame is `sandbox`ed with nothing allowed: email HTML has no scripts, and a preview that could
  * run any would be a way to execute markup inside the owner's console.
  */
-function PreviewGallery({ ar }: { ar: boolean }) {
+function PreviewGallery({ ar, test }: { ar: boolean; test: TestTarget }) {
   const [key, setKey] = useState('')
   const [locale, setLocale] = useState('ar')
   const [width, setWidth] = useState<'desktop' | 'phone'>('desktop')
@@ -408,7 +473,7 @@ function PreviewGallery({ ar }: { ar: boolean }) {
   const chosen = key !== '' ? key : (list.data?.keys[0] ?? '')
   const qc = useQueryClient()
   const sendTest = useMutation({
-    mutationFn: () => sendTestEmail(locale === 'en' ? 'en' : 'ar', chosen),
+    mutationFn: () => sendTestEmail(locale === 'en' ? 'en' : 'ar', test.target, chosen),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
   })
 
@@ -417,16 +482,13 @@ function PreviewGallery({ ar }: { ar: boolean }) {
     queryFn: () => fetchEmailPreview(chosen, locale),
     enabled: chosen !== '',
   })
-  const proven = list.data?.test_send?.address_proven ?? true
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="text-lg font-bold text-text-primary">{ar ? 'معرض الرسائل' : 'Message gallery'}</h2>
-      <p className="mt-1 max-w-3xl text-[13px] leading-6 text-text-secondary">
-        {ar
-          ? 'كل رسالة يمكن للمنصة إرسالها، بنص تجريبي لا ببيانات عميل. المعرض والأمر `notifications:preview` يقرآن التعريف نفسه.'
-          : 'Every message the platform can send, with fixture text rather than a customer’s data. This gallery and `notifications:preview` read the same definition.'}
-      </p>
+      <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-text-primary">
+        {ar ? 'معرض الرسائل' : 'Message gallery'}
+        <Badge>{ar ? 'بيانات تجريبية' : 'Fixture data'}</Badge>
+      </h2>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <Field label={ar ? 'الرسالة' : 'Message'} htmlFor="p-key">
@@ -463,19 +525,19 @@ function PreviewGallery({ ar }: { ar: boolean }) {
             <dt className="text-text-muted">{ar ? 'هل يمكن إيقافها؟' : 'Can it be switched off?'}</dt>
             <dd className="text-text-primary">
               {preview.data.mandatory
-                ? (ar ? 'لا، رسالة حساب وأمان تصل دائمًا' : 'No, an account and security message always goes')
-                : (ar ? 'نعم، من إعدادات المستلم' : 'Yes, from the recipient’s settings')}
+                ? (ar ? 'لا · حساب وأمان' : 'No · account & security')
+                : (ar ? 'نعم' : 'Yes')}
             </dd>
           </div>
         </dl>
       )}
 
       <div className="mt-3 flex flex-col items-start gap-3 sm:flex-row">
-        <Button variant="secondary" disabled={chosen === '' || sendTest.isPending || !proven} onClick={() => sendTest.mutate()} data-testid="gallery-test-send">
-          {ar ? 'أرسل هذه الرسالة إلى بريدي' : 'Send this message to me'}
+        <Button variant="secondary" disabled={chosen === '' || sendTest.isPending || !test.canSend} onClick={() => sendTest.mutate()} data-testid="gallery-test-send">
+          {ar ? 'أرسل هذه الرسالة' : 'Send this message'}
         </Button>
-        <div className="w-full min-w-0 flex-1 space-y-1">
-          <TestSendNote list={list.data} ar={ar} />
+        <div className="w-full min-w-0 flex-1 space-y-2">
+          <TestTargetPicker test={test} ar={ar} testId="gallery-test-target" />
           <TestSendOutcome result={sendTest.data} error={sendTest.error} ar={ar} testId="gallery-test-result" />
         </div>
       </div>
