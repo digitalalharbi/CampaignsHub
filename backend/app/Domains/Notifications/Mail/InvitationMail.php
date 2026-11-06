@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -45,9 +46,9 @@ final class InvitationMail extends Mailable
     {
         $ar = $this->lang === 'ar';
 
-        return new Envelope(subject: $ar
-            ? "كامبينز هب — دعوة للانضمام إلى {$this->workspace}"
-            : "CampaignsHub — You have been invited to join {$this->workspace}");
+        return new Envelope(subject: MailSubject::of($ar
+            ? "دعوة للانضمام إلى {$this->workspace}"
+            : "You have been invited to join {$this->workspace}", $ar));
     }
 
     public function content(): Content
@@ -57,21 +58,21 @@ final class InvitationMail extends Mailable
 
         $intro = $this->invitedBy !== ''
             ? ($ar
-                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
-                : "{$this->invitedBy} has invited you to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.")
+                ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
+                : "{$this->invitedBy} invited you to join the {$this->workspace} workspace on CampaignsHub.")
             : ($ar
-                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب، حيث تتابع الفرق حملاتها الإعلانية المدفوعة في مكان واحد."
-                : "You have been invited to join the {$this->workspace} workspace on CampaignsHub, where teams follow their paid advertising campaigns in one place.");
+                ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
+                : "You are invited to join the {$this->workspace} workspace on CampaignsHub.");
 
         $shell = MailShell::build(
             lang: $this->lang,
-            subject: $ar ? 'دعوة للانضمام' : 'An invitation to join',
+            subject: $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
             preheader: $intro,
             // The recipient has no account and therefore no preferences to manage.
             preferences: false,
             footerNote: $ar
-                ? 'وصلتك هذه الرسالة لأن أحد أعضاء الفريق أدخل بريدك الإلكتروني عند إرسال الدعوة.'
-                : 'You received this because a member of the team entered your email address when sending the invitation.',
+                ? 'وصلتك لأن أحد أعضاء الفريق أدخل بريدك عند إرسال الدعوة.'
+                : 'Sent because a team member entered your email when sending the invitation.',
         );
 
         $body = $shell + [
@@ -83,22 +84,22 @@ final class InvitationMail extends Mailable
             'actionUrl' => $this->acceptUrl,
             'actionLabel' => $ar ? 'قبول الدعوة' : 'Accept the invitation',
             'validity' => $ar
-                ? "هذه الدعوة صالحة لمدة {$this->expiresInHours} ساعة، وبعدها يمكن لأي عضو في الفريق إرسال دعوة جديدة."
-                : "This invitation is valid for {$this->expiresInHours} hours. After that, any member of the team can send a new one.",
+                ? "الدعوة صالحة لمدة {$this->expiresInHours} ساعة، وبعدها تحتاج إلى دعوة جديدة."
+                : "This invitation is valid for {$this->expiresInHours} hours. After that, you will need a new one.",
         ];
 
         $body['t'] = $shell['t'] + ($ar
             ? [
                 'workspace' => 'مساحة العمل',
                 'role' => 'دورك',
-                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط والصقه في المتصفح:',
-                'not_expecting' => 'إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل الرسالة. لن يُفتح أي حساب على بريدك ما لم تقبل الدعوة بنفسك.',
+                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط إلى المتصفح:',
+                'not_expecting' => 'إذا لم تتوقع هذه الدعوة، فتجاهلها. لن يُفتح حساب دون قبولك.',
             ]
             : [
                 'workspace' => 'Workspace',
                 'role' => 'Your role',
                 'or_paste' => 'If the button does not work, copy this link into your browser:',
-                'not_expecting' => 'If you were not expecting this invitation, you can ignore this message. No account will be opened on your address unless you accept it yourself.',
+                'not_expecting' => 'Not expecting this invitation? Ignore it. No account is opened unless you accept.',
             ]);
 
         return new Content(view: 'mail.layout', with: $body + [
@@ -114,22 +115,24 @@ final class InvitationMail extends Mailable
     private function role(bool $ar): array
     {
         $roles = $ar ? [
-            'owner' => ['مالك الحساب', 'صلاحية كاملة على مساحة العمل، بما في ذلك الفريق والاشتراك والفواتير.'],
-            'admin' => ['مدير', 'إدارة المشاريع والحملات والفريق، دون الوصول إلى إعدادات الاشتراك.'],
-            'manager' => ['مدير حسابات', 'متابعة المشاريع المسندة إليه وإدارة حملاتها وتقاريرها.'],
+            'tenant-owner' => ['مالك مساحة العمل', 'صلاحية كاملة، تشمل الفريق والاشتراك والفواتير.'],
+            'owner' => ['مالك الحساب', 'صلاحية كاملة، تشمل الفريق والاشتراك والفواتير.'],
+            'admin' => ['مدير', 'إدارة المشاريع والحملات والفريق، دون إعدادات الاشتراك.'],
+            'manager' => ['مدير حسابات', 'إدارة حملات المشاريع المسندة إليه وتقاريرها.'],
             'analyst' => ['محلل', 'الاطلاع على البيانات والتقارير وإنشاؤها، دون تعديل الحملات.'],
             'viewer' => ['مطّلع', 'الاطلاع على لوحات المتابعة والتقارير فقط.'],
-            'member' => ['عضو فريق', 'العمل على المشاريع المسندة إليه داخل مساحة العمل.'],
+            'member' => ['عضو فريق', 'العمل على المشاريع المسندة إليه.'],
             'client_viewer' => ['مطّلع', 'الاطلاع على أداء حملاتك وتقاريرك فقط.'],
             'client_approver' => ['معتمِد', 'الاطلاع على الأداء والتقارير، واعتماد العروض والرد على الطلبات والرسائل.'],
             'client_admin' => ['مسؤول العميل', 'كل ما سبق، مع إدارة من يصل إلى بوابتك.'],
         ] : [
-            'owner' => ['Account owner', 'Full control of the workspace, including the team, the subscription and billing.'],
-            'admin' => ['Administrator', 'Manages projects, campaigns and the team, without access to subscription settings.'],
-            'manager' => ['Account manager', 'Follows their assigned projects and manages the campaigns and reports within them.'],
+            'tenant-owner' => ['Workspace owner', 'Full control, including team, subscription and billing.'],
+            'owner' => ['Account owner', 'Full control, including team, subscription and billing.'],
+            'admin' => ['Administrator', 'Manages projects, campaigns and the team, not the subscription.'],
+            'manager' => ['Account manager', 'Manages campaigns and reports on assigned projects.'],
             'analyst' => ['Analyst', 'Reads and builds reports and analysis, without changing campaigns.'],
             'viewer' => ['Viewer', 'Reads dashboards and reports only.'],
-            'member' => ['Team member', 'Works on the projects assigned to them inside the workspace.'],
+            'member' => ['Team member', 'Works on assigned projects.'],
             'client_viewer' => ['Viewer', 'Reads the performance of your campaigns and your reports only.'],
             'client_approver' => ['Approver', 'Reads performance and reports, approves quotes, and replies to requests and messages.'],
             'client_admin' => ['Client administrator', 'Everything above, and manages who can reach your portal.'],
@@ -137,9 +140,14 @@ final class InvitationMail extends Mailable
 
         $known = $roles[$this->roleSlug] ?? null;
 
-        // An unknown role reads as its own slug, with NO description. See the class docblock.
-        return $known === null
-            ? ['name' => $this->roleSlug, 'note' => '']
-            : ['name' => $known[0], 'note' => $known[1]];
+        // An unknown role never prints its raw slug and is never blank: Arabic gets the generic «عضو»,
+        // English the slug in words. No description — see the class docblock.
+        if ($known === null) {
+            $words = trim((string) preg_replace('/[\s_\-]+/', ' ', $this->roleSlug));
+
+            return ['name' => $ar ? 'عضو' : ($words === '' ? 'Member' : ucfirst(strtolower($words))), 'note' => ''];
+        }
+
+        return ['name' => $known[0], 'note' => $known[1]];
     }
 }

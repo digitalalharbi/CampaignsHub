@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -43,6 +45,18 @@ final class NotificationDispatcher
         'report_ready' => 'reports',
         'report_failed' => 'reports',
         'security' => 'security',
+    ];
+
+    /** Events with nothing else to carry them to an inbox: the switch on the settings screen is honoured here. */
+    private const MAILED_HERE = ['message', 'request', 'journey_transition', 'client_needs_attention'];
+
+    /** These reach an inbox through their own sender, and that sender's ledger says what happened. */
+    private const MAILED_ELSEWHERE = [
+        'budget_risk', 'sync_failed', 'token_expiring', 'report_ready', 'report_failed', 'lead_sla', 'security',
+        'subscription', 'internal_spend_limit', 'budget_pace', 'rising_cost', 'reallocation', 'stale_data', 'data_gap',
+        'falling_rate', 'period_comparison', 'frequency_saturation',
+        // What `AlertEvaluator` posts for a rule with no category of its own, and what `AlertEventMailer` mails it as.
+        'performance',
     ];
 
     /**
@@ -108,25 +122,69 @@ final class NotificationDispatcher
         // In-app is delivered immediately (a passive inbox is not silenced by quiet hours).
         $this->logDelivery($tenantId, (string) $notification->id, 'in_app', 'sent', $dedupKey);
 
-        // 3) Email delivery state. The status comes from the provider adapter, NOT a hard-coded assumption:
-        //    with no provider wired (the Null adapter) it is awaiting_credentials; the moment a real provider
-        //    is bound it becomes a genuine send attempt whose documented result is recorded. Never "sent"
-        //    without a provider acknowledgement.
+        /*
+         * 3) Email — EMAIL-DELIVERY-LEDGER-001.
+         *
+         * This row said `sent` whenever a provider was configured, and nothing here sent anything. So on
+         * a live install the log claimed an email for every bell notification. The row now states what
+         * actually happens to it: mailed here, mailed by its own sender with its own ledger, or not
+         * mailed at all. A preference or quiet hours still come first.
+         */
         $emailStatus = ! $emailEnabled ? 'suppressed_by_preference'
-            : ($inQuietHours ? 'suppressed_by_quiet_hours' : $this->channelStatus('email'));
+            : ($inQuietHours ? 'suppressed_by_quiet_hours' : $this->email($notification, $tenantId, $userId, $type));
         $this->logDelivery($tenantId, (string) $notification->id, 'email', $emailStatus, $dedupKey);
 
         return $notification;
     }
 
     /**
-     * Honest delivery status for a channel. When the channel has no configured provider (the default Null
-     * adapter) we record awaiting_credentials and send nothing. A configured provider maps to its documented
-     * result — 'sent' only ever comes back from a real provider acknowledgement.
+     * What happens to the email half of one notification.
+     *
+     * Only `MAILED_HERE` is sent from this class. A type outside it either has a sender of its own (the
+     * alert mailer, the subscription job), whose ledger is the truth, or has no email form at all. An
+     * unlisted type is never mailed by default: a request's internal status change going to every
+     * assignee's inbox is a decision for someone to make, not a side effect of being honest here.
      */
-    private function channelStatus(string $channel): string
+    private function email(AppNotification $notification, string $tenantId, ?int $userId, string $type): string
     {
-        return $this->providers->isConfigured($channel) ? 'sent' : 'awaiting_credentials';
+        if (! $this->providers->isConfigured('email')) {
+            return 'awaiting_credentials';
+        }
+
+        if (in_array($type, self::MAILED_ELSEWHERE, true)) {
+            return 'handled_elsewhere';
+        }
+
+        $user = $userId === null ? null : User::query()->find($userId);
+
+        if (! in_array($type, self::MAILED_HERE, true) || $user === null || $user->email === null) {
+            return 'in_app_only';
+        }
+
+        $locale = in_array($user->locale, ['ar', 'en'], true) ? (string) $user->locale : 'ar';
+        $url = (string) ($notification->action_url ?? '');
+        $path = parse_url($url, PHP_URL_PATH);
+        $query = parse_url($url, PHP_URL_QUERY);
+
+        return app(TransactionalMailer::class)->queue(
+            recipient: (string) $user->email,
+            mail: new OperationalMail(
+                kind: $type,
+                severity: (string) ($notification->severity ?? 'info'),
+                title: (string) $notification->title,
+                detail: (string) ($notification->message ?? $notification->title),
+                context: 'CampaignsHub',
+                lang: $locale,
+                recipientName: (string) $user->name,
+                path: is_string($path) && $path !== '' ? $path.(is_string($query) ? '?'.$query : '') : '/app/notifications',
+            ),
+            kind: $type,
+            template: 'mail.operational',
+            locale: $locale,
+            tenantId: $tenantId,
+            userId: $userId,
+            dedupKey: 'bell:'.$notification->id,
+        );
     }
 
     /** @param  array<string,mixed>  $p */

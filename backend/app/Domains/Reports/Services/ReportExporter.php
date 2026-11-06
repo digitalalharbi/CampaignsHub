@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -85,7 +86,8 @@ final class ReportExporter
             $applied['kpi_allowlist'] = array_values($applied['metric_set']);
         }
 
-        return $applied;
+        // REPORT-FILTERS-FUNCTIONAL-001 — the file is built from the same cut document as the page and the PDF (four surfaces, one answer).
+        return ChosenFigures::for($report, $share)->cut($applied);
     }
 
     /**
@@ -1012,7 +1014,17 @@ final class ReportExporter
 
         $fresh = Report::withoutGlobalScopes()->find($report->getKey());
 
-        return $fresh === null ? $report : app(LiveReportService::class)->materialise($fresh, $share);
+        if ($fresh === null) {
+            return $report;
+        }
+        $stored = app(LiveReportService::class)->materialise($fresh, $share);
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's file is made from the stored copy while that copy is rebuilt. The gate still
+        // validates the document; only the row's «being rebuilt» is not held against the finished copy it carries. In memory only.
+        if ($stored->status === 'processing' && $stored->hasStoredCopy()) {
+            $stored->setAttribute('status', 'completed');
+        }
+
+        return $stored;
     }
 
     private function pdf(Report $report, array $data, ?ReportShare $share = null): string

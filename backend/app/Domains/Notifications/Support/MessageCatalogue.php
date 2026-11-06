@@ -68,7 +68,7 @@ final class MessageCatalogue
      */
     private const LEGACY_ALIAS = ['sync' => 'integrations', 'token' => 'integrations'];
 
-    public const RHYTHMS = ['immediate', 'daily', 'weekly'];
+    public const RHYTHMS = ['immediate', 'daily', 'weekly', 'monthly'];
 
     /**
      * The two types whose on/off lives in the older `digests` map rather than in `types`.
@@ -79,7 +79,13 @@ final class MessageCatalogue
     public const DIGEST_SWITCH = ['daily_digest' => 'daily', 'weekly_digest' => 'weekly', 'monthly_digest' => 'monthly'];
 
     /** Types that can be held for a digest, because the digest prints them. */
-    private const DIGESTIBLE = ['immediate', 'daily', 'weekly'];
+    private const DIGESTIBLE = ['immediate', 'daily', 'weekly', 'monthly'];
+
+    /**
+     * How far a person may narrow a type by importance (§17.4.1): every level, or warnings and above, or
+     * critical alone. Ordered low to high; a severity not listed here is below all of them.
+     */
+    public const IMPORTANCE = ['info', 'warning', 'critical'];
 
     /** Types that are an event and nothing batches them. */
     private const EVENT_ONLY = ['immediate'];
@@ -145,6 +151,8 @@ final class MessageCatalogue
             'monthly_digest' => self::rhythmItself('DigestDispatcher::sendMonthly'),
             'report_ready' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
             'report_failed' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
+            // EMAIL-GAPS — off behind `reports.schedule_mail.enabled`; the default is what a person gets once it is on.
+            'scheduled_report' => self::event('reports', 'reports', 'ScheduledReportMailer', defaultEmail: true),
 
             // ── التشغيل ───────────────────────────────────────────────────────────────────────
             /*
@@ -165,6 +173,9 @@ final class MessageCatalogue
              * cost of it arriving late is the client's money, and «eventually» is the failure.
              */
             'lead_sla' => self::event('operations', null, 'AlertEvaluator', defaultEmail: true),
+            'delivery_reminder' => self::event('operations', null, 'MemberNotices::deliveryReminder', defaultEmail: true),
+            // EMAIL-GAPS — off behind `requests.client_mail_enabled`; to the client contact and to the team who can reach the request.
+            'client_request' => self::event('operations', null, 'RequestMailer', defaultEmail: true),
 
             // ── المالية ───────────────────────────────────────────────────────────────────────
             'subscription' => self::event('billing', null, 'SubscriptionNotifier', defaultEmail: true),
@@ -176,7 +187,43 @@ final class MessageCatalogue
             'member_setup' => self::mandatory('PasswordResetService::inviteExistingMember'),
             'invitation' => self::mandatory('InvitationService'),
             'security_alert' => self::mandatory('SecurityAlertMail'),
+            // A person's standing in a workspace changed: they must be able to notice somebody else did it.
+            'role_changed' => self::mandatory('MemberNotices::roleChanged'),
+            'member_welcome' => self::mandatory('MemberNotices::welcome'),
         ];
+    }
+
+    /**
+     * The catalogue type a ledger `kind` belongs to. Null for a kind that is no message type at all — `test`
+     * is an operator asking about the transport, and no switch applies to it.
+     */
+    public static function typeOfKind(string $kind): ?string
+    {
+        if (str_starts_with($kind, 'delivery_')) {
+            return 'delivery_reminder';
+        }
+
+        return self::has($kind) ? $kind : null;
+    }
+
+    /**
+     * Kinds whose body holds something that opens an account or proves who somebody is. These are never
+     * serialised into a queue payload — see `TransactionalMailer`.
+     */
+    public static function carriesSecret(string $kind): bool
+    {
+        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'invitation'], true);
+    }
+
+    /**
+     * May this type be left with one click (§17.4.5)?
+     *
+     * Not a mandatory type, and not `subscription`: its sender never asks a preference, and a renewal that
+     * failed is about the account whatever somebody thought of the marketing. Unknown types: no.
+     */
+    public static function isUnsubscribable(string $type): bool
+    {
+        return self::has($type) && ! self::isMandatory($type) && $type !== 'subscription';
     }
 
     /** @return list<string> */

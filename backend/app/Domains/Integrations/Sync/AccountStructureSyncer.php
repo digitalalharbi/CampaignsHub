@@ -49,6 +49,9 @@ use Throwable;
  */
 final class AccountStructureSyncer
 {
+    /** INTEG-UNIFIED-BOUNDARIES-001 — what a run says when the binding went away while it was reading. */
+    private const UNLINKED_MID_RUN = 'The account was unlinked from this project (or syncing was switched off) while this run was reading from the provider, so what it read was not stored.';
+
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly ImportExternalCampaigns $importCampaigns,
@@ -123,18 +126,36 @@ final class AccountStructureSyncer
 
         // ── 1. Campaigns ──────────────────────────────────────────────────────────────────────
         $campaigns = $this->attempt(fn () => $connector->syncCampaigns($accountId), $problems, 'campaigns');
-        $importedCampaigns = $campaigns === null ? 0 : $this->importCampaigns->execute($account, $campaigns, $projectId);
+
+        /*
+         * INTEG-UNIFIED-BOUNDARIES-001 — the binding is re-proved AT each write, not only when the job started.
+         * A provider call can outlast the customer's decision to unlink the account; `whileBound()` holds the binding
+         * for the length of the write, so nothing is filed into a project the account has left.
+         */
+        $importedCampaigns = 0;
+        if ($campaigns !== null) {
+            $held = $this->assignment->whileBound($account, $projectId, function () use (&$importedCampaigns, $account, $campaigns, $projectId): void {
+                $importedCampaigns = $this->importCampaigns->execute($account, $campaigns, $projectId);
+            });
+
+            if (! $held) {
+                return $this->finish($run, SyncRunStatus::AwaitingAssignment->value, 0, self::UNLINKED_MID_RUN);
+            }
+        }
 
         // ── 2 & 3. Ad sets and ads, together, because an ad is placed by its ad set ────────────
         // META-RESILIENCE-001 — a dead token or a throttle answers the next read the same way, and each read is a call.
         $adSets = $this->toldToStop($account, $problems) ? null : $this->attempt(fn () => $connector->syncAdSets($accountId), $problems, 'ad sets');
         $ads = $this->toldToStop($account, $problems) ? null : $this->attempt(fn () => $connector->syncAds($accountId), $problems, 'ads');
 
-        $counts = $this->importStructure->execute(
-            $account,
-            $adSets?->records ?? [],
-            $ads?->records ?? [],
-        );
+        $counts = ['ad_sets' => 0, 'ads' => 0, 'creatives' => 0, 'skipped' => 0];
+        $held = $this->assignment->whileBound($account, $projectId, function () use (&$counts, $account, $adSets, $ads): void {
+            $counts = $this->importStructure->execute($account, $adSets?->records ?? [], $ads?->records ?? []);
+        });
+
+        if (! $held) {
+            return $this->finish($run, SyncRunStatus::AwaitingAssignment->value, $importedCampaigns, self::UNLINKED_MID_RUN);
+        }
 
         if ($connector instanceof ApiAdvertisingConnector) {
             $this->retainRaw($account, $run, $connector->takeRawResponses(), $importedCampaigns + $counts['ad_sets'] + $counts['ads']);

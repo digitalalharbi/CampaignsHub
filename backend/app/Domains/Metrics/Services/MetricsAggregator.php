@@ -846,7 +846,9 @@ final class MetricsAggregator
         }
         $through = Carbon::parse($dates[0])->startOfDay();
 
-        return $through->lt($today->copy()->min($to)->startOfDay()) ? $through->toDateString() : null;
+        // `min()` hands back the caller's own `$to` when it is the earlier one, so the copy comes after it: `startOfDay()` on that
+        // instance moved an alert sweep's clock to midnight for every rule and every ledger stamp that followed.
+        return $through->lt($today->copy()->min($to)->copy()->startOfDay()) ? $through->toDateString() : null;
     }
 
     private function coverage(Carbon $from, Carbon $to): array

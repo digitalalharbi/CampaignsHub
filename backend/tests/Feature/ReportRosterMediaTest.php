@@ -377,6 +377,8 @@ final class ReportRosterMediaTest extends TestCase
             ])->toArray()],
             'scope' => [
                 'project_id' => (string) $this->project->getKey(),
+                // The link names what it covers: a ceiling with no campaign and no account lists nothing (REPORT-FILTERS-FUNCTIONAL-001).
+                'campaign_ids' => [(string) $this->campaign->id],
                 'earliest' => now()->subDays(30)->toDateString(),
                 'latest' => now()->toDateString(),
             ],

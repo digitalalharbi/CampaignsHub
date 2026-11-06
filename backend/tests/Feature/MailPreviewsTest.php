@@ -70,8 +70,8 @@ final class MailPreviewsTest extends TestCase
             $this->assertArrayHasKey("{$kind}.en.html", $files, "{$kind} has no English preview");
         }
 
-        // 21 messages × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
-        $this->assertCount(42, $files);
+        // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
+        $this->assertCount(60, $files); // EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
     }
 
     /**
@@ -176,8 +176,9 @@ final class MailPreviewsTest extends TestCase
         $this->assertStringNotContainsString('ملخص أمس', $files['digest-weekly.ar.html']);
         $this->assertStringContainsString('The week across your projects', $files['digest-weekly.en.html']);
 
-        // And a daily one still says yesterday, which is what it is.
-        $this->assertStringContainsString('ملخص أمس', $files['digest-daily.ar.html']);
+        // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so its snippet says so and never «أمس».
+        $this->assertStringContainsString('آخر 7 أيام عبر مشاريعك', $files['digest-daily.ar.html']);
+        $this->assertStringNotContainsString('ملخص أمس', $files['digest-daily.ar.html']);
     }
 
     /** A preview that rendered a blank shell would pass every other assertion here. */
@@ -185,7 +186,8 @@ final class MailPreviewsTest extends TestCase
     {
         foreach ($this->render() as $name => $html) {
             $this->assertGreaterThan(2000, strlen($html), "{$name} rendered almost nothing");
-            $this->assertStringContainsString('CampaignsHub', $html);
+            // One name, in the reader's language (Owner, 2026-11-05).
+            $this->assertMatchesRegularExpression('/CampaignsHub|كامبينز هَب/u', $html, "{$name} names no product");
         }
     }
 
@@ -213,16 +215,16 @@ final class MailPreviewsTest extends TestCase
         foreach ($this->render() as $name => $html) {
             // EMAIL-BRAND-001 — the official lockup in the header, and (EMAIL-DECISION-REPORT-001) the static
             // chart PNGs served by opaque token from our own origin, each with its figures in the alt. Nothing else.
-            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-(ar|en)-dark\.png"#', $html, "{$name}'s header image is not the brand lockup");
+            $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/banner-(ar|en)\.png"#', $html, "{$name}'s header image is not the brand lockup");
             preg_match_all('/<img\b[^>]*>/', $html, $images);
             foreach ($images[0] as $tag) {
-                if (str_contains($tag, '/brand/email/lockup-')) {
+                if (str_contains($tag, '/brand/email/banner-')) {
                     continue;
                 }
                 $this->assertMatchesRegularExpression('#src="[^"]+/mail/charts/[a-z0-9]{32}\.png"#', $tag, "{$name} loads an image that is neither the lockup nor a chart");
                 $this->assertMatchesRegularExpression('#alt="[^"]{8,}"#', $tag, "{$name} has a chart without its readable fallback");
             }
-            $this->assertStringNotContainsString('background-image', $html, "{$name} loads a background image");
+            $this->assertStringNotContainsString('url(', $html, "{$name} loads a background image");
         }
     }
 
@@ -329,14 +331,15 @@ final class MailPreviewsTest extends TestCase
 
         $this->assertStringContainsString('مدير حسابات', $files['account-invitation.ar.html']);
         $this->assertStringContainsString(
-            'متابعة المشاريع المسندة إليه',
+            'إدارة حملات المشاريع المسندة إليه',
             $files['account-invitation.ar.html'],
             'a known role lost its description',
         );
 
         $unknown = $files['account-invitation-unknown-role.ar.html'];
-        $this->assertStringContainsString('campaign_ops', $unknown, 'the unknown role is not named at all');
-        $this->assertStringNotContainsString('متابعة المشاريع المسندة إليه', $unknown, 'a description was invented');
+        $this->assertStringContainsString('عضو', $unknown, 'the unknown role falls back to the generic label');
+        $this->assertStringNotContainsString('campaign_ops', $unknown, 'the raw slug leaked');
+        $this->assertStringNotContainsString('إدارة حملات المشاريع المسندة إليه', $unknown, 'a description was invented');
     }
 
     /**

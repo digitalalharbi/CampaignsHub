@@ -217,6 +217,18 @@ final class TokenVault
             ], static fn ($v) => $v !== null))->save();
 
             /*
+             * INTEG-SOURCE-REMOVAL-001 — reconnecting a REMOVED source restores this same row.
+             *
+             * One connection per (tenant, workspace, platform) is what keeps its accounts, and so their stored
+             * history, from being discovered a second time under a new id. `store()` has just written a fresh
+             * credential and set `connected`; the hide is lifted here. Bindings stay disabled — a reconnect is
+             * not a selection.
+             */
+            if ($existing->removed_at !== null) {
+                $existing->forceFill(['removed_at' => null])->save();
+            }
+
+            /*
              * META-SESSION-190-001 — a new consent is what an `error` connection was waiting for, so it is connected again. Only `error`:
              * a disconnected or revoked row keeps the status somebody chose for it.
              */

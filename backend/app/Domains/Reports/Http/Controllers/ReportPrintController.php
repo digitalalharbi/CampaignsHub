@@ -16,6 +16,7 @@ use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
 use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -67,7 +68,10 @@ final class ReportPrintController extends Controller
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
-        abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's PDF prints the stored copy while it is rebuilt, as the link's page shows it; the
+        // link itself is re-checked below. An operator's own export still waits for the rebuild.
+        $forLink = ($ctx['share_id'] ?? null) !== null;
+        abort_if($report === null || ! ($forLink ? $report->servesStoredCopy() : $report->status === 'completed'), 404, 'Report not available.');
         /*
          * LIVE-FILE-PARITY-001 — a live report prints the page's payload. A link's own file is materialised through THAT link,
          * after it is re-checked below (`downloadDocument`); an operator's export reads through the report's definition link.
@@ -120,6 +124,11 @@ final class ReportPrintController extends Controller
         if ($drilldowns !== []) {
             // REPORT-GENERIC-LABELS-001 — attached after the sweep, so it passes through the sweep itself.
             $body['platform_drilldowns'] = GenericNames::for($report, $share)->apply($drilldowns);
+        }
+
+        // REPORT-FILTERS-FUNCTIONAL-001 — the document holds the values of what was chosen, not only their list. An internal copy keeps everything.
+        if ($audience !== 'internal') {
+            $body = ChosenFigures::for($report, $share)->cut($body);
         }
 
         /*

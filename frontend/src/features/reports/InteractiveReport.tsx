@@ -10,6 +10,7 @@ import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
 import { cutColumns } from './reportColumns'
+import { carries } from './chosenFigures'
 import { ReportAdsSection, type AdGroup, type AdPlatformGroup, type AdsReading, type ReportAd } from './ReportAdsSection'
 import { ReportLinksSection } from './ReportLinksSection'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -863,8 +864,9 @@ function RecommendationsSlide({ data }: { data: ReportData }) {
 
 function ExecutiveSlide({ data }: { data: ReportData }) {
   // REPORT-SECTION-SURFACES-001 — the trend and the spend split are sections of their own.
-  const showTrend = sectionShown(data, 'trends')
-  const showSplit = sectionShown(data, 'platform_comparison')
+  // REPORT-FILTERS-FUNCTIONAL-001 — spend not chosen is not carried: no split of it and no line of it, never a total of 0.
+  const spendCarried = carries(data.kpis, 'spend')
+  const showSplit = sectionShown(data, 'platform_comparison') && spendCarried
   const donut = (data.platforms ?? []).map((p) => ({ name: plat(String(p.provider)), value: Number(p.spend ?? 0) }))
   const totalSpend = donut.reduce((a, b) => a + b.value, 0)
   /*
@@ -876,6 +878,11 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
   */
   const cards = reportMetrics(data)
   const trend = trendSeries(data.objective)
+  const trendLines = [
+    ...(spendCarried ? [{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' as const }] : []),
+    ...(carries(data.kpis, trend.key) ? [{ key: trend.key, name: trend.name, color: 'var(--info)', kind: trend.kind }] : []),
+  ]
+  const showTrend = sectionShown(data, 'trends') && trendLines.length > 0
   const cmp = data.comparison
   const who = (cmp?.contributors ?? []).map((c) => plat(String(c))).join('، ')
   return (
@@ -930,15 +937,12 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         {showTrend && (
         <ChartCard title={trend.title} subtitle="الاتجاه اليومي" className={showSplit ? 'lg:col-span-2' : 'lg:col-span-3'}>
-          {trend.key === 'revenue'
+          {trend.key === 'revenue' && trendLines.length === 2
             ? <SpendRevenueAreaChart data={data.timeseries ?? []} currency={data.currency} height={200} />
             : <MetricLineChart
                 data={data.timeseries ?? []}
                 currency={data.currency}
-                series={[
-                  { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
-                  { key: trend.key, name: trend.name, color: 'var(--info)', kind: trend.kind },
-                ]}
+                series={trendLines}
                 height={200}
                 rightAxisFor={trend.key}
               />}
@@ -961,12 +965,16 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         it: the name of a container the client never chose. `best.campaign` is null now, so the tile
         would read «—», and a highlight showing a dash teaches a reader that the row is decoration.
       */}
+      {/* REPORT-FILTERS-FUNCTIONAL-001 — a ranking on a figure nobody chose arrives with no basis; it is not a trophy over a dash. */}
+      {!(data.best && data.best.basis === null && !data.best.platform && !data.best.platform_by_cpa) && (
       <div className={`mt-3 grid gap-2 ${data.best?.platform_by_cpa ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
+        {!(data.best && data.best.basis === null && !data.best.platform) && (
         <Highlight
           label={`أفضل منصة (${data.best?.basis?.label_ar ?? 'الأداء'})`}
           value={data.best?.platform ? plat(data.best.platform) : '—'}
           note={data.best?.platform_value ?? undefined}
         />
+        )}
         {/*
           No filler card where there is no second ranking. A count of platforms under a trophy is
           not a highlight, and putting one there to keep three columns invites the reader to treat
@@ -974,6 +982,7 @@ function ExecutiveSlide({ data }: { data: ReportData }) {
         */}
         {data.best?.platform_by_cpa && <Highlight label="أقل تكلفة نتيجة" value={plat(data.best.platform_by_cpa)} />}
       </div>
+      )}
     </div>
   )
 }
@@ -1005,6 +1014,11 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
     platform's own connector, because the scope-wide map would let a platform that publishes no
     reach print a reach of zero.
   */
+  const lines = ([
+    { key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' },
+    { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' },
+    { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' },
+  ] as const).filter((l) => carries(p, l.key)).map((l) => ({ ...l }))
   const cards = reportMetrics({
     ...data,
     kpis: p as Record<string, number | null>,
@@ -1037,11 +1051,14 @@ function PlatformSlide({ data, platform }: { data: ReportData; platform: string 
         period, which is the question the page is for, and the ad section further on shows the work
         that did it.
       */}
+      {/* REPORT-FILTERS-FUNCTIONAL-001 — the lines of figures the answer carries, and no chart where it carries none of them. */}
+      {lines.length > 0 && (
       <div className="mt-3">
-        <ChartCard title="الأداء بمرور الوقت" subtitle="الإنفاق والإيرادات والنتائج">
-          <MetricLineChart data={series} currency={data.currency} series={[{ key: 'spend', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }, { key: 'revenue', name: 'الإيرادات', color: 'var(--info)', kind: 'money' }, { key: 'conversions', name: 'النتائج', color: 'var(--purple)', kind: 'num' }]} height={155} />
+        <ChartCard title="الأداء بمرور الوقت" subtitle={lines.map((l) => l.name).join(' و')}>
+          <MetricLineChart data={series} currency={data.currency} series={lines} height={155} />
         </ChartCard>
       </div>
+      )}
       <PlatformInsights data={data} platform={platform} />
       <p className="mt-3 text-xs text-text-muted">Reach يُعرض لكل منصة على حدة ولا يُجمع كوصول فريد بين المنصات.</p>
     </div>
@@ -1332,7 +1349,7 @@ function ComparisonSlide({ data }: { data: ReportData }) {
         gate failed it and that one page blocked the entire client PDF export.
       */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} height={200} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>
+        {carries(data.kpis, 'spend') && <ChartCard title="مساهمة الإنفاق"><PlatformDonutChart data={donut} height={200} centerLabel="الإجمالي" centerValue={compact(donut.reduce((a, b) => a + b.value, 0))} currency={data.currency} /></ChartCard>}
       {/*
         TABLE-NUMERIC-ALIGNMENT-001 — through the primitive, in a document a client reads.
 
@@ -1606,17 +1623,20 @@ function FunnelSlide({ data }: { data: ReportData }) {
               <div className="rounded-2xl border border-border bg-[var(--warning-background)] p-4">
                 <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-warning"><TriangleAlert size={15} /> أكبر تسرّب</div>
                 <div className="font-semibold text-text-primary">{worst.label}</div>
-                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)} · تكلفة {moneyExact(worst.cost_per, data.currency)}</div>
+                <div className="tnum mt-0.5 text-sm text-text-secondary">تسرّب {percent(worst.drop ?? 0, 0)}{worst.cost_per != null && <> · تكلفة {moneyExact(worst.cost_per, data.currency)}</>}</div>
               </div>
             )}
+            {/* REPORT-FILTERS-FUNCTIONAL-001 — a cost per stage is spend; where the answer carries none, there is no card of dashes. */}
+            {stages.some((s) => s.cost_per != null) && (
             <div className="rounded-2xl border border-border bg-surface-secondary p-4">
               <div className="mb-1 text-sm font-bold text-text-primary">تكلفة كل مرحلة</div>
               <div className="space-y-1 text-xs">
-                {stages.filter((s) => s.cost_per !== null).slice(-4).map((s) => (
+                {stages.filter((s) => s.cost_per != null).slice(-4).map((s) => (
                   <div key={s.label} className="flex justify-between"><span className="text-text-secondary">{s.label}</span><span className="tnum font-semibold">{moneyExact(s.cost_per, data.currency)}</span></div>
                 ))}
               </div>
             </div>
+            )}
           </div>
         </div>
       ) : <p className="text-sm text-text-muted">لا بيانات قمع.</p>}

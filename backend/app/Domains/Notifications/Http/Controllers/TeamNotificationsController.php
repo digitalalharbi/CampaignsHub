@@ -7,6 +7,8 @@ namespace App\Domains\Notifications\Http\Controllers;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
+use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -206,6 +208,8 @@ final class TeamNotificationsController extends Controller
                 'kind' => (string) $r->kind,
                 'recipient' => null,
                 'status' => (string) $r->status,
+                'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
+                'failure_code' => $r->failure_code ?? null,
                 'reason' => $r->reason === null ? null : (string) $r->reason,
                 'attempts' => (int) ($r->attempts ?? 0),
                 'at' => (string) ($r->sent_at ?? $r->created_at),
@@ -219,6 +223,7 @@ final class TeamNotificationsController extends Controller
          */
         $transactional = DB::table('mail_deliveries')
             ->where('tenant_id', $tenantId)
+            ->where('kind', '!=', TransactionalMailer::TEST_KIND)
             ->orderByDesc('created_at')
             ->limit(self::LOG_LIMIT)
             ->get()
@@ -227,8 +232,11 @@ final class TeamNotificationsController extends Controller
                 'kind' => (string) $r->kind,
                 'recipient' => (string) $r->recipient,
                 'status' => (string) $r->status,
-                'reason' => null,
-                'attempts' => 1,
+                'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
+                'failure_code' => $r->failure_code ?? null,
+                // The named reason, not the transport's words: this is a workspace's screen, not the operator's.
+                'reason' => $r->failure_code ?? null,
+                'attempts' => (int) ($r->attempts ?? 1),
                 'at' => (string) ($r->sent_at ?? $r->created_at),
                 'sort' => (string) $r->created_at,
             ]);
@@ -262,6 +270,8 @@ final class TeamNotificationsController extends Controller
         // This workspace's only, as `deliveries()` asks: another workspace's mail is not its manager's to read.
         $delivery = DB::table('mail_deliveries')
             ->where('tenant_id', $tenantId)
+            // EMAIL-TEST-SEND-001 — keyed by person, so a platform admin who is also a member would show their own test here.
+            ->where('kind', '!=', TransactionalMailer::TEST_KIND)
             ->where(fn ($q) => $q->where('user_id', $userId)->orWhere('recipient', $email))
             ->orderByDesc('created_at')
             ->first();

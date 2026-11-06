@@ -19,6 +19,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\MailManager;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -160,6 +161,40 @@ final class DigestDeliveryTest extends TestCase
         $this->assertSame(1, DB::table('digest_sends')->where('user_id', $this->user->id)->count());
     }
 
+    /** EMAIL-GAPS — the digest goes around `TransactionalMailer`, so it asks the gate itself, at the send. */
+    public function test_an_unsubscribed_person_is_recorded_not_mailed_and_a_sent_digest_carries_the_way_out(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+        Mail::assertSent(DailyDigestMail::class, fn (DailyDigestMail $m): bool => str_contains((string) $m->unsubscribeUrl, '/mail/unsubscribe/'));
+
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Uuid::uuid4(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', 'ops@digest.test'), 'scope' => 'daily_digest']);
+
+        $this->assertSame('unsubscribed', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()));
+        Mail::assertSentCount(1);
+        $this->assertSame('unsubscribed', DB::table('digest_sends')->where('status', 'unsubscribed')->value('reason'));
+
+        // Leaving the daily says nothing about the weekly.
+        $this->assertSame('sent', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+    }
+
+    public function test_past_the_workspace_limit_a_digest_is_recorded_as_refused(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.daily_limit_per_tenant' => 1]);
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+        $this->assertSame('limit_reached', $dispatcher->sendWeekly($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+
+        Mail::assertSentCount(1);
+        $this->assertSame('limit_reached', DB::table('digest_sends')->where('kind', 'weekly')->value('reason'));
+    }
+
     /**
      * With no mail provider wired, nothing is sent and nothing claims to have been.
      *
@@ -233,6 +268,80 @@ final class DigestDeliveryTest extends TestCase
     }
 
     /** Nothing in scope is a recorded reason, not a silent absence. */
+    /**
+     * EMAIL-DELIVERY-LEDGER-001 — the retry the docblock always promised.
+     *
+     * «The next run picks it up» was untrue for a daily: the sweep fires only at the recipient's hour,
+     * by which time the period key has moved on, so a failed daily was never tried again. A retry now
+     * waits out a backoff, re-sends the SAME window through the same scope, and stops at the ceiling.
+     */
+    public function test_a_failed_digest_is_retried_after_a_backoff_for_its_own_period(): void
+    {
+        $this->preference(['digests' => json_encode(['daily' => true])]);
+        $this->withConfiguredEmail();
+        $day = Carbon::yesterday();
+        $dispatcher = app(DigestDispatcher::class);
+
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('Connection could not be established with host smtp.test'));
+        $this->assertSame('failed', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day));
+        Mail::swap(new MailManager(app())); // out of the mock, for the next step
+
+        $row = DB::table('digest_sends')->where('user_id', $this->user->id)->first();
+        $this->assertSame('connection_failed', $row->failure_code);
+        $this->assertNotNull($row->next_attempt_at);
+
+        // Not due yet: nothing is attempted.
+        Mail::fake();
+        $this->artisan('notifications:retry-failed')->assertSuccessful();
+        Mail::assertNothingSent();
+
+        Carbon::setTestNow(Carbon::now()->addHours(2));
+        $this->artisan('notifications:retry-failed')->assertSuccessful();
+        Mail::assertSent(DailyDigestMail::class, 1);
+
+        $row = DB::table('digest_sends')->where('user_id', $this->user->id)->first();
+        $this->assertSame('sent', $row->status);
+        $this->assertSame($day->toDateString(), $row->period_key);
+        $this->assertSame(2, (int) $row->attempts);
+        $this->assertNull($row->next_attempt_at);
+        $this->assertNotNull($row->accepted_at);
+        $this->assertNull($row->delivered_at);
+
+        // A second run after success sends nothing.
+        Carbon::setTestNow(Carbon::now()->addHours(2));
+        $this->artisan('notifications:retry-failed')->assertSuccessful();
+        Mail::assertSent(DailyDigestMail::class, 1);
+    }
+
+    public function test_a_retry_does_not_outlive_the_recipients_choice_or_a_permanent_failure(): void
+    {
+        $this->withConfiguredEmail();
+        $day = Carbon::yesterday();
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->preference(['digests' => json_encode(['daily' => true])]);
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('Connection could not be established'));
+        $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day);
+        Mail::swap(new MailManager(app())); // out of the mock, for the next step
+        Mail::fake();
+
+        // They switched the digest off while the retry was waiting.
+        DB::table('notification_preferences')->where('user_id', $this->user->id)->update(['digests' => json_encode(['daily' => false])]);
+        Carbon::setTestNow(Carbon::now()->addHours(2));
+        $this->artisan('notifications:retry-failed')->assertSuccessful();
+        Mail::assertNothingSent();
+        $this->assertNull(DB::table('digest_sends')->where('user_id', $this->user->id)->value('next_attempt_at'));
+
+        // A broken template schedules no retry at all.
+        DB::table('digest_sends')->delete();
+        Mail::swap(new MailManager(app())); // out of the mock, for the next step
+        Mail::shouldReceive('to->send')->once()->andThrow(new \RuntimeException('Undefined variable $x (View: mail.daily-digest)'));
+        $dispatcher->sendDaily($this->user, (string) $this->tenant->id, $day);
+        $row = DB::table('digest_sends')->where('user_id', $this->user->id)->first();
+        $this->assertSame('template_error', $row->failure_code);
+        $this->assertNull($row->next_attempt_at);
+    }
+
     public function test_no_activity_is_recorded_as_a_reason_rather_than_a_missing_row(): void
     {
         Mail::fake();

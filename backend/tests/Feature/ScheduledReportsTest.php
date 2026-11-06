@@ -11,6 +11,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
+use App\Domains\Reports\Models\ReportVersion;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Domains\Tenancy\Actions\GrantMembership;
@@ -26,11 +27,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /** Scheduled reports: due schedules generate a snapshot + honest delivery ledger; internal never to client. */
 final class ScheduledReportsTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -110,6 +113,36 @@ final class ScheduledReportsTest extends TestCase
         $this->assertSame(ReportIdentity::subject($report), $subject);
         // It names the document rather than the product.
         $this->assertStringNotContainsString('CampaignsHub', (string) $subject);
+    }
+
+    /**
+     * EMAIL-GAPS (§17.4.4) — two overlapping sweeps read the same due row. Only one may run it, or the
+     * recipients get two reports for one schedule.
+     */
+    public function test_a_schedule_read_by_two_overlapping_sweeps_runs_once(): void
+    {
+        $s = $this->schedule();
+        $dispatcher = app(ScheduledReportDispatcher::class);
+        $stale = ReportSchedule::withoutGlobalScopes()->findOrFail($s->id);
+
+        $this->assertSame(1, $dispatcher->dispatchDue());
+        // The second sweep read the row before the first one advanced it.
+        $this->assertFalse($dispatcher->claimDue($stale, Carbon::now()));
+        $this->assertSame(1, Report::withoutGlobalScopes()->where('project_id', $this->project->id)->count());
+    }
+
+    /**
+     * EMAIL-GAPS — the scheduler runs with no tenant. The read dropped only `ProjectScope`, so
+     * `TenantScope` failed closed and the cron found nothing, on every run, for every tenant. Every test
+     * above sets a tenant first, which is why none of them saw it.
+     */
+    public function test_the_cron_finds_due_schedules_with_no_tenant_resolved(): void
+    {
+        $this->schedule();
+        app(TenantContext::class)->forget();
+
+        $this->assertSame(1, app(ScheduledReportDispatcher::class)->dispatchDue());
+        $this->assertSame(1, DB::table('report_deliveries')->count());
     }
 
     public function test_internal_report_is_suppressed_for_external_recipients(): void
@@ -277,5 +310,25 @@ final class ScheduledReportsTest extends TestCase
         $this->assertSame('2026-08-02', $local->toDateString());
 
         Carbon::setTestNow();
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — a system path: a schedule builds a report of its own, waits on no confirmation and replaces nobody's stored copy. */
+    public function test_a_scheduled_run_builds_its_own_report_and_leaves_every_stored_copy_alone(): void
+    {
+        $existing = Report::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Sent to the client', 'type' => 'executive',
+            'audience' => 'client', 'mode' => 'snapshot', 'status' => 'draft', 'period_start' => '2026-08-01', 'period_end' => '2026-08-31', 'currency' => 'SAR',
+        ]);
+        $original = $this->storeCopy((string) $existing->getKey());
+        $this->schedule();
+
+        $this->assertSame(1, app(ScheduledReportDispatcher::class)->dispatchDue());
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        Queue::assertPushed(GenerateReportJob::class, fn (GenerateReportJob $job): bool => $job->reportId !== (string) $existing->getKey());
+        $kept = Report::withoutGlobalScopes()->findOrFail($existing->getKey());
+        $this->assertSame('completed', $kept->status);
+        $this->assertEquals($original, $kept->data);
+        $this->assertSame(0, ReportVersion::withoutGlobalScopes()->count());
     }
 }

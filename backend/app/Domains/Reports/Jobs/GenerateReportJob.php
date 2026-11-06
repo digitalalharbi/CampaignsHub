@@ -42,6 +42,10 @@ final class GenerateReportJob implements ShouldQueue
         if (! $report) {
             return;
         }
+        // REPORT-DUPLICATE-001 — a draft is not built until it is published; publishing is what moves it to `processing`.
+        if ($report->isDraft()) {
+            return;
+        }
         $report->update(['status' => 'processing', 'error' => null]);
         try {
             $data = $generator->generate($report);

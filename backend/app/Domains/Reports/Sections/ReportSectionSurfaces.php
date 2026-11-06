@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Sections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportReadMemo;
@@ -164,7 +165,8 @@ final class ReportSectionSurfaces
      */
     public function previewPayload(Report $report, array $data): array
     {
-        return $this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client'));
+        // REPORT-FILTERS-FUNCTIONAL-001 — the preview is the document a link of this report carries, so it carries the same cut; an internal report keeps everything.
+        return ChosenFigures::for($report, null)->cut($this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client')));
     }
 
     /**
@@ -188,7 +190,24 @@ final class ReportSectionSurfaces
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
-        $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+        $resolved = $this->resolve($report, $share, $surface, $payload, $audience, $form);
+        $payload = $resolved->apply($payload);
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — a document without its content section names no content anywhere else.
+         *
+         * An attention item carries up to three pieces of content as its evidence. The live payload attaches them from the lists
+         * that survived the switches; a stored copy has them written in, so a link (or a report) that switched the content off
+         * still named its creatives one section earlier, on the page, in the PDF document and in the files.
+         */
+        if (! $resolved->isVisible('content_performance') && is_array($payload['attention'] ?? null)) {
+            $payload['attention'] = array_map(static function ($item) {
+                if (is_array($item) && is_array($item['evidence']['content'] ?? null)) {
+                    $item['evidence']['content'] = [];
+                }
+
+                return $item;
+            }, $payload['attention']);
+        }
         // The tabs a reader is offered, named by the server like the sections are.
         $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface

@@ -8,8 +8,11 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\ConnectionRemoval;
 use App\Domains\Integrations\Services\ConnectionWizardState;
+use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +39,12 @@ final class ProviderConnectionController extends Controller
          */
         $state = app(ConnectionWizardState::class);
 
-        $connections = ProviderConnection::withCount('externalAccounts')->latest()->get()
+        $models = ProviderConnection::withCount('externalAccounts')->whereNull('removed_at')->latest()->get();
+
+        // INTEG-STATUS-MODEL-001 — five independent statuses per connection, resolved in one batch (never per row).
+        $resolved = app(IntegrationStatusResolver::class)->forConnections($models, (string) app(TenantContext::class)->tenantId());
+
+        $connections = $models
             ->map(fn (ProviderConnection $c) => [
                 'id' => $c->id,
                 'name' => $c->connection_name,
@@ -52,6 +60,8 @@ final class ProviderConnectionController extends Controller
                 'ever_discovered' => $c->external_accounts_count,
                 'discovery_blocked_reason' => $c->discovery_blocked_reason,
                 'last_health_check_at' => optional($c->last_health_check_at)->toIso8601String(),
+                'statuses' => $resolved[(string) $c->getKey()]['statuses'] ?? null,
+                'status_profile' => $resolved[(string) $c->getKey()]['profile'] ?? null,
             ]);
 
         return ApiResponse::success($connections, 'Connections retrieved.');
@@ -86,6 +96,40 @@ final class ProviderConnectionController extends Controller
         return ApiResponse::success(
             ['status' => 'revoked'],
             'Connection revoked; all its project bindings were disabled.',
+        );
+    }
+
+    /**
+     * INTEG-SOURCE-REMOVAL-001 — remove a source from the Connection Hub.
+     *
+     * Disables every binding, stops its syncs, clears the stored credential and soft-hides the row. It
+     * deletes and moves no stored figure, report row or ownership row (see {@see ConnectionRemoval}).
+     *
+     * `unconfirmed_only` is the wizard's «إلغاء»: it removes the connection ONLY if nothing was ever
+     * selected or synced on it, so cancelling a re-authorisation of a working source can never take that
+     * source away. Anything else answers `removed: false` and changes nothing.
+     *
+     * Tenant isolation is the model's own scope: another tenant's connection id is a 404, not a 403.
+     */
+    public function remove(Request $request, ProviderConnection $connection, ConnectionRemoval $removal): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.disconnect'), 403);
+
+        $validated = $request->validate(['unconfirmed_only' => ['sometimes', 'boolean']]);
+
+        if ($connection->removed_at !== null) {
+            return ApiResponse::success(['removed' => true, 'already' => true, 'disabled_bindings' => 0], 'Source already removed.');
+        }
+
+        if (($validated['unconfirmed_only'] ?? false) && ! $removal->isUnconfirmed($connection)) {
+            return ApiResponse::success(['removed' => false, 'disabled_bindings' => 0], 'The source is already in use, so it was kept.');
+        }
+
+        $result = $removal->remove($connection, ($validated['unconfirmed_only'] ?? false) ? 'wizard_cancelled' : 'operator');
+
+        return ApiResponse::success(
+            ['removed' => true, 'disabled_bindings' => $result['disabled_bindings']],
+            'Source removed; its bindings were disabled and its stored history was kept.',
         );
     }
 }
