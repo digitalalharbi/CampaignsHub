@@ -256,9 +256,10 @@ final class MailDeliveryLedgerTest extends TestCase
         $anomaly = app(NotificationDispatcher::class)->dispatch(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'type' => 'performance', 'title' => 'Anomaly']);
         $this->assertSame('handled_elsewhere', DB::table('notification_deliveries')->where('notification_id', $anomaly->id)->where('channel', 'email')->value('status'));
 
-        // Nothing mails this kind at all, so it says so rather than «sent».
+        // NOTIFICATION-CHANNELS-001 — a request's own event now has an email form (the dispatcher mails it as `request`), but it is OFF
+        // by default for a person who never chose, so the row says exactly that rather than «sent» or «in_app_only».
         $request = app(NotificationDispatcher::class)->dispatch(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'type' => 'request.sla_warning', 'title' => 'SLA']);
-        $this->assertSame('in_app_only', DB::table('notification_deliveries')->where('notification_id', $request->id)->where('channel', 'email')->value('status'));
+        $this->assertSame('suppressed_by_preference', DB::table('notification_deliveries')->where('notification_id', $request->id)->where('channel', 'email')->value('status'));
         Mail::assertNothingSent();
         $this->assertSame(0, DB::table('notification_deliveries')->where('channel', 'email')->where('status', 'sent')->count());
     }

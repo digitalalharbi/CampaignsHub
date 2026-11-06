@@ -137,6 +137,22 @@ final class NotificationChoices
     }
 
     /**
+     * Has this person switched THIS type on for WhatsApp — NOTIFICATION-CHANNELS-001.
+     *
+     * Not `wants()` and not `chose()`, on purpose. WhatsApp is the one channel nobody has by default and
+     * no master switch or category choice can imply: `chose()` answers `true` for every channel of a
+     * mandatory type, which would put a security alert on a phone nobody asked it to reach. Only an
+     * explicit `types.<type>.whatsapp = true` counts, and even that does nothing until the number has
+     * an opt-in — see `WhatsAppChannel`.
+     */
+    public function whatsapp(int $userId, string $tenantId, string $type): bool
+    {
+        $types = $this->map($this->row($userId, $tenantId), 'types');
+
+        return ($types[$type]['whatsapp'] ?? false) === true;
+    }
+
+    /**
      * The same question for a whole category — what a recipient arrangement names.
      *
      * A category is wanted when ANY type inside it is, because that is what the manager asked for:

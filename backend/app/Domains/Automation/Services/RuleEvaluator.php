@@ -335,6 +335,9 @@ final class RuleEvaluator
             'type' => 'automation_rule', 'severity' => 'warning',
             'title' => "Rule «{$rule->name}» matched: ".($t['name'] ?? $t['external_id']),
             'message' => $this->describe($read).($type !== 'notify' ? ' — action: '.$type.' (monitor only).' : ''),
+            // NOTIFICATION-CHANNELS-001 — the email is in the reader's language; the figures are the same.
+            'title_ar' => "طابقت القاعدة «{$rule->name}»: ".($t['name'] ?? $t['external_id']),
+            'message_ar' => $this->describe($read).($type !== 'notify' ? ' — الإجراء: '.$type.' (مراقبة فقط).' : ''),
             'source' => 'automation', 'entity_type' => 'automation_rule', 'entity_id' => (string) $rule->getKey(),
             'action_url' => '/automation', 'dedup_extra' => $t['external_id'],
         ]);

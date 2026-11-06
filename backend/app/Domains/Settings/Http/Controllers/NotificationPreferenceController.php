@@ -11,6 +11,7 @@ use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\NotificationChannelPolicy;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -140,6 +141,8 @@ final class NotificationPreferenceController extends Controller
             // MAIL-011 — the catalogue, and this person's effective answer for every entry in it.
             'catalogue' => $this->catalogue(),
             'types' => $this->effectiveTypes($userId, $tenantId),
+            // NOTIFICATION-CHANNELS-001 — whether WhatsApp can be switched on by THIS person today, and why not.
+            'whatsapp' => WhatsAppOptInController::state($request->user(), $this->providers),
             'projects' => $this->reachableProjects($request, $tenantId),
         ], 'Notification preferences retrieved.');
     }
@@ -196,6 +199,7 @@ final class NotificationPreferenceController extends Controller
             'types.*' => ['array'],
             'types.*.email' => ['boolean'],
             'types.*.in_app' => ['boolean'],
+            'types.*.whatsapp' => ['boolean'],
             'types.*.rhythm' => ['string'],
             'types.*.min_severity' => ['nullable', 'string'],
             'quiet_hours' => ['sometimes', 'nullable', 'array'],
@@ -365,6 +369,8 @@ final class NotificationPreferenceController extends Controller
                 abort(422, "There is no message type called «{$type}».");
             }
 
+            $this->assertWhatsAppMayBeChosen($request, $type, $choice);
+
             if (MessageCatalogue::isMandatory($type)) {
                 if (($choice['min_severity'] ?? null) !== null) {
                     abort(422, "«{$type}» is sent whenever it applies and cannot be narrowed.");
@@ -374,6 +380,11 @@ final class NotificationPreferenceController extends Controller
                     if (array_key_exists($channel, $choice) && $choice[$channel] !== true) {
                         abort(422, "«{$type}» is sent whenever it applies and cannot be switched off.");
                     }
+                }
+
+                // The one thing a person may add to a message that cannot be switched off: a second place to be told.
+                if (array_key_exists('whatsapp', $choice)) {
+                    $stored[$type] = ['whatsapp' => (bool) $choice['whatsapp']];
                 }
 
                 continue;
@@ -409,6 +420,48 @@ final class NotificationPreferenceController extends Controller
     }
 
     /**
+     * WhatsApp is the one channel nobody has by default, so «on» is refused unless it could actually work.
+     *
+     * Reading the document back sends `false` for every type and must stay a no-op; only a CONTRADICTION is
+     * refused: `true` for a type the policy never sends there, or for a person with no provider or no
+     * confirmed opt-in. A switch that shows on and sends nothing is the promise this product does not make.
+     *
+     * @param  array<string, mixed>  $choice
+     */
+    private function assertWhatsAppMayBeChosen(Request $request, string $type, array $choice): void
+    {
+        if (($choice['whatsapp'] ?? false) !== true) {
+            return;
+        }
+
+        if ((NotificationChannelPolicy::for($type)['whatsapp'] ?? 'never') !== 'planned') {
+            abort(422, "«{$type}» is never sent on WhatsApp.");
+        }
+
+        $state = WhatsAppOptInController::state($request->user(), $this->providers);
+
+        if (! $state['provider_configured']) {
+            abort(422, 'WhatsApp is not available yet: no provider is configured.');
+        }
+
+        if (! $state['opted_in']) {
+            abort(422, 'WhatsApp cannot be switched on before this number has a confirmed opt-in.');
+        }
+    }
+
+    /** @return array{in_app: bool, email: string, whatsapp: string} */
+    private function channelsOf(string $type): array
+    {
+        $policy = NotificationChannelPolicy::for($type);
+
+        return [
+            'in_app' => $policy['in_app'] ?? true,
+            'email' => $policy['email'] ?? 'immediate',
+            'whatsapp' => $policy['whatsapp'] ?? 'never',
+        ];
+    }
+
+    /**
      * The catalogue, grouped for the screen, with everything the screen needs to be honest about.
      *
      * `sent_by` is not rendered — it is here so a developer reading the response can see that every
@@ -432,6 +485,9 @@ final class NotificationPreferenceController extends Controller
                     // that or it renders a checkbox that writes to nothing.
                     'digest_switch' => MessageCatalogue::DIGEST_SWITCH[$type] ?? null,
                     'sent_by' => $definition['sent_by'],
+                    // NOTIFICATION-CHANNELS-001 — what the PRODUCT does with it, from the one policy: a dash on the
+                    // screen where there is no bell item, a lock where there is no switch.
+                    'channels' => $this->channelsOf($type),
                 ];
             }
 
@@ -446,7 +502,7 @@ final class NotificationPreferenceController extends Controller
     /**
      * What will actually happen, per type, for this person today.
      *
-     * @return array<string, array{email: bool, in_app: bool, rhythm: string, min_severity: ?string}>
+     * @return array<string, array{email: bool, in_app: bool, rhythm: string, min_severity: ?string, whatsapp: bool}>
      */
     private function effectiveTypes(int $userId, string $tenantId): array
     {
@@ -458,6 +514,7 @@ final class NotificationPreferenceController extends Controller
                 'in_app' => $this->choices->wants($userId, $tenantId, $type, 'in_app'),
                 'rhythm' => $this->choices->rhythm($userId, $tenantId, $type),
                 'min_severity' => $this->choices->minSeverity($userId, $tenantId, $type),
+                'whatsapp' => $this->choices->whatsapp($userId, $tenantId, $type),
             ];
         }
 
