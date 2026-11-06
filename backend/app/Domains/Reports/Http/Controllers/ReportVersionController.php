@@ -41,6 +41,11 @@ final class ReportVersionController extends Controller
             return ApiResponse::error(__('api.report_restore_needs_confirmation'), ['code' => 'report_restore_needs_confirmation'], status: 409);
         }
 
+        // A rebuild in flight replaces whatever is on the row when it commits; a copy restored now would be gone with nobody told.
+        if ($model->status === 'processing') {
+            return ApiResponse::error(__('api.report_is_rebuilding'), ['code' => 'report_is_rebuilding'], status: 409);
+        }
+
         $from = $model->generated_at?->toIso8601String();
         DB::transaction(function () use ($versions, $model, $kept): void {
             $versions->keep($model);

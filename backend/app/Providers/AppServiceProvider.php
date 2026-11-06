@@ -15,6 +15,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
@@ -230,6 +231,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
 
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
+        // EMAIL-GAPS — recognises a new device. Queues its mail and swallows its own failures: see the class.
+        Event::listen(Login::class, [NewSignInAlert::class, 'handle']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
         /*
@@ -264,6 +267,17 @@ class AppServiceProvider extends ServiceProvider
          * is exactly where that happens). Off-production the allowance is large for the same reason
          * `auth-login`'s is: the acceptance suite submits back to back from one address.
          */
+        /*
+         * EMAIL-TEST-SEND-001 — named, because an unnamed `throttle:3,1` shares its counter with every
+         * other route written the same way. Strict in every environment: it can only ever be a person
+         * reviewing templates, and it spends the provider's sending reputation.
+         */
+        RateLimiter::for('mail-test-send', static function (Request $request): array {
+            $who = (string) $request->user()?->getAuthIdentifier();
+
+            return [Limit::perMinute(3)->by('m:'.$who), Limit::perDay(20)->by('d:'.$who)];
+        });
+
         RateLimiter::for('public-form', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 40 : 600;
 

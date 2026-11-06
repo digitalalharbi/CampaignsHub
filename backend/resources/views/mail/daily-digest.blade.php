@@ -12,7 +12,7 @@
 @php($tone = ['good' => '#0d8a6f', 'warn' => '#b45309', 'bad' => '#b91c1c', 'neutral' => '#5b6b68'])
 @php($toneBg = ['good' => '#e8f5f1', 'warn' => '#fffbeb', 'bad' => '#fef2f2', 'neutral' => '#faf8f3'])
 
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:20px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['greeting'] }}</div>
     @php($singleProject = $singleProject ?? false)
@@ -63,7 +63,7 @@
                         @if (! empty($charts['trend']))
                             {{-- EMAIL-DECISION-REPORT-001 — the window's shape under the figure: a static PNG with its figures in the alt and a caption beneath. --}}
                             <div style="margin-top:8px;" data-block="chart-trend">
-                                <img src="{{ $charts['trend']['url'] }}" width="{{ $charts['trend']['width'] }}" height="{{ $charts['trend']['height'] }}" alt="{{ $charts['trend']['alt'] }}" style="display:block; max-width:100%; height:auto; border:0;">
+                                <img src="{{ $charts['trend']['url'] }}" width="{{ $charts['trend']['width'] }}" height="{{ $charts['trend']['height'] }}" alt="{{ $charts['trend']['alt'] }}" style="display:block; width:100%; max-width:{{ $charts['trend']['width'] }}px; height:auto; border:0; font-size:12px; color:#5b6b68;">
                                 <div style="font-size:11px; color:#8b9a97; margin-top:2px;">{{ $charts['trend']['caption'] }}</div>
                             </div>
                         @endif
@@ -111,13 +111,13 @@
         @if ($movement['best'])
             <div data-block="highlight-best" style="margin-bottom:8px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['good'] }}; border-{{ $startSide }}:3px solid {{ $tone['good'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['best']['name'] }} — {{ $t['best_move'] }}</div>
-                <div style="font-size:12px; color:{{ $tone['good'] }};" dir="ltr">{{ $movement['best']['text'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['good'] }};" dir="{{ $dir }}">{{ $movement['best']['text'] }}</div>
             </div>
         @endif
         @if ($movement['worst'])
             <div data-block="highlight-worst" style="margin-bottom:16px; padding:10px 12px; border-radius:10px; background-color:{{ $toneBg['bad'] }}; border-{{ $startSide }}:3px solid {{ $tone['bad'] }};">
                 <div style="font-size:13px; font-weight:700; color:#0b1a16;">{{ $movement['worst']['name'] }} — {{ $t['worst_move'] }}</div>
-                <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="ltr">{{ $movement['worst']['text'] }}</div>
+                <div style="font-size:12px; color:{{ $tone['bad'] }};" dir="{{ $dir }}">{{ $movement['worst']['text'] }}</div>
             </div>
         @endif
     @endif
@@ -159,19 +159,22 @@
     @if (! empty($charts['donut']))
         {{-- Where the spend went by platform: the donut, and its legend — which is also the fallback when images are off. --}}
         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px;">{{ $t['spend_by_platform'] }}</div>
+        {{-- EMAIL-LAYOUT-001 — stacked, always. Image beside a four-column legend needed 412px and pushed the whole card off a 390px phone; nothing in the legend can shrink. --}}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="chart-donut" style="margin-bottom:16px;">
             <tr>
-                <td width="{{ $charts['donut']['size'] + 12 }}" style="vertical-align:middle;">
-                    <img src="{{ $charts['donut']['url'] }}" width="{{ $charts['donut']['size'] }}" height="{{ $charts['donut']['size'] }}" alt="{{ $charts['donut']['alt'] }}" style="display:block; border:0;">
+                <td align="center" style="text-align:center; padding-bottom:8px; font-size:12px; color:#5b6b68;">
+                    <img src="{{ $charts['donut']['url'] }}" width="{{ $charts['donut']['size'] }}" height="{{ $charts['donut']['size'] }}" alt="{{ $charts['donut']['alt'] }}" style="display:block; margin:0 auto; max-width:100%; height:auto; border:0;">
                 </td>
-                <td style="vertical-align:middle; font-size:12px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            </tr>
+            <tr>
+                <td style="font-size:12px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                         @foreach ($charts['donut']['legend'] as $item)
                             <tr>
-                                <td style="padding:2px 6px 2px 0;"><span style="display:inline-block; width:10px; height:10px; border-radius:5px; background-color:{{ $item['colour'] }};"></span></td>
-                                <td style="padding:2px 8px 2px 0; color:#0b1a16;">{{ $item['label'] }}</td>
-                                <td style="padding:2px 8px 2px 0; color:#0b1a16; font-weight:700;" dir="ltr">{{ $item['share'] }}</td>
-                                <td style="padding:2px 0; color:#5b6b68;" dir="ltr">{{ $item['value'] }}</td>
+                                <td width="16" style="padding:2px 0;"><span style="display:inline-block; width:10px; height:10px; border-radius:5px; background-color:{{ $item['colour'] }};"></span></td>
+                                <td style="padding:2px 4px; color:#0b1a16;">{{ $item['label'] }}</td>
+                                <td style="padding:2px 4px; color:#0b1a16; font-weight:700; text-align:{{ $endSide }};" dir="ltr">{{ $item['share'] }}</td>
+                                <td style="padding:2px 0; color:#5b6b68; text-align:{{ $endSide }};" dir="ltr">{{ $item['value'] }}</td>
                             </tr>
                         @endforeach
                     </table>
@@ -196,23 +199,9 @@
                     @if ($row['attention'] || $row['follow'])
                         <div style="font-size:12px; color:{{ $row['attention'] ? $tone['warn'] : '#5b6b68' }}; line-height:1.6; margin-top:2px;">{{ $t['follow_up'] }}: {{ $row['attention'] ?? $row['follow'] }}</div>
                     @endif
-                    @php($cells = array_values(array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null])))
-                    @if ($cells)
-                    {{-- Equal columns, labels over figures, every column a real figure: the strip stays parallel with no empty cell (Owner 2026-10-22). --}}
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
-                        <tr>
-                            @foreach ($cells as $card)
-                                <td class="ch-kpi" width="{{ (int) (100 / count($cells)) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
-                                    <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
-                                    <div style="font-size:14px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}@if ($card['change']) <span style="font-size:11px; font-weight:700; color:{{ $card['change_colour'] }};">{{ $card['change'] }}</span>@endif</div>
-                                </td>
-                            @endforeach
-                        </tr>
-                    </table>
-                    @endif
                 </td>
                 @if ($row['objective'])
-                    <td width="112" style="padding:12px 14px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:0 12px 12px 0;">
+                    <td width="104" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:{{ $startSide === 'right' ? '12px 0 12px 0' : '0 12px 0 12px' }};">
                         <div class="ch-kpi-lead" style="font-size:{{ $singleProject ? '30' : '22' }}px; line-height:1.15; font-weight:800; color:{{ $tone[$row['tone']] }};" dir="ltr">{{ $row['objective']['value'] }}</div>
                         <div style="font-size:11px; color:#5b6b68;">{{ $row['objective']['label'] }}</div>
                         @if ($row['objective']['change'])
@@ -221,6 +210,25 @@
                     </td>
                 @endif
             </tr>
+            @php($cells = array_values(array_filter([$row['spend'], $row['second'], $row['revenue'] ?? null])))
+            @if ($cells)
+                {{-- EMAIL-LAYOUT-001 — the strip has the card's whole width. Inside the name's cell, beside the objective, three figures shared 210px on a phone and a number broke in two. --}}
+                <tr>
+                    <td @if ($row['objective']) colspan="2" @endif style="padding:0 14px 12px;">
+                    {{-- Equal columns, labels over figures, every column a real figure: the strip stays parallel with no empty cell (Owner 2026-10-22). --}}
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                        <tr>
+                            @foreach ($cells as $card)
+                                <td class="ch-strip" width="{{ (int) (100 / count($cells)) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
+                                    <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
+                                    <div style="font-size:14px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}@if ($card['change']) <span style="font-size:11px; font-weight:700; color:{{ $card['change_colour'] }};">{{ $card['change'] }}</span>@endif</div>
+                                </td>
+                            @endforeach
+                        </tr>
+                    </table>
+                    </td>
+                </tr>
+            @endif
         </table>
     @endforeach
     @if ($rest > 0)
@@ -233,8 +241,8 @@
     {{-- One button, and it says where it lands. --}}
     <div style="margin:10px 0 18px; text-align:center;">
         <a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 22px; border-radius:10px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
+           class="ch-btn" style="display:inline-block; background-color:#0b7a62; color:#ffffff; font-size:15px; font-weight:700;
+                  text-decoration:none; line-height:44px; padding:0 28px; border-radius:8px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
     </div>
 
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:4px;">{{ $t['footer_note'] }}</div>

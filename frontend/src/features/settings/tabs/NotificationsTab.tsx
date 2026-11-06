@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type NotifPrefs, type Rhythm } from '../api'
+import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type Importance, type NotifPrefs, type Rhythm } from '../api'
 import { CATEGORY_LABELS, CATEGORY_NOTES, TYPE_LABELS, TYPE_NOTES, words } from '../messageLabels'
 import { Switch } from '@/components/ui/Switch'
 import { Select } from '@/components/ui/Select'
@@ -111,7 +111,7 @@ export function NotificationsTab() {
     setTimeout(() => setSaved(false), 2500)
   }
 
-  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; rhythm: Rhythm }>) =>
+  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; rhythm: Rhythm; min_severity: Importance | null }>) =>
     setP({ ...p, types: { ...p.types, [key]: { ...p.types[key], ...patch } } })
 
   const chosenProjects = p.project_ids ?? []
@@ -163,6 +163,12 @@ export function NotificationsTab() {
             label={ar ? 'البريد الإلكتروني' : 'Email'}
           />
         </div>
+        {/* SMS is stated rather than offered: a switch for a channel with no provider is a promise the product cannot keep. */}
+        {p.available_channels?.some((c) => c.key === 'sms' && !c.available) && (
+          <p data-testid="sms-unavailable" className="mt-3 text-[13px] leading-6 text-text-muted">
+            {ar ? 'الرسائل النصية غير متاحة حاليًا: لا يوجد مزوّد مربوط.' : 'SMS is not available yet: no provider is wired.'}
+          </p>
+        )}
         {!p.channels.email && (
           <p className="mt-3 text-[13px] leading-6 text-warning">
             {ar
@@ -271,6 +277,17 @@ export function NotificationsTab() {
                                   value={value.rhythm}
                                   onChange={(e) => setType(t.key, { rhythm: e.target.value as Rhythm })}
                                   options={t.rhythms.map((r) => ({ value: r, label: ar ? RHYTHM_LABELS[r].ar : RHYTHM_LABELS[r].en }))}
+                                />
+                                <Select
+                                  className="mt-1 max-w-[210px]"
+                                  aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'الأهمية' : 'importance'}`}
+                                  value={value.min_severity ?? ''}
+                                  onChange={(e) => setType(t.key, { min_severity: (e.target.value || null) as Importance | null })}
+                                  options={[
+                                    { value: '', label: ar ? 'كل المستويات' : 'Every level' },
+                                    { value: 'warning', label: ar ? 'التحذيرات فأعلى' : 'Warnings and above' },
+                                    { value: 'critical', label: ar ? 'الحرجة فقط' : 'Critical only' },
+                                  ]}
                                 />
                                 {stranded && (
                                   <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">

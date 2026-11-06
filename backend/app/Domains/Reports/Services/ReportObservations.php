@@ -178,7 +178,7 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
                 'detail' => sprintf(
-                    'ارتفعت %s %s لتصل إلى %s %s، وقد يعود ذلك إلى منافسة أعلى أو ضعف في أداء المحتوى.',
+                    'ارتفعت %s %s إلى %s %s، ربما بسبب منافسة أعلى أو ضعف أداء المحتوى.',
                     $label,
                     self::percent((float) $change),
                     number_format((float) $value, 2),
@@ -218,7 +218,7 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('تراجع %s', $label),
                 'detail' => sprintf(
-                    'تراجع %s %s ليصل إلى %s، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.',
+                    'تراجع %s %s إلى %s، وقد يشير إلى بداية ضعف أداء المحتوى.',
                     $label,
                     self::percent(abs((float) $change)),
                     self::percent((float) $value, 2),
@@ -257,7 +257,7 @@ final class ReportObservations
             'change' => isset($data['delta']['frequency']) ? round((float) $data['delta']['frequency'], 4) : null,
             'title' => 'ارتفاع معدل التكرار',
             'detail' => sprintf(
-                'يشاهد الشخص الواحد الإعلان %s في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.',
+                'يشاهد الشخص الإعلان %s في المتوسط؛ نوصي بتوسيع الجمهور أو تحديث المحتوى.',
                 self::times((float) $frequency),
             ),
         ]];
@@ -323,7 +323,7 @@ final class ReportObservations
                  * it for them keeps spending.
                  */
                 'detail' => sprintf(
-                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف كامبينز هب العرض — أوقف الحملة على المنصة إن كان هذا المقصود.',
+                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف كامبينز هب العرض؛ لإيقافه، أوقف الحملة على المنصة.',
                     number_format((float) ($limit['consumed'] ?? 0), 2),
                     $currency,
                     number_format((float) ($limit['amount'] ?? 0), 2),
@@ -433,7 +433,7 @@ final class ReportObservations
             'change' => round($gap, 4),
             'title' => sprintf('فرصة لإعادة توزيع الميزانية نحو %s', AdPlatforms::name((string) $best['provider'])),
             'detail' => sprintf(
-                '%s على %s هو %s، مقابل %s على %s — بفارق %s لصالح الأولى.',
+                '%s على %s %s مقابل %s على %s، بفارق %s لصالح الأولى.',
                 $metric['label_ar'],
                 AdPlatforms::name((string) $best['provider']),
                 $lens->formatRanking($bv, $currency),
@@ -491,7 +491,7 @@ final class ReportObservations
              */
             'title' => 'مؤشرات لم تصل لهذه الفترة',
             'detail' => sprintf(
-                'لم تصل بيانات %s خلال هذه الفترة، ولذلك تظهر بلا قيمة بدلًا من صفر — «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.',
+                'لم تصل بيانات %s لهذه الفترة، فتظهر بلا قيمة بدلًا من صفر؛ غياب القيمة لا يعني صفرًا.',
                 $this->arabicList($missing),
             ),
         ]];
@@ -523,8 +523,8 @@ final class ReportObservations
             'change' => null,
             'title' => $state === 'failed' ? 'تعذّرت آخر مزامنة للبيانات' : 'بيانات لم تتحدث مؤخرًا',
             'detail' => $failing === []
-                ? 'لم تتحدث بيانات هذه الفترة مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.'
-                : sprintf('لم تتحدث بيانات %s مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.', $this->arabicList($failing)),
+                ? 'لم تتحدث بيانات هذه الفترة مؤخرًا، فقد تكون بعض المؤشرات غير مكتملة.'
+                : sprintf('لم تتحدث بيانات %s مؤخرًا، فقد تكون بعض المؤشرات غير مكتملة.', $this->arabicList($failing)),
         ]];
     }
 

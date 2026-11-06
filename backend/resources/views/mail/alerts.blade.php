@@ -12,7 +12,7 @@
 @php($tone = ['critical' => '#b91c1c', 'warning' => '#b45309', 'positive' => '#0d8a6f', 'info' => '#5b6b68'])
 @php($toneBg = ['critical' => '#fef2f2', 'warning' => '#fffbeb', 'positive' => '#e8f5f1', 'info' => '#faf8f3'])
 
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 6px;">{{ $greeting }}</div>
     <div style="font-size:14px; color:#3d4742; line-height:1.8; margin:0 0 12px;">{{ $intro }}</div>
@@ -89,11 +89,7 @@
     @endforeach
 
     {{-- One button, and it says what it does. «اضغط هنا» tells a reader nothing about where they land. --}}
-    <div style="padding-top:8px;">
-        <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
-    </div>
+    @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])
 
     {{--
       Why this arrived. An unexplained email is one a person marks as spam rather than unsubscribes.
@@ -108,7 +104,7 @@
         {{ $single
             ? $t['why']
             : ($dir === 'rtl'
-                ? 'وصلتك هذه الرسالة لأنك تتابع هذه المشاريع في كامبينز هب.'
-                : 'You are receiving this because you follow these projects in CampaignsHub.') }}
+                ? 'وصلتك لأنك تتابع هذه المشاريع.'
+                : 'Sent because you follow these projects.') }}
     </div>
 </div>

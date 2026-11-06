@@ -75,8 +75,8 @@ final class DigestMailVisualTest extends TestCase
             // EMAIL-BRAND-001 — the official lockup, and (EMAIL-DECISION-REPORT-001) the static chart PNGs served
             // by opaque token from our own origin, each with its figures in the alt. No other image, ever.
             preg_match_all('/<img\b[^>]*>/', $html, $images);
-            $others = array_filter($images[0], static fn (string $tag): bool => ! str_contains($tag, '/brand/email/lockup-'));
-            $this->assertCount(count($images[0]) - 1, $others, "$locale: the lockup is one image");
+            $others = array_filter($images[0], static fn (string $tag): bool => ! str_contains($tag, '/brand/email/banner-'));
+            $this->assertCount(count($images[0]) - 1, $others, "$locale: the mark is one image");
             foreach ($others as $tag) {
                 $this->assertMatchesRegularExpression('#src="[^"]+/mail/charts/[a-z0-9]{32}\.png"#', $tag, "$locale: an image that is neither the lockup nor a chart");
                 $this->assertMatchesRegularExpression('#alt="[^"]{8,}"#', $tag, "$locale: a chart without its readable fallback");

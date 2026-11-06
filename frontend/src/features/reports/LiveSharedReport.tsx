@@ -17,6 +17,7 @@ import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readM
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 import { ReportFooter } from './reportFooter'
+import { LiveDeliveryNote } from './live/LiveDeliveryNote'
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -353,6 +354,8 @@ export function LiveSharedReport({
         REPORT-FOOTER-001 — the same footer every report surface ends with. The objective is stated only
         where the link's campaigns share ONE; a mixed programme names none rather than guessing.
       */}
+      <LiveDeliveryNote delivery={payload.delivery} ar={ar} />
+
       <ReportFooter
         locale={ar ? 'ar' : 'en'}
         facts={{

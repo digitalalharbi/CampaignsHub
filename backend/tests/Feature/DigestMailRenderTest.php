@@ -144,10 +144,10 @@ final class DigestMailRenderTest extends TestCase
         unset($digest['projects'][0]['totals']['cpa'], $digest['projects'][0]['totals']['roas']);
         $html = $this->renderOf($digest, 'ar');
         $row = (string) substr($html, (int) strpos($html, 'data-block="portfolio-row"'));
-        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-kpi')) + 8);
+        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-strip')) + 8);
         $this->assertStringNotContainsString('ch-kpi-lead', $row, 'no objective block without an objective figure');
         // Two real cells → two equal 50% columns, labels over figures.
-        $this->assertSame(2, substr_count($row, 'class="ch-kpi" width="50%"'), $row);
+        $this->assertSame(2, substr_count($row, 'class="ch-strip" width="50%"'), $row);
 
         // The account line without a results total shows spend and projects only — no «no data» tile.
         $html = $this->html('en', ['totals' => ['projects' => 2, 'spend' => 12400.0]]);
@@ -206,11 +206,11 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->render();
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->render();
 
-        $this->assertStringContainsString('Reading the results depends on the performance and data available', $en);
+        $this->assertStringContainsString('Note: Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.', $en);
         $this->assertStringContainsString('Last updated:', $en);
         $this->assertStringContainsString('Currency: USD', $en);
         $this->assertStringContainsString('Time zone: Asia/Riyadh', $en);
-        $this->assertStringContainsString('تعتمد قراءة النتائج على الأداء والبيانات المتاحة', $ar);
+        $this->assertStringContainsString('ملاحظة: تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.', $ar);
         $this->assertStringContainsString('آخر تحديث:', $ar);
         $this->assertStringContainsString('العملة: USD', $ar);
     }
@@ -249,9 +249,9 @@ final class DigestMailRenderTest extends TestCase
         $html = $this->html('en');
 
         $this->assertSame(1, substr_count($html, '<img'));
-        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-en-dark\.png" width="220" alt="CampaignsHub"#', $html);
+        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/banner-en\.png" width="600" alt="CampaignsHub#', $html);
         $this->assertStringNotContainsString('data:image', $html);
-        $this->assertStringNotContainsString('background-image', $html);
+        $this->assertStringNotContainsString('url(', $html);
     }
 
     /** Every reader can reach their own preferences and the three policies from the footer. */
@@ -360,7 +360,9 @@ final class DigestMailRenderTest extends TestCase
         $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))
             ->envelope()->subject;
 
-        $this->assertStringStartsWith('Nakheel Media —', $subject, 'the subject still announced the product');
+        // Owner §17.3.1 is the later instruction: the product opens every subject, and the agency follows it.
+        $this->assertStringStartsWith('CampaignsHub — Nakheel Media:', $subject);
+        $this->assertStringContainsString('on behalf of Nakheel Media', $html);
     }
 
     /**
@@ -376,7 +378,7 @@ final class DigestMailRenderTest extends TestCase
             $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', $absent))
                 ->envelope()->subject;
 
-            $this->assertStringStartsWith((string) config('brand.name').' —', $subject);
+            $this->assertStringStartsWith('CampaignsHub — Your daily report', $subject);
         }
     }
 

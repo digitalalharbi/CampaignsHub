@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use LogicException;
 use Tests\Concerns\BuildsAlertSweepWorld;
 use Tests\TestCase;
@@ -43,6 +44,34 @@ final class AlertSweepBatchedReadsTest extends TestCase
     {
         $this->thawWorld();
         parent::tearDown();
+    }
+
+    /**
+     * `pacedThrough()` ended «today or the window's end, whichever is earlier» with `startOfDay()` on the caller's own instant, so once a
+     * provider stopped short the budget rule moved the sweep's clock to midnight. Everything after it in that sweep — the triggers of later
+     * rules, the mail ledger's stamps, and the 24-hour window the repeat ceiling counts in — then ran up to a day early: four critical
+     * alerts were held as «repeated too often» with one send inside the real 24 hours.
+     */
+    public function test_a_provider_that_stopped_short_does_not_move_the_sweep_clock_to_midnight(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'connection_id' => (string) Str::uuid(),
+            'external_account_id' => $this->boundAccounts[2]->id, 'provider' => 'snapchat', 'status' => 'success', 'window_start' => '2026-10-01',
+            'window_end' => '2026-10-10', 'started_at' => Carbon::now(), 'finished_at' => Carbon::now(), 'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        ]);
+        app(TenantContext::class)->forget();
+
+        Carbon::setTestNow(Carbon::parse('2026-10-22 10:00:00', 'UTC'));
+        $now = Carbon::now();
+        app(AlertEvaluator::class)->evaluateAll($now);
+
+        $this->assertSame('2026-10-22 10:00:00', $now->toDateTimeString(), 'a rule must not move the instant the sweep hands it');
+        $this->assertSame(
+            ['2026-10-22 10:00:00+00'],
+            DB::table('alert_events')->where('tenant_id', $this->tenant->id)->distinct()->orderBy('last_triggered_at')->pluck('last_triggered_at')->all(),
+            'every alert of one sweep is triggered at the sweep\'s own instant',
+        );
     }
 
     private function metrics(): MetricsAggregator

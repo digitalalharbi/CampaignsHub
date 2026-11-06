@@ -32,6 +32,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /**
@@ -53,6 +54,7 @@ use Tests\TestCase;
  */
 final class ReportScopeEndpointTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -875,5 +877,20 @@ final class ReportScopeEndpointTest extends TestCase
         $this->actingAs($stranger, 'sanctum')
             ->putJson($this->url("/{$report->getKey()}/scope"), ['scope' => []])
             ->assertForbidden();
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — a scope save is an explicit edit: it rebuilds without a second question, and the copy it replaces is kept. */
+    public function test_a_scope_save_on_a_completed_report_asks_nothing_and_keeps_the_copy_it_replaces(): void
+    {
+        Queue::fake();
+        $report = $this->report(['account_ids' => [$this->accounts['meta']]]);
+        $original = $this->storeCopy((string) $report->getKey());
+
+        $this->actingAs($this->operator, 'sanctum')
+            ->putJson($this->url("/{$report->getKey()}/scope"), ['scope' => ['account_ids' => [$this->accounts['meta']], 'providers' => ['meta']]])
+            ->assertOk();
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        $this->assertCopyKeptThroughRebuild((string) $report->getKey(), $original);
     }
 }

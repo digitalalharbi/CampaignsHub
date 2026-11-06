@@ -20,8 +20,8 @@ export const REPORT_NOTE = {
 
 /** The longer explanation, kept behind «معرفة المزيد» — never printed unless a reader asks for it. */
 export const REPORT_NOTE_MORE = {
-  ar: 'تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.',
-  en: 'Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+  ar: 'تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.',
+  en: 'Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.',
 } as const
 
 const MORE_LABEL = { ar: { more: 'معرفة المزيد', less: 'إخفاء' }, en: { more: 'Learn more', less: 'Hide' } } as const
