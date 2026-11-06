@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Notifications\Providers\NullEmailProvider;
 use App\Domains\Notifications\Providers\NullSmsProvider;
 use App\Domains\Notifications\Providers\NullWhatsAppProvider;
+use App\Domains\Notifications\Providers\TwilioWhatsAppProvider;
 
 return [
     /*
@@ -18,7 +19,10 @@ return [
     */
     'channels' => [
         'email' => env('NOTIFICATION_EMAIL_PROVIDER', NullEmailProvider::class),
-        'whatsapp' => NullWhatsAppProvider::class,
+        // The Twilio adapter is registered only once a WhatsApp sender exists; until then the honest Null adapter stays.
+        'whatsapp' => (env('TWILIO_WHATSAPP_FROM') || env('TWILIO_WHATSAPP_MESSAGING_SERVICE_SID'))
+            ? TwilioWhatsAppProvider::class
+            : NullWhatsAppProvider::class,
         'sms' => NullSmsProvider::class,
     ],
 

@@ -90,7 +90,9 @@ describe('the notification preferences centre', () => {
     open()
 
     expect(screen.getByText('تُرسل دائمًا عند الحاجة إليها.')).toBeInTheDocument()
-    expect(screen.queryByLabelText(/إعادة تعيين كلمة المرور — بريد/)).not.toBeInTheDocument()
+    // The email cell is a lock, not a switch: nothing to press, and nothing that reads as a disabled control.
+    expect(screen.queryByRole('switch', { name: /إعادة تعيين كلمة المرور — بريد/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /إعادة تعيين كلمة المرور — بريد: دائم/ })).toBeInTheDocument()
   })
 
   /** A rhythm select appears only where more than one rhythm exists. */
