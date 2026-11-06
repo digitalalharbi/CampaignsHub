@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Measurement;
 
+use App\Domains\Integrations\Measurement\Ga4AttributionMatch;
+use App\Domains\Integrations\Measurement\Ga4Classification;
+use App\Domains\Integrations\Measurement\Ga4GapExplain;
 use App\Domains\Integrations\Measurement\Ga4StoreAnalytics;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use Illuminate\Support\Carbon;
 
 /**
@@ -31,19 +35,34 @@ use Illuminate\Support\Carbon;
  */
 final class Ga4ReportSections
 {
-    public const KEYS = ['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables'];
+    public const KEYS = ['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'];
+
+    /** The four parts every property with figures has; the measurement parts need campaigns or items besides. */
+    public const CORE = ['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables'];
+
+    /** GA4-ATTRIBUTION-MATCH-001 — the groupings the Classification part carries, each as a short fixed list. */
+    public const CLASSIFICATION_GROUPS = ['channel', 'platform', 'landing_page'];
+
+    /** The tiles Store pulse reads: visits, bounce, sales, AOV, conversion. */
+    private const PULSE_TILES = ['sessions', 'bounce_rate', 'transactions', 'revenue', 'aov', 'conversion_rate'];
 
     private const MONEY_TILES = ['revenue', 'aov'];
 
-    public function __construct(private readonly Ga4StoreAnalytics $store) {}
+    public function __construct(
+        private readonly Ga4StoreAnalytics $store,
+        private readonly Ga4AttributionMatch $match,
+        private readonly Ga4Classification $classification,
+        private readonly Ga4GapExplain $explain,
+    ) {}
 
     /**
      * @param  list<array<string, mixed>>  $platformRows  the report's own per-platform rows (`provider`, `conversions`, `revenue`)
      * @return array<string, array<string, mixed>|null> every key of KEYS; null where the property has nothing for it
      */
-    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $platformRows, ?string $reportCurrency, bool $hideRevenue, bool $clientFacing): array
+    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $platformRows, ?string $reportCurrency, bool $hideRevenue, bool $clientFacing, bool $wholeProject = true, ?array $platformCeiling = null, array $hidden = []): array
     {
         $empty = array_fill_keys(self::KEYS, null);
+        $hidden = Ga4Visibility::normalise($hidden);
         $reading = $this->store->build($tenantId, $projectId, $from, $to, $this->reported($platformRows, $reportCurrency, $hideRevenue));
 
         if (($reading['state'] ?? null) !== 'ready') {
@@ -79,9 +98,72 @@ final class Ga4ReportSections
                 ? null
                 : $gap + ['currency' => $reading['currency']],
             'ga4_tables' => $tables === [] ? null : ['currency' => $reading['currency'], 'tables' => $tables],
-        ];
+        ] + $this->measurementParts($tenantId, $projectId, $from, $to, $reading, $clientFacing, $wholeProject, $platformCeiling);
+
+        $sections = Ga4Visibility::applyToSections($sections, $hidden);
 
         return $hideRevenue ? self::withoutMoney($sections) : $sections;
+    }
+
+    /**
+     * GA4-ATTRIBUTION-MATCH-001 — the four measurement parts: Attribution match, Store pulse, Classification, Products.
+     *
+     * Link scope, decided here and not by a new scope axis: Store pulse, Classification, Products and the reasons of the gap
+     * read the WHOLE property (GA4 visits are not split by campaign), so a link that names specific campaigns never receives
+     * them and gets no attribution part either; a link that names platforms gets the attribution part for those platforms
+     * only. A client-facing report gets the client framing: platform and source names only, no spend, no cost, no ROAS,
+     * no campaign names.
+     *
+     * @param  array<string, mixed>  $reading
+     * @param  list<string>|null  $platformCeiling  the platforms a narrower link names, or null for «all»
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function measurementParts(string $tenantId, string $projectId, Carbon $from, Carbon $to, array $reading, bool $clientFacing, bool $wholeProject, ?array $platformCeiling): array
+    {
+        $attribution = $this->match->build($tenantId, $projectId, $from, $to, ['internal' => ! $clientFacing]);
+        if (($attribution['state'] ?? null) === 'ready') {
+            if ($platformCeiling !== null) {
+                $attribution['platforms'] = array_values(array_filter($attribution['platforms'], static fn (array $p): bool => in_array($p['platform'], $platformCeiling, true)));
+            }
+            unset($attribution['filters'], $attribution['evidence']['campaigns_without_trace']);
+        } else {
+            $attribution = null;
+        }
+        if (! $wholeProject && $platformCeiling === null) {
+            $attribution = null;
+        }
+
+        $pulse = null;
+        $classification = null;
+        $products = null;
+        if ($wholeProject) {
+            $tiles = array_values(array_filter((array) $reading['kpis'], static fn ($k): bool => is_array($k) && in_array($k['key'] ?? null, self::PULSE_TILES, true)));
+            $funnel = $reading['funnel'] ?? [];
+            $pulse = $tiles === [] && $this->funnelIsEmpty((array) $funnel) ? null : [
+                'currency' => $reading['currency'], 'usd' => $reading['usd'], 'period' => $reading['period'], 'previous_period' => $reading['previous_period'],
+                'last_synced_at' => $reading['last_synced_at'], 'kpis' => $tiles, 'funnel' => $funnel,
+            ];
+
+            $groups = [];
+            foreach (self::CLASSIFICATION_GROUPS as $group) {
+                $page = $this->classification->page($tenantId, $projectId, $from, $to, ['group' => $group, 'per_page' => 10]);
+                if (($page['state'] ?? null) === 'ready') {
+                    $groups[$group] = ['total' => $page['total'], 'rows' => $page['rows']];
+                }
+            }
+            $classification = $groups === [] ? null : ['currency' => $reading['currency'], 'groups' => $groups];
+
+            $p = $reading['tables']['products'] ?? null;
+            $products = is_array($p) && ($p['rows'] ?? []) !== [] ? ['currency' => $reading['currency'], 'table' => $p] : null;
+        }
+
+        $reasons = null;
+        if ($wholeProject) {
+            $r = $this->explain->build($tenantId, $projectId, $from, $to, internal: ! $clientFacing);
+            $reasons = ($r['state'] ?? null) === 'ready' ? array_diff_key($r, ['state' => 1]) : null;
+        }
+
+        return ['ga4_attribution' => $attribution, 'ga4_pulse' => $pulse, 'ga4_classification' => $classification, 'ga4_products' => $products, 'ga4_gap_reasons' => $reasons];
     }
 
     /**
@@ -169,6 +251,95 @@ final class Ga4ReportSections
             $g['other_paid'] = $side($g['other_paid'] ?? null);
             $g['currency'] = null;
             $sections['ga4_platform_gap'] = $g;
+        }
+        if (is_array($sections['ga4_attribution'] ?? null)) {
+            $a = $sections['ga4_attribution'];
+            $a['platforms'] = array_map(static function (array $p) use ($blank): array {
+                foreach (['claimed', 'ga4', 'channel'] as $k) {
+                    if (is_array($p[$k] ?? null)) {
+                        $p[$k] = $blank($p[$k]);
+                        $p[$k]['aov_usd'] = null;
+                        $p[$k]['revenue_usd'] = null;
+                    }
+                }
+                if (isset($p['gap'])) {
+                    $p['gap']['revenue_usd'] = null;
+                    $p['gap']['revenue_share'] = null;
+                }
+                foreach (($p['campaigns'] ?? []) as $i => $c) {
+                    foreach (['claimed', 'ga4'] as $k) {
+                        if (is_array($c[$k] ?? null)) {
+                            $p['campaigns'][$i][$k] = $blank($c[$k]);
+                            $p['campaigns'][$i][$k]['aov_usd'] = null;
+                        }
+                    }
+                    $p['campaigns'][$i]['gap']['revenue_usd'] = null;
+                    $p['campaigns'][$i]['gap']['revenue_share'] = null;
+                    $p['campaigns'][$i]['roas_ga4'] = null;
+                }
+
+                return $p;
+            }, (array) $a['platforms']);
+            $a['unattributed']['classes'] = array_map(static function (array $c) use ($blank): array {
+                $c = $blank($c);
+                $c['aov_usd'] = null;
+
+                return $c;
+            }, (array) ($a['unattributed']['classes'] ?? []));
+            if (is_array($a['other_paid']['ga4'] ?? null)) {
+                $a['other_paid']['ga4'] = $blank($a['other_paid']['ga4']);
+            }
+            if (is_array($a['property'] ?? null)) {
+                $a['property']['currency'] = null;
+            }
+            $sections['ga4_attribution'] = $a;
+        }
+        if (is_array($sections['ga4_pulse'] ?? null)) {
+            $o = $sections['ga4_pulse'];
+            $o['kpis'] = array_values(array_filter((array) $o['kpis'], static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, self::MONEY_TILES, true)));
+            $o['currency'] = null;
+            $o['usd'] = ['available' => false, 'reason' => 'hidden'];
+            $sections['ga4_pulse'] = $o;
+        }
+        if (is_array($sections['ga4_classification'] ?? null)) {
+            foreach ((array) $sections['ga4_classification']['groups'] as $g => $block) {
+                $sections['ga4_classification']['groups'][$g]['rows'] = array_map(static function (array $r): array {
+                    foreach (['revenue', 'revenue_usd', 'aov_usd'] as $k) {
+                        if (array_key_exists($k, $r)) {
+                            $r[$k] = null;
+                        }
+                    }
+
+                    return $r;
+                }, (array) $block['rows']);
+            }
+            $sections['ga4_classification']['currency'] = null;
+        }
+        if (is_array($sections['ga4_products']['table']['rows'] ?? null)) {
+            $sections['ga4_products']['table']['rows'] = array_map($blank, $sections['ga4_products']['table']['rows']);
+            $sections['ga4_products']['currency'] = null;
+        }
+        if (is_array($sections['ga4_gap_reasons'] ?? null)) {
+            $g = $sections['ga4_gap_reasons'];
+            $g['headline']['gap_usd'] = null;
+            $g['reasons'] = array_map(static function (array $r): array {
+                $r['value_usd'] = null;
+
+                return $r;
+            }, (array) $g['reasons']);
+            if (is_array($g['property'] ?? null)) {
+                $g['property']['currency'] = null;
+            }
+            $g['context'] = array_map(static function (array $c): array {
+                if (array_key_exists('currency', $c)) {
+                    $c['currency'] = null;
+                    $c['usd'] = null;
+                    $c['measured'] = false;
+                }
+
+                return $c;
+            }, (array) ($g['context'] ?? []));
+            $sections['ga4_gap_reasons'] = $g;
         }
         if (is_array($sections['ga4_tables']['tables'] ?? null)) {
             foreach ($sections['ga4_tables']['tables'] as $name => $table) {

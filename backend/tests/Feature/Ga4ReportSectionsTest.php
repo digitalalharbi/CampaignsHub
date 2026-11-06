@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
@@ -16,6 +17,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Sections\SectionSettings;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -83,7 +85,7 @@ final class Ga4ReportSectionsTest extends TestCase
     public function test_the_four_parts_are_registered_on_by_default_and_each_owns_one_payload_key(): void
     {
         $registry = app(ReportSectionRegistry::class);
-        foreach (Ga4ReportSections::KEYS as $key) {
+        foreach (Ga4ReportSections::CORE as $key) {
             $section = $registry->get($key);
             $this->assertSame([$key], $section->payloadKeys);
             $this->assertTrue($section->defaultFor('client'), "$key is shown unless the operator hides it");
@@ -95,7 +97,7 @@ final class Ga4ReportSectionsTest extends TestCase
     {
         $live = $this->live();
 
-        foreach (Ga4ReportSections::KEYS as $key) {
+        foreach (Ga4ReportSections::CORE as $key) {
             $this->assertContains($key, $live['report_sections']);
         }
         $kpis = collect($live['ga4_overview']['kpis'])->keyBy('key');
@@ -142,18 +144,18 @@ final class Ga4ReportSectionsTest extends TestCase
         Report::withoutGlobalScopes()->whereKey($this->report->id)->update(['audience' => 'internal']);
         $internal = $this->live();
         $this->assertSame('eid_secret_campaign', $internal['ga4_tables']['tables']['campaigns']['rows'][0]['name']);
-        $this->assertStringNotContainsString('spend', (string) json_encode(array_intersect_key($internal, array_flip(Ga4ReportSections::KEYS))));
+        $this->assertStringNotContainsString('spend', (string) json_encode(array_intersect_key($internal, array_flip(Ga4ReportSections::CORE))));
     }
 
     public function test_each_part_is_hidden_on_its_own_and_takes_its_data_with_it(): void
     {
-        foreach (Ga4ReportSections::KEYS as $hidden) {
+        foreach (Ga4ReportSections::CORE as $hidden) {
             $this->choose([$hidden => false]);
             $live = $this->live();
 
             $this->assertNotContains($hidden, $live['report_sections']);
             $this->assertNull($live[$hidden] ?? null, "$hidden left its data behind");
-            foreach (array_diff(Ga4ReportSections::KEYS, [$hidden]) as $kept) {
+            foreach (array_diff(Ga4ReportSections::CORE, [$hidden]) as $kept) {
                 $this->assertContains($kept, $live['report_sections'], "hiding $hidden took $kept with it");
                 $this->assertIsArray($live[$kept]);
             }
@@ -169,7 +171,7 @@ final class Ga4ReportSectionsTest extends TestCase
     public function test_hiding_revenue_removes_every_ga4_amount_and_keeps_the_counts(): void
     {
         $live = $this->read($this->link(['hide_revenue' => true]));
-        $parts = array_intersect_key($live, array_flip(Ga4ReportSections::KEYS));
+        $parts = array_intersect_key($live, array_flip(Ga4ReportSections::CORE));
         $flat = (string) json_encode($parts);
 
         $this->assertNotContains('revenue', array_column($parts['ga4_overview']['kpis'], 'key'));
@@ -185,6 +187,29 @@ final class Ga4ReportSectionsTest extends TestCase
         $this->assertEquals(-2.0, $row['gap']['conversions']);
         $this->assertNull($row['gap']['revenue_usd']);
         $this->assertNull($parts['ga4_tables']['tables']['products']['rows'][0]['revenue']);
+    }
+
+    public function test_hiding_revenue_also_empties_the_money_of_the_new_parts(): void
+    {
+        $live = $this->read($this->link(['hide_revenue' => true]));
+        $parts = array_intersect_key($live, array_flip(['ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons']));
+        $money = ['revenue', 'revenue_usd', 'aov', 'aov_usd', 'item_revenue', 'roas_ga4', 'gap_usd', 'value_usd'];
+        $walk = function (array $a, string $path = '') use (&$walk, $money): array {
+            $out = [];
+            foreach ($a as $k => $v) {
+                if (is_array($v)) {
+                    $out = [...$out, ...$walk($v, $path.'/'.$k)];
+                } elseif (is_numeric($v) && in_array($k, $money, true)) {
+                    $out[] = $path.'/'.$k;
+                }
+            }
+
+            return $out;
+        };
+
+        $this->assertSame([], $walk($parts));
+        $this->assertStringNotContainsString('"SAR"', (string) json_encode($parts));
+        $this->assertNotContains('revenue', array_column($parts['ga4_pulse']['kpis'], 'key'));
     }
 
     public function test_a_kpi_list_without_revenue_takes_ga4_money_out_too(): void
@@ -244,6 +269,103 @@ final class Ga4ReportSectionsTest extends TestCase
         foreach (Ga4ReportSections::KEYS as $key) {
             $this->assertNull($none[$key] ?? null);
         }
+    }
+
+    // ------------------------------------------------------------------ GA4-ATTRIBUTION-MATCH-001 / GA4-VISIBILITY-001
+
+    private const SALES_KEYS = ['revenue', 'revenue_usd', 'purchases', 'aov', 'aov_usd', 'conversion_rate', 'transactions', 'items_purchased', 'item_revenue', 'roas_ga4', 'cost_per_purchase_usd'];
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<string> the path of every sales figure that still carries a number
+     */
+    private function salesNumbers(array $data, string $path = ''): array
+    {
+        $found = [];
+        foreach ($data as $k => $v) {
+            if (is_array($v)) {
+                $found = [...$found, ...$this->salesNumbers($v, $path.'/'.$k)];
+            } elseif (is_numeric($v) && is_string($k) && in_array($k, self::SALES_KEYS, true)) {
+                $found[] = $path.'/'.$k;
+            }
+        }
+
+        return $found;
+    }
+
+    public function test_the_measurement_parts_are_built_for_a_whole_project_link_and_say_what_they_are(): void
+    {
+        $live = $this->live();
+        foreach (['ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $key) {
+            $this->assertContains($key, $live['report_sections'], $key);
+            $this->assertIsArray($live[$key], $key);
+        }
+        $this->assertFalse($live['ga4_attribution']['order_level']);
+        $this->assertSame('ga4', $live['ga4_attribution']['basis']);
+        $this->assertFalse($live['ga4_gap_reasons']['order_level']);
+        $this->assertSame($live['ga4_gap_reasons']['headline']['gap'], $live['ga4_gap_reasons']['check']['sum']);
+        $this->assertSame(['channel', 'platform', 'landing_page'], array_keys($live['ga4_classification']['groups']));
+    }
+
+    public function test_a_client_reading_of_the_new_parts_has_no_spend_and_no_campaign_names(): void
+    {
+        $parts = array_intersect_key($this->live(), array_flip(['ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons']));
+        $flat = (string) json_encode($parts, JSON_UNESCAPED_UNICODE);
+
+        foreach (['QCAMP', 'eid_secret_campaign', 'spend', '123.45', 'cost_per', 'roas'] as $needle) {
+            $this->assertStringNotContainsString($needle, $flat, $needle);
+        }
+        $this->assertArrayNotHasKey('campaigns', $parts['ga4_attribution']['platforms'][0]);
+    }
+
+    public function test_an_internal_reader_gets_the_campaigns_and_the_reasons_rows(): void
+    {
+        Report::withoutGlobalScopes()->whereKey($this->report->id)->update(['audience' => 'internal']);
+        $live = $this->live();
+
+        $this->assertSame('QCAMP', $live['ga4_attribution']['platforms'][0]['campaigns'][0]['name']);
+        $this->assertContains('QCAMP', array_column(array_column($live['ga4_gap_reasons']['reasons'], 'rows')[0], 'campaign'));
+    }
+
+    public function test_a_link_that_hides_sales_carries_no_sales_number_in_any_part(): void
+    {
+        Report::withoutGlobalScopes()->whereKey($this->report->id)->update(['audience' => 'internal']);
+        $before = $this->live();
+        $this->assertNotSame([], $this->salesNumbers(array_intersect_key($before, array_flip(Ga4ReportSections::KEYS))), 'the fixture has sales figures to cut');
+
+        $live = $this->read($this->link(['settings' => ['ga4_hidden' => Ga4Visibility::forPreset('marketing')]]));
+        $parts = array_intersect_key($live, array_flip(Ga4ReportSections::KEYS));
+
+        $this->assertSame([], $this->salesNumbers($parts), 'a hidden figure is absent from the JSON the page, the PDF and the CSV are built from');
+        $this->assertEquals(1000.0, collect($parts['ga4_overview']['kpis'])->firstWhere('key', 'sessions')['current'], 'marketing figures stay');
+        $this->assertNull($parts['ga4_products'] ?? null, 'the products table is a sales element');
+    }
+
+    public function test_the_report_itself_can_hide_elements_and_the_saved_snapshot_freezes_the_cut(): void
+    {
+        Report::withoutGlobalScopes()->whereKey($this->report->id)->update(['audience' => 'internal', 'section_settings' => json_encode(['sections' => [], 'ga4_hidden' => ['tile.revenue', 'col.revenue', 'gap.reason.no_trace', 'platform:snapchat']])]);
+        $data = $this->snapshot();
+
+        $this->assertNotContains('revenue', array_column($data['ga4_overview']['kpis'], 'key'));
+        $this->assertNotContains('no_trace', array_column($data['ga4_gap_reasons']['reasons'], 'key'));
+        $this->assertSame([], array_filter($data['ga4_platform_gap']['rows'], static fn ($r): bool => $r['platform'] === 'snapchat'));
+        $this->assertNull($data['ga4_tables']['tables']['sources']['rows'][0]['revenue']);
+        $this->assertStringNotContainsString('"QCAMP"', (string) json_encode($data['ga4_gap_reasons']['reasons'][0]['rows'] ?? []).(string) json_encode(array_column($data['ga4_gap_reasons']['reasons'], 'rows')), 'the hidden reason took its rows with it');
+    }
+
+    public function test_a_hidden_list_is_normalised_and_a_stored_unknown_key_cuts_nothing(): void
+    {
+        $this->assertSame(['tile.revenue'], SectionSettings::fromArray(['sections' => [], 'ga4_hidden' => ['tile.revenue', '<script>', 7]], app(ReportSectionRegistry::class))->ga4Hidden());
+    }
+
+    public function test_a_link_narrower_than_its_project_never_receives_the_store_wide_parts(): void
+    {
+        $live = $this->read($this->link([], ['campaign_ids' => [self::CAMPAIGN], 'dynamic_campaigns' => false]));
+
+        foreach (['ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $key) {
+            $this->assertNull($live[$key] ?? null, "$key reads the whole property, which a campaign-scoped link does not name");
+        }
+        $this->assertNull($live['ga4_attribution'] ?? null);
     }
 
     /** @return array<string, mixed> */

@@ -68,7 +68,7 @@ export interface ReportSection {
   absent_reason_en?: string
 }
 
-export interface ReportData extends Pick<WithGa4Sections, 'ga4_overview' | 'ga4_acquisition' | 'ga4_platform_gap' | 'ga4_tables'> {
+export interface ReportData extends Pick<WithGa4Sections, 'ga4_overview' | 'ga4_acquisition' | 'ga4_platform_gap' | 'ga4_tables' | 'ga4_attribution' | 'ga4_pulse' | 'ga4_classification' | 'ga4_products' | 'ga4_gap_reasons'> {
   store_analytics?: StoreAnalyticsPayload | null
   /** RESULT-EVENTS-001 — a link's file: its defined Results (resolver), their label, and the KPIs the link shows. */
   results?: { configured: boolean; total: number | null; cost: number | null; by_platform?: Record<string, { results?: number | null; cost?: number | null }>; leads?: { configured: boolean; total: number | null; landing: number | null; native: number | null; cost: number | null } } | null
@@ -391,6 +391,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case '__daily': return <DailyRecordsSlide data={data} range={slide.range} />
     // GA4-REPORT-SECTIONS-001 — the store reading's pages; a table page on paper is its own rows, never a shrunken table.
     case '__ga4_overview': case '__ga4_acquisition': case '__ga4_gap': case '__ga4_tables': case '__ga4_table':
+    case '__ga4_pulse': case '__ga4_attribution': case '__ga4_reasons': case '__ga4_classification': case '__ga4_products':
       return <Ga4Slide slide={slide} data={data} paged={paged} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر وGA4، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>

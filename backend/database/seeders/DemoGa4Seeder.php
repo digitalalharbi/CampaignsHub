@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -68,7 +69,7 @@ final class DemoGa4Seeder extends Seeder
 
         $property = $this->property($tenant, $project);
         DemoAccountSelection::bind((string) $project->id, (string) $property->id, 'ga4', 'analytics');
-        $this->days($tenant, $project, $property);
+        $this->days($tenant, $project, $property, $this->platformCampaigns($project));
         $this->rate();
     }
 
@@ -99,7 +100,34 @@ final class DemoGa4Seeder extends Seeder
         ]);
     }
 
-    private function days(Tenant $tenant, Project $project, ExternalAccount $property): void
+    /**
+     * GA4-ATTRIBUTION-MATCH-001 — the demo project's own platform campaigns, each with the way GA4 will be made to see it:
+     * the first of a platform by its UTM name (`utm`), the second by its platform id (`id`), the third not at all
+     * (`unmatched`), so every confidence chip and both buckets are visible locally. Clearly demo, like the rest.
+     *
+     * @return list<array{provider: string, external_id: string, name: string, mode: string, source: string, medium: string}>
+     */
+    private function platformCampaigns(Project $project): array
+    {
+        $by = [
+            'snapchat' => ['snapchat', 'cpc'], 'meta' => ['facebook', 'paid_social'], 'tiktok' => ['tiktok', 'cpc'], 'google' => ['google', 'cpc'],
+        ];
+        $out = [];
+        $seen = [];
+        foreach (ExternalCampaign::withoutGlobalScopes()->where('project_id', $project->id)->orderBy('provider')->orderBy('name')->get(['provider', 'external_id', 'name']) as $c) {
+            $p = (string) $c->provider;
+            if (! isset($by[$p])) {
+                continue;
+            }
+            $n = $seen[$p] = ($seen[$p] ?? -1) + 1;
+            $out[] = ['provider' => $p, 'external_id' => (string) $c->external_id, 'name' => (string) $c->name, 'mode' => ['utm', 'id', 'unmatched'][min($n, 2)], 'source' => $by[$p][0], 'medium' => $by[$p][1]];
+        }
+
+        return $out;
+    }
+
+    /** @param  list<array{provider: string, external_id: string, name: string, mode: string, source: string, medium: string}>  $platformCampaigns */
+    private function days(Tenant $tenant, Project $project, ExternalAccount $property, array $platformCampaigns = []): void
     {
         $daily = [];
         $dims = [];
@@ -146,6 +174,28 @@ final class DemoGa4Seeder extends Seeder
             foreach (self::CAMPAIGNS as [$campaign, $sourceMedium, $share]) {
                 $p = (int) round($purchases * $share);
                 $dims[] = $this->dim($base, $date, 'campaign', $campaign, $sourceMedium, ['sessions' => (int) round($sessions * $share), 'engaged_sessions' => (int) round($sessions * $share * 0.6), 'key_events' => $p, 'add_to_carts' => $p * 7, 'checkouts' => $p * 3, 'purchases' => $p, 'revenue' => round($revenue * $share, 2)]);
+            }
+            // GA4-ATTRIBUTION-MATCH-001 — the match's keys: campaign ids, click-id families folded with their UTMs, new vs returning.
+            $family = ['snapchat' => 'snapchat', 'meta' => 'meta', 'tiktok' => 'tiktok', 'google' => 'google'];
+            foreach ($platformCampaigns as $i => $c) {
+                if ($c['mode'] === 'unmatched') {
+                    continue;
+                }
+                $label = $c['mode'] === 'id' ? $c['external_id'] : strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '_', $c['name']));
+                $share = 0.05 + 0.01 * ($i % 3);
+                $p = (int) round($purchases * $share);
+                $m = ['sessions' => (int) round($sessions * $share), 'engaged_sessions' => (int) round($sessions * $share * 0.6), 'key_events' => $p, 'add_to_carts' => $p * 7, 'checkouts' => $p * 3, 'purchases' => $p, 'revenue' => round($revenue * $share, 2)];
+                $dims[] = $this->dim($base, $date, 'campaign', $label, $c['source'].' / '.$c['medium'], $m);
+                $dims[] = $this->dim($base, $date, 'campaign_id', $c['mode'] === 'id' ? $c['external_id'] : '(not set)', $label, $m);
+                // Most, not all, of a campaign's sessions carry the platform's click id (demo click ids are never stored: only the family).
+                $dims[] = $this->dim($base, $date, 'landing_query', 'family='.$family[$c['provider']].';utm_campaign='.$label.';utm_source='.$c['source'], '', ['sessions' => (int) round($m['sessions'] * 0.7)] + $m);
+            }
+            $dims[] = $this->dim($base, $date, 'landing_query', '', '', ['sessions' => (int) round($sessions * 0.25), 'purchases' => (int) round($purchases * 0.2), 'revenue' => round($revenue * 0.2, 2)]);
+            $dims[] = $this->dim($base, $date, 'user_type', 'new', '', ['sessions' => (int) round($sessions * 0.62), 'purchases' => (int) round($purchases * 0.55), 'revenue' => round($revenue * 0.5, 2)]);
+            $dims[] = $this->dim($base, $date, 'user_type', 'returning', '', ['sessions' => (int) round($sessions * 0.38), 'purchases' => (int) round($purchases * 0.45), 'revenue' => round($revenue * 0.5, 2)]);
+            foreach ([['عبايات', 0.55], ['إكسسوارات', 0.3], ['أحذية', 0.15]] as [$cat, $share]) {
+                $units = (int) round($purchases * 1.3 * $share);
+                $dims[] = $this->dim($base, $date, 'product_category', $cat, '', ['items_viewed' => $units * 20, 'items_added_to_cart' => $units * 5, 'items_purchased' => $units, 'item_revenue' => round($units * 420, 2)]);
             }
             foreach (self::PRODUCTS as [$name, $share, $price]) {
                 $units = (int) round($purchases * 1.3 * $share);

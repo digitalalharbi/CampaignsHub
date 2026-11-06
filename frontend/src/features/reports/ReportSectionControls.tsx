@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Ga4VisibilityControl } from '@/features/analytics/ga4/Ga4VisibilityBar'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff } from 'lucide-react'
 import { Switch } from '@/components/ui/Switch'
@@ -63,8 +64,10 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const linkKey = ['share-sections', projectId, reportId, level]
   const link = useQuery({ queryKey: linkKey, queryFn: () => getShareSections(projectId, reportId, level), enabled: level !== '' })
   const toggleLink = useMutation({
-    mutationFn: ({ section, on, money, views, names }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean }; views?: string[] | null; names?: GenericNameKind[] }) =>
-      names !== undefined
+    mutationFn: ({ section, on, money, views, names, ga4 }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean }; views?: string[] | null; names?: GenericNameKind[]; ga4?: string[] }) =>
+      ga4 !== undefined
+        ? updateShareSections(projectId, reportId, level, {}, {}, undefined, undefined, ga4)
+        : names !== undefined
         ? updateShareSections(projectId, reportId, level, {}, {}, undefined, names)
         : views === undefined
         ? updateShareSections(projectId, reportId, level, section === undefined ? {} : { [section]: on ?? false }, money ?? {})
@@ -94,6 +97,12 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
     onError: onFailed,
   })
   // REPORT-GENERIC-LABELS-001 — saved like any other switch.
+  // GA4-VISIBILITY-001 — the store / GA4 elements, one list per report and one per link.
+  const setGa4 = useMutation({
+    mutationFn: (ga4_hidden: string[]) => updateReportSections(projectId, reportId, { ga4_hidden }),
+    onSuccess: onSaved,
+    onError: onFailed,
+  })
   const setNames = useMutation({
     mutationFn: (generic_names: GenericNameKind[]) => updateReportSections(projectId, reportId, { generic_names }),
     onSuccess: onSaved,
@@ -256,6 +265,17 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
           disabled={onLink ? toggleLink.isPending || !linkData : busy}
           onChange={(next) => (onLink ? toggleLink.mutate({ names: next }) : setNames.mutate(next))}
         />
+        {(effective.ga4_overview || effective.ga4_attribution || effective.ga4_gap_reasons || effective.ga4_pulse) && (
+          <div data-testid="ga4-visibility-section" className="mt-3 rounded-xl border border-border p-3">
+            <p className="mb-2 text-xs font-bold text-text-primary">{ar ? 'المتجر وGA4' : 'Store & GA4'}</p>
+            <Ga4VisibilityControl
+              ar={ar}
+              hidden={(onLink ? linkData?.ga4_hidden : state.data.ga4_hidden) ?? []}
+              onChange={(next) => (onLink ? toggleLink.mutate({ ga4: next }) : setGa4.mutate(next))}
+              testId="report-ga4-visibility"
+            />
+          </div>
+        )}
         {!onLink && effective.advanced_segmentation && (
           <StreamsEditor projectId={projectId} reportId={reportId} saved={state.data.streams ?? []} ar={ar} onSaved={onSaved} onFailed={onFailed} />
         )}

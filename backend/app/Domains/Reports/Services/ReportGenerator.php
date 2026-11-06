@@ -1183,6 +1183,7 @@ final class ReportGenerator
         return app(Ga4ReportSections::class)->build(
             (string) $report->tenant_id, (string) $report->project_id, $from, $to,
             array_values(array_filter($platforms, 'is_array')), $currency, false, $audience !== 'internal',
+            hidden: $settings->ga4Hidden(),
         );
     }
 }

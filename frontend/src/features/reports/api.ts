@@ -1256,6 +1256,8 @@ export interface ReportSectionsState {
   offers_views?: boolean
   /** REPORT-GENERIC-LABELS-001 — the names this report replaces with generic labels, on every surface and link. */
   generic_names?: GenericNameKind[]
+  /** GA4-VISIBILITY-001 — the store / GA4 elements this report hides; nothing by default. */
+  ga4_hidden?: string[]
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -1273,7 +1275,7 @@ export interface BusinessStreamDefinition {
   account_ids: string[]
 }
 
-export const updateReportSections = (p: string, id: string, body: { generic_names?: GenericNameKind[]; sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
+export const updateReportSections = (p: string, id: string, body: { generic_names?: GenericNameKind[]; ga4_hidden?: string[]; sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
@@ -1296,6 +1298,8 @@ export interface ShareSectionsState {
   /** REPORT-GENERIC-LABELS-001 — the link's own name switches, and the ones its report already holds, which it cannot undo. */
   generic_names?: GenericNameKind[]
   generic_names_of_report?: GenericNameKind[]
+  ga4_hidden?: string[]
+  ga4_hidden_of_report?: string[]
   resolved: ResolvedSectionRow[]
   visible: string[]
   availability_judged: boolean
@@ -1326,7 +1330,8 @@ export const updateShareSections = (
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
   genericNames?: GenericNameKind[],
-) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }), ...(genericNames === undefined ? {} : { generic_names: genericNames }) })
+  ga4Hidden?: string[],
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }), ...(genericNames === undefined ? {} : { generic_names: genericNames }), ...(ga4Hidden === undefined ? {} : { ga4_hidden: ga4Hidden }) })
 
 /** REPORT-GENERIC-LABELS-001 — a kind of name that can be replaced by a generic label. */
 export type GenericNameKind = 'campaign' | 'ad_set' | 'account' | 'content'

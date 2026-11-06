@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -2128,7 +2129,28 @@ final class LiveReportService
             (string) $share->tenant_id, $scope['project_id'], $from, $to,
             array_values(array_filter($platforms, 'is_array')), $currency,
             (bool) $share->hide_revenue, (string) ($report->audience ?? 'client') !== 'internal',
+            ! $this->namesCampaigns($share), $this->ga4PlatformCeiling($share),
+            // The link can only narrow what the report shows: its own list joins the report's.
+            [...$report->sectionSettings()->ga4Hidden(), ...Ga4Visibility::normalise(((array) ($share->settings ?? []))['ga4_hidden'] ?? null)],
         );
+    }
+
+    /** GA4-ATTRIBUTION-MATCH-001 — a link that names specific campaigns is deliberately narrow: GA4's store-wide readings are not its to carry. */
+    private function namesCampaigns(ReportShare $share): bool
+    {
+        return (array) (((array) ($share->scope ?? []))['campaign_ids'] ?? []) !== [];
+    }
+
+    /**
+     * GA4-ATTRIBUTION-MATCH-001 — the platforms a link names, for the attribution part; null when the link names none.
+     *
+     * @return list<string>|null
+     */
+    private function ga4PlatformCeiling(ReportShare $share): ?array
+    {
+        $providers = array_values(array_filter((array) (((array) ($share->scope ?? []))['providers'] ?? []), 'is_string'));
+
+        return $providers === [] ? null : array_map(static fn (string $p): string => AdPlatforms::canonical($p), $providers);
     }
 
     /** STORE-ANALYTICS-DEPTH-001 §3.1 — only for a report whose operator switched the category on; nothing is read otherwise. */

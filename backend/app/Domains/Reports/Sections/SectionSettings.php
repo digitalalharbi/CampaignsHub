@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Sections;
 
+use App\Domains\Integrations\Measurement\Ga4Visibility;
+
 /**
  * The operator's saved section choices for one report or one template — REPORT-SECTION-MODEL-001.
  *
@@ -24,7 +26,7 @@ final class SectionSettings
      * @param  list<array{key: string, label: string, providers: list<string>, account_ids: list<string>}>  $streams
      * @param  list<string>|null  $views  the main sections (`ReportViews`) — null is «every view»
      */
-    private function __construct(private readonly array $chosen, private readonly array $streams = [], private readonly ?array $views = null) {}
+    private function __construct(private readonly array $chosen, private readonly array $streams = [], private readonly ?array $views = null, private readonly array $ga4Hidden = []) {}
 
     /** @param array<string, mixed>|null $raw  the stored JSON, `{"sections": {"kpis": true, …}}` */
     public static function fromArray(?array $raw, ReportSectionRegistry $registry): self
@@ -38,7 +40,7 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen, self::normaliseStreams($raw['streams'] ?? null), ReportViews::normalise($raw['views'] ?? null));
+        return new self($chosen, self::normaliseStreams($raw['streams'] ?? null), ReportViews::normalise($raw['views'] ?? null), Ga4Visibility::normalise($raw['ga4_hidden'] ?? null));
     }
 
     /**
@@ -81,7 +83,7 @@ final class SectionSettings
     /** @param list<array<string, mixed>> $streams */
     public function withStreams(array $streams): self
     {
-        return new self($this->chosen, self::normaliseStreams($streams), $this->views);
+        return new self($this->chosen, self::normaliseStreams($streams), $this->views, $this->ga4Hidden);
     }
 
     /**
@@ -97,7 +99,17 @@ final class SectionSettings
     /** @param list<string>|null $views */
     public function withViews(?array $views): self
     {
-        return new self($this->chosen, $this->streams, ReportViews::normalise($views));
+        return new self($this->chosen, $this->streams, ReportViews::normalise($views), $this->ga4Hidden);
+    }
+
+    /**
+     * GA4-VISIBILITY-001 — the store / GA4 elements this report hides; empty (nothing hidden) by default.
+     *
+     * @return list<string>
+     */
+    public function ga4Hidden(): array
+    {
+        return $this->ga4Hidden;
     }
 
     public static function none(): self
@@ -136,10 +148,10 @@ final class SectionSettings
             }
         }
 
-        return new self($chosen, $this->streams, $this->views);
+        return new self($chosen, $this->streams, $this->views, $this->ga4Hidden);
     }
 
-    /** @return array{sections: array<string, bool>, streams?: list<array<string, mixed>>, views?: list<string>} */
+    /** @return array{sections: array<string, bool>, streams?: list<array<string, mixed>>, views?: list<string>, ga4_hidden?: list<string>} */
     public function toArray(): array
     {
         $out = ['sections' => $this->chosen];
@@ -148,6 +160,9 @@ final class SectionSettings
         }
         if ($this->views !== null) {
             $out['views'] = $this->views;
+        }
+        if ($this->ga4Hidden !== []) {
+            $out['ga4_hidden'] = $this->ga4Hidden;
         }
 
         return $out;

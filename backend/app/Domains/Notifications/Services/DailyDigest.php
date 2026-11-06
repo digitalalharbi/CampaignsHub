@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
+use App\Domains\Integrations\Measurement\Ga4DigestBlock;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -164,6 +165,8 @@ final class DailyDigest
         $blocks = [];
         foreach ($projects as $project) {
             $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
+            // GA4-DIGEST-001 — one compact GA4 line; the reader's own capability decides whether sales are in it.
+            $block['ga4'] = app(Ga4DigestBlock::class)->forProject($user, $tenantId, (string) $project->id, $from, $to);
             $block['project_id'] = (string) $project->id;
             $block['project_name'] = (string) $project->name;
             $blocks[] = $block;

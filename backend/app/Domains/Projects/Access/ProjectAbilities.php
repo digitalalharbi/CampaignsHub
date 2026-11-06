@@ -58,7 +58,7 @@ final class ProjectAbilities
      * @var array<string, list<string>>
      */
     private const FROM_TENANT = [
-        'analytics.view' => [ProjectCapability::DASHBOARD_VIEW, ProjectCapability::ANALYTICS_VIEW, ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
+        'analytics.view' => [ProjectCapability::DASHBOARD_VIEW, ProjectCapability::ANALYTICS_VIEW, ProjectCapability::ANALYTICS_STORE_VIEW, ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         // MEMBER-VISIBILITY-001 — a non-member who could read campaigns, budgets or reports before keeps the money:
         // the tenant role never withheld it, and only a membership's `denied` list can.
         'campaigns.view' => [ProjectCapability::CAMPAIGNS_VIEW, ProjectCapability::MONEY_VIEW],

@@ -79,6 +79,8 @@ final class AlertEvaluator
         'tracking_health',
         // LAUNCH-ADVANCE-001 — an account that now earns a better launch stage than it had when its plan went out: an opportunity, offered to a person, never applied.
         'launch_advance',
+        // GA4-ALERTS-001 — the store as GA4 measured it: sales, bounce, conversion, basket, the platforms' claims against GA4, lost tracking, unmatched spend.
+        'ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend',
     ];
 
     /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
@@ -128,6 +130,14 @@ final class AlertEvaluator
         'sync_failure' => 'sync_failed',
         'sync_outage' => 'sync_failed',
         'measurement_outage' => 'sync_failed',
+        // GA4-ALERTS-001 — a data-quality finding about the store's measurement.
+        'ga4_sales_drop' => 'performance',
+        'ga4_bounce_spike' => 'performance',
+        'ga4_cvr_drop' => 'performance',
+        'ga4_aov_shift' => 'performance',
+        'ga4_attribution_gap' => 'performance',
+        'ga4_tracking_loss' => 'sync_failed',
+        'ga4_unmatched_spend' => 'performance',
         // A broken form or a failing conversion delivery is a data-pipeline failure to the person who is told about it.
         'tracking_health' => 'sync_failed',
         'token_expiry' => 'token_expiring',
@@ -207,6 +217,13 @@ final class AlertEvaluator
             'measurement_outage' => $this->measurementOutages($rule, $now),
             'tracking_health' => $this->trackingHealth($rule, $now),
             'launch_advance' => $this->launchAdvance($rule),
+            'ga4_sales_drop' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_bounce_spike' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_cvr_drop' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_aov_shift' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_attribution_gap' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_tracking_loss' => app(Ga4AlertSignals::class)->breaches($rule, $now),
+            'ga4_unmatched_spend' => app(Ga4AlertSignals::class)->breaches($rule, $now),
             'token_expiry' => $this->tokenExpiries($rule, $now),
             'budget_risk' => $this->budgetRisks($rule, $now),
             'no_results' => $this->noResults($rule, $now),

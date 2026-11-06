@@ -82,7 +82,7 @@ final class ChosenFigures
         'links', 'outline', 'slides', 'columns', 'report_columns', 'breakdowns', 'reported', 'reported_by_platform', 'kpi_labels',
         'store_funnel', 'site_measurement', 'objective_analytics', 'results', 'verified_result',
         // GA4-REPORT-SECTIONS-001 — GA4's own vocabulary (sessions, purchases); only its money follows the KPI list, below.
-        'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables',
+        'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */

@@ -86,6 +86,14 @@ final class ProjectCapability
     public const MONEY_VIEW = 'money.view';
 
     /**
+     * GA4-VISIBILITY-001 — the store's SALES figures (purchases, revenue, AOV, conversion, the claimed-vs-measured
+     * gap) as GA4 measured them. Store sales belong to a different job from campaign management, so a membership
+     * can withhold them (its `denied` list) while the marketing figures (visits, sources, funnel) stay readable.
+     * Granted wherever `analytics.view` is, so no existing role loses anything.
+     */
+    public const ANALYTICS_STORE_VIEW = 'analytics.store.view';
+
+    /**
      * Every capability this product recognises.
      *
      * A capability NOT on this list is refused rather than granted, wherever it is asked about. An
@@ -113,6 +121,7 @@ final class ProjectCapability
         self::INTEGRATIONS_MANAGE,
         self::SETTINGS_MANAGE,
         self::MONEY_VIEW,
+        self::ANALYTICS_STORE_VIEW,
     ];
 
     public static function exists(string $capability): bool
