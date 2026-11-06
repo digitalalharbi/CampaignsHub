@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, E2E_ORIGIN } from './helpers'
+import { AUTH, E2E_ORIGIN, selectFirstProject } from './helpers'
 
 /**
  * RUNTIME-100 §48 — the selection journey, rendered, in both languages and at both widths.
@@ -39,6 +39,7 @@ for (const vp of VIEWPORTS) {
   test(`the integrations page has no horizontal overflow @ ${vp.name}`, async ({ page }) => {
     await connectSandbox(page.request)
     await page.setViewportSize({ width: vp.width, height: vp.height })
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
     await expect(page.locator('main')).toBeVisible()
     await page.waitForLoadState('networkidle')
@@ -86,6 +87,7 @@ for (const vp of VIEWPORTS) {
  */
 test('the integrations page renders right-to-left in Arabic and left-to-right in English', async ({ page }) => {
   await connectSandbox(page.request)
+  await selectFirstProject(page)
   await page.goto('/app/integrations')
   await expect(page.locator('main')).toBeVisible()
 
@@ -104,6 +106,7 @@ test('the integrations page renders right-to-left in Arabic and left-to-right in
  */
 test('a connection with discovered accounts offers the selection step rather than claiming success', async ({ page }) => {
   await connectSandbox(page.request)
+  await selectFirstProject(page)
   await page.goto('/app/integrations')
   await expect(page.locator('main')).toBeVisible()
   await page.waitForLoadState('networkidle')
@@ -118,5 +121,6 @@ test('a connection with discovered accounts offers the selection step rather tha
   expect(
     text,
     'the page neither offers the selection step nor states an honest alternative',
-  ).toMatch(/اختيار الحسابات|Choose accounts|حسابًا متاحًا|available|بانتظار|Awaiting|لم يربط|not connected/i)
+    // INTEG-PROJECT-SPACE-001 — what the project's space really prints: the count of LINKED accounts on a row («1 حساب مربوط»), or the empty state.
+  ).toMatch(/مربوط|accounts? connected|لا مصدر بعد|No source yet/)
 })

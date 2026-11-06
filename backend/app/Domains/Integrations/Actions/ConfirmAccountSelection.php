@@ -98,7 +98,7 @@ final class ConfirmAccountSelection
                 if (! $this->assignment->mayAssign($account, $project)) {
                     throw new HttpException(
                         403,
-                        'This account belongs to a different client workspace and cannot be assigned to this project.',
+                        'This account belongs to a different client workspace, or to a connection opened for another project, and cannot be assigned to this project.',
                     );
                 }
             }

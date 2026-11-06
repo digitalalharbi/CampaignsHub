@@ -146,14 +146,19 @@ function StoreCard({ store, provider, ar, onSync, syncing, projects, onAssign, a
   )
 }
 
-export function StoresPanel() {
+/**
+ * `projectId` (INTEG-PROJECT-SPACE-001) — drawn inside a project's space: the list is asked for that project
+ * alone, a store can only be given to it, and a new store is authorised for its client. Without it this is
+ * the older workspace-wide panel.
+ */
+export function StoresPanel({ projectId: space = null }: { projectId?: string | null } = {}) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
   const [clientWorkspaceId, setClientWorkspaceId] = useState('')
 
   const query = useQuery({
-    queryKey: ['commerce-stores'],
-    queryFn: listStoreProviders,
+    queryKey: space === null ? ['commerce-stores'] : ['commerce-stores', space],
+    queryFn: () => listStoreProviders(space),
     // A sync is a queued job, so the page that started it has no way of hearing that it finished.
     refetchInterval: (q) =>
       q.state.data?.some((p) => p.state === 'syncing' || p.stores.some((s) => s.last_run?.status === 'queued' || s.last_run?.status === 'running'))
@@ -162,7 +167,7 @@ export function StoresPanel() {
   })
 
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
-  const projectChoices = projects.data ?? []
+  const projectChoices = (projects.data ?? []).filter((p) => space === null || p.id === space)
   const assign = useMutation({
     mutationFn: ({ storeId, projectId }: { storeId: string; projectId: string | null }) => assignStore(storeId, projectId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
@@ -173,11 +178,13 @@ export function StoresPanel() {
    * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
    */
   const inAdvertiserPortal = useInAdvertiserPortal()
-  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
-  const clientChoices = clients.data ?? []
+  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal && space === null })
+  // In a project's space the client is the project's own: nobody else's is listed or asked for.
+  const clientChoices = space === null ? clients.data ?? [] : []
+  const spaceWorkspace = projectChoices.find((p) => p.id === space)?.client_workspace_id ?? null
 
   const authorize = useMutation({
-    mutationFn: (provider: string) => startStoreOAuth(provider, clientWorkspaceId || null),
+    mutationFn: (provider: string) => startStoreOAuth(provider, space === null ? clientWorkspaceId || null : spaceWorkspace),
     // A full navigation, not a router push: the destination is the platform's own consent screen.
     onSuccess: ({ authorization_url }) => { window.location.assign(authorization_url) },
   })

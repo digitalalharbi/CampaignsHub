@@ -100,6 +100,7 @@ final class ReportScopeController extends Controller
 
         $fProviders = array_values(array_map('strtolower', array_filter((array) $request->input('providers', []), 'is_string')));
         $fAccounts = array_values(array_filter((array) $request->input('account_ids', []), 'is_string'));
+        ReportScopeHierarchy::refuseForeignAccounts($project, $fAccounts);
         $fObjectives = array_values(array_filter((array) $request->input('objectives', []), 'is_string'));
         $fDestinations = array_values(array_filter((array) $request->input('destinations', []), 'is_string'));
 
@@ -798,6 +799,9 @@ final class ReportScopeController extends Controller
 
         $submitted = ReportScope::fromReport((array) $request->input('scope', []));
 
+        // Another project's account is refused outright; the other axes keep their drop-or-impossible rule below.
+        ReportScopeHierarchy::refuseForeignAccounts($project, $submitted->accountIds);
+
         $keep = function (array $asked, array $available): array {
             if ($asked === []) {
                 return [];
@@ -815,9 +819,7 @@ final class ReportScopeController extends Controller
             'objective_filter' => $submitted->objectiveFilter,
             'project_ids' => $submitted->projectIds === [] ? [] : [$project],
             'providers' => $submitted->providers,
-            'account_ids' => $keep($submitted->accountIds, array_values(array_unique(array_merge(DailyMetric::query()
-                ->where('project_id', $project)->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))->whereNotNull('external_account_id')
-                ->distinct()->pluck('external_account_id')->map(fn ($id): string => (string) $id)->all(), BoundAccountVisibility::activeAccountIds($project))))),
+            'account_ids' => $keep($submitted->accountIds, ReportScopeHierarchy::accountsOf($project)),
             'campaign_ids' => $keep($submitted->campaignIds, $campaignIds),
             'ad_set_ids' => $keep($submitted->adSetIds, ExternalAdSet::query()
                 ->where('project_id', $project)->pluck('id')->map(fn ($id): string => (string) $id)->all()),

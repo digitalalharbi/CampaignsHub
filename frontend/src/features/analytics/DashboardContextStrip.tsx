@@ -35,7 +35,7 @@ export function DashboardContextStrip() {
    * The same query key the Connection Hub uses, so opening the dashboard after the hub costs
    * nothing and a reconnect made there is reflected here without a reload.
    */
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
+  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), retry: false })
 
   const connections = hub.data?.connections ?? []
 

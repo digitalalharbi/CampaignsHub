@@ -78,7 +78,8 @@ describe('the ad account → campaign → ad checkbox flow', () => {
     renderWithProviders(<Harness />, { locale: 'en' })
 
     await screen.findByTestId('scope-select-Ad accounts')
-    expect(labels('accounts')).toEqual(['Razzah Avenue · meta', 'hanka · meta', 'Saudi Surfing Federation · tiktok'])
+    // The platform is NAMED (never its key), and the list follows the one source ordering: platform, then account.
+    expect(labels('accounts')).toEqual(['Saudi Surfing Federation · TikTok', 'hanka · Meta', 'Razzah Avenue · Meta'])
     expect(screen.queryByTestId('scope-select-Campaigns')).not.toBeInTheDocument()
     expect(screen.getByTestId('scope-accounts-required')).toBeInTheDocument()
     expect(screen.getByTestId('scope-count-accounts')).toHaveTextContent('0 of 3 selected')
@@ -139,7 +140,8 @@ describe('the ad account → campaign → ad checkbox flow', () => {
     await screen.findByTestId('scope-select-Ad accounts')
 
     fireEvent.click(screen.getByTestId('scope-all-accounts'))
-    expect(stored().account_ids).toEqual(['a-razzah', 'a-hanka', 'a-ssf'])
+    // «select all» takes them in the order they are listed.
+    expect(stored().account_ids).toEqual(['a-ssf', 'a-hanka', 'a-razzah'])
     expect(screen.getByTestId('scope-count-accounts')).toHaveTextContent('3 of 3 selected')
 
     fireEvent.click(screen.getByTestId('scope-clear-accounts'))

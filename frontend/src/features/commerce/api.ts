@@ -44,8 +44,9 @@ export interface StoreProvider {
   supports_abandoned_carts: boolean
 }
 
-export function listStoreProviders(): Promise<StoreProvider[]> {
-  return getData<StoreProvider[]>('/commerce/stores')
+/** INTEG-PROJECT-SPACE-001 — with a project, only that project's stores and the ones nobody has taken yet. */
+export function listStoreProviders(projectId?: string | null): Promise<StoreProvider[]> {
+  return getData<StoreProvider[]>(typeof projectId === 'string' ? `/commerce/stores?project_id=${projectId}` : '/commerce/stores')
 }
 
 /**

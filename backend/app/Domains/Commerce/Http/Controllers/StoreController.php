@@ -53,6 +53,16 @@ final class StoreController extends Controller
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
+        /*
+         * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — asked for ONE project, the answer is that project's own:
+         * the stores it reads, and the ones no project has been given yet that its client may take. A store
+         * feeding another project is not read into the answer at all — not its name, domain or counts.
+         */
+        $only = $request->validate(['project_id' => ['sometimes', 'nullable', 'uuid']])['project_id'] ?? null;
+        $space = $only === null ? null : Project::query()->whereKey($only)->first();
+        abort_if($only !== null && $space === null, 404, 'Project not found.');
+        $assignment = app(AccountAssignment::class);
+
         $data = [];
 
         foreach ($this->registry->all() as $key => $connector) {
@@ -70,6 +80,16 @@ final class StoreController extends Controller
                     ->where('provider_connection_id', $connection->getKey())
                     ->where('account_type', 'store')
                     ->get();
+
+            if ($space !== null) {
+                $stores = $stores->filter(function (ExternalAccount $store) use ($assignment, $space): bool {
+                    $feeds = $assignment->projectIdFor($store);
+
+                    return $feeds === null
+                        ? $store->client_workspace_id === null || (string) $store->client_workspace_id === (string) $space->client_workspace_id
+                        : (string) $feeds === (string) $space->getKey();
+                })->values();
+            }
 
             $syncing = $stores->isNotEmpty() && IntegrationSyncRun::query()
                 ->where('type', 'commerce')

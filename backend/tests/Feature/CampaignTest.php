@@ -130,7 +130,11 @@ final class CampaignTest extends TestCase
         // Bind ONE account, then sync the same binding twice — the upsert must not duplicate.
         $bindingId = $this->bindSandboxAccount($this->projectA);
         $this->runSync($this->projectA, $bindingId);
+        // INTEGRATIONS-CENTRE-001 §4 — a second press inside two minutes is refused outright, so
+        // the idempotency under test is the one of the NEXT allowed sync.
+        $this->travel(3)->minutes();
         $this->runSync($this->projectA, $bindingId);
+        $this->travelBack();
 
         $this->actingAs($this->owner, 'sanctum')
             ->getJson("/api/v1/projects/{$this->projectA->id}/external-campaigns")

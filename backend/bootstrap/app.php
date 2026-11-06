@@ -45,6 +45,7 @@ use App\Domains\Integrations\Console\SweepAbandonedConnectionsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Console\SyncCensusCommand;
+use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
@@ -192,6 +193,7 @@ return Application::configure(basePath: dirname(__DIR__))
         CloseAbandonedSyncRunsCommand::class,
         // INTEG-SOURCE-REMOVAL-001 / INTEG-PROVIDER-IDENTITY-001.
         SweepAbandonedConnectionsCommand::class,
+        UnboundEstateReportCommand::class,
         IdentityRefreshCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,

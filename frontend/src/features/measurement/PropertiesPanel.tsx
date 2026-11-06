@@ -152,7 +152,11 @@ function PropertyRow({ property, ar, projectId, onSelect, onSync, busy }: {
   )
 }
 
-export function PropertiesPanel() {
+/**
+ * `projectId` (INTEG-PROJECT-SPACE-001) — drawn inside a project's space: the list is asked for that project
+ * alone and a property can only be chosen for it. Without it this is the older workspace-wide panel.
+ */
+export function PropertiesPanel({ projectId: space = null }: { projectId?: string | null } = {}) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
   const currentProjectId = useProject((s) => s.currentProjectId)
@@ -173,14 +177,14 @@ export function PropertiesPanel() {
    */
   const maySeeProjects = useAuth((s) => s.hasPermission('projects.view'))
 
-  const query = useQuery({ queryKey: ['measurement-properties'], queryFn: listMeasurementProviders })
+  const query = useQuery({ queryKey: space === null ? ['measurement-properties'] : ['measurement-properties', space], queryFn: () => listMeasurementProviders(space) })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: maySeeProjects })
   /*
    * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
    * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
    */
   const inAdvertiserPortal = useInAdvertiserPortal()
-  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
+  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal && space === null })
 
   /*
    * The reader's own project first, then an explicit choice, and never a silent guess.
@@ -189,10 +193,10 @@ export function PropertiesPanel() {
    * a reader managing the agency's Google authorisation was pointed at another client's project and
    * answered 403 by the server.
    */
-  const destination = projectId ?? currentProjectId
+  const destination = space ?? projectId ?? currentProjectId
 
   const authorize = useMutation({
-    mutationFn: (provider: string) => startMeasurementOAuth(provider, clientWorkspaceId || null),
+    mutationFn: (provider: string) => startMeasurementOAuth(provider, space === null ? clientWorkspaceId || null : projects.data?.find((p) => p.id === space)?.client_workspace_id ?? null),
     // A full navigation, not a router push: the destination is Google's own consent screen.
     onSuccess: ({ authorization_url }) => { window.location.assign(authorization_url) },
   })
@@ -225,10 +229,11 @@ export function PropertiesPanel() {
 
   const providers = query.data ?? []
   const actionError = [authorize, select, sync].map((m) => (m.isError ? toApiError(m.error) : null)).find((e) => e !== null) ?? null
-  const projectChoices = projects.data ?? []
+  // In a project's space there is one destination and it is not asked for: no project or client picker is drawn.
+  const projectChoices = space === null ? projects.data ?? [] : []
   /* ANALYTICS-PROJECT-IDENTITY-001 — a project two clients share a name for says whose it is. */
   const projectLabels = projectOptionLabels(projectChoices, clients.data)
-  const clientChoices = clients.data ?? []
+  const clientChoices = space === null ? clients.data ?? [] : []
 
   return (
     <section className="space-y-4" data-testid="measurement-panel">

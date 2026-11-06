@@ -22,6 +22,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  *                                                  it is absent from `$fillable` so nothing can mass-assign it, and a project read anywhere else
  *                                                  simply does not carry it. Declared here because it is a real attribute at runtime and static
  *                                                  analysis is entitled to know its type.
+ * @property array<string,mixed>|null $lifecycle_facts
+ *                                                     The same facts for ONE project, read by `show` to derive its status;
+ *                                                     never returned.
  */
 final class Project extends Model
 {

@@ -302,6 +302,83 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return $accounts;
     }
 
+    /**
+     * INTEG-ON-DEMAND-DISCOVERY-001 — the organisations alone, in ONE call: `me/organizations` WITHOUT
+     * `with_ad_accounts`, so no organisation's accounts are read until one is chosen.
+     */
+    protected function fetchOrganisations(OAuthTokens $tokens): array
+    {
+        $organisations = [];
+
+        foreach ($this->readAll($tokens, 'me/organizations', 'organizations', 'organisations') as $wrapper) {
+            /** @var array<string,mixed> $organization */
+            $organization = (array) ($wrapper['organization'] ?? []);
+
+            if (($organization['id'] ?? null) !== null) {
+                $organisations[] = [
+                    'external_id' => (string) $organization['id'],
+                    'name' => isset($organization['name']) ? (string) $organization['name'] : null,
+                ];
+            }
+        }
+
+        return $organisations;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — `organizations/{id}/adaccounts`: the CHOSEN organisation's accounts and no other's. */
+    protected function fetchAdAccountsOf(OAuthTokens $tokens, ?string $organisationId): array
+    {
+        if ($organisationId === null) {
+            return [];
+        }
+
+        $accounts = [];
+
+        foreach ($this->readAll($tokens, "organizations/{$organisationId}/adaccounts", 'adaccounts', 'ad accounts') as $wrapper) {
+            $row = $this->adAccountRow((array) ($wrapper['adaccount'] ?? []), $organisationId);
+            if ($row !== null) {
+                $accounts[] = $row;
+            }
+        }
+
+        return $accounts;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — `adaccounts/{id}`: the one linked account, asked by its own id. */
+    protected function fetchAdAccount(OAuthTokens $tokens, string $externalId): ?array
+    {
+        foreach ($this->readAll($tokens, "adaccounts/{$externalId}", 'adaccounts', 'ad account') as $wrapper) {
+            $a = (array) ($wrapper['adaccount'] ?? []);
+
+            return $this->adAccountRow($a, isset($a['organization_id']) ? (string) $a['organization_id'] : null);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string,mixed>  $a
+     * @return array<string,mixed>|null
+     */
+    private function adAccountRow(array $a, ?string $organisationId): ?array
+    {
+        if (($a['id'] ?? null) === null) {
+            return null;
+        }
+
+        return [
+            'external_id' => (string) $a['id'],
+            'name' => (string) ($a['name'] ?? $a['id']),
+            // Absent stays absent — never a guessed currency or timezone.
+            'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+            'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
+            'status' => strtolower((string) ($a['status'] ?? 'active')),
+            'parent_external_id' => $organisationId,
+            'parent_name' => null,
+            'raw' => $a,
+        ];
+    }
+
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
         $campaigns = [];

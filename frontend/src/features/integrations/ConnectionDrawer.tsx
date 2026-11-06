@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { UnlinkAccountButton } from './UnlinkAccountButton'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plug, RefreshCw, X } from 'lucide-react'
+import { Pencil, Plug, X } from 'lucide-react'
 import {
-  getAccountLogs, listAccounts, refreshDiscoveredAccounts, revokeConnection, startPlatformOAuth,
-  syncConnector, type AccountRow, type HubConnection,
+  getAccountLogs, listAccounts, revokeConnection,
+  type HubConnection,
 } from './api'
-import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
+import { SelectedAccounts } from './SelectedAccounts'
+import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { syncStatusMeaning } from '@/lib/syncStatus'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -16,7 +16,6 @@ import { platformColor } from '@/features/analytics/components'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
-import { toApiError } from '@/lib/api/client'
 
 export type DrawerTab = 'overview' | 'accounts' | 'history' | 'settings'
 
@@ -39,12 +38,17 @@ export type DrawerTab = 'overview' | 'accounts' | 'history' | 'settings'
  * authorisation itself, kept away from the ones that change a selection, because «stop syncing this
  * account for this client» and «end this authorisation for every client» are not neighbours.
  */
-export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAccounts }: {
+export function ConnectionDrawer({ connection, projectId = null, tab, onTab, onClose, onManageAccounts, onReauthorise }: {
   connection: HubConnection
+  /** INTEG-PROJECT-SPACE-001 — the project whose space this is: the drawer lists and reads only its accounts. */
+  projectId?: string | null
   tab: DrawerTab
   onTab: (tab: DrawerTab) => void
   onClose: () => void
-  onManageAccounts: (connection: HubConnection) => void
+  /** Opens the wizard in manage mode — the only place accounts are searched, paged and chosen. */
+  onManageAccounts: (connection: HubConnection, projectId?: string | null) => void
+  /** Hands the renewal to `ConnectionFlow`, which starts OAuth with this connection's workspace and project. */
+  onReauthorise: (connection: HubConnection) => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
@@ -64,13 +68,7 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
     void queryClient.invalidateQueries({ queryKey: ['integration-accounts'] })
   }
 
-  const sync = useMutation({ mutationFn: () => syncConnector(connection.provider), onSettled: invalidate })
-  const refresh = useMutation({ mutationFn: () => refreshDiscoveredAccounts(connection.id), onSettled: invalidate })
   const revoke = useMutation({ mutationFn: () => revokeConnection(connection.id), onSettled: () => { invalidate(); onClose() } })
-  const reauthorise = useMutation({
-    mutationFn: () => startPlatformOAuth(connection.provider),
-    onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
-  })
 
   return (
     <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true" data-testid="connection-drawer">
@@ -95,10 +93,20 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
               <h2 className="truncate text-base font-bold text-text-primary">
                 {ar ? connection.label_ar : connection.label}
               </h2>
-              <p className="truncate text-xs text-text-secondary">
+              {/*
+                INTEG-UNIFIED-002 — the same identity the hub row states: the PLATFORM account the grant
+                was made with. The workspace user is named by name; a CampaignsHub email is never shown
+                as, or beside, the identity of a source.
+              */}
+              <p className="truncate text-xs text-text-secondary" data-testid="drawer-platform-account">
+                {(connection.provider_account?.email ?? connection.provider_account?.label ?? null) === null
+                  ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')
+                  : `${ar ? 'حساب المنصة' : 'Platform account'}: ${connection.provider_account?.email ?? connection.provider_account?.label}`}
+              </p>
+              <p className="truncate text-[11px] text-text-muted" data-testid="drawer-added-by">
                 {connection.authorised_by === null
-                  ? (ar ? 'لم يُسجَّل من صرّح بالربط' : 'Authoriser not recorded')
-                  : connection.authorised_by.email}
+                  ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
+                  : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.name}`}
               </p>
             </div>
             <button
@@ -143,29 +151,21 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
           {tab === 'accounts' && (
             <Accounts
               connection={connection}
+              projectId={projectId}
               ar={ar}
-              onManageAccounts={() => onManageAccounts(connection)}
+              onManageAccounts={(projectId) => onManageAccounts(connection, projectId)}
             />
           )}
 
-          {tab === 'history' && <History connection={connection} ar={ar} />}
+          {tab === 'history' && <History connection={connection} projectId={projectId} ar={ar} />}
 
           {tab === 'settings' && (
             <Settings
               ar={ar}
               connection={connection}
-              busy={{
-                sync: sync.isPending,
-                refresh: refresh.isPending,
-                revoke: revoke.isPending,
-                reauthorise: reauthorise.isPending,
-              }}
-              onSync={() => sync.mutate()}
-              onRefresh={() => refresh.mutate()}
-              refreshed={refresh.data ?? null}
-              refreshError={refresh.isError ? toApiError(refresh.error).message : null}
+              busy={{ revoke: revoke.isPending }}
               onRevoke={() => revoke.mutate()}
-              onReauthorise={() => reauthorise.mutate()}
+              onReauthorise={() => onReauthorise(connection)}
             />
           )}
         </div>
@@ -177,10 +177,9 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
 function Overview({ connection, ar }: { connection: HubConnection; ar: boolean }) {
   return (
     <dl className="flex flex-col gap-3 text-sm" data-testid="drawer-overview">
-      <Fact label={ar ? 'الحسابات المختارة' : 'Selected accounts'}>
-        {ar
-          ? <><Num>{connection.selected_accounts}</Num> من <Num>{connection.discovered_accounts}</Num></>
-          : <><Num>{connection.selected_accounts}</Num> of <Num>{connection.discovered_accounts}</Num></>}
+      <Fact label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}>
+        {/* Linked accounts only: the unchosen part of what a sign-in can see is not counted (INTEG-PROJECT-LINK-001). */}
+        <Num>{connection.selected_accounts}</Num>
       </Fact>
 
       <Fact label={ar ? 'يغذّي العملاء' : 'Feeds'}>
@@ -220,111 +219,43 @@ function Overview({ connection, ar }: { connection: HubConnection; ar: boolean }
   )
 }
 
-function Accounts({ connection, ar, onManageAccounts }: {
+function Accounts({ connection, projectId, ar, onManageAccounts }: {
   connection: HubConnection
+  projectId: string | null
   ar: boolean
-  onManageAccounts: () => void
+  onManageAccounts: (projectId?: string | null) => void
 }) {
   /*
-   * Selected only, by default, and that default is the point.
+   * The SELECTED accounts of this connection, and no way to widen the list.
    *
    * Seventeen rows under a heading about one client is how the old page taught people that
-   * everything discovered was being read. «Show all» is one press away and says how many it will add.
+   * everything discovered was being read. Finding, searching and choosing among the rest happens in
+   * the wizard — «تعديل الاختيار» — which searches and pages on the server; this list is its result.
    */
-  const [onlySelected, setOnlySelected] = useState(true)
-  const [search, setSearch] = useState('')
-
-  const accounts = useQuery({
-    queryKey: ['integration-accounts', { connection: connection.id, onlySelected, search }],
-    queryFn: () => listAccounts({
-      connection: connection.id,
-      ...(onlySelected ? { link: 'linked' as const } : {}),
-      ...(search.trim() === '' ? {} : { q: search.trim() }),
-      per_page: 50,
-    }),
-  })
-
-  const rows = accounts.data?.accounts ?? []
-
   return (
     <div className="flex flex-col gap-3" data-testid="drawer-accounts">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setOnlySelected((v) => !v)}
-          aria-pressed={onlySelected}
-          data-testid="drawer-only-selected"
-          className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-            onlySelected ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          {ar ? 'المختارة فقط' : 'Selected only'}
-        </button>
+      <SelectedAccounts
+        connection={connection.id}
+        {...(projectId === null ? {} : { project: projectId })}
+        onManage={(account) => onManageAccounts(account.assigned_project_id)}
+      />
 
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={ar ? 'ابحث بالاسم أو المعرّف' : 'Search by name or ID'}
-          aria-label={ar ? 'ابحث بالاسم أو المعرّف' : 'Search by name or ID'}
-          data-testid="drawer-account-search"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
-        />
-      </div>
-
-      {accounts.isLoading ? (
-        <Skeleton className="h-20 w-full" />
-      ) : rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-secondary">
-          {onlySelected
-            ? (ar ? 'لم يُختر أي حساب من هذا المصدر بعد.' : 'No account from this source has been chosen yet.')
-            : (ar ? 'لا نتائج.' : 'No results.')}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {rows.map((account) => <AccountLine key={account.id} account={account} ar={ar} />)}
-        </ul>
-      )}
-
-      <Button variant="secondary" onClick={onManageAccounts} data-testid="drawer-manage-accounts">
-        {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+      <Button variant="secondary" onClick={() => onManageAccounts()} data-testid="drawer-edit-selection">
+        <Pencil size={14} /> {ar ? 'تعديل الاختيار' : 'Edit the selection'}
       </Button>
     </div>
   )
 }
 
-function AccountLine({ account, ar }: { account: AccountRow; ar: boolean }) {
-  return (
-    <li className="rounded-lg border border-border p-2.5" data-testid="drawer-account-row">
-      <p className="truncate text-xs font-semibold text-text-primary">{account.name}</p>
-      <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
-        <span className="font-mono" dir="ltr">{account.reference}</span>
-        {account.currency !== null && <span>{account.currency}</span>}
-        {account.assigned_project_name !== null && (
-          <span className="text-success">{account.assigned_project_name}</span>
-        )}
-        <span>
-          {ar ? 'آخر مزامنة' : 'Last sync'}:{' '}
-          {account.last_synced_at === null
-            ? (ar ? 'لا يوجد' : 'None')
-            : fmtDateTime(account.last_synced_at)}
-        </span>
-      </p>
-      {account.assigned_project_id !== null && (
-        <UnlinkAccountButton projectId={account.assigned_project_id} projectName={account.assigned_project_name} accountId={account.id} accountName={account.name} />
-      )}
-    </li>
-  )
-}
-
-function History({ connection, ar }: { connection: HubConnection; ar: boolean }) {
+function History({ connection, projectId, ar }: { connection: HubConnection; projectId: string | null; ar: boolean }) {
   /*
    * The runs of the accounts this connection actually feeds — read one account at a time, because
    * the run log is per account and a connection-wide log would be a new endpoint answering a
    * question the inventory's own log already answers correctly.
    */
   const accounts = useQuery({
-    queryKey: ['integration-accounts', { connection: connection.id, link: 'linked' }],
-    queryFn: () => listAccounts({ connection: connection.id, link: 'linked', per_page: 10 }),
+    queryKey: ['integration-accounts', { project: projectId, connection: connection.id, link: 'linked' }],
+    queryFn: () => listAccounts({ connection: connection.id, ...(projectId === null ? {} : { project: projectId }), link: 'linked', per_page: 10 }),
   })
 
   const first = accounts.data?.accounts[0] ?? null
@@ -391,15 +322,10 @@ function History({ connection, ar }: { connection: HubConnection; ar: boolean })
   )
 }
 
-function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReauthorise, refreshed = null, refreshError = null }: {
+function Settings({ ar, connection, busy, onRevoke, onReauthorise }: {
   ar: boolean
-  /** GADS-DISCOVERY-PARTIAL-001 — what the last refresh found, and what the provider refused. */
-  refreshed?: { discovered: number; inaccessible?: number; warnings?: Array<{ customer: string; reason: string }> } | null
-  refreshError?: string | null
   connection: HubConnection
-  busy: { sync: boolean; refresh: boolean; revoke: boolean; reauthorise: boolean }
-  onSync: () => void
-  onRefresh: () => void
+  busy: { revoke: boolean }
   onRevoke: () => void
   onReauthorise: () => void
 }) {
@@ -418,12 +344,14 @@ function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReautho
 
       <div className="flex flex-col gap-2">
         {/*
-          Re-authorising first when it is needed, because it is the only act that can succeed; a
-          «Sync now» beside it would be a button whose whole job is to fail.
+          INTEGRATIONS-CENTRE-001 §4 — one control per action. «Sync now» lives on each SELECTED
+          account (`SelectedAccounts`), where the server can say which binding it is for and refuse a
+          second press inside two minutes. The connection-wide button that sat here called the legacy
+          `/integrations/{key}/sync` — a second way to start the same work, answering to a different
+          gate — so it is gone rather than hidden.
         */}
         <Button
           variant={reauth ? 'secondary' : 'ghost'}
-          loading={busy.reauthorise}
           onClick={onReauthorise}
           data-testid="drawer-reauthorise"
         >
@@ -434,43 +362,6 @@ function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReautho
             ? 'تُجدّد المصادقة فقط. لا تتغيّر الحسابات المختارة ولا ارتباطها بالعملاء.'
             : 'Renews the authorisation only. Your selected accounts and their clients are untouched.'}
         </p>
-
-        <Button variant="ghost" loading={busy.refresh} onClick={onRefresh} data-testid="drawer-refresh">
-          <RefreshCw size={14} /> {ar ? 'تحديث الحسابات المتاحة' : 'Refresh available accounts'}
-        </Button>
-        <p className="-mt-1 ps-1 text-[11px] text-text-muted">
-          {ar
-            ? 'يعيد قراءة قائمة الحسابات من المزود بالمصادقة الحالية — دون المرور بشاشة الموافقة.'
-            : 'Re-reads the catalogue with the authorisation you already have — no consent screen.'}
-        </p>
-        {refreshed && (
-          <div data-testid="drawer-refresh-result" className="flex flex-col gap-1 rounded-lg bg-surface-secondary p-2 text-xs">
-            <span className="font-semibold text-text-primary">
-              {ar ? 'الحسابات المكتشفة' : 'Accounts discovered'}: <Num>{refreshed.discovered}</Num>
-            </span>
-            {(refreshed.warnings ?? []).length > 0 && (
-              <div data-testid="drawer-refresh-warnings" className="flex flex-col gap-1 text-warning">
-                <span>
-                  {ar
-                    ? 'حسابات لم تسمح المنصة بقراءتها (صلاحيات هذا المستخدم لا تشملها):'
-                    : 'Accounts the provider would not let this sign-in read (no access for this user):'}
-                </span>
-                {(refreshed.warnings ?? []).map((w) => (
-                  <span key={w.customer} className="break-words text-text-secondary" dir="ltr">{w.customer} — {w.reason}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {refreshError && (
-          <p data-testid="drawer-refresh-error" className="break-words text-xs text-danger">{refreshError}</p>
-        )}
-
-        {!reauth && (
-          <Button variant="ghost" loading={busy.sync} onClick={onSync} data-testid="drawer-sync-now">
-            <RefreshCw size={14} /> {ar ? 'مزامنة الآن' : 'Sync now'}
-          </Button>
-        )}
       </div>
 
       <div className="border-t border-border pt-4">
@@ -495,8 +386,8 @@ function Settings({ ar, connection, busy, onSync, onRefresh, onRevoke, onReautho
         </Button>
         <p className="mt-1 ps-1 text-[11px] text-text-muted">
           {ar
-            ? 'ينهي المصادقة لكل العملاء الذين يعتمدون عليها. لإيقاف حساب واحد عن عميل، استخدم «إدارة الحسابات».'
-            : 'Ends the authorisation for every client that depends on it. To stop one account for one client, use Manage accounts.'}
+            ? 'ينهي المصادقة لكل العملاء الذين يعتمدون عليها. لإيقاف حساب واحد عن عميل، افصله من تبويب «الحسابات المختارة».'
+            : 'Ends the authorisation for every client that depends on it. To stop one account for one client, remove it from the Selected accounts tab.'}
         </p>
       </div>
     </div>
@@ -514,7 +405,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 const TABS = {
   overview: { ar: 'نظرة عامة', en: 'Overview' },
-  accounts: { ar: 'الحسابات', en: 'Accounts' },
+  accounts: ACCOUNT_SET_COPY.selected,
   history: { ar: 'سجل المزامنة', en: 'Sync history' },
   settings: { ar: 'الإعدادات', en: 'Settings' },
 } as const

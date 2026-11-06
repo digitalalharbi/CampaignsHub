@@ -53,8 +53,9 @@ export interface MeasurementProvider {
   properties: MeasurementProperty[]
 }
 
-export function listMeasurementProviders(): Promise<MeasurementProvider[]> {
-  return getData<MeasurementProvider[]>('/measurement/properties')
+/** INTEG-PROJECT-SPACE-001 — with a project, only that project's properties and the ones nobody has chosen yet. */
+export function listMeasurementProviders(projectId?: string | null): Promise<MeasurementProvider[]> {
+  return getData<MeasurementProvider[]>(typeof projectId === 'string' ? `/measurement/properties?project_id=${projectId}` : '/measurement/properties')
 }
 
 /**

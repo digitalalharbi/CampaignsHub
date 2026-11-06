@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Resources;
 
 use App\Domains\Projects\Models\Project;
+use App\Domains\Projects\Services\ProjectLifecycle;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -18,8 +19,9 @@ final class ProjectResource extends JsonResource
             'id' => $this->id,
             'client_workspace_id' => $this->client_workspace_id,
             'name' => $this->name,
-            'status' => $this->status,
-            'setup_completion' => $this->setup_completion,
+            // PROJECT-LIFECYCLE-DERIVED-001 — derived on read from what the project really has; the columns are not rewritten.
+            'status' => ProjectLifecycle::status((string) $this->status, $this->list_summary ?? $this->lifecycle_facts),
+            'setup_completion' => ProjectLifecycle::setupCompletion((int) $this->setup_completion, $this->list_summary ?? $this->lifecycle_facts),
             'account_manager_id' => $this->account_manager_id,
             'created_at' => optional($this->created_at)->toIso8601String(),
             /*

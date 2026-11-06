@@ -16,6 +16,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -66,6 +67,18 @@ final class MeasurementPropertyController extends Controller
         $tenantId = (string) $this->tenant->tenantId();
         $out = [];
 
+        /*
+         * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — asked for ONE project, the answer is that project's own:
+         * the properties it reads and the ones nobody has chosen yet. A property another project reads is not
+         * read into the answer at all.
+         */
+        $only = $request->validate(['project_id' => ['sometimes', 'nullable', 'uuid']])['project_id'] ?? null;
+        abort_if(
+            $only !== null && ! Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('id', $only)->whereNull('deleted_at')->exists(),
+            404,
+            'Project not found.',
+        );
+
         foreach (ProviderCatalogue::ofKind(ProviderKind::Measurement) as $definition) {
             $creds = PlatformCredentials::for($definition->key);
 
@@ -97,6 +110,14 @@ final class MeasurementPropertyController extends Controller
                 ->whereIn('external_account_id', $properties->modelKeys())
                 ->where('is_active', true)
                 ->pluck('project_id', 'external_account_id');
+
+            if ($only !== null) {
+                $properties = $properties->filter(static function (ExternalAccount $a) use ($selected, $only): bool {
+                    $feeds = $selected->get((string) $a->getKey());
+
+                    return $feeds === null || (string) $feeds === $only;
+                })->values();
+            }
 
             $state = match (true) {
                 /*

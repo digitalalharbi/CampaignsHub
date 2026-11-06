@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Services;
 
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Metrics\Services\SourceCurrency;
@@ -73,7 +74,13 @@ final class AccountCurrencyLookup
         }
 
         try {
-            $listed = $connector->listAdAccounts();
+            /*
+             * INTEG-ON-DEMAND-DISCOVERY-001 — a project's connection asks about THIS account only where the
+             * platform can answer for one account; the listing is the fallback for a platform that cannot,
+             * and for every workspace-wide connection, exactly as before. Either way only a currency is written.
+             */
+            $one = $this->belongsToAProject($account) ? $connector->readAdAccount((string) $account->external_id) : null;
+            $listed = $one !== null ? [$one] : $connector->listAdAccounts();
         } catch (Throwable $e) {
             // Released, so a transient refusal does not cost six hours of withheld money.
             Cache::forget($this->throttleKey($account));
@@ -119,6 +126,11 @@ final class AccountCurrencyLookup
         $account->forceFill(['currency' => $found])->syncOriginalAttribute('currency');
 
         return self::FOUND;
+    }
+
+    private function belongsToAProject(ExternalAccount $account): bool
+    {
+        return ProviderConnection::withoutGlobalScopes()->whereKey($account->provider_connection_id)->whereNotNull('project_id')->exists();
     }
 
     private function throttleKey(ExternalAccount $account): string

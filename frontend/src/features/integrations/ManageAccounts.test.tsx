@@ -188,16 +188,19 @@ describe('managing the accounts of a connected source', () => {
     expect(vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0].externalAccountIds).not.toContain('a1')
   })
 
-  /** «Select this page» is the page, and it skips what another project holds. */
-  it('selects the page without touching a row another project owns', async () => {
+  /**
+   * INTEGRATIONS-CENTRE-001 §3 — every account is ticked by name. There is no «select all» and no
+   * «select this page»: the picker offers one checkbox per account and a count, nothing that ticks
+   * twenty-five of them behind one press.
+   */
+  it('offers no control that ticks a whole page or the whole inventory', async () => {
     renderWithProviders(<ConnectionWizard connectionId="c1" manageProjectId="p1" onClose={() => {}} />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByTestId('wizard-select-page'))
-    fireEvent.click(screen.getByTestId('wizard-save-selection'))
-
-    await waitFor(() => expect(vi.mocked(applyAccountSelection)).toHaveBeenCalled())
-    const sent = vi.mocked(applyAccountSelection).mock.calls.at(-1)?.[0].externalAccountIds ?? []
-    expect([...sent].sort()).toEqual(['a1', 'a2'])
+    await screen.findAllByRole('checkbox')
+    expect(screen.queryByTestId('wizard-select-page')).toBeNull()
+    expect(screen.queryByTestId('wizard-clear-page')).toBeNull()
+    expect(screen.queryByRole('button', { name: /select (all|this page)|تحديد (الكل|هذه الصفحة)/i })).toBeNull()
+    expect(screen.getByTestId('wizard-selected-count')).toHaveTextContent(/^\d+ of \d+ selected$/)
   })
 
   /**

@@ -276,6 +276,92 @@ abstract class ApiAdvertisingConnector implements AdvertisingConnector
         return $this->fetchAdAccounts($tokens);
     }
 
+    /*
+     * ── INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — «الاكتشاف عند الطلب» ───────────────────────
+     *
+     * A project's link journey asks three narrow questions instead of one wide one: which organisations
+     * can this sign-in reach, which accounts does THE CHOSEN organisation hold, and — afterwards, for the
+     * periodic refresh — what does the provider say about THE ONE linked account. None of the three
+     * stores anything; storing is the confirmation's job, and it stores one row.
+     *
+     * The defaults below answer from the provider's ordinary listing, for a platform whose API has no
+     * narrower call (TikTok, X and the pasted-key providers answer with every advertiser in one request
+     * anyway). A platform that HAS narrower calls overrides them — Meta and Snapchat do — so choosing
+     * one organisation never walks the others.
+     */
+
+    /**
+     * The organisations this connection's sign-in reaches. `external_id` null is «no organisation»: the
+     * accounts the identity holds directly.
+     *
+     * @return list<array{external_id:?string, name:?string}>
+     */
+    public function listOrganisations(): array
+    {
+        if ($this->status() !== ConnectorStatus::Connected) {
+            return [];
+        }
+
+        return $this->fetchOrganisations($this->tokens());
+    }
+
+    /**
+     * The ad accounts of ONE organisation (null: the directly-held ones). Same row shape as `listAdAccounts()`.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function listAdAccountsOf(?string $organisationId): array
+    {
+        if ($this->status() !== ConnectorStatus::Connected) {
+            return [];
+        }
+
+        return $this->fetchAdAccountsOf($this->tokens(), $organisationId);
+    }
+
+    /**
+     * What the provider says about ONE ad account, asked by its id — or null when this platform has no
+     * such call, in which case the caller leaves the stored row as it is rather than list the estate.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function readAdAccount(string $externalId): ?array
+    {
+        if ($this->status() !== ConnectorStatus::Connected) {
+            return null;
+        }
+
+        return $this->fetchAdAccount($this->tokens(), $externalId);
+    }
+
+    /** @return list<array{external_id:?string, name:?string}> */
+    protected function fetchOrganisations(OAuthTokens $tokens): array
+    {
+        $organisations = [];
+
+        foreach ($this->fetchAdAccounts($tokens) as $account) {
+            $id = isset($account['parent_external_id']) ? (string) $account['parent_external_id'] : null;
+            $organisations[$id ?? ''] ??= ['external_id' => $id, 'name' => isset($account['parent_name']) ? (string) $account['parent_name'] : null];
+        }
+
+        return array_values($organisations);
+    }
+
+    /** @return list<array<string,mixed>> */
+    protected function fetchAdAccountsOf(OAuthTokens $tokens, ?string $organisationId): array
+    {
+        return array_values(array_filter(
+            $this->fetchAdAccounts($tokens),
+            static fn (array $a): bool => (isset($a['parent_external_id']) ? (string) $a['parent_external_id'] : null) === $organisationId,
+        ));
+    }
+
+    /** @return array<string,mixed>|null */
+    protected function fetchAdAccount(OAuthTokens $tokens, string $externalId): ?array
+    {
+        return null;
+    }
+
     public function syncCampaigns(string $adAccountId): SyncResult
     {
         $refusal = $this->refusal();

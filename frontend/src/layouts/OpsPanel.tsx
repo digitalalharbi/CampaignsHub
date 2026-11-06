@@ -142,7 +142,7 @@ const SYNC_STATE: Record<string, { ar: string; en: string }> = {
 }
 
 function useHub(enabled: boolean) {
-  return useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, enabled, retry: false, refetchInterval: POLL })
+  return useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), enabled, retry: false, refetchInterval: POLL })
 }
 
 function IntegrationsSection({ ar }: { ar: boolean }) {

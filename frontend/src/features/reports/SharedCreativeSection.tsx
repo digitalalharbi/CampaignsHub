@@ -746,7 +746,7 @@ function InsightList({
               {item.creative_name && <Pair k="" v={item.creative_name} />}
               {item.objective && <Pair k={t.objective} v={item.objective} />}
               {item.path && <Pair k={t.path} v={item.path} />}
-              {item.provider && <Pair k={t.platform} v={item.provider} />}
+              {item.provider && <Pair k={t.platform} v={providerLabel(item.provider, ar ? 'ar' : 'en')} />}
               {item.campaign_name && <Pair k={t.campaign} v={item.campaign_name} />}
               <Pair k={t.period} v={`${item.period.from} → ${item.period.to}`} />
             </dl>

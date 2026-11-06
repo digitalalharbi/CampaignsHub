@@ -36,3 +36,30 @@ export const SYNC_COPY: Record<SyncState, { tone: Tone; ar: string; en: string }
 export function needsReauthorising(state: ConnectionState): boolean {
   return state === 'REAUTH_REQUIRED' || state === 'REVOKED'
 }
+
+/**
+ * INTEGRATIONS-CENTRE-001 §5 — the two SETS of accounts, named once.
+ *
+ * DISCOVERED is what an authorisation can see; SELECTED is what somebody chose for a project, and
+ * only the second is read. The hub's counters, the wizard's picker and the estate's rows all state
+ * these sets, and they used to do it in three phrasings — «الحسابات المختارة», «تم اختيار», «من … حساب»
+ * — which is three chances to teach a reader that the discovered three hundred are being synced.
+ * `connectionCopy.test.ts` holds every surface to this module.
+ */
+export const ACCOUNT_SET_COPY: Record<'discovered' | 'selected', { ar: string; en: string }> = {
+  discovered: { ar: 'الحسابات المكتشفة', en: 'Discovered accounts' },
+  selected: { ar: 'الحسابات المختارة', en: 'Selected accounts' },
+}
+
+/**
+ * «3 of 40 selected» — the one sentence that relates the two sets, with Latin digits.
+ *
+ * Deliberately not a counted noun: the noun is the SET («selected»), and the number that matters to
+ * a reader is the first one. The denominator is the discovered inventory on this connection, or on
+ * this page of the picker, as the caller states.
+ */
+export function selectedOfDiscovered(selected: number, discovered: number, ar: boolean): string {
+  const n = selected.toLocaleString('en-US')
+  const m = discovered.toLocaleString('en-US')
+  return ar ? `اختير ${n} من ${m}` : `${n} of ${m} selected`
+}

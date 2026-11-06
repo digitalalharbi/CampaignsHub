@@ -152,6 +152,20 @@ export async function selectProject(page: Page, projectId: string) {
 }
 
 /**
+ * INTEG-PROJECT-SPACE-001 — the integrations centre is the SELECTED project's space, so a spec that reads
+ * the centre stands in a project first. The workspace's first project: the one `connectSandbox` links to.
+ * Without a project the page is the project chooser, which is a different surface with its own checks.
+ */
+export async function selectFirstProject(page: Page): Promise<string | null> {
+  const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
+    .data as Array<{ id: string }> | null
+  const first = projects?.[0]?.id ?? null
+  if (first !== null) await selectProject(page, first)
+
+  return first
+}
+
+/**
  * Put an external campaign back in the unlinked pool, whatever a previous run left behind.
  *
  * `campaigns-linking` starts by linking a named external to campaign A and only then expects the

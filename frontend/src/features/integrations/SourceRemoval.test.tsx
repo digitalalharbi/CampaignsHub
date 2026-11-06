@@ -4,6 +4,7 @@ import { IntegrationsPage } from './IntegrationsPage'
 import { ConnectionFlow } from './ConnectionFlow'
 import type { ConnectionHub as Hub, HubConnection } from './api'
 import { renderWithProviders } from '@/test/utils'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-SOURCE-REMOVAL-001 and INTEG-PROVIDER-IDENTITY-001 — the Owner's three reports on the Connection Hub.
@@ -71,17 +72,21 @@ function connection(over: Partial<HubConnection> = {}): HubConnection {
 
 describe('the Connection Hub: provider identity', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     hub.removed = []
     removals.calls = []
   })
 
-  it('names the provider login first and keeps the workspace user as the secondary line', async () => {
+  it('names the provider login first and keeps the workspace user, by name, as the secondary line', async () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
     expect(await screen.findByTestId('hub-platform-account-c-1')).toHaveTextContent('Platform account: snap@person.test')
-    expect(screen.getByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: agency@campaignshub.io')
+    expect(screen.getByTestId('hub-added-by-c-1')).toHaveTextContent('Added by: Agency')
+    // INTEG-UNIFIED-002 — the workspace email is nowhere on the centre.
+    expect(screen.getByTestId('connection-hub')).not.toHaveTextContent('agency@campaignshub.io')
   })
 
   it('falls back to the provider display name when the provider gave no email', async () => {
@@ -103,6 +108,8 @@ describe('the Connection Hub: provider identity', () => {
 
 describe('the Connection Hub: removing a source', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     hub.removed = []
     removals.calls = []
@@ -112,10 +119,10 @@ describe('the Connection Hub: removing a source', () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
-    fireEvent.click(await screen.findByTestId('hub-actions-desktop-c-1'))
+    fireEvent.click(await screen.findByTestId('hub-actions-c-1'))
     fireEvent.click(screen.getByTestId('action-remove'))
 
-    expect(screen.getByTestId('remove-source-dialog')).toHaveTextContent('Stored figures and reports stay')
+    expect(screen.getByTestId('remove-source-dialog')).toHaveTextContent('Its history stays, and it can be linked again.')
     expect(removals.calls).toHaveLength(0)
 
     fireEvent.click(screen.getByTestId('remove-source-confirm'))
@@ -128,7 +135,7 @@ describe('the Connection Hub: removing a source', () => {
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
 
-    fireEvent.click(await screen.findByTestId('hub-actions-desktop-c-1'))
+    fireEvent.click(await screen.findByTestId('hub-actions-c-1'))
     fireEvent.click(screen.getByTestId('action-remove'))
     fireEvent.click(screen.getByTestId('remove-source-keep'))
 
@@ -154,13 +161,15 @@ describe('the Connection Hub: removing a source', () => {
     fireEvent.click(screen.getByTestId('hub-show-removed'))
 
     expect(await screen.findByTestId('hub-removed-c-gone')).toHaveTextContent('Removed')
-    expect(screen.queryByTestId('hub-actions-desktop-c-gone')).not.toBeInTheDocument()
-    expect(screen.getByTestId('hub-actions-desktop-c-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('hub-actions-c-gone')).not.toBeInTheDocument()
+    expect(screen.getByTestId('hub-actions-c-1')).toBeInTheDocument()
   })
 })
 
 describe('cancelling the connect flow', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     removals.calls = []
   })
 

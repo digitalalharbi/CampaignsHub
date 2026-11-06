@@ -37,7 +37,8 @@ const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; 
   { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-overview'] },
   { path: '/agency/content', project: true, firstScreen: ['content-summary', 'content-filters'] },
   { path: '/agency/reports', project: true, firstScreen: ['reports-hero-kpis', 'reports-filters'] },
-  { path: '/agency/integrations', firstScreen: ['integrations-intro', 'connection-hub'] },
+  // INTEG-PROJECT-SPACE-001 — the centre is the selected project's space; without one it is the chooser.
+  { path: '/agency/integrations', project: true, firstScreen: ['integrations-intro', 'connection-hub'] },
   { path: '/agency/alerts', firstScreen: [] },
   { path: '/agency/clients', firstScreen: ['clients-intro-kpis', 'clients-filters'] },
   { path: '/agency/requests', firstScreen: ['requests-intro-kpis'] },
