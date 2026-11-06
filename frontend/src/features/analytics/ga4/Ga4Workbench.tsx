@@ -59,7 +59,7 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
     queryFn: () => getData<GapReasonsPayload>(`/projects/${projectId}/measurement/gap${qs(range, {}, hidden)}`),
   })
 
-  const platforms = match.data?.platforms ?? []
+  const platforms = Array.isArray(match.data?.platforms) ? match.data!.platforms! : []
   const platformChips = useMemo(() => platforms.map((p) => p.platform), [platforms])
 
   return (
@@ -75,7 +75,7 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
 
       <MatchSection q={match} ar={ar} drill={drill} setDrill={setDrill} projectId={projectId} range={range} hidden={hidden} compare={f.compare} />
 
-      {gap.data?.state === 'ready' || gap.data?.reasons ? <GapPanel data={gap.data} ar={ar} /> : null}
+      {gap.data?.state === 'ready' && Array.isArray(gap.data.reasons) ? <GapPanel data={gap.data} ar={ar} /> : null}
 
       <ClassifySection projectId={projectId} range={range} ar={ar} f={f} setF={setF} hidden={hidden} drillCampaign={drill?.campaign ?? null} />
     </div>
@@ -108,7 +108,7 @@ function MatchSection({ q, ar, drill, setDrill, projectId, range, hidden, compar
   if (q.isError || !q.data) return <QueryFailure error={q.error} ar={ar} testId="ga4-match-failure" onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّرت القراءة' : 'Could not be read'} />
   const d = q.data
   if (d.state !== 'ready') return d.state === 'hidden' ? null : null
-  const platforms = d.platforms ?? []
+  const platforms = Array.isArray(d.platforms) ? d.platforms : []
   const current = drill ? platforms.find((p) => p.platform === drill.platform) : undefined
   const rows: MatchRow[] = current ? campaignRows(current) : platformRows(platforms)
   const onDrill = (r: MatchRow) => {
@@ -174,7 +174,7 @@ function LandingPages({ projectId, range, campaign, ar, hidden }: { projectId: s
   })
   if (q.isLoading) return <ChartBodySkeleton height={260} testid="ga4-landing-skeleton" />
 
-  return <FixedPageTable testId="match-landing-table" ar={ar} pageSize={8} rows={q.data?.rows ?? []} rowKey={(r) => r.label} columns={classColumns(ar, ar ? 'الصفحة' : 'Page', false)} initialSort={{ key: 'sessions', dir: 'desc' }} />
+  return <FixedPageTable testId="match-landing-table" ar={ar} pageSize={8} rows={Array.isArray(q.data?.rows) ? q.data!.rows : []} rowKey={(r) => r.label} columns={classColumns(ar, ar ? 'الصفحة' : 'Page', false)} initialSort={{ key: 'sessions', dir: 'desc' }} />
 }
 
 function GapPanel({ data, ar }: { data: GapReasonsPayload; ar: boolean }) {
@@ -218,7 +218,7 @@ function ClassifySection({ projectId, range, ar, f, setF, hidden, drillCampaign 
         </div>
         {d && (d.unsupported?.length ?? 0) > 0 && <div data-testid="ga4-classify-unsupported" className="flex flex-wrap gap-1.5">{d.unsupported!.map((u) => <Badge key={u} tone="neutral">{u} · {ar ? 'لا ينطبق' : 'n/a'}</Badge>)}</div>}
         {q.isLoading ? <ChartBodySkeleton height={260} testid="ga4-classify-skeleton" /> : d?.state === 'hidden' ? <Badge tone="neutral">{ar ? 'مخفي' : 'Hidden'}</Badge> : (
-          <FixedPageTable key={f.group} testId="ga4-classify-table" ar={ar} pageSize={8} rows={d?.rows ?? []} rowKey={(r) => r.label} columns={classColumns(ar, ar ? GROUP_LABEL[f.group].ar : GROUP_LABEL[f.group].en, items)} initialSort={{ key: items ? 'revenue' : 'sessions', dir: 'desc' }} />
+          <FixedPageTable key={f.group} testId="ga4-classify-table" ar={ar} pageSize={8} rows={Array.isArray(d?.rows) ? d!.rows : []} rowKey={(r) => r.label} columns={classColumns(ar, ar ? GROUP_LABEL[f.group].ar : GROUP_LABEL[f.group].en, items)} initialSort={{ key: items ? 'revenue' : 'sessions', dir: 'desc' }} />
         )}
       </div>
     </ChartCard>
@@ -230,11 +230,11 @@ function ViewsRow({ projectId, range, ar, hidden, filters, onApply }: { projectI
   const save = useSaveView(MODULE)
   const del = useDeleteView(MODULE)
   const [applied, setApplied] = useState(false)
-  const list = views.data ?? []
+  const list = Array.isArray(views.data) ? views.data : []
 
   // The user's default view is applied once, when the list first arrives.
   useEffect(() => {
-    if (applied || !views.data) return
+    if (applied || !Array.isArray(views.data)) return
     setApplied(true)
     const d = views.data.find((v) => v.is_default)
     if (d) onApply(d.filters?.hidden ?? [], { ...NO_FILTERS, ...((d.filters as { ga4?: Partial<Filters> } | null)?.ga4 ?? {}) })
