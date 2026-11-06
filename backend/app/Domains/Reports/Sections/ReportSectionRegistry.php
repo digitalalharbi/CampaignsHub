@@ -183,6 +183,42 @@ final class ReportSectionRegistry
                 payloadKeys: ['ga4_tables'],
                 view: 'tables',
             ),
+            // GA4-ATTRIBUTION-MATCH-001 — four more parts, each its own SHOW/HIDE, on by default like the first four.
+            new ReportSection(
+                key: 'ga4_attribution',
+                titleAr: 'مطابقة الإسناد (GA4)',
+                titleEn: 'Attribution match (GA4)',
+                payloadKeys: ['ga4_attribution'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_pulse',
+                titleAr: 'نبض المتجر (GA4)',
+                titleEn: 'Store pulse (GA4)',
+                payloadKeys: ['ga4_pulse'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_classification',
+                titleAr: 'تصنيف الزيارات (GA4)',
+                titleEn: 'Traffic classification (GA4)',
+                payloadKeys: ['ga4_classification'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_products',
+                titleAr: 'منتجات المتجر (GA4)',
+                titleEn: 'Store products (GA4)',
+                payloadKeys: ['ga4_products'],
+                view: 'tables',
+            ),
+            new ReportSection(
+                key: 'ga4_gap_reasons',
+                titleAr: 'سبب الفرق',
+                titleEn: 'Why the gap (GA4)',
+                payloadKeys: ['ga4_gap_reasons'],
+                view: 'dashboard',
+            ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -317,7 +353,7 @@ final class ReportSectionRegistry
         $this->availableWhen('store_analytics', 'has_store_or_site_figures', static fn (SectionContext $c): bool => is_array($c->value('store_analytics')));
 
         // GA4-REPORT-SECTIONS-001 — a part with nothing measured for the window is not a section, and never a zero.
-        foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables'] as $ga4) {
+        foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $ga4) {
             $this->availableWhen($ga4, 'has_ga4_figures', static fn (SectionContext $c): bool => is_array($c->value($ga4)));
         }
 

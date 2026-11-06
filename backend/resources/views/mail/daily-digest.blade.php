@@ -199,6 +199,9 @@
                     @if ($row['attention'] || $row['follow'])
                         <div style="font-size:12px; color:{{ $row['attention'] ? $tone['warn'] : '#5b6b68' }}; line-height:1.6; margin-top:2px;">{{ $t['follow_up'] }}: {{ $row['attention'] ?? $row['follow'] }}</div>
                     @endif
+                    @if (! empty($row['ga4']))
+                        <div data-block="ga4-line" style="font-size:12px; color:#5b6b68; line-height:1.6; margin-top:2px;" dir="auto">{{ $row['ga4'] }}</div>
+                    @endif
                 </td>
                 @if ($row['objective'])
                     <td width="104" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:{{ $startSide === 'right' ? '12px 0 12px 0' : '0 12px 0 12px' }};">

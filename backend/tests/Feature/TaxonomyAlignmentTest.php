@@ -123,7 +123,7 @@ final class TaxonomyAlignmentTest extends TestCase
             'report.type' => ['executive', 'project', 'campaign', 'platform', 'platform_comparison', 'weekly', 'monthly', 'custom'],
             'report.audience' => ['client', 'internal', 'executive'],
             // AlertController::TYPES + severity + channels Rule::in
-            'alert.type' => ['budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results', 'sync_failure', 'token_expiry', 'report_failed', 'sla_warning', 'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue', 'metric_anomaly', 'sync_outage', 'measurement_outage', 'tracking_health', 'launch_advance'],
+            'alert.type' => ['budget_risk', 'cpa_increase', 'cpl_increase', 'roas_drop', 'no_results', 'sync_failure', 'token_expiry', 'report_failed', 'sla_warning', 'lead_unassigned', 'lead_no_contact', 'lead_follow_up_overdue', 'metric_anomaly', 'sync_outage', 'measurement_outage', 'tracking_health', 'launch_advance', 'ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend'],
             'alert.severity' => ['info', 'warning', 'critical'],
             'alert.channel' => ['in_app', 'email', 'whatsapp'],
         ];

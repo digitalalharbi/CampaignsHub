@@ -6,10 +6,14 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Integrations\Measurement\Ga4AttributionMatch;
 use App\Domains\Integrations\Measurement\Ga4Classification;
+use App\Domains\Integrations\Measurement\Ga4GapExplain;
 use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
 use App\Domains\Integrations\Measurement\Ga4StoreAnalytics;
 use App\Domains\Integrations\Measurement\Ga4TrafficTable;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Metrics\Services\AttributionTransparency;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -31,7 +35,7 @@ final class SiteAnalyticsController extends Controller
         [$from, $to] = $this->window($request);
         [$tenantId, $projectId] = $this->scope();
 
-        return ApiResponse::success($site->build($tenantId, $projectId, $from, $to), 'Site analytics.');
+        return ApiResponse::success(Ga4Visibility::scrub($site->build($tenantId, $projectId, $from, $to), $this->hidden($request)), 'Site analytics.');
     }
 
     /**
@@ -44,7 +48,7 @@ final class SiteAnalyticsController extends Controller
         [$tenantId, $projectId] = $this->scope();
 
         return ApiResponse::success(
-            $store->build($tenantId, $projectId, $from, $to, $transparency->reportedByPlatform($projectId, $from, $to)),
+            Ga4Visibility::applyToReading($store->build($tenantId, $projectId, $from, $to, $transparency->reportedByPlatform($projectId, $from, $to)), $this->hidden($request)),
             'Store analytics.',
         );
     }
@@ -55,6 +59,11 @@ final class SiteAnalyticsController extends Controller
         [$from, $to] = $this->window($request);
         [$tenantId, $projectId] = $this->scope();
 
+        // The three sources set store-confirmed sales beside GA4's: with sales hidden there is nothing left to compare.
+        if (array_intersect(['attr.sales', 'attr.gap'], $this->hidden($request)) !== []) {
+            return ApiResponse::success(['summed' => false, 'hidden' => true, 'rows' => []], 'Three sources.');
+        }
+
         return ApiResponse::success($transparency->threeSources($tenantId, $projectId, $from, $to), 'Three sources.');
     }
 
@@ -64,7 +73,7 @@ final class SiteAnalyticsController extends Controller
         [$from, $to] = $this->window($request);
         [$tenantId, $projectId] = $this->scope();
 
-        return ApiResponse::success($table->page($tenantId, $projectId, $from, $to, $this->options($request)), 'Traffic table.');
+        return ApiResponse::success(Ga4Visibility::scrub($table->page($tenantId, $projectId, $from, $to, $this->options($request)), $this->hidden($request)), 'Traffic table.');
     }
 
     /**
@@ -82,7 +91,12 @@ final class SiteAnalyticsController extends Controller
             'compare' => ['sometimes', 'boolean'],
         ]);
 
-        return ApiResponse::success($match->build($tenantId, $projectId, $from, $to, $v + ['internal' => true]), 'Attribution match.');
+        $data = $match->build($tenantId, $projectId, $from, $to, $v + ['internal' => true]);
+        if (($data['state'] ?? null) === 'ready') {
+            $data = Ga4Visibility::applyToSections(['ga4_attribution' => $data], $this->hidden($request))['ga4_attribution'] ?? ['state' => 'hidden', 'basis' => 'ga4', 'order_level' => false];
+        }
+
+        return ApiResponse::success($data, 'Attribution match.');
     }
 
     /** GA4-CLASSIFICATION-001 — the traffic grouped by one chosen axis, one fixed-size page at a time. */
@@ -101,7 +115,44 @@ final class SiteAnalyticsController extends Controller
             'campaign' => ['sometimes', 'nullable', 'string', 'max:512'],
         ]);
 
-        return ApiResponse::success($classification->page($tenantId, $projectId, $from, $to, $v), 'Classification.');
+        $hidden = $this->hidden($request);
+        if (in_array('dim.'.$v['group'], $hidden, true) || ($v['group'] === 'product' || $v['group'] === 'product_category') && in_array('table.products', $hidden, true)) {
+            return ApiResponse::success(['group' => $v['group'], 'state' => 'hidden', 'rows' => [], 'total' => 0, 'pages' => 0, 'basis' => 'ga4'], 'Classification.');
+        }
+        $page = $classification->page($tenantId, $projectId, $from, $to, $v);
+        $page['rows'] = array_map(static fn (array $r): array => Ga4Visibility::cols($r, array_flip($hidden)), $page['rows']);
+
+        return ApiResponse::success($page, 'Classification.');
+    }
+
+    /** GA4-GAP-EXPLAINED-001 — «سبب الفرق»: the gap decomposed by measured quantities; each reason its own switch. */
+    public function gap(Request $request, Ga4GapExplain $explain): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+        [$tenantId, $projectId] = $this->scope();
+        $data = $explain->build($tenantId, $projectId, $from, $to, internal: true);
+        if (($data['state'] ?? null) === 'ready') {
+            $data = Ga4Visibility::applyToSections(['ga4_gap_reasons' => $data], $this->hidden($request))['ga4_gap_reasons'] ?? ['state' => 'hidden', 'basis' => 'ga4', 'order_level' => false];
+        }
+
+        return ApiResponse::success($data, 'Gap reasons.');
+    }
+
+    /**
+     * GA4-VISIBILITY-001 — what this reader must not receive: the elements they hid (`hide`, a list or a
+     * comma-separated string; unknown keys are dropped) plus, without the store capability, every sales element.
+     *
+     * @return list<string>
+     */
+    private function hidden(Request $request): array
+    {
+        $raw = $request->input('hide');
+        $list = Ga4Visibility::normalise(is_string($raw) ? explode(',', $raw) : $raw);
+        $user = $request->user();
+        $projectId = (string) app(ProjectContext::class)->projectId();
+        $may = $user === null || $projectId === '' || app(ProjectAbilities::class)->allows($user, $projectId, ProjectCapability::ANALYTICS_STORE_VIEW);
+
+        return Ga4Visibility::withRole($list, $may);
     }
 
     /** Every row in scope for the same breakdown, filter and sort — the page and page size are ignored on purpose. */
@@ -112,6 +163,12 @@ final class SiteAnalyticsController extends Controller
         $data = $table->page($tenantId, $projectId, $from, $to, $this->options($request), all: true);
         $head = ['Dimension 1', 'Dimension 2', 'Sessions', 'Engaged sessions', 'Key events', 'Add to carts', 'Checkouts', 'Purchases', 'Revenue', 'Engagement rate', 'Conversion rate'];
         $keys = ['dimension_1', 'dimension_2', 'sessions', 'engaged_sessions', 'key_events', 'add_to_carts', 'checkouts', 'purchases', 'revenue', 'engagement_rate', 'conversion_rate'];
+        // A hidden column is not exported: a file is built from the same cut as the page.
+        $h = array_flip($this->hidden($request));
+        $drop = ['sessions' => 'col.sessions', 'engaged_sessions' => 'col.sessions', 'engagement_rate' => 'col.engagement_rate', 'purchases' => 'col.purchases', 'revenue' => 'col.revenue', 'conversion_rate' => 'col.conversion_rate'];
+        $keep = array_keys(array_filter($keys, static fn (string $k): bool => ! isset($drop[$k], $h[$drop[$k] ?? ''])));
+        $head = array_values(array_intersect_key($head, array_flip($keep)));
+        $keys = array_values(array_intersect_key($keys, array_flip($keep)));
         $lines = array_map(static fn (array $r): array => array_map(static function ($k) use ($r) {
             $v = $r[$k] ?? null;
 
