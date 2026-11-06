@@ -40,6 +40,9 @@ test('the hub says which state every authorisation is in, on both axes', async (
     const id = ((await rows.nth(i).getAttribute('data-testid')) ?? '').replace('hub-row-', '')
 
     // BOTH, always. Either alone is the collapse that hid a Reconnect button on Production.
+    // The row carries ONE chip; the separate states are under it, one press away.
+    await expect(page.getByTestId(`hub-state-${id}`), `«${id}» has no state on its row`).toBeVisible()
+    await page.getByTestId(`hub-expand-${id}`).click()
     await expect(page.getByTestId(`hub-auth-${id}`), `«${id}» has no authorisation state`).toBeVisible()
     await expect(page.getByTestId(`hub-sync-${id}`), `«${id}» has no data state`).toBeVisible()
     // INTEG-PROJECT-LINK-001 — the row counts LINKED accounts only; what was merely discovered is not on the centre.
