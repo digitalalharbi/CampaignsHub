@@ -57,11 +57,14 @@ final class Ga4DigestBlock
     }
 
     /**
-     * The line the mail prints, AR or EN, Latin digits.
+     * The line's pieces, so the mail can isolate every Latin fragment (a count, a dollar figure, a sign) as its own
+     * left-to-right island inside a block whose direction is the locale's. One string with `dir="auto"` took the
+     * direction of its first strong letter, the Latin «GA4», and an Arabic reader saw the order reversed.
      *
      * @param  array{sessions: ?float, purchases: ?float, revenue_usd: ?float, claimed: ?float, gap: ?float}|null  $b
+     * @return list<array{value: string, label: string}>|null
      */
-    public static function line(?array $b, bool $ar): ?string
+    public static function parts(?array $b, bool $ar): ?array
     {
         if ($b === null) {
             return null;
@@ -69,18 +72,33 @@ final class Ga4DigestBlock
         $n = static fn (float $v): string => number_format($v, 0, '.', ',');
         $parts = [];
         if ($b['sessions'] !== null) {
-            $parts[] = $n($b['sessions']).($ar ? ' زيارة' : ' visits');
+            $parts[] = ['value' => $n($b['sessions']), 'label' => $ar ? 'زيارة' : 'visits'];
         }
         if ($b['purchases'] !== null) {
-            $parts[] = $n($b['purchases']).($ar ? ' شراء' : ' orders');
+            $parts[] = ['value' => $n($b['purchases']), 'label' => $ar ? 'شراء' : 'orders'];
         }
         if ($b['revenue_usd'] !== null) {
-            $parts[] = '$'.$n($b['revenue_usd']);
+            $parts[] = ['value' => '$'.$n($b['revenue_usd']), 'label' => ''];
         }
         if ($b['gap'] !== null && $b['claimed'] !== null) {
-            $parts[] = ($ar ? 'فرق المنصات ' : 'platform gap ').($b['gap'] > 0 ? '+' : ($b['gap'] < 0 ? '−' : '')).$n(abs($b['gap']));
+            $parts[] = ['value' => ($b['gap'] > 0 ? '+' : ($b['gap'] < 0 ? '-' : '')).$n(abs($b['gap'])), 'label' => $ar ? 'فرق المنصات' : 'platform gap'];
         }
 
-        return $parts === [] ? null : 'GA4 · '.implode(' · ', $parts);
+        return $parts === [] ? null : $parts;
+    }
+
+    /**
+     * The line as plain text (logs, tests): the same pieces in reading order.
+     *
+     * @param  array{sessions: ?float, purchases: ?float, revenue_usd: ?float, claimed: ?float, gap: ?float}|null  $b
+     */
+    public static function line(?array $b, bool $ar): ?string
+    {
+        $parts = self::parts($b, $ar);
+        if ($parts === null) {
+            return null;
+        }
+
+        return 'GA4 · '.implode(' · ', array_map(static fn (array $p): string => $ar && $p['label'] !== '' && str_starts_with($p['label'], 'فرق') ? $p['label'].' '.$p['value'] : trim($p['value'].' '.$p['label']), $parts));
     }
 }

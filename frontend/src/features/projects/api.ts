@@ -15,6 +15,8 @@ export interface ProjectSummary {
   providers: string[]
   /** The newest sync among THIS project's bound accounts, or null when none has ever reported. */
   data_last_synced_at: string | null
+  /** GA4-HEALTH-001 — the store measurement's health: read lately, stale, or failed; when it was read; the platforms' gap as a share. Null with no property. */
+  ga4?: { state: 'connected' | 'stale' | 'failed'; last_read_at: string | null; gap_share: number | null } | null
   team_members: number
   /**
    * Campaigns running in this project — canonical rows, not a guess from metrics.

@@ -376,7 +376,7 @@ final class DailyDigestMail extends Mailable
                     'attention' => null,
                     'follow' => null,
                     // GA4-DIGEST-001 — one line, counts and USD; never spend, never a campaign name.
-                    'ga4' => Ga4DigestBlock::line($block['ga4'] ?? null, $ar),
+                    'ga4' => Ga4DigestBlock::parts($block['ga4'] ?? null, $ar),
                     'spend_amount' => null,
                     'url' => $this->client() ? Frontend::origin().'/portal' : $app.'/app/dashboard',
                 ];
@@ -396,7 +396,7 @@ final class DailyDigestMail extends Mailable
                 // EXECUTIVE-DAILY-DIGEST-001 — the one follow-up line that needs a person, counts only; the table went with the analysis.
                 'attention' => $attention === [] ? null : implode(' · ', $attention),
                 'follow' => $followLine === '' ? null : $followLine,
-                'ga4' => Ga4DigestBlock::line($block['ga4'] ?? null, $ar),
+                'ga4' => Ga4DigestBlock::parts($block['ga4'] ?? null, $ar),
                 'spend_amount' => is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
                 'url' => $app.'/app/dashboard',
             ];

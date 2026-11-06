@@ -516,6 +516,20 @@ export function ProjectsPage() {
                       </span>
                     </div>
 
+                    {p.summary.ga4 && (
+                      <div data-testid={`project-ga4-${p.id}`} data-state={p.summary.ga4.state} className="flex flex-wrap items-center gap-1">
+                        <Badge tone={p.summary.ga4.state === 'connected' ? 'success' : p.summary.ga4.state === 'failed' ? 'danger' : 'warning'}>
+                          GA4 · {p.summary.ga4.state === 'connected' ? (locale === 'ar' ? 'متصل' : 'Live') : p.summary.ga4.state === 'failed' ? (locale === 'ar' ? 'فشل' : 'Failed') : (locale === 'ar' ? 'متأخر' : 'Stale')}
+                        </Badge>
+                        {p.summary.ga4.last_read_at && <span className="text-[11px] text-text-muted">{freshnessLabel(p.summary.ga4.last_read_at, locale)}</span>}
+                        {p.summary.ga4.gap_share !== null && p.summary.ga4.gap_share !== undefined && (
+                          <Badge tone={Math.abs(p.summary.ga4.gap_share) >= 0.2 ? 'warning' : 'neutral'}>
+                            <span className="tnum">{locale === 'ar' ? 'فرق' : 'Gap'} {p.summary.ga4.gap_share > 0 ? '+' : p.summary.ga4.gap_share < 0 ? '−' : ''}{Math.round(Math.abs(p.summary.ga4.gap_share) * 100)}%</span>
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
                     {p.summary.providers.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {p.summary.providers.map((key) => (
