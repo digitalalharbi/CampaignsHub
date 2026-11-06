@@ -34,6 +34,13 @@ final class Ga4Breakdowns
         'utm_term' => ['sessionManualTerm', 'sessionCampaignName'],
         // GA4-STORE-ANALYTICS-001 — the products the store sold, by GA4's item-scoped `itemName`.
         'product' => ['itemName'],
+        'product_category' => ['itemCategory'],
+        // GA4-ATTRIBUTION-MATCH-001 — the keys the match reads. Ids: GA4's own campaign id beside the name
+        // (utm_id / Google Ads); the Google-Ads-linked campaign id; and the landing query, folded to the
+        // click-id FAMILY and UTM values it carried (see Ga4LandingQuery) so a click id is never stored.
+        'campaign_id' => ['sessionCampaignId', 'sessionCampaignName'],
+        'google_ads_campaign' => ['sessionGoogleAdsCampaignId', 'sessionGoogleAdsCampaignName'],
+        'landing_query' => ['landingPagePlusQueryString'],
     ];
 
     /** GA4 metric → stored key, for every session breakdown */
@@ -72,13 +79,16 @@ final class Ga4Breakdowns
     {
         return match ($breakdown) {
             'event' => self::EVENT_METRICS,
-            'product' => self::ITEM_METRICS,
+            'product', 'product_category' => self::ITEM_METRICS,
             default => self::SESSION_METRICS,
         };
     }
 
     /** Stored keys that are money, and so carry the property's currency on their row. */
     public const MONEY = ['revenue', 'item_revenue'];
+
+    /** Breakdowns whose rows are folded before they are stored (see Ga4Reporting::breakdownRows). */
+    public const FOLDED = ['landing_query'];
 
     /** Session breakdowns whose counts may be summed across their rows to a total. */
     public const ADDITIVE = ['sessions', 'engaged_sessions', 'key_events', 'add_to_carts', 'checkouts', 'purchases', 'revenue'];

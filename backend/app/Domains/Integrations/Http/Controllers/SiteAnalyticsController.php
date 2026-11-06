@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Integrations\Measurement\Ga4AttributionMatch;
+use App\Domains\Integrations\Measurement\Ga4Classification;
 use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
 use App\Domains\Integrations\Measurement\Ga4StoreAnalytics;
 use App\Domains\Integrations\Measurement\Ga4TrafficTable;
@@ -63,6 +65,43 @@ final class SiteAnalyticsController extends Controller
         [$tenantId, $projectId] = $this->scope();
 
         return ApiResponse::success($table->page($tenantId, $projectId, $from, $to, $this->options($request)), 'Traffic table.');
+    }
+
+    /**
+     * GA4-ATTRIBUTION-MATCH-001 — every ad-platform campaign against the GA4 traffic it produced.
+     * Channel / campaign-level, from GA4's own session attribution; never an order-level match.
+     */
+    public function attribution(Request $request, Ga4AttributionMatch $match): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+        [$tenantId, $projectId] = $this->scope();
+        $v = $request->validate([
+            'platform' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'channel' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'campaign' => ['sometimes', 'nullable', 'string', 'max:512'],
+            'compare' => ['sometimes', 'boolean'],
+        ]);
+
+        return ApiResponse::success($match->build($tenantId, $projectId, $from, $to, $v + ['internal' => true]), 'Attribution match.');
+    }
+
+    /** GA4-CLASSIFICATION-001 — the traffic grouped by one chosen axis, one fixed-size page at a time. */
+    public function classification(Request $request, Ga4Classification $classification): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+        [$tenantId, $projectId] = $this->scope();
+        $v = $request->validate([
+            'group' => ['required', 'string', 'in:'.implode(',', Ga4Classification::GROUPS)],
+            'page' => ['sometimes', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['sometimes', 'integer'],
+            'sort' => ['sometimes', 'string', 'max:40'],
+            'dir' => ['sometimes', 'string', 'in:asc,desc'],
+            'platform' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'channel' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'campaign' => ['sometimes', 'nullable', 'string', 'max:512'],
+        ]);
+
+        return ApiResponse::success($classification->page($tenantId, $projectId, $from, $to, $v), 'Classification.');
     }
 
     /** Every row in scope for the same breakdown, filter and sort — the page and page size are ignored on purpose. */
