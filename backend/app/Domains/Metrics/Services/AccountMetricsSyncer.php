@@ -29,6 +29,7 @@ use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\PeriodReach;
+use App\Domains\Metrics\Support\NoDataReading;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -469,6 +470,36 @@ final class AccountMetricsSyncer
          * gap, reported as `partial_mapping` rather than as a green tick over an empty dashboard.
          */
         if ($parsed === 0) {
+            /*
+             * META-NO-DATA-READING-001 — rows that arrived and could not be read are not «no data».
+             *
+             * `no_data` says the provider had nothing for the window. A body holding rows of which not one
+             * named an entity we could file it under says something else entirely — the request or the
+             * mapping is wrong — and it used to be filed under the same quiet word, where nobody looks.
+             */
+            if (NoDataReading::of($counts['provider_raw_rows'], $parsed) === NoDataReading::UNREAD_ROWS) {
+                return $this->finish(
+                    $run,
+                    SyncRunStatus::PartialMapping,
+                    0,
+                    $connector->label()." returned {$counts['provider_raw_rows']} row(s) for this window and none of them could be read as a campaign figure, so nothing was stored. This is not «no data»: the rows arrived. Read the retained provider body for this run.",
+                    $account,
+                    $counts,
+                    NoDataReading::UNREAD_ROWS,
+                );
+            }
+
+            /*
+             * The provider answered with an empty list, and the run says so — with the last day this
+             * account does hold a figure for, read once here so «it stopped delivering on the 28th» is on
+             * the run rather than something to be worked out from the tables afterwards.
+             */
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'no_data_reading' => NoDataReading::NO_DELIVERY,
+                'last_delivery_date' => NoDataReading::lastDeliveryDate((string) $account->getKey()),
+            ]])->save();
+
             return $this->finish(
                 $run,
                 SyncRunStatus::NoData,

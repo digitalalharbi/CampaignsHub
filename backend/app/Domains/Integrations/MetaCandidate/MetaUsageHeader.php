@@ -13,6 +13,27 @@ namespace App\Domains\Integrations\MetaCandidate;
  */
 final class MetaUsageHeader
 {
+    /**
+     * Minutes until Meta stops throttling, from `estimated_time_to_regain_access`; 0 when none is stated.
+     *
+     * Meta's rate-limit page names the same payload `X-Business-Use-Case`, so the caller passes whichever arrived.
+     */
+    public static function regainMinutes(?string $header): int
+    {
+        $decoded = is_string($header) && $header !== '' ? json_decode($header, true) : null;
+        $minutes = 0;
+
+        foreach (is_array($decoded) ? $decoded : [] as $entries) {
+            foreach ((array) $entries as $entry) {
+                if (is_array($entry) && is_numeric($entry['estimated_time_to_regain_access'] ?? null)) {
+                    $minutes = max($minutes, (int) $entry['estimated_time_to_regain_access']);
+                }
+            }
+        }
+
+        return $minutes;
+    }
+
     /** @return array{present: bool, max_call_count: int|null, max_total_cputime: int|null, max_total_time: int|null} */
     public static function summarise(?string $header): array
     {
