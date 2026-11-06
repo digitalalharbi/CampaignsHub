@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
+use App\Domains\Integrations\OAuth\PendingProjectLink;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
@@ -21,8 +22,12 @@ use App\Domains\Integrations\Services\AccountDiscovery;
 use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Integrations\Services\ProviderIdentity;
 use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
 use App\Support\Frontend;
@@ -144,7 +149,23 @@ final class AdPlatformOAuthController extends Controller
                 ->whereNull('deleted_at')],
             // META-SAAS-APP-001 — which Meta app issues THIS connection; absent = the platform's choice for new connections.
             'app_profile' => ['sometimes', 'nullable', Rule::in([MetaCredentialProfile::Live->value, MetaCredentialProfile::Saas->value])],
+            // INTEG-PROJECT-LINK-001 — which portal's project page the journey returns to. A prefix, never a permission.
+            'return_portal' => ['sometimes', 'nullable', Rule::in(self::PORTALS)],
         ]);
+
+        /*
+         * INTEG-PROJECT-LINK-001 — a journey that names a project is refused HERE unless this user may link
+         * sources to that project. The tenant rule above proves the project is this tenant's; this proves the
+         * person is allowed to feed it. Asked before a state exists, so a refused request leaves nothing to
+         * come back to.
+         */
+        if (($validated['project_id'] ?? null) !== null) {
+            abort_unless(
+                app(ProjectAbilities::class)->allows($request->user(), (string) $validated['project_id'], ProjectCapability::INTEGRATIONS_MANAGE),
+                403,
+                'You may not link a source to this project.',
+            );
+        }
 
         $metaProfile = MetaCredentialProfile::Live;
         if ($creds->platform === 'meta') {
@@ -194,6 +215,7 @@ final class AdPlatformOAuthController extends Controller
             extra: array_filter([
                 'code_verifier' => $verifier,
                 'project_id' => $validated['project_id'] ?? null,
+                'return_portal' => $validated['return_portal'] ?? null,
             ], static fn ($v): bool => $v !== null),
             metaProfile: $metaProfile,
         );
@@ -259,7 +281,7 @@ final class AdPlatformOAuthController extends Controller
             }
 
             if ($request->has('error')) {
-                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
+                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')), record: $record);
             }
 
             if ($record === null) {
@@ -270,21 +292,27 @@ final class AdPlatformOAuthController extends Controller
             $issuedBy = MetaCredentialProfile::from((string) $record['profile']);
             $creds = PlatformCredentials::forMeta($issuedBy);
             if (! $creds->isConfigured()) {
-                return $this->back('meta', 'failed', 'The Meta app this authorisation was started with is no longer configured.');
+                return $this->back('meta', 'failed', 'The Meta app this authorisation was started with is no longer configured.', record: $record);
             }
         } else {
-            // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
-            // (OAuth 1.0a reports a refusal as `denied=<request token>`.)
-            if ($request->has('error') || $request->has('denied')) {
-                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
-            }
-
-            // OAuth 1.0a hands back only the request token; the state we issued is looked up by it.
+            /*
+             * The state is claimed BEFORE the refusal is read (INTEG-PROJECT-LINK-001). A person who presses
+             * «Cancel» at the provider started from a project, and the only record of which one is the state —
+             * so it is spent here either way, and the refusal goes back to that project with nothing opened.
+             *
+             * OAuth 1.0a hands back only the request token (as `oauth_token`, or as `denied` on a refusal);
+             * the state we issued is looked up by it.
+             */
             $stateValue = $this->oauth->usesOAuth1($creds)
-                ? (string) $this->oauth->stateForRequestToken((string) $request->query('oauth_token', ''))
+                ? (string) $this->oauth->stateForRequestToken((string) $request->query('oauth_token', (string) $request->query('denied', '')))
                 : (string) $request->query('state', '');
 
             $record = AuthorizationState::claim($stateValue, $creds->platform);
+
+            // The platform's own refusal — the customer pressed "cancel", or the app is not approved.
+            if ($request->has('error') || $request->has('denied')) {
+                return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')), record: $record);
+            }
 
             if ($record === null) {
                 // Deliberately vague to the browser, because this is the branch an attacker sees.
@@ -302,11 +330,24 @@ final class AdPlatformOAuthController extends Controller
         $code = (string) $request->query($parameter, '');
 
         if ($code === '') {
-            return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.');
+            return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.', record: $record);
         }
 
         $tenantId = (string) $record['tenant_id'];
         $tenant->setTenantId($tenantId);
+
+        /*
+         * INTEG-PROJECT-LINK-001 — the project is proven AGAIN, on the way back, before anything is opened.
+         *
+         * Minutes pass between the start and this line, and the redirect that carries it is not
+         * authenticated. The project may have been deleted, the person removed from it or from the
+         * workspace. If the project the state names is no longer this tenant's, or its issuer may no longer
+         * link to it, the code is NOT exchanged: no token, no connection, no discovery.
+         */
+        $projectId = isset($record['project_id']) ? (string) $record['project_id'] : null;
+        if ($projectId !== null && ! $this->mayStillLink($record, $tenantId, $projectId)) {
+            return $this->back($creds->platform, 'project_refused', 'This project can no longer be linked by the person who started the authorisation.');
+        }
 
         try {
             // The verifier comes out of the RECORD, never the query string — the same rule as the
@@ -327,13 +368,24 @@ final class AdPlatformOAuthController extends Controller
                 clientWorkspaceId: isset($record['client_workspace_id']) ? (string) $record['client_workspace_id'] : null,
                 createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
                 appProfile: $creds->platform === 'meta' ? MetaCredentialProfile::from((string) $record['profile']) : null,
+                // INTEG-PROJECT-LINK-001 — a journey started from a project opens that project's OWN connection.
+                projectId: $projectId,
             );
 
             // INTEG-PROVIDER-IDENTITY-001 — which provider login granted this; best effort, never blocks the connect.
             app(ProviderIdentity::class)->capture($connection, $tokens);
 
             // The first real round trip. Until this returns, nothing is called connected.
-            $discovered = $this->discoverAccounts($connection);
+            /*
+             * INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — a project's journey catalogues NOTHING here.
+             *
+             * The sign-in used to be followed by a walk of everything the identity could reach, all of it
+             * written to `external_accounts`: ~2450 rows in Production against 31 ever linked. A journey
+             * started from a project asks for the organisations when the person reaches that step, then the
+             * chosen organisation's accounts, and stores the one that is confirmed
+             * ({@see ProjectLinkDirectoryController}). The workspace-wide connect keeps its discovery.
+             */
+            $discovered = $projectId === null ? $this->discoverAccounts($connection) : 0;
 
             /*
              * A RECONNECT fetches immediately — META-INSIGHTS-GRANT-001 §10.
@@ -351,7 +403,12 @@ final class AdPlatformOAuthController extends Controller
         } catch (Throwable $e) {
             // Redacted before it is trimmed: a provider's own failure message names the URL that
             // failed, and one platform's discovery URL carries the app secret (SecretNeverInLoggedUrlTest).
-            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
+            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()), record: $record);
+        }
+
+        // Which project this connection came back for is kept on the server, never trusted from the address.
+        if ($projectId !== null && isset($record['user_id'])) {
+            PendingProjectLink::put((string) $connection->getKey(), $tenantId, $projectId, (int) $record['user_id']);
         }
 
         $audit->log(
@@ -375,8 +432,27 @@ final class AdPlatformOAuthController extends Controller
              * with the client already decided.
              */
             connectionId: (string) $connection->getKey(),
-            projectId: isset($record['project_id']) ? (string) $record['project_id'] : null,
+            record: $record,
         );
+    }
+
+    /** The two portals a project page lives in. */
+    private const PORTALS = ['app', 'agency'];
+
+    /**
+     * Does the project the state names still belong to this tenant, and may its issuer still link to it?
+     *
+     * @param  array<string,mixed>  $record
+     */
+    private function mayStillLink(array $record, string $tenantId, string $projectId): bool
+    {
+        $exists = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('id', $projectId)->whereNull('deleted_at')->exists();
+        $user = isset($record['user_id']) ? User::find((int) $record['user_id']) : null;
+
+        return $exists
+            && $user !== null
+            && $user->hasPermission('integrations.connect')
+            && app(ProjectAbilities::class)->allows($user, $projectId, ProjectCapability::INTEGRATIONS_MANAGE);
     }
 
     /**
@@ -419,23 +495,37 @@ final class AdPlatformOAuthController extends Controller
         return PlatformCredentials::for($provider);
     }
 
-    /** Back to the SPA's integrations page, carrying an outcome it can render in the reader's language. */
+    /**
+     * Where the browser goes after the provider.
+     *
+     * A journey that started from a project returns to THAT PROJECT's page (INTEG-PROJECT-LINK-001) — on
+     * success, on refusal and on failure alike. The project id in this address is a place to land, not a
+     * decision: resuming reads the project from {@see PendingProjectLink}, and binding is authorised again
+     * by the project's own capability check. A `project_refused` return names no project at all.
+     *
+     * @param  array<string,mixed>|null  $record  the claimed state, when there is one
+     */
     private function back(
         string $provider,
         string $outcome,
         ?string $reason,
         int $accounts = 0,
         ?string $connectionId = null,
-        ?string $projectId = null,
+        ?array $record = null,
     ): RedirectResponse {
-        return redirect()->away(Frontend::origin().'/app/integrations?'.http_build_query(array_filter([
+        $projectId = isset($record['project_id']) ? (string) $record['project_id'] : null;
+        $portal = in_array($record['return_portal'] ?? null, self::PORTALS, true) ? (string) $record['return_portal'] : 'app';
+
+        $path = $projectId === null
+            ? '/app/integrations'
+            : '/'.$portal.'/projects/'.$projectId.'/integrations';
+
+        return redirect()->away(Frontend::origin().$path.'?'.http_build_query(array_filter([
             'provider' => $provider,
             'outcome' => $outcome,
             'accounts' => $outcome === 'connected' ? (string) $accounts : null,
-            // What to reopen, and for whom. Absent on a refusal: there is no flow to resume.
-            'connection' => $connectionId,
-            'project' => $projectId,
-            // Trimmed: a provider error body can be a page long and this is going in a URL.
+            // On the centre this is the connection to resume; on a project page it is the link to resume.
+            ($projectId === null ? 'connection' : 'link') => $connectionId,
             'reason' => $reason === null ? null : mb_substr($reason, 0, 180),
         ], static fn ($v) => $v !== null && $v !== '')));
     }

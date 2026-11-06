@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -233,6 +234,82 @@ final class ProjectListSurfaceTest extends TestCase
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * PROJECT-LIFECYCLE-DERIVED-001 (Owner 2026-11-06) — «مسودة / الإعداد 0% / نشطة 0» on projects that sync.
+     *
+     * `status` and `setup_completion` were written once, at creation (`draft`, 0), and nothing ever moved
+     * them: a project with bound, syncing sources and hundreds of campaigns still read «مسودة» and «0%»,
+     * and the header counted no active project. They are DERIVED on read from what the project really
+     * has; the stored columns are not rewritten.
+     */
+    public function test_a_draft_project_that_syncs_and_has_campaigns_reads_active_and_fully_set_up(): void
+    {
+        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $account = $this->account($this->snapchat, 'act-1', syncedHoursAgo: 2);
+        $this->bind($this->mine, $account);
+        ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->mine->id, 'external_account_id' => $account->id,
+            'provider' => 'snapchat', 'external_id' => 'c-1', 'name' => 'Campaign', 'status' => 'active',
+        ]);
+
+        $card = $this->cards()['رزة أفينيو'];
+
+        $this->assertSame('active', $card['status']);
+        $this->assertSame(100, $card['setup_completion']);
+
+        // Derived on read: no row was rewritten to make the card right.
+        $this->assertSame('draft', (string) $this->mine->refresh()->status);
+        $this->assertSame(0, (int) $this->mine->setup_completion);
+    }
+
+    public function test_a_linked_source_that_has_not_synced_yet_reads_onboarding_and_a_bare_project_stays_draft(): void
+    {
+        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->neighbour->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: null));
+
+        $cards = $this->cards();
+
+        $this->assertSame('onboarding', $cards['رزة أفينيو']['status']);
+        $this->assertSame(33, $cards['رزة أفينيو']['setup_completion']);
+        // The neighbour has nothing, and one project's source never lifts another's card.
+        $this->assertSame('draft', $cards['عميل آخر']['status']);
+        $this->assertSame(0, $cards['عميل آخر']['setup_completion']);
+    }
+
+    /** The project's own page reads the same derived status and setup as its card — and gains no `summary` key. */
+    public function test_the_show_endpoint_derives_status_and_setup_like_the_list(): void
+    {
+        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->neighbour->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: null));
+
+        $card = $this->cards()['رزة أفينيو'];
+        $shown = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/projects/'.$this->mine->id)->assertOk()->json('data');
+
+        $this->assertSame('onboarding', $shown['status']);
+        $this->assertSame($card['status'], $shown['status']);
+        $this->assertSame($card['setup_completion'], $shown['setup_completion']);
+        $this->assertArrayNotHasKey('summary', $shown);
+
+        // A project with nothing stays what was stored, and nothing is written by reading.
+        $bare = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/projects/'.$this->neighbour->id)->assertOk()->json('data');
+        $this->assertSame('draft', $bare['status']);
+        $this->assertSame('draft', (string) $this->mine->refresh()->status);
+    }
+
+    /** A status somebody CHOSE is not overridden by what the project happens to hold. */
+    public function test_a_paused_project_stays_paused_however_much_it_has_synced(): void
+    {
+        $this->mine->forceFill(['status' => 'paused', 'setup_completion' => 0])->save();
+        $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: 1));
+
+        $card = $this->cards()['رزة أفينيو'];
+
+        $this->assertSame('paused', $card['status']);
+        $this->assertSame(67, $card['setup_completion']);
+    }
 
     /** @return list<array<string,mixed>> */
     private function list(): array

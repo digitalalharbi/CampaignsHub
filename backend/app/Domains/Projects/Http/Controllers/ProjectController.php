@@ -22,6 +22,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Rules\UserInCurrentTenant;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -88,6 +89,14 @@ final class ProjectController extends Controller
          * in the address of every project they legitimately open.
          */
         $this->authorizeReach($user, $model);
+
+        /*
+         * The status and setup a reader sees are DERIVED from what the project has (`ProjectLifecycle`), and
+         * the listing has done so since it was written. This route returned the value stored at creation, so a
+         * project read «نشط» on its card and «مسودة» on its own page. The same facts, for the one project;
+         * they are not added to the answer — `summary` stays the listing's.
+         */
+        $model->setAttribute('lifecycle_facts', app(ProjectListSummary::class)->for(new EloquentCollection([$model]))[(string) $model->getKey()] ?? null);
 
         return ApiResponse::success(new ProjectResource($model), 'Project retrieved.');
     }

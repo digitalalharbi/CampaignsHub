@@ -17,7 +17,7 @@ import { useUi } from '@/stores/ui'
 export function ProjectStores({ projectId }: { projectId: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
-  const stores = useQuery({ queryKey: ['commerce-stores'], queryFn: listStoreProviders, retry: false })
+  const stores = useQuery({ queryKey: ['commerce-stores'], queryFn: () => listStoreProviders(), retry: false })
   const assign = useMutation({
     mutationFn: ({ storeId, project }: { storeId: string; project: string | null }) => assignStore(storeId, project),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
