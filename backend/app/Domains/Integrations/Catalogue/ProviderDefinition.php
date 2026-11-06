@@ -54,6 +54,8 @@ final class ProviderDefinition
         public readonly string $docsUrl,
         public readonly string $rateLimitNote,
         public readonly string $paginationNote,
+        /** INTEG-CAPABILITY-CONTRACT-001 — what the adapter does; see `supports()`. */
+        public readonly ProviderCapabilities $capabilities,
         /**
          * INTEG-AUTH-KIND-001 — how this provider is authorised.
          *
@@ -96,6 +98,55 @@ final class ProviderDefinition
     public function isAdvertising(): bool
     {
         return $this->kind === ProviderKind::Advertising;
+    }
+
+    /**
+     * INTEG-CAPABILITY-CONTRACT-001 — the one answer to «can this provider do that?».
+     *
+     * A `match` with no default, so a capability added to the enum cannot fall through to a quiet
+     * «no». Refresh and webhooks read the fields that already held them.
+     */
+    public function supports(ProviderCapability $capability): bool
+    {
+        $declared = $this->capabilities;
+
+        return match ($capability) {
+            ProviderCapability::Discovery => $declared->discovery,
+            ProviderCapability::RefreshToken => $this->supportsRefresh,
+            ProviderCapability::TokenExpiry => $declared->tokenExpiry,
+            ProviderCapability::TokenExchange => $declared->tokenExchange,
+            ProviderCapability::Webhooks => $this->webhooks->hasEndpoint(),
+            ProviderCapability::Hierarchy => $declared->parentLevel !== null,
+            ProviderCapability::EntityGrains => $declared->entityGrains,
+            ProviderCapability::CreativeInsights => $declared->creativeInsights,
+            ProviderCapability::PeriodReach => $declared->periodReach,
+            ProviderCapability::AbandonedCarts => $declared->abandonedCarts,
+            ProviderCapability::IncrementalCursor => $declared->incrementalCursor,
+            ProviderCapability::RateLimitPolicy => $declared->rateLimit !== null,
+        };
+    }
+
+    /**
+     * One row of the capability table: what the runbook prints and what the report quotes.
+     *
+     * Deliberately not part of `toArray()`, which is an API response nothing has asked to change.
+     *
+     * @return array<string, string>
+     */
+    public function capabilityRow(): array
+    {
+        $row = [
+            'provider' => $this->key,
+            'category' => $this->kind->category(),
+            'resource' => $this->capabilities->resourceType->value,
+            'auth' => $this->auth->value,
+        ];
+
+        foreach (ProviderCapability::cases() as $capability) {
+            $row[$capability->value] = $this->supports($capability) ? 'yes' : 'no';
+        }
+
+        return $row;
     }
 
     /**

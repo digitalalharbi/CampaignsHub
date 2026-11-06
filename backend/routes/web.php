@@ -3,6 +3,7 @@
 use App\Domains\Campaigns\Http\Controllers\AppMediaController;
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Notifications\Http\Controllers\MailChartController;
+use App\Domains\Notifications\Http\Controllers\MailUnsubscribeController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkHopController;
 use App\Domains\ShortLinks\Services\ShortLinkHops;
@@ -57,6 +58,19 @@ Route::get('/r/{token}/preview.png', [SharePreviewController::class, 'image'])
 Route::get('/mail/charts/{token}.png', [MailChartController::class, 'png'])
     ->middleware('throttle:120,1')
     ->name('mail.chart');
+
+/*
+ * EMAIL-GAPS — leaving a kind of message with no sign-in. GET only shows the page, because link scanners
+ * fetch every URL in a message and must not unsubscribe anybody; POST does it. See the controller.
+ */
+Route::get('/mail/unsubscribe/{token}', [MailUnsubscribeController::class, 'show'])
+    ->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]+')
+    ->middleware('throttle:60,1')
+    ->name('mail.unsubscribe');
+Route::post('/mail/unsubscribe/{token}', [MailUnsubscribeController::class, 'leave'])
+    ->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]+')
+    ->middleware('throttle:60,1')
+    ->name('mail.unsubscribe.confirm');
 
 /*
  * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.

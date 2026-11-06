@@ -124,6 +124,15 @@ Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapp
 Schedule::command('integrations:close-abandoned-runs --apply')->hourlyAt(10)->withoutOverlapping();
 
 /*
+ * INTEG-SOURCE-REMOVAL-001 — hide authorisations that were started in the wizard and never finished.
+ *
+ * Scheduled daily but inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true: without it the command only
+ * reports. It hides (never deletes) a connection older than a day with no selection, no sync and not one
+ * binding, metric, run or mapping row referencing it.
+ */
+Schedule::command('integrations:sweep-abandoned --apply')->dailyAt('04:20')->withoutOverlapping();
+
+/*
  * Refresh tokens BEFORE a sync needs them.
  *
  * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am
@@ -141,6 +150,8 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
  * Sending is idempotent by database constraint, so an overlapping run cannot double-send.
  */
 Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
+// EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
+Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
 /*
  * The alert sweep (MAIL-006) — four times a day, not hourly.
@@ -168,6 +179,16 @@ Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->wit
  * already been refunded.
  */
 Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
+
+/*
+ * INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation: read-only toward the provider, bounded, OFF by default.
+ *
+ * Listed unconditionally so the scheduled-work inventory sees it; `when()` is what keeps it quiet until the
+ * Owner sets WEBHOOK_RECONCILE_ENABLED. Every six hours at :40, clear of the :20 store sweep, and only the
+ * stores bound to a project, at most twenty per run.
+ */
+Schedule::command('webhooks:reconcile')->cron('40 */6 * * *')->withoutOverlapping()
+    ->when(static fn (): bool => (bool) config('integrations.webhooks.reconcile.enabled'));
 
 /*
  * GA4-INTEGRATION-001 — the measurement sweep.

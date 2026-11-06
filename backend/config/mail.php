@@ -110,6 +110,21 @@ return [
     |
     */
 
+    /*
+    | EMAIL-GAPS — how many optional messages one workspace may send in a day (UTC). Per tenant, so one
+    | workspace cannot spend another's allowance. Account and security mail and billing notices are never
+    | counted or refused. 0 switches the limit off. A refusal is written to the ledger as `limit_reached`.
+    */
+    'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
+
+    /*
+    | EMAIL-TEST-SEND-001 (§17.4.5) — how many times one alert may reach one person in 24 hours. A rule's
+    | cooldown can be as short as five minutes, and a problem that stays open would otherwise mail each
+    | time it passes. Its recovery is never held. 0 switches the limit off. A held message is written to the
+    | ledger as `repeat_limit`; the alert itself stays open in the product.
+    */
+    'alert_repeats_per_day' => (int) env('MAIL_ALERT_REPEATS_PER_DAY', 3),
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

@@ -1030,6 +1030,8 @@ export interface ReportScheduleRow {
   next_run_at: string | null
   /** status → count, exactly as recorded. `sent` only ever appears after a provider acknowledgement. */
   deliveries: Record<string, number>
+  /** Why rows were held back, by reason: `outside_recipient_off`, `schedule_mail_off` and so on. */
+  delivery_reasons?: Record<string, number>
 }
 
 export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at'>>

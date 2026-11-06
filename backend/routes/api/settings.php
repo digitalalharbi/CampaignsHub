@@ -58,6 +58,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');
     Route::match(['put', 'patch'], 'notifications', [NotificationPreferenceController::class, 'update'])->name('notifications.update');
+    // §17.4.5 — a manager's preview of the templates. Sending one is the platform admin's alone (EMAIL-TEST-SEND-001).
+    Route::get('notifications/previews', [NotificationPreferenceController::class, 'previews'])->name('notifications.previews');
+    Route::get('notifications/previews/{key}', [NotificationPreferenceController::class, 'preview'])->name('notifications.preview');
 
     /*
      * Who a manager wants told — MAIL-010. Distinct from the routes above, which are a person's own

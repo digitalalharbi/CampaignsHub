@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Metrics\Services\ReportingCurrency;
-use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
@@ -20,29 +20,53 @@ use Illuminate\Support\Str;
  * engine (a fresh Report + GenerateReportJob) — no parallel generator. Delivery is honest: with no mail
  * provider each row is "awaiting_provider_credentials", never "sent". An internal report is NEVER delivered
  * to an external recipient (suppressed). Runs from the reports:dispatch-scheduled command.
+ *
+ * EMAIL-GAPS — a row is `queued` only when mail may actually follow, and {@see ScheduledReportMailer}
+ * reads nothing else. `awaiting_provider_credentials` keeps meaning no provider, and a live install with
+ * the mail switched off now says that instead of claiming to wait for credentials it already has.
  */
 final class ScheduledReportDispatcher
 {
+    public function __construct(private readonly ProviderRegistry $providers) {}
+
     /** @return int number of schedules dispatched */
     public function dispatchDue(?Carbon $now = null): int
     {
         $now ??= Carbon::now();
         $count = 0;
 
-        // Schedules are tenant/project-scoped models; dispatch runs cron-wide, so drop the project scope and
-        // read across tenants (each report carries its own tenant_id/project_id).
-        $due = ReportSchedule::withoutGlobalScope(ProjectScope::class)
+        // Schedules are tenant/project-scoped models; dispatch runs cron-wide with no tenant resolved, so BOTH
+        // scopes go. Dropping only the project scope left TenantScope failing closed: the cron found nothing.
+        // Each report carries its own tenant_id/project_id.
+        $due = ReportSchedule::withoutGlobalScopes()
             ->where('active', true)
             ->whereNotNull('next_run_at')
             ->where('next_run_at', '<=', $now)
             ->get();
 
         foreach ($due as $schedule) {
-            $this->dispatchOne($schedule, $now);
-            $count++;
+            if ($this->claimDue($schedule, $now)) {
+                $this->dispatchOne($schedule, $now);
+                $count++;
+            }
         }
 
         return $count;
+    }
+
+    /**
+     * Take this run, or learn that an overlapping sweep already took it.
+     *
+     * The `next_run_at` this copy read is part of the condition, so of two sweeps holding the same due
+     * row exactly one moves it on. The other gets no row back and creates no report.
+     */
+    public function claimDue(ReportSchedule $schedule, Carbon $now): bool
+    {
+        return ReportSchedule::withoutGlobalScopes()
+            ->whereKey($schedule->getKey())
+            ->where('active', true)
+            ->where('next_run_at', $schedule->next_run_at)
+            ->update(['next_run_at' => $this->nextRun($schedule, $now)]) === 1;
     }
 
     public function dispatchOne(ReportSchedule $schedule, Carbon $now): Report
@@ -89,11 +113,11 @@ final class ScheduledReportDispatcher
                      * months later from a report whose name may have changed. Recorded here it is the
                      * document's own name at the moment the delivery was scheduled.
                      */
-                    'subject' => ReportIdentity::subject($report, $schedule->locale ?? 'ar'),
+                    'subject' => ReportIdentity::subject($report, $schedule->language ?? 'ar'),
                     'audience' => $schedule->audience ?? 'client',
                     // Internal reports never leave the tenant — an external recipient is suppressed. Otherwise
                     // there is no mail provider yet, so the honest state is awaiting_provider_credentials.
-                    'status' => $this->deliveryStatus($schedule, $email),
+                    ...$this->deliveryStatus($schedule, $email),
                     'attempts' => 0,
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -110,18 +134,25 @@ final class ScheduledReportDispatcher
         return $report;
     }
 
-    private function deliveryStatus(ReportSchedule $schedule, string $email): string
+    /** @return array{status: string, reason: ?string} */
+    private function deliveryStatus(ReportSchedule $schedule, string $email): array
     {
         if (($schedule->audience ?? 'client') === 'internal') {
             // Internal reports may only go to a user of the same tenant.
             $internal = User::query()->inTenant((string) $schedule->tenant_id)
                 ->whereRaw('lower(email) = ?', [Str::lower($email)])->exists();
             if (! $internal) {
-                return 'suppressed';
+                return ['status' => 'suppressed', 'reason' => 'internal_audience'];
             }
         }
 
-        return 'awaiting_provider_credentials';
+        if (! $this->providers->isConfigured('email')) {
+            return ['status' => 'awaiting_provider_credentials', 'reason' => null];
+        }
+
+        return config('reports.schedule_mail.enabled') === true
+            ? ['status' => 'queued', 'reason' => null]
+            : ['status' => 'suppressed', 'reason' => 'schedule_mail_off'];
     }
 
     /** Compute the next run in the schedule's timezone from daily/weekly/monthly/custom + day + time. */

@@ -7,6 +7,7 @@ import { NotificationsTab } from './tabs/NotificationsTab'
 import { NotificationRecipients } from './tabs/NotificationRecipients'
 import { TeamNotifications } from './tabs/TeamNotifications'
 import { DeliveryLog } from './tabs/DeliveryLog'
+import { NotificationTemplates } from './tabs/NotificationTemplates'
 import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
@@ -163,6 +164,7 @@ export function SettingsPage({ only, title, subtitle, navigation = true }: Props
                 arriving.
               */}
               <DeliveryLog />
+              <NotificationTemplates />
             </div>
           )}
           {tab === 'security' && <SecurityTab />}

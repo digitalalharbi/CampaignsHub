@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * WEBHOOK-001 — record a verified delivery exactly once, and place it if we can.
@@ -64,13 +65,7 @@ final class WebhookIngest
          * several do, the row names none of them: filing a delivery two tenants are entitled to under
          * one of them is a guess recorded as a fact.
          */
-        $accounts = $externalId === null
-            ? new Collection
-            : ExternalAccount::withoutGlobalScopes()
-                ->where('external_id', $externalId)
-                ->where('provider', $definition->key)
-                ->orderBy('id')
-                ->get();
+        $accounts = $this->accountsFor($definition->key, $payload);
 
         $account = $accounts->count() === 1 ? $accounts->first() : null;
 
@@ -87,10 +82,16 @@ final class WebhookIngest
             'tenant_id' => $account?->tenant_id ?? $connection?->tenant_id,
             'provider_connection_id' => $connection?->getKey(),
             'external_account_id' => $account?->getKey(),
-            'payload' => $payload,
+            'payload' => WebhookEventFacts::redacted($payload),
             'signature_verified' => $verified,
             'status' => $accounts->isEmpty() ? 'unmatched' : 'received',
             'received_at' => Carbon::now(),
+            // INTEG-WEBHOOK-ENGINE-001 — what the inbox needs to answer «what happened to this delivery».
+            'verdict' => 'verified',
+            'source' => 'webhook',
+            'correlation_id' => $this->correlationId(),
+            'event_time' => WebhookEventFacts::eventTime($payload),
+            'entity_key' => WebhookEventFacts::entityKey($payload, $externalId, $this->topicIn($payload)),
         ];
 
         try {
@@ -114,10 +115,43 @@ final class WebhookIngest
                 ->where('fingerprint', $attributes['fingerprint'])
                 ->firstOrFail();
 
+            // INTEG-WEBHOOK-ENGINE-001 — the redelivery is recorded as a duplicate, not just swallowed.
+            $existing->forceFill([
+                'duplicate_count' => $existing->duplicate_count + 1,
+                'last_duplicate_at' => Carbon::now(),
+            ])->save();
+
             return ['event' => $existing, 'duplicate' => true, 'accounts' => new Collection];
         }
 
         return ['event' => $event, 'duplicate' => false, 'accounts' => $accounts];
+    }
+
+    /**
+     * Every copy of the account a payload names, one per tenant that holds it (extracted so the worker
+     * resolves the same set the receiver did; the lookup itself is unchanged).
+     *
+     * @param  array<string,mixed>  $payload
+     * @return Collection<int, ExternalAccount>
+     */
+    public function accountsFor(string $provider, array $payload): Collection
+    {
+        $externalId = $this->accountIdIn($payload);
+
+        return $externalId === null
+            ? new Collection
+            : ExternalAccount::withoutGlobalScopes()
+                ->where('external_id', $externalId)
+                ->where('provider', $provider)
+                ->orderBy('id')
+                ->get();
+    }
+
+    private function correlationId(): string
+    {
+        $id = request()->attributes->get('correlation_id');
+
+        return is_string($id) && $id !== '' ? mb_substr($id, 0, 64) : (string) Str::uuid();
     }
 
     /**
@@ -175,7 +209,7 @@ final class WebhookIngest
      *
      * @param  array<string,mixed>  $payload
      */
-    private function accountIdIn(array $payload): ?string
+    public function accountIdIn(array $payload): ?string
     {
         foreach (['account_id', 'ad_account_id', 'merchant', 'store_id'] as $key) {
             $value = $payload[$key] ?? null;

@@ -52,9 +52,9 @@ final class ReportScheduleController extends Controller
             ? collect()
             : DB::table('report_deliveries')
                 ->whereIn('schedule_id', $schedules->pluck('id'))
-                ->select('schedule_id', 'status')
+                ->select('schedule_id', 'status', 'reason')
                 ->selectRaw('COUNT(*) AS total')
-                ->groupBy('schedule_id', 'status')
+                ->groupBy('schedule_id', 'status', 'reason')
                 ->get()
                 ->groupBy('schedule_id');
 
@@ -219,7 +219,9 @@ final class ReportScheduleController extends Controller
             'next_run_at' => optional($s->next_run_at)->toIso8601String(),
             // Delivery states are reported exactly as recorded — nothing is ever presented as "sent"
             // unless a provider acknowledged it.
-            'deliveries' => collect($deliveries ?? [])->mapWithKeys(fn ($r) => [$r->status => (int) $r->total])->all(),
+            'deliveries' => collect($deliveries ?? [])->groupBy('status')->map(fn ($rows) => (int) $rows->sum('total'))->all(),
+            // EMAIL-GAPS — why rows were held back, which the states alone cannot say.
+            'delivery_reasons' => collect($deliveries ?? [])->whereNotNull('reason')->groupBy('reason')->map(fn ($rows) => (int) $rows->sum('total'))->all(),
         ];
     }
 }

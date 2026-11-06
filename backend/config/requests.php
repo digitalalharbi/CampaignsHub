@@ -13,6 +13,10 @@ return [
     // Warn when the running SLA has fewer than this many hours remaining (evaluated by the scheduler).
     'sla_warning_hours' => (int) env('REQUESTS_SLA_WARNING_HOURS', 4),
 
+    // EMAIL-GAPS — request mail, to the client contact and to the team. OFF until the Owner approves it:
+    // switching it on mails real people. While off, `client_notifications` is written exactly as before.
+    'client_mail_enabled' => (bool) env('REQUEST_CLIENT_MAIL_ENABLED', false),
+
     // Public intake anti-abuse.
     'intake_throttle_per_minute' => (int) env('REQUESTS_INTAKE_THROTTLE', 6),
 

@@ -123,4 +123,35 @@ return [
          */
         'sweep_spread_minutes' => (int) env('SYNC_SWEEP_SPREAD_MINUTES', 0),
     ],
+    'webhooks' => [
+        /*
+         * INTEG-WEBHOOK-ENGINE-001 — how old a SIGNED delivery may be before it is refused as a replay.
+         *
+         * Applied only where the provider's signed material carries a timestamp (Salla's body, Meta's
+         * entry time); Zid signs nothing, so a timestamp in its body proves nothing and is not used.
+         * Forty-eight hours, because Meta redelivers for 36 hours and a genuine retry must still land.
+         */
+        'replay_tolerance_seconds' => (int) env('WEBHOOK_REPLAY_TOLERANCE_SECONDS', 172800),
+
+        /** A delivery stamped further in the future than this is refused: a clock that wrong is not the provider's. */
+        'future_skew_seconds' => 900,
+
+        /** Rejected deliveries recorded per provider per hour; past it the flood is counted in the log, not stored. */
+        'rejected_record_cap_per_hour' => 500,
+
+        'reconcile' => [
+            /** Off unless the Owner turns it on: the scheduler still lists the command, the `when()` decides. */
+            'enabled' => (bool) env('WEBHOOK_RECONCILE_ENABLED', false),
+            'days' => 3,
+            'max_stores' => 20,
+            /** An order placed (or a row synced) more recently than this is not yet a gap: the hourly sweep owns it. */
+            'grace_minutes' => 90,
+        ],
+    ],
+
+    /*
+     * INTEG-SOURCE-REMOVAL-001 — whether the daily sweep may HIDE connections that were started and never finished.
+     * Off unless an operator sets INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true after reading the command's preview.
+     */
+    'abandoned_sweep_enabled' => (bool) env('INTEGRATIONS_ABANDONED_SWEEP_ENABLED', false),
 ];

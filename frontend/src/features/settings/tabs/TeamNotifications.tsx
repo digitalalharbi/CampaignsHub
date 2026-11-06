@@ -23,7 +23,8 @@ const PORTALS: Record<string, { ar: string; en: string }> = {
 
 /** The one word for what is happening to this person's email, and what it means. */
 const STATES: Record<string, { ar: string; en: string; tone: string }> = {
-  sent: { ar: 'وصلت آخر رسالة', en: 'Last message delivered', tone: 'text-success' },
+  // EMAIL-DELIVERY-LEDGER-001 — «delivered» here was a claim on the strength of an SMTP 250.
+  sent: { ar: 'قبل خادم البريد آخر رسالة', en: 'Mail server accepted the last message', tone: 'text-success' },
   sandbox: { ar: 'وضع الاختبار', en: 'Sandbox', tone: 'text-warning' },
   awaiting_credentials: { ar: 'بانتظار ربط مزوّد البريد', en: 'Awaiting a mail provider', tone: 'text-warning' },
   failed: { ar: 'تعذّر الإرسال', en: 'Sending failed', tone: 'text-danger' },

@@ -61,7 +61,81 @@ final class AlertSweepCharacterisationTest extends TestCase
         }
 
         $this->assertFileExists(self::BASELINE);
-        $this->assertSame(rtrim((string) file_get_contents(self::BASELINE), "\n"), $now);
+        $baseline = rtrim((string) file_get_contents(self::BASELINE), "\n");
+
+        // Never `assertSame` on the two documents: PHPUnit's diff of two ~1 MB strings took 400–870 s, so a failure looked like a hang.
+        if ($baseline !== $now) {
+            $this->fail($this->differences((array) json_decode($baseline, true), $sweeps));
+        }
+
+        $this->addToAssertionCount(1);
+    }
+
+    /**
+     * Where the two documents part, bounded: a count and one example per `sweep.table.column`, and at most 40 lines.
+     *
+     * @param  array<string, mixed>  $was
+     * @param  array<string, mixed>  $is
+     */
+    private function differences(array $was, array $is): string
+    {
+        /** @var array<string, array{n: int, was: mixed, is: mixed}> $found */
+        $found = [];
+        $note = static function (string $where, mixed $a, mixed $b) use (&$found): void {
+            $found[$where] ??= ['n' => 0, 'was' => $a, 'is' => $b];
+            $found[$where]['n']++;
+        };
+
+        foreach (array_unique(array_merge(array_keys($was), array_keys($is))) as $part) {
+            // `mail` is a list of messages; a sweep is `raised` plus one list of rows per table.
+            $tablesWas = $part === 'mail' ? ['messages' => $was[$part] ?? null] : (array) ($was[$part] ?? []);
+            $tablesIs = $part === 'mail' ? ['messages' => $is[$part] ?? null] : (array) ($is[$part] ?? []);
+
+            foreach (array_unique(array_merge(array_keys($tablesWas), array_keys($tablesIs))) as $table) {
+                $where = $part.'.'.$table;
+                $rowsWas = $tablesWas[$table] ?? null;
+                $rowsIs = $tablesIs[$table] ?? null;
+
+                if (! is_array($rowsWas) || ! is_array($rowsIs)) {
+                    if ($rowsWas !== $rowsIs) {
+                        $note($where, $rowsWas, $rowsIs);
+                    }
+
+                    continue;
+                }
+
+                if (count($rowsWas) !== count($rowsIs)) {
+                    $note($where.' (rows)', count($rowsWas), count($rowsIs));
+                }
+
+                foreach ($rowsWas as $i => $rowWas) {
+                    $rowWas = (array) $rowWas;
+                    $rowIs = (array) ($rowsIs[$i] ?? []);
+
+                    foreach (array_unique(array_merge(array_keys($rowWas), array_keys($rowIs))) as $column) {
+                        $a = array_key_exists($column, $rowWas) ? $rowWas[$column] : '(no such key)';
+                        $b = array_key_exists($column, $rowIs) ? $rowIs[$column] : '(no such key)';
+
+                        if ($a !== $b) {
+                            $note($where.'.'.$column, $a, $b);
+                        }
+                    }
+                }
+            }
+        }
+
+        $short = static fn (mixed $v): string => mb_strimwidth((string) json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, 90, '…');
+        $lines = [];
+        foreach (array_slice($found, 0, 40, true) as $where => $d) {
+            $lines[] = sprintf('  %s ×%d  baseline %s  now %s', $where, $d['n'], $short($d['was']), $short($d['is']));
+        }
+
+        return sprintf(
+            "The sweep no longer leaves what the baseline holds: %d place(s) differ%s.\n%s\nFor the full diff: WRITE_ALERT_SWEEP_BASELINE=1, then `git diff` the fixture.",
+            count($found),
+            count($found) > 40 ? ', the first 40 shown' : '',
+            implode("\n", $lines),
+        );
     }
 }
 
