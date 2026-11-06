@@ -52,7 +52,7 @@ namespace App\Domains\Notifications\Support;
  * | the eight analysis notes (falling_rate … frequency_saturation, budget_pace …) | no | AlertDispatcher / digests — unchanged | budget ones planned |
  * | daily/weekly/monthly digest | no | DigestDispatcher — unchanged | never |
  * | scheduled_report, client_request, delivery_reminder | no | own senders — unchanged | delivery planned |
- * | password_reset, email_verification, sign_in_code, member_setup, invitation, member_welcome | no | mandatory — unchanged | never (sign-in codes ride Twilio Verify) |
+ * | password_reset, email_verification, sign_in_code, oauth_link, member_setup, invitation, member_welcome | no | mandatory — unchanged | never (sign-in codes ride Twilio Verify) |
  * | security_alert, role_changed | no | mandatory — unchanged | planned |
  * | test_notification | yes | the settings screen's own test button | planned |
  */
@@ -124,6 +124,7 @@ final class NotificationChannelPolicy
         'password_reset' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'email_verification' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'sign_in_code' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
+        'oauth_link' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'member_setup' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'invitation' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'security_alert' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'planned', 'severity' => 'critical'],
