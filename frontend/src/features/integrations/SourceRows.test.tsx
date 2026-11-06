@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { ConnectionHub, HubSummary } from './ConnectionHub'
-import type { ConnectionHub as Hub, HubConnection } from './api'
+import type { ConnectionHub as Hub, HubConnection, IntegrationStatus } from './api'
 import { renderWithProviders } from '@/test/utils'
 
 /**
@@ -119,6 +119,43 @@ describe('a source row in the project space', () => {
     expect(chip).not.toHaveTextContent(/^0/)
   })
 
+  /** MONEY-USD-001 — «تحويل العملات إلى الدولار جميعها»: a riyal account is stated by its USD figure, the one the metrics payload carries. */
+  it('states a SAR account by its USD figure', async () => {
+    // What `metrics/accounts` answers for a riyal account with a rate: `spend` is the USD-normalised value.
+    metrics.summary = { current: { spend: 1200 }, currency: 'USD' }
+    metrics.accounts = [{ account_id: 'a-2', provider: 'snapchat', account_name: 'Jeddah', spend: 1200, spend_withheld_rows: 0, spend_original: 0, money_original_currency: null, money_original_currencies: 0 }]
+    hub.data = { connections: [connection({ selected_accounts: 1, accounts: [connection().accounts![1]!] })], connectable: [] }
+    renderHub()
+
+    const chip = await screen.findByTestId('hub-spend-c-1')
+    expect(chip).toHaveTextContent('1.2K USD')
+    expect(chip).not.toHaveTextContent('SAR')
+    expect(chip).toHaveAttribute('data-withheld', 'false')
+    fireEvent.click(screen.getByTestId('hub-expand-c-1'))
+    expect(screen.getByTestId('hub-account-spend-a-2')).toHaveTextContent('1.2K USD')
+  })
+
+  it('marks an account with no rate as withheld in its own currency and leaves it out of the row\'s USD total, visibly', async () => {
+    metrics.accounts = [
+      { account_id: 'a-1', provider: 'snapchat', account_name: 'Riyadh', spend: 1200 },
+      { account_id: 'a-2', provider: 'snapchat', account_name: 'Jeddah', spend: 0, spend_withheld_rows: 3, spend_original: 4500, money_original_currency: 'SAR', money_original_currencies: 1 },
+    ]
+    renderHub()
+
+    const chip = await screen.findByTestId('hub-spend-c-1')
+    // 1,200 USD — not 5,700 of anything, and not a dash that hides the dollars that are known.
+    expect(chip).toHaveTextContent('1.2K USD')
+    expect(chip).not.toHaveTextContent('5.7K')
+    expect(within(chip).getByTestId('hub-spend-c-1-excluded')).toHaveTextContent('+1 محجوب')
+
+    fireEvent.click(screen.getByTestId('hub-expand-c-1'))
+    const withheld = screen.getByTestId('hub-account-spend-a-2')
+    expect(withheld).toHaveTextContent('4,500.00 SAR')
+    expect(withheld).toHaveAttribute('data-withheld', 'true')
+    expect(within(withheld).getByTestId('hub-account-spend-a-2-withheld')).toHaveTextContent('محجوب')
+    expect(screen.getByTestId('hub-account-spend-a-1')).toHaveAttribute('data-withheld', 'false')
+  })
+
   it('says nothing about spend for a source that reported none', async () => {
     metrics.accounts = []
     renderHub()
@@ -150,6 +187,47 @@ describe('the four figures of the project space', () => {
     expect(screen.getByTestId('hub-kpi-campaigns')).toHaveTextContent('7')
     expect(screen.getByTestId('hub-kpi-spend')).toHaveTextContent('1.5K USD')
     expect(screen.getByTestId('hub-kpi-attention')).toHaveTextContent('1')
+  })
+
+  /** MONEY-USD-001 — the tile's USD total is the converted accounts only; the one with no rate is counted beside it. */
+  it('leaves an account with no rate out of the 30-day USD total and says how many it left out', () => {
+    metrics.summary = { current: { spend: 1200, spend_withheld_rows: 3, spend_original: 4500, money_original_currency: 'SAR', money_original_currencies: 1 }, currency: 'USD' }
+    metrics.accounts = [
+      { account_id: 'a-1', provider: 'snapchat', account_name: 'Riyadh', spend: 1200 },
+      { account_id: 'a-2', provider: 'snapchat', account_name: 'Jeddah', spend: 0, spend_withheld_rows: 3, spend_original: 4500, money_original_currency: 'SAR', money_original_currencies: 1 },
+    ]
+    renderWithProviders(<HubSummary projectId="p-1" connections={[connection()]} />, { locale: 'ar' })
+
+    const tile = screen.getByTestId('hub-kpi-spend')
+    expect(tile).toHaveTextContent('1.2K USD')
+    expect(tile).not.toHaveTextContent('5.7K')
+    expect(tile).toHaveTextContent(/خارج الإجمالي \(محجوب\): .*حساب/)
+    expect(screen.getByTestId('hub-kpi-spend-figure')).toHaveAttribute('data-excluded', '1')
+  })
+
+  /** F2 — the tile and the chips are one rule: a row is counted exactly when its chip asks for something. */
+  it('counts in «تحتاج إجراء» exactly the rows whose chip asks for something', async () => {
+    const status = (state: string, action: IntegrationStatus['action'] = null): IntegrationStatus => ({ state, label_ar: state, label_en: state, since: null, as_of: null, detail: null, action })
+    const healthy = { authorisation: status('authorised'), binding: status('bound'), sync: status('succeeded'), freshness: status('fresh'), error: status('none') }
+    const retry = { code: 'retry_sync', label_ar: 'أعد المزامنة', label_en: 'Retry the sync' }
+    const connections = [
+      // The SYNC asks for a retry, the FRESHNESS asks for one: no error state, no authorisation action — the old count missed both.
+      connection({ id: 'c-sync', statuses: { ...healthy, sync: status('failed', retry) } }),
+      connection({ id: 'c-stale', statuses: { ...healthy, freshness: status('stale', retry) } }),
+      // The authorisation only says «wait»: nobody can act on that, the chip asks nothing — the old count took it.
+      connection({ id: 'c-wait', statuses: { ...healthy, authorisation: status('pending', { code: 'wait', label_ar: 'انتظر', label_en: 'Wait' }) } }),
+      connection({ id: 'c-ok', statuses: healthy }),
+    ]
+    renderWithProviders(<HubSummary projectId="p-1" connections={connections} />, { locale: 'ar' })
+    expect(screen.getByTestId('hub-kpi-attention')).toHaveTextContent('2')
+
+    hub.data = { connections, connectable: [] }
+    renderHub()
+    await screen.findByTestId('hub-row-c-sync')
+    const asking = connections.map((c) => c.id).filter((id) => screen.getByTestId(`hub-chip-${id}`).getAttribute('data-asks') === 'true')
+    expect(asking).toEqual(['c-sync', 'c-stale'])
+    expect(screen.getByTestId('hub-chip-c-sync')).toHaveAttribute('data-dimension', 'sync')
+    expect(screen.getByTestId('hub-chip-c-wait')).toHaveAttribute('data-dimension', 'authorisation')
   })
 
   it('states withheld spend in its own currency rather than a zero', () => {

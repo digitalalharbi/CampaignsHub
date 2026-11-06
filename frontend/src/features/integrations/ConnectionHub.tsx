@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
-import { fetchConnectionHub, fetchConnectionHubWithRemoved, unlinkAccount, STATUS_DIMENSIONS, type HubConnection } from './api'
+import { fetchConnectionHub, fetchConnectionHubWithRemoved, unlinkAccount, STATUS_DIMENSIONS, type HubConnection, type IntegrationStatuses, type StatusDimension } from './api'
 import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { StatusChips, statusTone } from './StatusChips'
 import { Badge } from '@/components/ui/Badge'
@@ -12,9 +12,9 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { CopyId } from '@/components/ui/CopyId'
 import { lastNDays, useAccounts, useSummary, type AccountRow } from '@/features/analytics/api'
 import { money, moneyFromTotals } from '@/features/analytics/format'
-import { aggregateMoney, type MoneyTotals } from '@/lib/money/contract'
+import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { platformLabel } from '@/lib/platforms'
-import { campaigns as countedCampaigns, connectedAccounts } from '@/lib/counted'
+import { accounts as countedAccounts, campaigns as countedCampaigns, connectedAccounts } from '@/lib/counted'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
 import { sortBySource } from '@/lib/sourceOrder'
@@ -59,11 +59,25 @@ function haystack(connection: HubConnection): string {
   ].join(' ').toLowerCase()
 }
 
-/** Does a person have to do something about this source? Read from the server's five statuses when they are there. */
+/**
+ * The first of the server's five statuses that ASKS for something — authorisation first, so a running sync
+ * can never stand in front of a refused grant. «wait» is not a request: nobody can act on it.
+ */
+export function askingDimension(statuses: IntegrationStatuses): StatusDimension | null {
+  return STATUS_DIMENSIONS.find((d) => statuses[d].action !== null && statuses[d].action?.code !== 'wait') ?? null
+}
+
+/**
+ * Does a person have to do something about this source? ONE rule, and it is the row chip's: the «تحتاج
+ * إجراء» tile, the «attention» sort and the chip all read it, so the tile can never count a row whose chip
+ * asks for nothing, nor miss one whose chip does. A disconnected link asks to be linked again.
+ */
 export function sourceNeedsAction(connection: HubConnection): boolean {
+  if (isDisconnected(connection)) return true
   const statuses = connection.statuses ?? null
-  if (statuses !== null) return statuses.error.state !== 'none' || statuses.authorisation.action !== null
-  return needsReauthorising(connection.connection_state) || connection.needs_attention
+  if (statuses !== null) return askingDimension(statuses) !== null
+  // No server statuses (an older payload): the chip turns on exactly these two, so the count does too.
+  return needsReauthorising(connection.connection_state) || connection.sync_state === 'FAILED'
 }
 
 export function sortSources(connections: HubConnection[], sort: SourceSort, ar: boolean): HubConnection[] {
@@ -238,10 +252,40 @@ export function isGone(connection: HubConnection): boolean {
 const SPEND_DAYS = 30
 
 /**
+ * One spend figure as the centre states it (MONEY-USD-001).
+ *
+ * `text` is in the canonical comparison currency — the one the metrics payload names, USD — whenever the
+ * money converted. `withheld` means it did not: the amount is stated in the account's OWN currency and is
+ * marked, never shown as 0. `excluded` counts the accounts a total had to leave out because they have no
+ * rate — the total is then the converted accounts only, and says so beside the figure.
+ */
+export type SpendReading = { text: string; withheld: boolean; excluded: number; note: string | null; exact: string | null }
+
+/**
+ * A total over several account rows — the money contract's own «drop and disclose» (`rankableMoney`), not a
+ * rule of this page: converted rows are summed in the reporting currency, a row with no rate is left OUT of
+ * that sum and COUNTED, and rows that are all withheld in one currency are summed in that currency and
+ * marked withheld. Nothing is converted here; the conversion happened once, at ingest.
+ */
+export function spendOver(rows: MoneyTotals[], currency: string | null, ar: boolean): SpendReading | null {
+  if (rows.length === 0) return null
+  if (rows.length === 1) return { ...moneyFromTotals(rows[0], 'spend', ar, currency), excluded: 0 }
+
+  const ranked = rankableMoney(rows, 'spend', currency)
+  const note = ar ? 'حسابات بلا سعر صرف خارج الإجمالي' : 'Accounts with no FX rate are left out of the total'
+  if (ranked === null) return { text: '\u2014', withheld: true, excluded: rows.length, note, exact: null }
+
+  const states = rows.map((row) => moneyState(row, 'spend').state)
+  const withheld = !states.includes('complete_converted') && states.includes('complete_withheld')
+  const sum = ranked.values.reduce<number>((n, v) => n + (v ?? 0), 0)
+  return { text: money(sum, ranked.currency ?? ''), withheld, excluded: ranked.dropped, note: withheld || ranked.dropped > 0 ? note : null, exact: null }
+}
+
+/**
  * The project's last 30 days of spend, per linked account and in total — read from the metrics endpoints
- * the analytics pages read, so the centre cannot state a figure they would not. Nothing is summed here that
- * the money contract refuses to sum: a withheld amount stays in its own currency, and «no single figure» is
- * a dash, never a zero.
+ * the dashboard and the analytics pages read (`metrics/summary`, `metrics/accounts`), whose `value` is the
+ * USD-normalised figure and whose `currency` names it. So the centre states the USD figure they state, and
+ * cannot state one they would not. A withheld amount stays in its own currency and out of the USD total.
  */
 export function useProjectSpend(projectId: string | null) {
   const range = useMemo(() => lastNDays(SPEND_DAYS), [])
@@ -252,15 +296,28 @@ export function useProjectSpend(projectId: string | null) {
 
   return {
     currency,
+    rows,
     total: summary.data?.current === undefined ? null : summary.data.current as MoneyTotals,
-    of: (accountIds: string[]): string | null => {
-      const mine = rows.filter((r) => r.account_id !== null && accountIds.includes(r.account_id))
-      if (mine.length === 0) return null
-      if (mine.length === 1) return moneyFromTotals(mine[0] as MoneyTotals, 'spend', true, currency).text
-      const sum = aggregateMoney(mine as MoneyTotals[], 'spend', currency)
-      return sum === null ? '—' : money(sum.amount, sum.currency)
-    },
+    of: (accountIds: string[], ar: boolean): SpendReading | null =>
+      spendOver(rows.filter((r) => r.account_id !== null && accountIds.includes(r.account_id)) as MoneyTotals[], currency, ar),
   }
+}
+
+/** A spend figure with its marks: «محجوب» on money that did not convert, «+N» on accounts a total left out. */
+function SpendFigure({ reading, ar, testid, className }: { reading: SpendReading; ar: boolean; testid: string; className: string }) {
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-1 ${className}`} data-testid={testid} data-withheld={reading.withheld ? 'true' : 'false'} title={reading.note ?? reading.exact ?? undefined}>
+      <span className="tnum" dir="ltr">{reading.text}</span>
+      {reading.withheld && (
+        <span className="rounded-full bg-[var(--warning-background)] px-1.5 text-[10px] font-bold text-warning" data-testid={`${testid}-withheld`}>{ar ? 'محجوب' : 'Withheld'}</span>
+      )}
+      {!reading.withheld && reading.excluded > 0 && (
+        <span className="tnum rounded-full bg-[var(--warning-background)] px-1.5 text-[10px] font-bold text-warning" data-testid={`${testid}-excluded`}>
+          {ar ? `+${reading.excluded} محجوب` : `+${reading.excluded} withheld`}
+        </span>
+      )}
+    </span>
+  )
 }
 
 type ProjectSpend = ReturnType<typeof useProjectSpend>
@@ -273,19 +330,28 @@ type ProjectSpend = ReturnType<typeof useProjectSpend>
 function RowState({ connection, ar }: { connection: HubConnection; ar: boolean }) {
   const statuses = connection.statuses ?? null
   const id = `hub-state-${connection.id}`
+  // Whether this chip ASKS for something — the same answer the «تحتاج إجراء» tile counts.
+  const asks = sourceNeedsAction(connection) ? 'true' : 'false'
+  const chip = `hub-chip-${connection.id}`
 
-  if (isDisconnected(connection)) return <Badge tone="danger" data-testid={id}>{ar ? 'مفصول' : 'Disconnected'}</Badge>
+  if (isDisconnected(connection)) {
+    return <span className="contents" data-testid={chip} data-asks={asks}><Badge tone="danger" data-testid={id}>{ar ? 'مفصول' : 'Disconnected'}</Badge></span>
+  }
 
   if (statuses !== null) {
-    const dimension = STATUS_DIMENSIONS.find((d) => statuses[d].action !== null && statuses[d].action?.code !== 'wait') ?? 'authorisation'
+    const dimension = askingDimension(statuses) ?? 'authorisation'
     const status = statuses[dimension]
-    return <Badge tone={statusTone(dimension, status.state)} data-testid={id} data-dimension={dimension}>{ar ? status.label_ar : status.label_en}</Badge>
+    return (
+      <span className="contents" data-testid={chip} data-asks={asks} data-dimension={dimension}>
+        <Badge tone={statusTone(dimension, status.state)} data-testid={id}>{ar ? status.label_ar : status.label_en}</Badge>
+      </span>
+    )
   }
 
   const copy = !needsReauthorising(connection.connection_state) && connection.sync_state === 'FAILED'
     ? SYNC_COPY[connection.sync_state]
     : CONNECTION_COPY[connection.connection_state]
-  return <Badge tone={copy.tone} data-testid={id}>{ar ? copy.ar : copy.en}</Badge>
+  return <span className="contents" data-testid={chip} data-asks={asks}><Badge tone={copy.tone} data-testid={id}>{ar ? copy.ar : copy.en}</Badge></span>
 }
 
 function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise, onRelink, projectId, spend }: {
@@ -373,7 +439,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
     </button>
   )
 
-  const rowSpend = projectId === null || accounts.length === 0 ? null : spend.of(accounts.map((a) => a.id))
+  const rowSpend = projectId === null || accounts.length === 0 ? null : spend.of(accounts.map((a) => a.id), ar)
   const panelId = `hub-detail-${connection.id}`
 
   return (
@@ -417,7 +483,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
             </span>
           )}
           {rowSpend !== null && (
-            <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-text-primary" dir="ltr" data-testid={`hub-spend-${connection.id}`}>{rowSpend}</span>
+            <SpendFigure reading={rowSpend} ar={ar} testid={`hub-spend-${connection.id}`} className="rounded-full bg-surface-secondary px-2 py-0.5 text-text-primary" />
           )}
         </div>
 
@@ -450,7 +516,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
         {accounts.length > 0 && (
           <ul className="flex min-w-0 flex-col divide-y divide-border rounded-xl border border-border bg-surface" data-testid={`hub-account-list-${connection.id}`}>
             {sortBySource(accounts, (a) => ({ organisation: a.organisation, account: a.name }), ar).map((a) => {
-              const accountSpend = projectId === null ? null : spend.of([a.id])
+              const accountSpend = projectId === null ? null : spend.of([a.id], ar)
               return (
                 <li key={a.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2" data-testid={`hub-account-${a.id}`}>
                   <ProviderMark provider={connection.provider} size={16} />
@@ -464,7 +530,7 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
                   {a.campaigns !== undefined && (
                     <span className="tnum shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">{countedCampaigns(a.campaigns, ar ? 'ar' : 'en')}</span>
                   )}
-                  {accountSpend !== null && <span className="tnum shrink-0 text-[11px] font-semibold text-text-primary" dir="ltr" data-testid={`hub-account-spend-${a.id}`}>{accountSpend}</span>}
+                  {accountSpend !== null && <SpendFigure reading={accountSpend} ar={ar} testid={`hub-account-spend-${a.id}`} className="shrink-0 text-[11px] font-semibold text-text-primary" />}
                   {projectId !== null && !gone && (
                     <button
                       type="button"
@@ -596,17 +662,30 @@ export function HubSummary({ connections, campaigns = null, projectId = null }: 
   const live = connections.filter((c) => !isGone(c))
   if (live.length === 0) return null
 
-  const attention = live.filter((c) => isDisconnected(c) || sourceNeedsAction(c)).length
+  const attention = live.filter(sourceNeedsAction).length
   const accounts = live.reduce((n, c) => n + c.selected_accounts, 0)
-  // Withheld money is stated in its own currency and «no single figure» is a dash: never a zero.
-  const reading = spend.total === null ? null : moneyFromTotals(spend.total, 'spend', ar, spend.currency)
+  /*
+   * MONEY-USD-001 — the project's own total, in the currency the payload names (USD). Withheld money is
+   * stated in its own currency and marked. Where part converted and part has no rate there is no single
+   * figure for the scope, so the tile states the converted accounts' USD total and counts the ones left out
+   * — never a zero, and never the two units added together.
+   */
+  const whole: SpendReading | null = spend.total === null ? null : { ...moneyFromTotals(spend.total, 'spend', ar, spend.currency), excluded: 0 }
+  const composition = spend.total === null ? null : moneyState(spend.total, 'spend').state
+  const reading = (composition === 'partial' || composition === 'mixed_currency') && spend.rows.length > 1
+    ? spendOver(spend.rows as MoneyTotals[], spend.currency, ar)
+    : whole
+  const spendMark = reading === null ? undefined
+    : reading.withheld ? (ar ? 'محجوب — بلا سعر صرف' : 'Withheld — no FX rate')
+      : reading.excluded > 0 ? (ar ? `خارج الإجمالي (محجوب): ${countedAccounts(reading.excluded, 'ar')}` : `Left out (withheld): ${countedAccounts(reading.excluded, 'en')}`)
+        : undefined
 
   return (
     <section className="min-w-0" data-testid="hub-summary" aria-label={ar ? 'ملخص' : 'Summary'}>
       <StatGrid columns="grid-cols-2 sm:grid-cols-4">
         <StatCard label={ar ? 'الحسابات' : 'Accounts'} value={accounts.toLocaleString('en-US')} tone="brand" dot testid="hub-kpi-accounts" />
         <StatCard label={ar ? 'الحملات' : 'Campaigns'} value={campaigns === null ? '—' : campaigns.toLocaleString('en-US')} tone="neutral" dot testid="hub-kpi-campaigns" />
-        <StatCard label={ar ? 'إنفاق 30 يومًا' : '30-day spend'} value={<span dir="ltr">{reading === null ? '—' : reading.text}</span>} exact={reading?.exact ?? undefined} tone="neutral" dot testid="hub-kpi-spend" />
+        <StatCard label={ar ? 'إنفاق 30 يومًا' : '30-day spend'} value={<span dir="ltr" data-testid="hub-kpi-spend-figure" data-withheld={reading?.withheld ? 'true' : 'false'} data-excluded={reading?.excluded ?? 0}>{reading === null ? '—' : reading.text}</span>} exact={reading?.exact ?? undefined} hint={spendMark} tone="neutral" dot testid="hub-kpi-spend" />
         <StatCard label={ar ? 'تحتاج إجراء' : 'Need action'} value={attention.toLocaleString('en-US')} tone={attention > 0 ? 'danger' : 'success'} dot testid="hub-kpi-attention" />
       </StatGrid>
     </section>
