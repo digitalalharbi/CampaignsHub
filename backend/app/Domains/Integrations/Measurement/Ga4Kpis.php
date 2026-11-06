@@ -41,6 +41,11 @@ final class Ga4Kpis
         'items_per_order' => ['Average products per order: items purchased divided by transactions.', ['itemsPurchased', 'transactions'], 'ratio', false],
         'revenue_per_user' => ['Purchase revenue divided by total users added across the days (users are not de-duplicated across days).', ['purchaseRevenue', 'totalUsers'], 'money', true],
         'revenue_per_session' => ['Purchase revenue divided by sessions.', ['purchaseRevenue', 'sessions'], 'money', true],
+        // GA4-STORE-ANALYTICS-001
+        'avg_session_seconds' => ['Average session duration in seconds (GA4 averageSessionDuration), weighted by each day\'s sessions.', ['averageSessionDuration', 'sessions'], 'seconds', false],
+        'conversion_rate' => ['Purchase transactions divided by sessions.', ['transactions', 'sessions'], 'rate', false],
+        'add_to_carts' => ['Add-to-cart events.', ['addToCarts'], 'count', false],
+        'checkouts' => ['Begin-checkout events.', ['checkouts'], 'count', false],
     ];
 
     /**
@@ -163,7 +168,9 @@ final class Ga4Kpis
         }
 
         return match ($key) {
-            'sessions', 'new_users', 'active_users', 'engaged_sessions', 'page_views', 'product_views', 'key_events', 'transactions', 'revenue' => $this->sum($byDay, $key),
+            'sessions', 'new_users', 'active_users', 'engaged_sessions', 'page_views', 'product_views', 'key_events', 'transactions', 'revenue', 'add_to_carts', 'checkouts' => $this->sum($byDay, $key),
+            'avg_session_seconds' => $this->weighted($byDay, 'avg_session_seconds'),
+            'conversion_rate' => $this->ratio($byDay, 'transactions', 'sessions'),
             'users_daily_sum' => $this->sum($byDay, 'users'),
             'engagement_rate' => $this->weighted($byDay, 'engagement_rate'),
             'bounce_rate' => $this->weighted($byDay, 'bounce_rate'),

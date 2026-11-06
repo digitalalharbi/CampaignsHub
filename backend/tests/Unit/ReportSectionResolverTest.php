@@ -46,6 +46,11 @@ final class ReportSectionResolverTest extends TestCase
                include it. */
             'site_measurement' => ['property' => ['id' => '111', 'name' => 'Site', 'timezone' => 'Asia/Riyadh'], 'days' => 2],
             'store_analytics' => ['not_summed' => true, 'store' => null, 'site' => null],
+            // GA4-REPORT-SECTIONS-001 — each part is available where its payload is an array.
+            'ga4_overview' => ['kpis' => [], 'series' => []],
+            'ga4_acquisition' => ['channels' => null, 'devices' => null, 'funnel' => []],
+            'ga4_platform_gap' => ['summed' => false, 'rows' => []],
+            'ga4_tables' => ['tables' => []],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -69,7 +74,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'store_analytics', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

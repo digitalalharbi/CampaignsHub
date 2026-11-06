@@ -32,6 +32,7 @@ import {
   useSpendCharting,
 } from './LiveSections'
 import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
+import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
@@ -166,14 +167,17 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
    * to improve → funnel and measurement coverage → optimisation steps. No spend, no campaign.
    */
   return (
-    <ExecutiveSummary
-      payload={payload}
-      reader={reader}
-      currency={currency}
-      locale={locale}
-      onOpenContent={onOpenContent}
-      sectionOn={(key) => sectionOn(payload, key)}
-    />
+    <div className="flex flex-col gap-6">
+      <ExecutiveSummary
+        payload={payload}
+        reader={reader}
+        currency={currency}
+        locale={locale}
+        onOpenContent={onOpenContent}
+        sectionOn={(key) => sectionOn(payload, key)}
+      />
+      <Ga4ReportBlocks payload={payload} ar={locale === 'ar'} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
+    </div>
   )
 }
 
@@ -233,6 +237,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
         </section>
       )}
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
+      <Ga4ReportBlocks payload={payload} ar={ar} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
     </div>
   )
 }
@@ -351,6 +356,8 @@ export function DashboardView({
       */}
       {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
       {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
+      {/* GA4-REPORT-SECTIONS-001 — the store as its GA4 property measured it: four parts, each the operator's own switch. */}
+      <Ga4ReportBlocks payload={payload} ar={ar} />
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )

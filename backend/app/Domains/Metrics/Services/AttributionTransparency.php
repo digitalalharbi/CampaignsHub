@@ -839,6 +839,22 @@ final class AttributionTransparency
     }
 
     /**
+     * GA4-PLATFORM-GAP-001 — what each ad platform reported for the project's window, and nothing else: the same rows
+     * {@see threeSources()} reads, in the project's reporting calendar and under the bound-account ceiling.
+     *
+     * @return array<string, array{conversions: ?float, revenue: ?float, currency: ?string}>
+     */
+    public function reportedByPlatform(string $projectId, Carbon $from, Carbon $to): array
+    {
+        $window = $this->timezones->window($projectId, $from, $to);
+
+        return array_map(
+            static fn (array $r): array => ['conversions' => round($r['orders'], 2), 'revenue' => round($r['revenue'], 2), 'currency' => $r['currency']],
+            $this->platformRows($projectId, $window['from_date'], $window['to_date'], []),
+        );
+    }
+
+    /**
      * GA4-PLATFORM-COMPARE-001 — per platform, what each of the three sources says, each in its own cell.
      *
      * Reads the same rows {@see build()} reads, without the reconciliation and model work around them, so the Site

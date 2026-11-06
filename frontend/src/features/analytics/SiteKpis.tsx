@@ -26,7 +26,8 @@ export interface SiteKpi {
   trend?: Array<{ date: string; value: number }>
 }
 
-const SHOWN = ['active_users', 'new_users', 'page_views', 'product_views', 'bounce_rate', 'avg_engagement_seconds', 'aov', 'items_per_order', 'revenue_per_user', 'revenue_per_session'] as const
+// The store tiles above already state new users, bounce rate and basket size (GA4-STORE-ANALYTICS-001); these are the rest.
+const SHOWN = ['active_users', 'page_views', 'product_views', 'avg_engagement_seconds', 'items_per_order', 'revenue_per_user', 'revenue_per_session'] as const
 
 const NAME: Record<string, { ar: string; en: string }> = {
   active_users: { ar: 'المستخدمون النشطون', en: 'Active users' },
@@ -55,7 +56,9 @@ export function kpiValue(k: SiteKpi, v: number | null): string {
 export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { from: string; to: string }; ar: boolean }) {
   const by = new Map(kpis.map((k) => [k.key, k]))
   const rows = SHOWN.map((key) => by.get(key)).filter((k): k is SiteKpi => k !== undefined)
-  if (rows.length === 0) return null
+  // The definitions cover every named KPI, the ones the store tiles draw included: a tile is one word, its meaning is here.
+  const defined = Object.keys(NAME).map((key) => by.get(key)).filter((k): k is SiteKpi => k !== undefined)
+  if (defined.length === 0) return null
   return (
     <section data-testid="site-kpis" aria-label={ar ? 'مؤشرات GA4' : 'GA4 KPIs'} className="space-y-2">
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
@@ -74,7 +77,7 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
       <details className="text-xs text-text-secondary" data-testid="site-kpi-definitions">
         <summary className="cursor-pointer font-semibold">{ar ? `التعريفات والمصدر (مقارنة مع ${previous.from} → ${previous.to})` : `Definitions and source (compared with ${previous.from} → ${previous.to})`}</summary>
         <ul className="mt-2 space-y-1.5">
-          {rows.map((k) => (
+          {defined.map((k) => (
             <li key={k.key} data-testid={`site-kpi-def-${k.key}`}>
               <span className="font-semibold text-text-primary">{NAME[k.key]?.[ar ? 'ar' : 'en']}</span> — {k.definition}{' '}
               <span dir="ltr" className="font-mono">[GA4: {k.source.metrics.join(', ')}]</span>{' '}

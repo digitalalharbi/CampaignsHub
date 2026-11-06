@@ -313,6 +313,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
     // GA4-PLATFORM-COMPARE-001 — the three sources side by side, never added.
     Route::get('measurement/compare', [SiteAnalyticsController::class, 'compare'])->middleware('project.can:analytics.view')->name('measurement.compare');
+    Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
     Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
     Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');

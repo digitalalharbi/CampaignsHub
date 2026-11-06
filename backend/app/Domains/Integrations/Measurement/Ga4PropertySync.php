@@ -347,7 +347,7 @@ final class Ga4PropertySync
             'dimension_1' => $row['d1'],
             'dimension_2' => $row['d2'],
             'metrics' => json_encode($row['values'], JSON_THROW_ON_ERROR),
-            'currency' => array_key_exists('revenue', $row['values']) ? $settings['currency'] : null,
+            'currency' => array_intersect(Ga4Breakdowns::MONEY, array_keys($row['values'])) !== [] ? $settings['currency'] : null,
             'timezone' => $settings['timezone'],
             'created_at' => $now,
             'updated_at' => $now,

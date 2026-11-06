@@ -6,6 +6,7 @@ import type { LivePayload } from '../api'
 import type { ReportAd } from '../ReportAdsSection'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
+import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
 import { asContent } from './LiveContent'
 import { resultWords } from './leadResults'
 
@@ -192,6 +193,8 @@ export function TablesView({
           <MetricTable head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
+
+      <Ga4ReportBlocks payload={payload} ar={ar} parts={['ga4_tables']} />
     </div>
   )
 }

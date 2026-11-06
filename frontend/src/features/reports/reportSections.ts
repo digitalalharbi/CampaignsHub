@@ -19,6 +19,10 @@ export type ReportSectionKey =
   | 'content_performance'
   | 'site_measurement'
   | 'store_analytics'
+  | 'ga4_overview'
+  | 'ga4_acquisition'
+  | 'ga4_platform_gap'
+  | 'ga4_tables'
   | 'recommendations'
   | 'detailed_tables'
   | 'daily_records'
@@ -64,6 +68,45 @@ export function withStoreAnalyticsSlide<S extends { id: string; type: string; or
   const list = data.report_sections
   if (Array.isArray(list) && (list as string[]).includes('store_analytics') && data.store_analytics != null) {
     slides.push({ id: '__store_analytics', type: '__store_analytics', order: 9997, visible: true } as S)
+  }
+
+  return slides
+}
+
+/** GA4-REPORT-SECTIONS-001 — rows of a GA4 table on one fixed printed page, and how many of a table a file carries. */
+export const GA4_ROWS_PER_PAGE = 8
+export const GA4_PRINT_ROWS_MAX = 24
+const GA4_TABLE_ORDER = ['sources', 'campaigns', 'landing_pages', 'products', 'countries'] as const
+
+/**
+ * GA4-REPORT-SECTIONS-001 — the saved report's pages for the store reading, only where the server named the part
+ * and sent it (an older snapshot never gains a page).
+ *
+ * On screen the tables are ONE page with fixed-size paging inside it. On paper (`paged`) a table cannot be paged
+ * by hand, so each table is split into pages of eight rows, never shrunk to fit: the slide id carries the table
+ * and `range` the rows.
+ */
+export function withGa4Slides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { ga4_overview?: unknown; ga4_acquisition?: unknown; ga4_platform_gap?: unknown; ga4_tables?: { tables?: Partial<Record<(typeof GA4_TABLE_ORDER)[number], { rows?: unknown[] } | null>> } | null },
+  paged = false,
+): S[] {
+  const list = data.report_sections
+  const named = (key: string, value: unknown) => Array.isArray(list) && (list as string[]).includes(key) && value != null
+  if (named('ga4_overview', data.ga4_overview)) slides.push({ id: '__ga4_overview', type: '__ga4_overview', order: 9990, visible: true } as S)
+  if (named('ga4_acquisition', data.ga4_acquisition)) slides.push({ id: '__ga4_acquisition', type: '__ga4_acquisition', order: 9991, visible: true } as S)
+  if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9992, visible: true } as S)
+  if (named('ga4_tables', data.ga4_tables)) {
+    if (!paged) {
+      slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9993, visible: true } as S)
+    } else {
+      for (const table of GA4_TABLE_ORDER) {
+        const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
+        for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) {
+          slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9993, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
+        }
+      }
+    }
   }
 
   return slides

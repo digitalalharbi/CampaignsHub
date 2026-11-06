@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
+use App\Domains\Integrations\Measurement\Ga4StoreAnalytics;
 use App\Domains\Integrations\Measurement\Ga4TrafficTable;
 use App\Domains\Metrics\Services\AttributionTransparency;
 use App\Domains\Projects\Context\ProjectContext;
@@ -29,6 +30,21 @@ final class SiteAnalyticsController extends Controller
         [$tenantId, $projectId] = $this->scope();
 
         return ApiResponse::success($site->build($tenantId, $projectId, $from, $to), 'Site analytics.');
+    }
+
+    /**
+     * GA4-STORE-ANALYTICS-001 — the store as its GA4 property measured it, beside what the project's ad platforms
+     * reported. The platform side is read under the same project scope and never added to the GA4 side.
+     */
+    public function store(Request $request, Ga4StoreAnalytics $store, AttributionTransparency $transparency): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+        [$tenantId, $projectId] = $this->scope();
+
+        return ApiResponse::success(
+            $store->build($tenantId, $projectId, $from, $to, $transparency->reportedByPlatform($projectId, $from, $to)),
+            'Store analytics.',
+        );
     }
 
     /** GA4-PLATFORM-COMPARE-001 — platform-reported, store-confirmed and GA4-measured, each in its own cell. */

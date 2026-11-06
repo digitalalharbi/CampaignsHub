@@ -793,6 +793,11 @@ export interface LivePayload {
   store_funnel: StoreFunnelPayload | null
   /** STORE-ANALYTICS-DEPTH-001 §3.1 — absent unless the operator switched the category on for this report. */
   store_analytics?: import('./StoreAnalyticsBlock').StoreAnalyticsPayload | null
+  /** GA4-REPORT-SECTIONS-001 — each present only where the server resolved the part as shown and the property has figures. */
+  ga4_overview?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_overview']
+  ga4_acquisition?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_acquisition']
+  ga4_platform_gap?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_platform_gap']
+  ga4_tables?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_tables']
   /**
    * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
    *

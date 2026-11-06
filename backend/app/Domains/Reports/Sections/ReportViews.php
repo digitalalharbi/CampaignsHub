@@ -39,11 +39,11 @@ final class ReportViews
      * @var array<string, list<string>>
      */
     public const DRAWS = [
-        'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'site_measurement', 'store_analytics', 'recommendations'],
-        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_analytics', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
+        'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'recommendations'],
+        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
         'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown'],
         'content' => ['kpis', 'content_performance'],
-        'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables'],
+        'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables', 'ga4_tables'],
     ];
 
     /** @var array<string, array{ar: string, en: string}> */

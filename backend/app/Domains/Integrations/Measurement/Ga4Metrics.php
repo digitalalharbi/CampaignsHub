@@ -54,6 +54,12 @@ final class Ga4Metrics
         'itemsPurchased' => 'items_purchased',
         // STORE-ANALYTICS-DEPTH-001 — units viewed in `view_item` events: the product-view step of the funnel.
         'itemsViewed' => 'product_views',
+        // GA4-STORE-ANALYTICS-001 — documented Data API metrics (api-schema): averageSessionDuration is
+        // seconds per session for the day (an average, so it is weighted by sessions, never summed);
+        // addToCarts and checkouts are the day's event counts, for the KPI tiles and their deltas.
+        'averageSessionDuration' => 'avg_session_seconds',
+        'addToCarts' => 'add_to_carts',
+        'checkouts' => 'checkouts',
     ];
 
     /**
@@ -74,7 +80,7 @@ final class Ga4Metrics
      *
      * @var list<string>
      */
-    public const RATES = ['engagement_rate', 'bounce_rate'];
+    public const RATES = ['engagement_rate', 'bounce_rate', 'avg_session_seconds'];
 
     /** @return list<string> the Data API names, for the request body */
     public static function requested(): array
