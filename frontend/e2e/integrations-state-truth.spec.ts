@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH, selectFirstProject, switchToEnglish } from './helpers'
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §§22, 26 — what the Connection Hub must never fail to say.
@@ -20,6 +20,7 @@ import { AUTH, switchToEnglish } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 test('the hub says which state every authorisation is in, on both axes', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
@@ -55,6 +56,7 @@ test('the hub says which state every authorisation is in, on both axes', async (
  * happen is one sitting in the account with nothing on screen about it.
  */
 test('an unfinished authorisation carries the way to finish it', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
@@ -71,6 +73,7 @@ test('an unfinished authorisation carries the way to finish it', async ({ page }
 })
 
 test('the integrations page prints no placeholder value', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 

@@ -27,8 +27,10 @@ import { useUi } from '@/stores/ui'
  * It is a reading surface. Every control on it opens something that already exists — the
  * re-authorise flow, the selection editor, the source's own drawer.
  */
-export function IntegrationAudit({ connections, loading = false, onReauthorise, onManage, onOpen }: {
+export function IntegrationAudit({ connections, projectId = null, loading = false, onReauthorise, onManage, onOpen }: {
   connections: HubConnection[]
+  /** INTEG-PROJECT-SPACE-001 — the project whose log this is; the query key carries it. */
+  projectId?: string | null
   /** The sources are still being read: «nothing needs action» would be a claim nobody has checked yet. */
   loading?: boolean
   onReauthorise: (connection: HubConnection) => void
@@ -76,7 +78,7 @@ export function IntegrationAudit({ connections, loading = false, onReauthorise, 
         )}
       </div>
 
-      <AuditLog ar={ar} />
+      <AuditLog ar={ar} projectId={projectId} />
     </section>
   )
 }
@@ -218,14 +220,14 @@ const SUBJECT_COPY: Record<NonNullable<IntegrationAuditEntry['subject_kind']>, {
 
 type Category = keyof typeof CATEGORY_COPY
 
-function AuditLog({ ar }: { ar: boolean }) {
+function AuditLog({ ar, projectId }: { ar: boolean; projectId: string | null }) {
   const [category, setCategory] = useState<Category | ''>('')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<PageSize>(10)
 
   const log = useQuery({
-    queryKey: ['integration-audit', { category, page, perPage }],
-    queryFn: () => fetchIntegrationAudit({ category: category === '' ? null : category, page, perPage }),
+    queryKey: ['integration-audit', projectId, { category, page, perPage }],
+    queryFn: () => fetchIntegrationAudit({ category: category === '' ? null : category, page, perPage, projectId }),
     placeholderData: (previous) => previous,
     retry: false,
   })

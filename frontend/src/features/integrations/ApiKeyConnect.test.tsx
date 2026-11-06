@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { IntegrationsPage } from './IntegrationsPage'
 import type { ConnectionHub as Hub } from './api'
 import { renderWithProviders } from '@/test/utils'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-APIKEY-001 — the connect experience for a provider the advertiser keys themselves.
@@ -82,11 +83,15 @@ vi.mock('@/features/projects/api', async (importOriginal) => ({
 async function openTheFlow() {
   renderWithProviders(<IntegrationsPage />)
   fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-  fireEvent.click(await screen.findByTestId('provider-pick-openai_ads'))
+  // INTEG-PROJECT-SPACE-001 — the platform is chosen inside the project's own journey.
+  fireEvent.click(await screen.findByTestId('link-platform-openai_ads'))
+  fireEvent.click(screen.getByTestId('link-next'))
 }
 
 describe('connecting a provider that issues the advertiser a key', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = {
       connections: [],
       connectable: [{
@@ -121,11 +126,12 @@ describe('connecting a provider that issues the advertiser a key', () => {
     renderWithProviders(<IntegrationsPage />, { locale: 'ar' })
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
 
-    const row = await screen.findByTestId('provider-pick-openai_ads')
+    const row = await screen.findByTestId('link-platform-row-openai_ads')
 
     expect(row).toHaveTextContent('إعلانات ChatGPT')
-    expect(row).toHaveTextContent('بمفتاح واجهة تملكه')
-    expect(row.textContent).not.toMatch(/تسجيل الدخول لدى المنصة/)
+    // Short labels (Owner 2026-11-06): two words say which act the row begins.
+    expect(row).toHaveTextContent('مفتاح API')
+    expect(row.textContent).not.toMatch(/تسجيل دخول/)
   })
 
   /** **The defect this prevents.** A provider with no consent screen offered a trip to one. */

@@ -205,6 +205,43 @@ final class IntegrationAuditEndpointTest extends TestCase
         $this->assertStringNotContainsString('Another Client', json_encode($data));
     }
 
+    /** INTEG-PROJECT-SPACE-001 — asked for one project, the log carries nothing of another project. */
+    public function test_asked_for_one_project_it_lists_only_that_projects_acts(): void
+    {
+        $a = $this->project('Project A');
+        $b = $this->project('Project B');
+        $connectionA = $this->connection($this->tenant, 'meta');
+        $connectionA->forceFill(['project_id' => $a->id])->save();
+        $connectionB = $this->connection($this->tenant, 'tiktok');
+        $connectionB->forceFill(['project_id' => $b->id])->save();
+        $accountB = $this->account($connectionB, 'act_b', 'B Secret Account');
+
+        $this->log('integration.connection.created', ProviderConnection::class, (string) $connectionA->id, minutesAgo: 30);
+        $this->log('integration.bound', Project::class, (string) $a->id, minutesAgo: 20);
+        $this->log('integration.connection.created', ProviderConnection::class, (string) $connectionB->id, minutesAgo: 10);
+        $this->log('integration.account.unlinked', ExternalAccount::class, (string) $accountB->id, minutesAgo: 5);
+        $this->log('integration.bound', Project::class, (string) $b->id);
+        // A row that names nothing belongs to no project.
+        $this->log('integration.bound', null, null);
+
+        $forA = $this->audit('?project_id='.$a->id)->assertOk()->json('data');
+
+        $this->assertSame(['integration.bound', 'integration.connection.created'], array_column($forA['entries'], 'action'));
+        $this->assertSame(2, $forA['meta']['total']);
+        $this->assertStringNotContainsString('Project B', json_encode($forA));
+        $this->assertStringNotContainsString('B Secret Account', json_encode($forA));
+        $this->assertStringNotContainsString('tiktok', json_encode($forA));
+
+        // Unasked, the tenant's whole log is unchanged.
+        $this->assertSame(6, $this->audit()->assertOk()->json('data.meta.total'));
+
+        // Another tenant's project, and one that does not exist, are the same 404.
+        $theirs = $this->project('Rival Project', $this->rival);
+        $this->audit('?project_id='.$theirs->id)->assertNotFound();
+        $this->audit('?project_id=00000000-0000-4000-8000-000000000000')->assertNotFound();
+        $this->audit('?project_id=not-a-uuid')->assertStatus(422);
+    }
+
     public function test_it_is_read_only(): void
     {
         $this->log('integration.bound', null, null);
@@ -270,14 +307,15 @@ final class IntegrationAuditEndpointTest extends TestCase
         ]);
     }
 
-    private function project(string $name): Project
+    private function project(string $name, ?Tenant $tenant = null): Project
     {
+        $tenant ??= $this->tenant;
         $workspace = ClientWorkspace::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'name' => $name, 'slug' => 'c-'.uniqid(), 'mode' => 'managed',
+            'tenant_id' => $tenant->id, 'name' => $name, 'slug' => 'c-'.uniqid(), 'mode' => 'managed',
         ]);
 
         return Project::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'name' => $name, 'status' => 'active',
+            'tenant_id' => $tenant->id, 'client_workspace_id' => $workspace->id, 'name' => $name, 'status' => 'active',
         ]);
     }
 }

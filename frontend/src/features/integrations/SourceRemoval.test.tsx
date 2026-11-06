@@ -4,6 +4,7 @@ import { IntegrationsPage } from './IntegrationsPage'
 import { ConnectionFlow } from './ConnectionFlow'
 import type { ConnectionHub as Hub, HubConnection } from './api'
 import { renderWithProviders } from '@/test/utils'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEG-SOURCE-REMOVAL-001 and INTEG-PROVIDER-IDENTITY-001 — the Owner's three reports on the Connection Hub.
@@ -71,6 +72,8 @@ function connection(over: Partial<HubConnection> = {}): HubConnection {
 
 describe('the Connection Hub: provider identity', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     hub.removed = []
     removals.calls = []
@@ -105,6 +108,8 @@ describe('the Connection Hub: provider identity', () => {
 
 describe('the Connection Hub: removing a source', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     hub.removed = []
     removals.calls = []
@@ -163,6 +168,8 @@ describe('the Connection Hub: removing a source', () => {
 
 describe('cancelling the connect flow', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     removals.calls = []
   })
 

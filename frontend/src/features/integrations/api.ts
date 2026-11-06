@@ -850,8 +850,11 @@ export function fetchIntegrationAudit(query: {
   category?: 'authorisation' | 'binding' | 'sync' | null
   page?: number
   perPage?: number
+  /** INTEG-PROJECT-SPACE-001 — the selected project's own log; the server lists nothing of another project. */
+  projectId?: string | null
 } = {}): Promise<IntegrationAuditPage> {
   const params = new URLSearchParams()
+  if (query.projectId) params.set('project_id', query.projectId)
   if (query.category) params.set('category', query.category)
   if (query.page) params.set('page', String(query.page))
   if (query.perPage) params.set('per_page', String(query.perPage))

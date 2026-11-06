@@ -94,6 +94,7 @@ final class IntegrationAuditController extends Controller
             'category' => ['sometimes', 'nullable', Rule::in(array_keys(self::CATEGORIES))],
             'per_page' => ['sometimes', 'integer', Rule::in(self::PAGE_SIZES)],
             'page' => ['sometimes', 'integer', 'min:1'],
+            'project_id' => ['sometimes', 'nullable', 'uuid'],
         ]);
 
         $tenantId = (string) $this->tenant->tenantId();
@@ -105,8 +106,28 @@ final class IntegrationAuditController extends Controller
         $reach = $this->reach->for($request->user(), ProjectCapability::DASHBOARD_VIEW);
         $narrowed = $reach['only'] !== null || $reach['except'] !== [];
 
+        /*
+         * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — asked for ONE project, the log is that project's own.
+         *
+         * A row belongs to the project when what it was done to is the project itself, one of its links, a
+         * connection opened for it, or an account it is (or was) linked to. A row that names nothing is not
+         * any project's and is left out: the centre is the selected project's space, never the tenant's.
+         */
+        $projectId = $validated['project_id'] ?? null;
+        $scope = $projectId === null ? null : $this->projectSubjects($request, $tenantId, $projectId);
+
         $page = AuditLog::query()
             ->where('tenant_id', $tenantId)
+            ->when($scope !== null, function (Builder $q) use ($scope): void {
+                $q->where(function (Builder $any) use ($scope): void {
+                    foreach ($scope as $kind => $ids) {
+                        if ($ids === []) {
+                            continue;
+                        }
+                        $any->orWhere(fn (Builder $one) => $one->whereIn('entity_type', self::ENTITY_TYPES[$kind])->whereIn('entity_id', $ids));
+                    }
+                });
+            })
             ->where(function (Builder $q) use ($prefixes): void {
                 foreach ($prefixes as $prefix) {
                     $q->orWhere('action', 'like', $prefix.'%');
@@ -150,6 +171,42 @@ final class IntegrationAuditController extends Controller
                 'last_page' => $page->lastPage(),
             ],
         ], __('api.ok'));
+    }
+
+    /** The two spellings each subject is written under by the audit call sites. */
+    private const ENTITY_TYPES = [
+        'project' => [Project::class, 'project'],
+        'binding' => [ProjectIntegrationBinding::class, 'project_integration_binding'],
+        'connection' => [ProviderConnection::class, 'provider_connection'],
+        'account' => [ExternalAccount::class, 'external_account'],
+    ];
+
+    /**
+     * What one project's rows can name. A project of another tenant, or one the reader does not reach, is a
+     * 404 like one that does not exist.
+     *
+     * @return array{project: list<string>, binding: list<string>, connection: list<string>, account: list<string>}
+     */
+    private function projectSubjects(Request $request, string $tenantId, string $projectId): array
+    {
+        $project = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('id', $projectId)->whereNull('deleted_at');
+        $this->reach->constrain($project, $request->user(), 'id', ProjectCapability::DASHBOARD_VIEW);
+        abort_unless($project->exists(), 404, 'Project not found.');
+
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->get(['id', 'external_account_id']);
+        $accounts = $bindings->pluck('external_account_id')->filter()->map(strval(...))->unique()->values()->all();
+        $connections = ProviderConnection::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->pluck('id')->map(strval(...))->all();
+
+        return [
+            'project' => [$projectId],
+            'binding' => $bindings->pluck('id')->map(strval(...))->values()->all(),
+            'connection' => $connections,
+            'account' => $accounts,
+        ];
     }
 
     public static function categoryOf(string $action): ?string

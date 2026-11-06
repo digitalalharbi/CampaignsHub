@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { IntegrationsPage } from './IntegrationsPage'
 import type { ConnectionHub as Hub, HubConnection } from './api'
 import { renderWithProviders } from '@/test/utils'
+import { useProject } from '@/stores/project'
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §§17, 22, 26 — the Connection Hub.
@@ -44,11 +45,20 @@ vi.mock('./api', async (importOriginal) => {
   }
 })
 
+vi.mock('@/features/commerce/StoresPanel', () => ({ StoresPanel: () => <div data-testid="stores-stub" /> }))
+vi.mock('@/features/measurement/PropertiesPanel', () => ({ PropertiesPanel: () => <div data-testid="properties-stub" /> }))
+
 vi.mock('@/features/projects/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listClientWorkspaces: () => Promise.resolve([]),
   listProjects: () => Promise.resolve([{ id: 'p-1', name: 'Razah', client_workspace_id: 'ws-1' }]),
 }))
+
+/** The platform step of the project's own journey: mark the platform, press «التالي». */
+async function pickPlatform(key: string) {
+  fireEvent.click(await screen.findByTestId(`link-platform-${key}`))
+  fireEvent.click(screen.getByTestId('link-next'))
+}
 
 function connection(over: Partial<HubConnection> = {}): HubConnection {
   return {
@@ -76,6 +86,8 @@ function connection(over: Partial<HubConnection> = {}): HubConnection {
 
 describe('the Connection Hub', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     started.calls = []
     listCalls.queries = []
@@ -85,7 +97,7 @@ describe('the Connection Hub', () => {
   it('says nothing is connected, and offers the one thing that can be done about it', async () => {
     renderWithProviders(<IntegrationsPage />)
 
-    expect(await screen.findByTestId('connection-hub-empty')).toHaveTextContent('Nothing is connected yet')
+    expect(await screen.findByTestId('connection-hub-empty')).toHaveTextContent('No source yet')
     expect(screen.getByTestId('hub-connect-empty')).toBeInTheDocument()
   })
 
@@ -212,20 +224,21 @@ describe('the Connection Hub', () => {
   })
 
   /**
-   * The per-project «link» is not a second connect flow: it opens the centre's one flow with the
-   * project already chosen, so the next press goes to the provider with that project on the state.
+   * A platform pressed on «المنصات» is not a second connect flow: it opens the project's one journey
+   * with the platform already chosen, so the next press goes to the provider with this project on the state.
    */
-  it('links a platform for a project through the same flow, project preselected', async () => {
+  it('links a platform for the project from the platforms tab, through the same flow', async () => {
     hub.data = {
       connections: [connection()],
       connectable: [{ key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'advertising', has_parent: true, auth: 'oauth' }],
     }
-    estate.projects = [{ project_id: 'p-1', project_name: 'Razah', providers: ['meta'], accounts: 1, last_synced_at: null, needs_attention: 0 }]
 
     renderWithProviders(<IntegrationsPage />)
 
-    fireEvent.click(await screen.findByTestId('estate-link-p-1'))
-    fireEvent.click(await screen.findByTestId('estate-link-p-1-meta'))
+    fireEvent.click(await screen.findByTestId('hub-section-link-platforms'))
+    // One account of this project reads Meta already: the count is on the platform, and the press re-links.
+    expect(await screen.findByTestId('hub-platform-linked-meta')).toHaveTextContent('1')
+    fireEvent.click(screen.getByTestId('hub-platform-link-meta'))
 
     expect(await screen.findByTestId('connection-flow')).toHaveTextContent('Connect')
     expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razah')
@@ -233,8 +246,8 @@ describe('the Connection Hub', () => {
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
     await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
-    // The picker of platforms is the hub's own entry; the estate skipped it by naming the platform.
-    expect(screen.queryByTestId('provider-picker')).toBeNull()
+    // The platform was named by the press: the platform step is not asked again.
+    expect(screen.queryByTestId('project-link-flow')).toBeNull()
   })
 
   /** One connect entry per surface: with rows it is in the head, without rows it is in the empty state. */
@@ -242,14 +255,14 @@ describe('the Connection Hub', () => {
     const { unmount } = renderWithProviders(<IntegrationsPage />)
     await screen.findByTestId('hub-connect-empty')
     expect(screen.queryByTestId('hub-connect')).toBeNull()
-    expect(screen.getAllByRole('button', { name: /Connect a source/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Link' })).toHaveLength(1)
     unmount()
 
     hub.data = { connections: [connection()], connectable: [] }
     renderWithProviders(<IntegrationsPage />)
     await screen.findByTestId('hub-connect')
     expect(screen.queryByTestId('hub-connect-empty')).toBeNull()
-    expect(screen.getAllByRole('button', { name: /Connect a source/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Link' })).toHaveLength(1)
   })
 
   it('carries both truths into the drawer header', async () => {
@@ -336,6 +349,8 @@ describe('the Connection Hub', () => {
  */
 describe('the connection flow', () => {
   beforeEach(() => {
+    // INTEG-PROJECT-SPACE-001 — the centre is the SELECTED project's space; these read it standing in p-1.
+    useProject.setState({ currentProjectId: 'p-1' })
     hub.data = {
       connections: [],
       connectable: [{ key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'advertising', has_parent: true, auth: 'oauth' }],
@@ -348,7 +363,9 @@ describe('the connection flow', () => {
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
 
-    expect(await screen.findByTestId('provider-pick-meta')).toBeInTheDocument()
+    expect(await screen.findByTestId('link-platform-meta')).toBeInTheDocument()
+    // Only what the install can start: one platform on offer, one row.
+    expect(screen.getAllByTestId(/^link-platform-row-/)).toHaveLength(1)
   })
 
   /**
@@ -359,9 +376,10 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    // The workspace's only project is preselected: a question with one answer is not asked.
-    await waitFor(() => expect(screen.getByTestId('picker-project')).toHaveValue('p-1'))
-    fireEvent.click(screen.getByTestId('provider-pick-meta'))
+    // The space IS the project: it is stated on the journey and never asked for.
+    expect(await screen.findByTestId('link-project')).toHaveTextContent('Razah')
+    expect(screen.queryByTestId('picker-project')).toBeNull()
+    await pickPlatform('meta')
 
     // The project is stated, not asked: there is no project picker inside the flow.
     expect(await screen.findByTestId('flow-project-fixed')).toHaveTextContent('Razah')
@@ -374,7 +392,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
     // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
     expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('flow-authorise'))
@@ -388,7 +406,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
     // INTEG-PROJECT-LINK-001 — the project was fixed in the picker; the flow states it and asks nothing.
     expect(await screen.findByTestId('flow-project-fixed')).toBeInTheDocument()
     expect(await screen.findByTestId('flow-meta-app-live')).toBeChecked()
@@ -403,7 +421,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
     await screen.findByTestId('flow-authorise')
     expect(screen.queryByTestId('flow-meta-app')).not.toBeInTheDocument()
   })
@@ -413,7 +431,7 @@ describe('the connection flow', () => {
     metaApps.testWorkspace = true
     renderWithProviders(<IntegrationsPage />)
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
     expect(await screen.findByTestId('flow-meta-saas-not-ready')).toBeInTheDocument()
     expect(screen.queryByTestId('flow-meta-app-live')).not.toBeInTheDocument()
     metaApps.testWorkspace = false
@@ -424,7 +442,7 @@ describe('the connection flow', () => {
     metaApps.saas = true
     renderWithProviders(<IntegrationsPage />)
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
     expect(await screen.findByTestId('flow-meta-app-saas')).toBeChecked()
     expect(screen.queryByTestId('flow-meta-app-live')).not.toBeInTheDocument()
     expect(screen.queryByTestId('flow-meta-saas-not-ready')).not.toBeInTheDocument()
@@ -437,7 +455,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
 
     const stepper = await screen.findByTestId('flow-stepper')
     expect(stepper).toHaveTextContent('Sign in')
@@ -456,7 +474,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-x'))
+    await pickPlatform('x')
 
     await screen.findByTestId('flow-stepper')
     expect(screen.queryByTestId('flow-stepper-parent')).toBeNull()
@@ -467,7 +485,7 @@ describe('the connection flow', () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
-    fireEvent.click(await screen.findByTestId('provider-pick-meta'))
+    await pickPlatform('meta')
 
     const login = await screen.findByTestId('flow-step-login')
     expect(login).toHaveTextContent('Read only')

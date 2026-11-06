@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
 import { fetchConnectionHub, fetchConnectionHubWithRemoved, type HubConnection } from './api'
-import { ACCOUNT_SET_COPY, CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
+import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { StatusChips } from './StatusChips'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -121,21 +121,8 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
 
   return (
     <section className="flex min-w-0 flex-col gap-4" data-testid="hub-section-sources" id="hub-sources" aria-labelledby="hub-sources-title">
-      {/*
-        INTEG-UNIFIED-002 — the second of the centre's three sections: the ACTUAL resources, their
-        states and their controls. The page head (`integrations-intro`) is the page's, not this
-        section's, and the three figures that used to sit here are now the summary under the work
-        (feature first, summaries below).
-      */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id="hub-sources-title" className="text-base font-bold text-text-primary">{ar ? 'المصادر المرتبطة' : 'Linked sources'}</h2>
-          <p className="text-xs text-text-secondary">
-            {ar
-              ? 'كل تفويض قائم: حساب المنصة الذي مُنح به، وما اختير منه، وحالاته الخمس كلٌّ على حدة.'
-              : 'Every authorisation: the platform account it was granted with, what was chosen from it, and its five statuses, each on its own.'}
-          </p>
-        </div>
+        <h2 id="hub-sources-title" className="text-base font-bold text-text-primary">{ar ? 'المصادر' : 'Sources'}</h2>
 
         {listed.length > 0 && (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -175,15 +162,10 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
           data-testid="connection-hub-empty"
         >
           <p className="text-sm font-semibold text-text-primary">
-            {ar ? 'لا يوجد مصدر مربوط بعد' : 'Nothing is connected yet'}
-          </p>
-          <p className="mx-auto mt-1 max-w-sm text-xs text-text-secondary">
-            {ar
-              ? 'اربط حساب منصتك الإعلانية، ثم اختر الحسابات التي تخصّ كل عميل. لن يُزامَن أي حساب لم تختره.'
-              : 'Authorise an ad platform, then choose which accounts belong to each client. Nothing you do not choose is ever synced.'}
+            {ar ? 'لا مصدر بعد' : 'No source yet'}
           </p>
           <Button className="mt-4" onClick={onConnect} data-testid="hub-connect-empty">
-            <Plus size={15} /> {ar ? 'ربط مصدر' : 'Connect a source'}
+            <Plus size={15} /> {ar ? 'ربط' : 'Link'}
           </Button>
         </div>
       ) : (
@@ -487,49 +469,26 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
 }
 
 /**
- * INTEG-UNIFIED-002 — the centre's three figures, drawn UNDER the work rather than above it.
- *
- * Feature first: a reader opens this page to link, re-authorise or detach, so the sections that do
- * those come first and the counts that summarise them come last. The figures are the same three the
- * page head used to carry, counted from the rows the sources section draws so the two cannot disagree.
+ * INTEG-PROJECT-SPACE-001 — the project's four figures, on top of its space: linked accounts, platforms,
+ * campaigns, and how many sources need an action. Figures only — a tile carries a word and a number.
  */
-export function HubSummary({ connections }: { connections: HubConnection[] }) {
-  const locale = useUi((s) => s.locale)
-  const ar = locale === 'ar'
+export function HubSummary({ connections, campaigns = null }: { connections: HubConnection[]; campaigns?: number | null }) {
+  const ar = useUi((s) => s.locale) === 'ar'
   const live = connections.filter((c) => !isGone(c))
   if (live.length === 0) return null
 
-  const needReauth = live.filter((c) => needsReauthorising(c.connection_state)).length
-  const selectedAccounts = live.reduce((n, c) => n + c.selected_accounts, 0)
+  const attention = live.filter(sourceNeedsAction).length
+  const accounts = live.reduce((n, c) => n + c.selected_accounts, 0)
+  const platforms = new Set(live.map((c) => c.provider)).size
 
   return (
-    <section className="flex min-w-0 flex-col gap-3" data-testid="hub-summary" aria-labelledby="hub-summary-title">
-      <h2 id="hub-summary-title" className="text-sm font-bold text-text-primary">{ar ? 'ملخص' : 'Summary'}</h2>
-      <div className="min-w-0">
-        <StatGrid columns="grid-cols-1 sm:grid-cols-3">
-          <StatCard
-            label={ar ? 'المصادر' : 'Sources'}
-            value={live.length.toLocaleString('en-US')}
-            tone="brand"
-            dot
-            testid="hub-kpi-sources"
-          />
-          <StatCard
-            label={ar ? CONNECTION_COPY.REAUTH_REQUIRED.ar : CONNECTION_COPY.REAUTH_REQUIRED.en}
-            value={needReauth.toLocaleString('en-US')}
-            tone={needReauth > 0 ? 'danger' : 'success'}
-            dot
-            testid="hub-kpi-reauth"
-          />
-          <StatCard
-            label={ar ? ACCOUNT_SET_COPY.selected.ar : ACCOUNT_SET_COPY.selected.en}
-            value={selectedAccounts.toLocaleString('en-US')}
-            tone="neutral"
-            dot
-            testid="hub-kpi-accounts"
-          />
-        </StatGrid>
-      </div>
+    <section className="min-w-0" data-testid="hub-summary" aria-label={ar ? 'ملخص' : 'Summary'}>
+      <StatGrid columns="grid-cols-2 sm:grid-cols-4">
+        <StatCard label={ar ? 'الحسابات' : 'Accounts'} value={accounts.toLocaleString('en-US')} tone="brand" dot testid="hub-kpi-accounts" />
+        <StatCard label={ar ? 'المنصات' : 'Platforms'} value={platforms.toLocaleString('en-US')} tone="neutral" dot testid="hub-kpi-platforms" />
+        <StatCard label={ar ? 'الحملات' : 'Campaigns'} value={campaigns === null ? '—' : campaigns.toLocaleString('en-US')} tone="neutral" dot testid="hub-kpi-campaigns" />
+        <StatCard label={ar ? 'تحتاج إجراء' : 'Need action'} value={attention.toLocaleString('en-US')} tone={attention > 0 ? 'danger' : 'success'} dot testid="hub-kpi-attention" />
+      </StatGrid>
     </section>
   )
 }

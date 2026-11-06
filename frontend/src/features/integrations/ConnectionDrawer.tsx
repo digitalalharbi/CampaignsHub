@@ -38,8 +38,10 @@ export type DrawerTab = 'overview' | 'accounts' | 'history' | 'settings'
  * authorisation itself, kept away from the ones that change a selection, because «stop syncing this
  * account for this client» and «end this authorisation for every client» are not neighbours.
  */
-export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAccounts, onReauthorise }: {
+export function ConnectionDrawer({ connection, projectId = null, tab, onTab, onClose, onManageAccounts, onReauthorise }: {
   connection: HubConnection
+  /** INTEG-PROJECT-SPACE-001 — the project whose space this is: the drawer lists and reads only its accounts. */
+  projectId?: string | null
   tab: DrawerTab
   onTab: (tab: DrawerTab) => void
   onClose: () => void
@@ -149,12 +151,13 @@ export function ConnectionDrawer({ connection, tab, onTab, onClose, onManageAcco
           {tab === 'accounts' && (
             <Accounts
               connection={connection}
+              projectId={projectId}
               ar={ar}
               onManageAccounts={(projectId) => onManageAccounts(connection, projectId)}
             />
           )}
 
-          {tab === 'history' && <History connection={connection} ar={ar} />}
+          {tab === 'history' && <History connection={connection} projectId={projectId} ar={ar} />}
 
           {tab === 'settings' && (
             <Settings
@@ -216,8 +219,9 @@ function Overview({ connection, ar }: { connection: HubConnection; ar: boolean }
   )
 }
 
-function Accounts({ connection, ar, onManageAccounts }: {
+function Accounts({ connection, projectId, ar, onManageAccounts }: {
   connection: HubConnection
+  projectId: string | null
   ar: boolean
   onManageAccounts: (projectId?: string | null) => void
 }) {
@@ -232,6 +236,7 @@ function Accounts({ connection, ar, onManageAccounts }: {
     <div className="flex flex-col gap-3" data-testid="drawer-accounts">
       <SelectedAccounts
         connection={connection.id}
+        {...(projectId === null ? {} : { project: projectId })}
         onManage={(account) => onManageAccounts(account.assigned_project_id)}
       />
 
@@ -242,15 +247,15 @@ function Accounts({ connection, ar, onManageAccounts }: {
   )
 }
 
-function History({ connection, ar }: { connection: HubConnection; ar: boolean }) {
+function History({ connection, projectId, ar }: { connection: HubConnection; projectId: string | null; ar: boolean }) {
   /*
    * The runs of the accounts this connection actually feeds — read one account at a time, because
    * the run log is per account and a connection-wide log would be a new endpoint answering a
    * question the inventory's own log already answers correctly.
    */
   const accounts = useQuery({
-    queryKey: ['integration-accounts', { connection: connection.id, link: 'linked' }],
-    queryFn: () => listAccounts({ connection: connection.id, link: 'linked', per_page: 10 }),
+    queryKey: ['integration-accounts', { project: projectId, connection: connection.id, link: 'linked' }],
+    queryFn: () => listAccounts({ connection: connection.id, ...(projectId === null ? {} : { project: projectId }), link: 'linked', per_page: 10 }),
   })
 
   const first = accounts.data?.accounts[0] ?? null

@@ -49,7 +49,8 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   onReturn: () => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), retry: false })
+  // The platforms on offer are read through THIS project's hub: the journey fetches nothing of another project.
+  const hub = useQuery({ queryKey: ['connection-hub', projectId, 'live'], queryFn: () => fetchConnectionHub(projectId), retry: false })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
 
   const [chosen, setChosen] = useState<ConnectableProvider | null>(provider)
@@ -111,6 +112,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
               <label
                 key={p.key}
                 className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${marked === p.key ? 'border-brand-500 bg-surface-hover' : 'border-border hover:bg-surface-hover'}`}
+                data-testid={`link-platform-row-${p.key}`}
               >
                 <input
                   type="radio"

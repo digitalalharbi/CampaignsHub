@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, E2E_ORIGIN } from './helpers'
+import { AUTH, E2E_ORIGIN, selectFirstProject } from './helpers'
 
 /**
  * INTEGRATIONS-CENTRE-001 — the centre shows SELECTED accounts only, rendered, against the gate.
@@ -51,6 +51,7 @@ async function openSandboxAccounts(page: import('@playwright/test').Page): Promi
 
 test('the page has no all-discovered-accounts section and no toggle for one', async ({ page }) => {
   await connectSandbox(page.request)
+  await selectFirstProject(page)
   await page.goto(INTEGRATIONS)
   await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
@@ -71,6 +72,7 @@ test('the drawer lists the selected accounts only, and every request says so', a
     if (url.pathname === '/api/v1/accounts') inventoryRequests.push(url.search)
   })
 
+  await selectFirstProject(page)
   await page.goto(INTEGRATIONS)
   await openSandboxAccounts(page)
 
@@ -98,6 +100,7 @@ test('the drawer lists the selected accounts only, and every request says so', a
 
 test('«Edit the selection» opens the connection wizard, where accounts are searched', async ({ page }) => {
   await connectSandbox(page.request)
+  await selectFirstProject(page)
   await page.goto(INTEGRATIONS)
   await openSandboxAccounts(page)
 
@@ -113,6 +116,7 @@ test('«Edit the selection» opens the connection wizard, where accounts are sea
 test('the integrations page does not overflow a 320px phone', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 })
   await connectSandbox(page.request)
+  await selectFirstProject(page)
   await page.goto(INTEGRATIONS)
   await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
