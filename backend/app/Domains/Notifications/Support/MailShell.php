@@ -30,6 +30,28 @@ namespace App\Domains\Notifications\Support;
 final class MailShell
 {
     /**
+     * The system logo's box in the header: `banner-{ar,en}.png` is 1200×300, shown at half that.
+     *
+     * Both are written on the `<img>` as attributes, so a client that has not fetched the image (or never
+     * will) keeps the band's room instead of collapsing it, and Outlook, which ignores `height:auto`,
+     * draws it at its own proportions. EMAIL-LOGO-GUARD-001.
+     */
+    public const LOGO_WIDTH = 600;
+
+    public const LOGO_HEIGHT = 150;
+
+    /**
+     * The system logo every message carries, absolute on the app origin.
+     *
+     * One reader: a mailable that assembles its own payload (the digest) asks here too, so no message can
+     * point at another image or at none.
+     */
+    public static function logoUrl(bool $ar): string
+    {
+        return MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png');
+    }
+
+    /**
      * The layout payload for one message.
      *
      * @param  bool  $preferences  false for account messages — see the class docblock
@@ -69,7 +91,7 @@ final class MailShell
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
             // EMAIL-BRAND-002 — the transparent cream mark (112px, shown at 56), on the app origin.
-            'logoUrl' => MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png'),
+            'logoUrl' => self::logoUrl($ar),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
@@ -95,7 +117,10 @@ final class MailShell
     }
 
     /**
-     * The footer's own words.
+     * The footer's own words — EMAIL-FOOTER-001.
+     *
+     * `sender` is the fourth line and is always there, in the wording the Owner approved and asked back
+     * for on 2026-11-06 («التنسيق الجديد غير لائق أبدًا»). An agency's digest replaces it with its own.
      *
      * `why` differs by message: a digest arrives because somebody follows a project, and an account
      * message arrives because somebody asked for it or because their account changed. Callers that
@@ -107,21 +132,23 @@ final class MailShell
     {
         return $ar
             ? [
-                'manage_preferences' => 'إدارة الإشعارات',
-                'unsubscribe' => 'إلغاء الاشتراك في هذا النوع',
+                'manage_preferences' => 'إعدادات الإشعارات',
+                'unsubscribe' => 'إلغاء الاشتراك',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
                 'support' => 'الدعم',
+                'sender' => 'أُرسلت هذه الرسالة من كامبينز هب — منصة إدارة الحملات الإعلانية المدفوعة.',
                 'why' => 'وصلتك لأنك تتابع هذا المشروع.',
             ]
             : [
-                'manage_preferences' => 'Manage notifications',
-                'unsubscribe' => 'Unsubscribe from this type',
+                'manage_preferences' => 'Notification settings',
+                'unsubscribe' => 'Unsubscribe',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
                 'support' => 'Support',
+                'sender' => 'Sent by CampaignsHub — the paid-campaign management platform.',
                 'why' => 'Sent because you follow this project.',
             ];
     }
@@ -136,7 +163,7 @@ final class MailShell
     public static function accountFootnote(bool $ar): string
     {
         return $ar
-            ? 'وصلتك لأنها تخص أمان حسابك، ولا يمكن إيقافها من إعدادات الإشعارات.'
-            : 'Sent because it concerns your account security. It cannot be turned off in notification settings.';
+            ? 'هذه رسالة تخص أمان حسابك، وتُرسل عند الحاجة فقط، ولا يمكن إيقافها من إعدادات الإشعارات.'
+            : 'This message is about the security of your account. It is sent only when needed, and cannot be turned off in notification settings.';
     }
 }

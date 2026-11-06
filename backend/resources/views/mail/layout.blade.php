@@ -98,7 +98,7 @@
                         <td class="ch-hdr" align="{{ $align }}" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; background-image:linear-gradient(#0b1a16,#0b1a16); padding:0; border-bottom:3px solid #0b7a62; text-align:{{ $align }}; font-family:{!! $font !!}; font-size:20px; line-height:1.4; font-weight:700; color:#f7f5f0;">
                             {{-- The banner IS the band: as wide as the card on every screen, with the mark on the reader's side (Owner, 2026-11-05). Blocked images show the alt text on the same ground. --}}
                             <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; color:#f7f5f0;">
-                                <img src="{{ $logoUrl }}" width="600" alt="{{ $wordmark }}" style="display:block; width:100%; max-width:600px; height:auto; border:0; outline:none; text-decoration:none; color:#f7f5f0;" />
+                                <img src="{{ $logoUrl }}" width="{{ \App\Domains\Notifications\Support\MailShell::LOGO_WIDTH }}" height="{{ \App\Domains\Notifications\Support\MailShell::LOGO_HEIGHT }}" alt="{{ $wordmark }}" style="display:block; width:100%; max-width:600px; height:auto; border:0; outline:none; text-decoration:none; color:#f7f5f0;" />
                             </a>
                             @if (!empty($scopeNote ?? ''))
                                 <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; font-weight:400; color:#b7c9c2; padding:0 24px 12px; text-align:{{ $align }};">{{ $scopeNote }}</div>
@@ -122,49 +122,68 @@
                     </tr>
 
                     {{--
-                      The footer carries the three policies every portal footer carries, and the way
-                      out. An unsubscribe a person cannot find is how a useful digest becomes spam.
+                      The footer — EMAIL-FOOTER-001 (Owner, 2026-11-06: «التنسيق الجديد غير لائق أبدًا»).
 
-                      `$showPreferences` is FALSE for account messages — MAIL-009.
+                      Four lines, always, in the wording he approved: the policies, the reason this message
+                      came, the copyright line, and who sent it. Between the first two sits the way to
+                      manage mail rather than block the sender: «إعدادات الإشعارات» on every message, and
+                      «إلغاء الاشتراك» only where the message carries a signed one-click address (the
+                      same one its `List-Unsubscribe` header names). An account or security message has
+                      no such address, and its second line says it cannot be switched off.
 
-                      A password reset, a sign-in code and a security alert are not subscriptions, and
-                      offering «إدارة إشعاراتك» beside one is an offer the product cannot honour: it
-                      implies the reader could turn this off, and nothing in the preference centre
-                      does or should. Worse, a person who follows that link from a security alert
-                      leaves the one message that was asking them to act. The footnote below says
-                      plainly why the message cannot be switched off instead.
+                      Every line is its own table cell with `dir`, `align` and inline `text-align` +
+                      `direction`. A wrapper's direction is not inherited by every client, and without it
+                      an Arabic line was drawn from the left with its full stop at the wrong end. Latin
+                      fragments inside an Arabic line are their own left-to-right run for the same reason.
                     --}}
+                    {{-- Raw PHP tags: an `@php … ?>` block below the inline `@php(...)` above is read by Blade as one block with it. --}}
+                    <?php
+                        $ftrCell = 'dir="'.$dir.'" align="'.$align.'"';
+                        $ftrBase = 'text-align:'.$align.'; direction:'.$dir.'; font-family:'.$font.'; color:#5b6b68;';
+                        $ftrLink = 'color:#5b6b68; text-decoration:underline; white-space:nowrap;';
+                        $ltr = 'direction:ltr; unicode-bidi:embed; display:inline-block;';
+                    ?>
                     <tr>
-                        <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:18px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">
-                            <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; line-height:1.7;">
-                                @if (($showPreferences ?? true) === true)
-                                    <a href="{{ $urls['preferences'] }}" style="color:#0d8a6f; text-decoration:underline;">{{ $t['manage_preferences'] }}</a>
-                                    &nbsp;·&nbsp;
-                                    @if (! empty($unsubscribeUrl ?? null))
-                                        <a href="{{ $unsubscribeUrl }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['unsubscribe'] }}</a>
+                        <td class="ch-pad ch-ftr" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:22px 24px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">
+                            <table role="presentation" data-mail-footer="1" dir="{{ $dir }}" align="{{ $align }}" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; direction:{{ $dir }};">
+                                <tr>
+                                    <td data-footer-line="policies" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:13px; line-height:1.8; padding:0 0 8px;">
+                                        <a href="{{ $urls['privacy'] }}" style="{!! $ftrLink !!}">{{ $t['privacy'] }}</a>
                                         &nbsp;·&nbsp;
-                                    @endif
+                                        <a href="{{ $urls['terms'] }}" style="{!! $ftrLink !!}">{{ $t['terms'] }}</a>
+                                        &nbsp;·&nbsp;
+                                        <a href="{{ $urls['security'] }}" style="{!! $ftrLink !!}">{{ $t['security'] }}</a>
+                                        &nbsp;·&nbsp;
+                                        <a href="{{ $urls['support'] }}" style="{!! $ftrLink !!}">{{ $t['support'] }}</a>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td data-footer-line="manage" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:13px; line-height:1.8; padding:0 0 10px;">
+                                        <a href="{{ $urls['preferences'] }}" style="color:#0b7a62; font-weight:700; text-decoration:underline; white-space:nowrap;">{{ $t['manage_preferences'] }}</a>
+                                        @if (($showPreferences ?? true) === true && ! empty($unsubscribeUrl ?? null))
+                                            &nbsp;·&nbsp;
+                                            <a href="{{ $unsubscribeUrl }}" style="{!! $ftrLink !!}">{{ $t['unsubscribe'] }}</a>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @if (($footerNote ?? '') !== '')
+                                    <tr>
+                                        <td data-footer-line="note" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0 0 8px;">
+                                            {{ $footerNote }}
+                                        </td>
+                                    </tr>
                                 @endif
-                                <a href="{{ $urls['privacy'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['privacy'] }}</a>
-                                &nbsp;·&nbsp;
-                                <a href="{{ $urls['terms'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['terms'] }}</a>
-                                &nbsp;·&nbsp;
-                                <a href="{{ $urls['security'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['security'] }}</a>
-                                &nbsp;·&nbsp;
-                                <a href="{{ $urls['support'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $t['support'] }}</a>
-                            </div>
-                            @if (($footerNote ?? '') !== '')
-                                <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
-                                    {{ $footerNote }}
-                                </div>
-                            @endif
-                            <div style="font-family:{!! $font !!}; font-size:12px; color:#5b6b68; padding-top:8px; line-height:1.7;">
-                                © {{ $year }} {!! $wordmarkPlain !!} · <a href="{{ $urls['home'] }}" style="color:#5b6b68; text-decoration:underline;">{{ $urls['host'] }}</a>
-                                {{-- Only an agency's digest names a sender here; the banner already says who the platform is (Owner, 2026-11-05). --}}
-                                @if (! empty($t['sender'] ?? null))
-                                    <br />{{ $t['sender'] }}
-                                @endif
-                            </div>
+                                <tr>
+                                    <td data-footer-line="copyright" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0 0 4px;">
+                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub · <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a></span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td data-footer-line="sender" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0;">
+                                        {{ $t['sender'] }}
+                                    </td>
+                                </tr>
+                            </table>
                         </td>
                     </tr>
                 </table>

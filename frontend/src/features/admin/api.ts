@@ -1221,7 +1221,9 @@ export function fetchEmailLedger(params: {
 export interface TestSendResult {
   state: string
   delivery_state: string
+  /** The address it really went to, whichever target was chosen. */
   recipient: string
+  to?: TestSendTarget
   delivery_id?: string | null
   transport?: string | null
   suppression_reason?: string | null
@@ -1229,15 +1231,21 @@ export interface TestSendResult {
   provider_message_id?: string | null
 }
 
-/** EMAIL-TEST-SEND-001 — one fixture message to the signed-in admin's own proven address. No address is ever sent from here. */
-export const sendTestEmail = (lang: 'ar' | 'en', key?: string) =>
-  postData<TestSendResult>('/admin/email/test', { lang, key })
+/**
+ * EMAIL-TEST-SEND-002 — the two places a test may go: the admin's own proven address, or the platform's
+ * own mailbox (the configured Reply-To). A word, never an address: the server holds both.
+ */
+export type TestSendTarget = 'self' | 'platform_mailbox'
+
+/** EMAIL-TEST-SEND-001 — one fixture message to one of the two targets. No address is ever sent from here. */
+export const sendTestEmail = (lang: 'ar' | 'en', to: TestSendTarget, key?: string) =>
+  postData<TestSendResult>('/admin/email/test', { lang, to, key })
 
 export interface EmailPreviewList {
   keys: string[]
   locales: string[]
   /** Where a test would go, and whether that address was ever proved. */
-  test_send?: { recipient: string; address_proven: boolean }
+  test_send?: { recipient: string; address_proven: boolean; platform_mailbox?: string | null }
 }
 
 export function fetchEmailPreviews(): Promise<EmailPreviewList> {

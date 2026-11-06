@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 64 64">
+  <title>CampaignsHub</title>
+  <desc>The CampaignsHub symbol on the email ground. Same geometry as favicon.svg, same colours as avatar.png.</desc>
+  <rect width="64" height="64" fill="#0b1a16"/>
+  <g transform="translate(32 32) scale(0.7) translate(-32 -32)">
+    <g fill="none" stroke="#f7f5f0" stroke-width="6" stroke-linecap="round">
+      <path d="M8 14 H24 C34 14 34 32 42 32"/>
+      <path d="M8 32 H42"/>
+      <path d="M8 50 H24 C34 50 34 32 42 32"/>
+    </g>
+    <circle cx="52" cy="32" r="7" fill="#e8a33d"/>
+  </g>
+</svg>
