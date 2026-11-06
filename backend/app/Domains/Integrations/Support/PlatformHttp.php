@@ -11,6 +11,8 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * INTEG-RETRY-001 — one HTTP client for every ad platform, with one retry policy.
@@ -56,6 +58,31 @@ final class PlatformHttp
                 when: self::isWorthRetrying(...),
                 throw: false,
             );
+    }
+
+    /**
+     * INTEG-SYNC-ENGINE-001 — count this request against the provider's and the connection's budget, and read what the answer says
+     * about them. See {@see ProviderRateBudget}. Every attempt of the retry above passes through here, and each one is a real request.
+     */
+    public static function budgeted(PendingRequest $request, string $platform, ?string $connectionId): PendingRequest
+    {
+        if ($connectionId === null) {
+            return $request;
+        }
+
+        $budget = app(ProviderRateBudget::class);
+
+        return $request
+            ->withRequestMiddleware(static function (RequestInterface $outgoing) use ($budget, $platform, $connectionId): RequestInterface {
+                $budget->beforeRequest($platform, $connectionId);
+
+                return $outgoing;
+            })
+            ->withResponseMiddleware(static function (ResponseInterface $answer) use ($budget, $platform, $connectionId): ResponseInterface {
+                $budget->afterResponse($platform, $connectionId, $answer);
+
+                return $answer;
+            });
     }
 
     /**

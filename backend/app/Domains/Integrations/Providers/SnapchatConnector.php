@@ -231,6 +231,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $url = is_string($next) && $next !== '' ? $next : null;
         }
 
+        if ($url !== null) {
+            $this->noteTruncatedRead($what);
+        }
+
         return $items;
     }
 
@@ -1555,6 +1559,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $url = is_string($next) && $next !== '' ? $next : null;
         }
 
+        if ($url !== null) {
+            $this->noteTruncatedRead("{$breakdown} stats");
+        }
+
         return $rows;
     }
 
@@ -1677,6 +1685,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
 
             $next = $body['paging']['next_link'] ?? null;
             $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        if ($url !== null) {
+            $this->noteTruncatedRead('daily stats');
         }
 
         return $rows;

@@ -88,6 +88,11 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             }
         }
 
+        // The loop only runs off its end when the last page was full.
+        if ($page === self::MAX_PAGES) {
+            $this->noteTruncatedRead($what);
+        }
+
         return $items;
     }
 

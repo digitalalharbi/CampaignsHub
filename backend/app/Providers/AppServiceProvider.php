@@ -20,6 +20,7 @@ use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Metrics\Services\PeriodReachReader;
@@ -77,6 +78,8 @@ class AppServiceProvider extends ServiceProvider
         // PERF-RECOVERY-001 — a read repeated inside one report build is answered once; discarded when the build ends.
         $this->app->scoped(ReportReadMemo::class);
         $this->app->scoped(PresentationAudience::class);
+        // INTEG-SYNC-ENGINE-001 — what the last request on a connection came to belongs to one job.
+        $this->app->scoped(ProviderRateBudget::class);
         $this->app->scoped(RefusedCreativeAccess::class);
 
         /*

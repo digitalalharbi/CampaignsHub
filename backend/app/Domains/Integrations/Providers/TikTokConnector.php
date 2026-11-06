@@ -157,6 +157,11 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
             }
         }
 
+        // The loop only runs off its end when the provider still had pages.
+        if ($page > self::MAX_PAGES) {
+            $this->noteTruncatedRead($what);
+        }
+
         return $items;
     }
 

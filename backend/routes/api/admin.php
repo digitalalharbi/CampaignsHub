@@ -32,6 +32,7 @@ use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
+use App\Domains\Platform\Http\Controllers\SyncDeadLetterController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
@@ -76,6 +77,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * would reintroduce exactly what it removes.
          */
         Route::get('/scheduled-work', ScheduledWorkController::class)->name('scheduled-work');
+
+        // INTEG-SYNC-ENGINE-001 — metrics syncs that exhausted their retries. API only for now; a re-drive re-proves the binding.
+        Route::get('/sync-dead-letters', [SyncDeadLetterController::class, 'index'])->middleware('throttle:60,1')->name('sync-dead-letters.index');
+        Route::post('/sync-dead-letters/{run}/redrive', [SyncDeadLetterController::class, 'redrive'])
+            ->whereUuid('run')->middleware('throttle:30,1')->name('sync-dead-letters.redrive');
 
         // SALLA-REVIEW-001 — one-click revoke and extend for the app-store review workspace.
         Route::get('/review-accounts', [PlatformReviewAccountController::class, 'index'])->name('review-accounts.index');

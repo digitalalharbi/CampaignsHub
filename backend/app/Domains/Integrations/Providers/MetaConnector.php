@@ -197,6 +197,10 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
             $url = is_string($next) && $next !== '' ? $next : null;
         }
 
+        if ($url !== null) {
+            $this->noteTruncatedRead($what);
+        }
+
         return $items;
     }
 
