@@ -727,6 +727,10 @@ export type IntegrationStatuses = Record<StatusDimension, IntegrationStatus>
  * could not say which of the two had gone stale.
  */
 export interface HubConnection {
+  /** The ONE project a link journey opened this connection for; null or absent is a workspace-wide connection. */
+  project_id?: string | null
+  /** What the reader's projects read through this source, by name — what tells two rows of one platform apart. */
+  accounts?: Array<{ id: string; name: string; organisation: string | null; external_id: string; currency: string | null }>
   id: string
   provider: string
   label: string
@@ -789,13 +793,17 @@ export interface ConnectionHub {
   connectable: ConnectableProvider[]
 }
 
-export function fetchConnectionHub(): Promise<ConnectionHub> {
-  return getData<ConnectionHub>('/integrations/hub')
+/**
+ * INTEG-PROJECT-SPACE-001 — with a project, the hub is THAT project's own space: the server reads nothing
+ * of another project into the answer. Without one it is the workspace-wide board the older callers use.
+ */
+export function fetchConnectionHub(projectId?: string | null): Promise<ConnectionHub> {
+  return getData<ConnectionHub>(typeof projectId === 'string' ? `/integrations/hub?project_id=${projectId}` : '/integrations/hub')
 }
 
 /** The same board with removed and revoked sources listed (the hub's «show removed» toggle). */
-export function fetchConnectionHubWithRemoved(): Promise<ConnectionHub> {
-  return getData<ConnectionHub>('/integrations/hub?include_removed=1')
+export function fetchConnectionHubWithRemoved(projectId?: string | null): Promise<ConnectionHub> {
+  return getData<ConnectionHub>(`/integrations/hub?include_removed=1${typeof projectId === 'string' ? `&project_id=${projectId}` : ''}`)
 }
 
 /**

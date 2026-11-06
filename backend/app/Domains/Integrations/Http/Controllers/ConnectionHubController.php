@@ -134,7 +134,7 @@ final class ConnectionHubController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('account_type', 'ad_account')
             ->whereIn('provider_connection_id', $connections->modelKeys())
-            ->get(['id', 'provider_connection_id', 'client_workspace_id', 'last_synced_at', 'access_lost_at', 'last_sync_error_category', 'last_sync_attempt_at', 'next_sync_at'])
+            ->get(['id', 'provider_connection_id', 'client_workspace_id', 'name', 'external_id', 'parent_name', 'currency', 'last_synced_at', 'access_lost_at', 'last_sync_error_category', 'last_sync_attempt_at', 'next_sync_at'])
             ->groupBy(fn (ExternalAccount $a): string => (string) $a->provider_connection_id);
 
         /*
@@ -145,12 +145,46 @@ final class ConnectionHubController extends Controller
          */
         $reachable = $this->reachableProjectIds($request, $tenantId);
 
+        /*
+         * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — asked for ONE project, the hub is that project's own space.
+         *
+         * The centre is the selected project's screen: switching the project makes the other project's sources
+         * disappear, and here that means they are not read into the answer at all — not another project's
+         * connection, account, name or count. A project the reader does not reach, or of another tenant, is a
+         * 404 like one that does not exist.
+         */
+        $only = $request->validate(['project_id' => ['sometimes', 'nullable', 'uuid']])['project_id'] ?? null;
+        if ($only !== null) {
+            abort_unless(
+                ($reachable === null || in_array($only, $reachable, true))
+                    && Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('id', $only)->whereNull('deleted_at')->exists(),
+                404,
+                'Project not found.',
+            );
+        }
+
         $selected = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->whereNotNull('project_id')
             ->when($reachable !== null, fn ($q) => $q->whereIn('project_id', $reachable ?: ['00000000-0000-0000-0000-000000000000']))
+            ->when($only !== null, fn ($q) => $q->where('project_id', $only))
             ->get(['project_id', 'external_account_id', 'sync_enabled']);
+
+        if ($only !== null) {
+            /*
+             * Only what THIS project reads. The accounts of a connection that this project is not linked to —
+             * another project's, or the never-linked estate — are dropped before anything is counted, so
+             * «discovered» on a project's row can never be the estate. A connection left with nothing is not
+             * a row: that is every other project's source, every dead or zero-account one, and a sign-in that
+             * was started for this project and never finished.
+             */
+            $linkedHere = $selected->pluck('external_account_id')->map(strval(...))->unique()->all();
+            $accounts = $accounts
+                ->map(fn ($rows) => $rows->filter(fn (ExternalAccount $a): bool => in_array((string) $a->getKey(), $linkedHere, true))->values())
+                ->filter(fn ($rows) => $rows->isNotEmpty());
+            $connections = $connections->filter(fn (ProviderConnection $c): bool => $accounts->has((string) $c->getKey()))->values();
+        }
 
         if ($reachable !== null) {
             $clients = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $reachable)
@@ -278,6 +312,16 @@ final class ConnectionHubController extends Controller
                     'email' => (string) $author->email,
                 ],
                 'authorised_at' => $connection->created_at?->toIso8601String(),
+                // The ONE project a link journey opened this connection for; null is a workspace-wide connection.
+                'project_id' => $connection->project_id === null ? null : (string) $connection->project_id,
+                // What the reader's projects read through this source, by name — two rows of one platform are told apart by it.
+                'accounts' => $chosen->sortBy('name')->map(fn (ExternalAccount $a): array => [
+                    'id' => (string) $a->getKey(),
+                    'name' => (string) $a->name,
+                    'organisation' => $a->parent_name,
+                    'external_id' => (string) $a->external_id,
+                    'currency' => $a->currency,
+                ])->values()->all(),
                 'selected_accounts' => $chosen->count(),
                 'discovered_accounts' => $discovered->count(),
                 'connection_state' => $connectionState,

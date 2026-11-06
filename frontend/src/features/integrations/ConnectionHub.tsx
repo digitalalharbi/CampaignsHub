@@ -69,7 +69,9 @@ export function sortSources(connections: HubConnection[], sort: SourceSort, ar: 
   return rows.sort((a, b) => (ar ? a.label_ar : a.label).localeCompare(ar ? b.label_ar : b.label, ar ? 'ar' : 'en'))
 }
 
-export function ConnectionHub({ onConnect, onOpen, onAction, onRemove, onReauthorise }: {
+export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, onRemove, onReauthorise }: {
+  /** INTEG-PROJECT-SPACE-001 — the project whose space this is. Part of every query key, so nothing of another project is ever shown from cache. */
+  projectId?: string | null
   onConnect: () => void
   onOpen: (connection: HubConnection, tab?: 'overview' | 'accounts') => void
   onAction: (connection: HubConnection) => void
@@ -85,8 +87,10 @@ export function ConnectionHub({ onConnect, onOpen, onAction, onRemove, onReautho
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SourceSort>('provider')
   const hub = useQuery({
-    queryKey: showRemoved ? ['connection-hub', 'with-removed'] : ['connection-hub'],
-    queryFn: showRemoved ? fetchConnectionHubWithRemoved : fetchConnectionHub,
+    queryKey: projectId === null
+      ? (showRemoved ? ['connection-hub', 'with-removed'] : ['connection-hub'])
+      : ['connection-hub', projectId, showRemoved ? 'with-removed' : 'live'],
+    queryFn: () => (showRemoved ? fetchConnectionHubWithRemoved(projectId) : fetchConnectionHub(projectId)),
   })
 
   const listed = useMemo(() => hub.data?.connections ?? [], [hub.data])
@@ -285,6 +289,19 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
                 INTEG-PROVIDER-IDENTITY-001 — the PROVIDER login the grant was made with, first: the
                 email the platform reported, or its display name where it gave no email.
               */}
+              {/* INTEG-PROJECT-SPACE-001 — what this source reads, by name: two rows of one platform are told apart here. */}
+              {(connection.accounts?.length ?? 0) > 0 && (
+                <span className="mt-0.5 flex min-w-0 flex-wrap gap-1" data-testid={`hub-accounts-${connection.id}`}>
+                  {connection.accounts!.slice(0, 3).map((a) => (
+                    <span key={a.id} className="max-w-full truncate rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-primary">
+                      {a.organisation === null ? a.name : `${a.organisation} · ${a.name}`}
+                    </span>
+                  ))}
+                  {connection.accounts!.length > 3 && (
+                    <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">+{(connection.accounts!.length - 3).toLocaleString('en-US')}</span>
+                  )}
+                </span>
+              )}
               <span className="block truncate text-xs text-text-secondary" data-testid={`hub-platform-account-${connection.id}`}>
                 {platformAccount === null
                   ? (ar ? 'لم يُسجَّل حساب المنصة' : 'Platform account not recorded')

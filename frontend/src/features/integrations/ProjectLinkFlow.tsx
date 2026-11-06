@@ -49,7 +49,7 @@ export function ProjectLinkFlow({ projectId, provider = null, resume = null, onC
   onReturn: () => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
+  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), retry: false })
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
 
   const [chosen, setChosen] = useState<ConnectableProvider | null>(provider)

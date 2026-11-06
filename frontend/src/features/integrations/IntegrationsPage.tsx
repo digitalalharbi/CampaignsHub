@@ -79,7 +79,7 @@ export function IntegrationsPage() {
   const manageDestination = (connection: HubConnection): string | null =>
     currentProjectId ?? (connection.projects.length === 1 ? connection.projects[0]!.id : null)
 
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
+  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), retry: false })
 
   /*
    * «Manage link» on a SELECTED account: its own connection, edited for the project it feeds.
