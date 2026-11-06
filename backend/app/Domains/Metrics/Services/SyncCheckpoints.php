@@ -10,7 +10,7 @@ use App\Domains\Metrics\Models\MetricSyncRun;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Ramsey\Uuid\Uuid;
 
 /**
  * INTEG-SYNC-ENGINE-001 — date-window checkpoints per binding and grain.
@@ -62,7 +62,8 @@ final class SyncCheckpoints
         ];
 
         $inserted = DB::table('metric_sync_checkpoints')->insertOrIgnore($window + [
-            'id' => (string) Str::uuid(),
+            // Not `Str::uuid()`: a checkpoint is bookkeeping beside the figures and must not draw from the id sequence their rows use.
+            'id' => Uuid::uuid4()->toString(),
             'tenant_id' => $account->tenant_id,
             'project_id' => $projectId,
             'external_account_id' => $account->getKey(),

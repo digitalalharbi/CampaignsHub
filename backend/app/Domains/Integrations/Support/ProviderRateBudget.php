@@ -79,6 +79,12 @@ final class ProviderRateBudget
         }
     }
 
+    /** A job starts with no facts about its connection: on an inline queue one instance serves every job of the process. */
+    public function beginJob(string $connectionId): void
+    {
+        unset($this->seen[$connectionId], $this->last[$connectionId]);
+    }
+
     /** Seconds until this provider and connection may be asked again, or null when they may be asked now. */
     public function delayFor(string $provider, string $connectionId): ?int
     {

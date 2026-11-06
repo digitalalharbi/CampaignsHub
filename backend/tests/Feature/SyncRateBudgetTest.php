@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Support\ProviderRateBudget;
+use App\Domains\Metrics\Exceptions\TransientSyncFailure;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -275,6 +276,29 @@ final class SyncRateBudgetTest extends TestCase
 
         $this->assertGreaterThanOrEqual(3, count($this->asked));
         $this->assertSame(count($this->asked), $this->lastRun()->meta['provider_requests'] ?? null);
+    }
+
+    public function test_each_job_counts_its_own_requests_and_inherits_no_failure_from_the_job_before_it(): void
+    {
+        // Inline, one budget instance serves both jobs on this connection: the second must not report the first's requests,
+        // and a refusal nobody can retry must not be read as the transient failure the job before it met.
+        $this->script = ['mode' => 'page2_500'];
+        try {
+            $this->handled($this->job());
+            $this->fail('a 500 on a queue worker is thrown so the queue retries it');
+        } catch (TransientSyncFailure $e) {
+            $this->assertSame('provider_unavailable', $e->category);
+        }
+        $first = $this->lastRun()->meta['provider_requests'];
+
+        Carbon::setTestNow(Carbon::now()->addMinute());
+        $this->script = ['mode' => 'ok'];
+        $this->asked = [];
+        $this->handled($this->job());
+        $this->assertSame(count($this->asked), $this->lastRun()->meta['provider_requests']);
+        $this->assertGreaterThan(0, $first);
+
+        $this->assertNull(app(ProviderRateBudget::class)->failureKind((string) $this->connection->id));
     }
 
     public function test_a_campaign_write_is_counted_but_never_refused_by_the_sync_budget(): void

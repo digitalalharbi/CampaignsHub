@@ -164,6 +164,7 @@ final class SyncAccountMetricsJob implements ShouldBeUnique, ShouldQueue
         $budget = app(ProviderRateBudget::class);
         $checkpoints = app(SyncCheckpoints::class);
         $connectionId = (string) $account->provider_connection_id;
+        $budget->beginJob($connectionId);
 
         /*
          * INTEG-SYNC-ENGINE-001 — a spent budget or a provider's «come back later» defers the job: it does not fail and it does not
