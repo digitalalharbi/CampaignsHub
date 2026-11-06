@@ -82,12 +82,21 @@ final class MeasurementPropertyController extends Controller
         foreach (ProviderCatalogue::ofKind(ProviderKind::Measurement) as $definition) {
             $creds = PlatformCredentials::for($definition->key);
 
-            $connection = ProviderConnection::withoutGlobalScopes()
+            /*
+             * INTEG-PROJECT-LINK-STORES-GA4-001 — a project links its property through its OWN Google sign-in, so
+             * the provider now holds one connection per project beside any older workspace-wide one. Asked for a
+             * project, every connection that project may read through is looked at — its own and the
+             * workspace-wide ones, never another project's. Unasked, the answer is the latest connection's,
+             * exactly as before.
+             */
+            $connections = ProviderConnection::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->where('provider', $definition->key)
                 ->whereIn('status', ['connected', 'error'])
+                ->when($only !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('project_id')->orWhere('project_id', $only)))
                 ->latest('updated_at')
-                ->first();
+                ->limit($only === null ? 1 : 200)
+                ->get();
 
             /*
              * An empty ELOQUENT collection, not `collect()`.
@@ -96,12 +105,13 @@ final class MeasurementPropertyController extends Controller
              * own methods — `modelKeys()` below was the one that noticed, and only under static
              * analysis, because the null branch never reaches it at runtime.
              */
-            $properties = $connection === null
+            $properties = $connections->isEmpty()
                 ? new EloquentCollection
                 : ExternalAccount::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
-                    ->where('provider_connection_id', $connection->getKey())
+                    ->whereIn('provider_connection_id', $connections->modelKeys())
                     ->where('account_type', Ga4PropertyDiscovery::ACCOUNT_TYPE)
+                    ->where('status', '!=', 'superseded')
                     ->orderBy('parent_name')
                     ->orderBy('name')
                     ->get();
@@ -112,12 +122,18 @@ final class MeasurementPropertyController extends Controller
                 ->pluck('project_id', 'external_account_id');
 
             if ($only !== null) {
-                $properties = $properties->filter(static function (ExternalAccount $a) use ($selected, $only): bool {
-                    $feeds = $selected->get((string) $a->getKey());
-
-                    return $feeds === null || (string) $feeds === $only;
-                })->values();
+                /*
+                 * The project's space carries the property THIS project reads and nothing else. Whatever an
+                 * older, workspace-wide sign-in catalogued and nobody chose is not a list to pick from any more:
+                 * a property is chosen in the project's own journey, from what that sign-in can read.
+                 */
+                $properties = $properties->filter(static fn (ExternalAccount $a): bool => (string) $selected->get((string) $a->getKey()) === $only)->values();
+                $selected = $selected->only($properties->modelKeys());
             }
+
+            // The connection the answer speaks about: the one a listed property is read through, else the latest.
+            $owning = $properties->pluck('provider_connection_id')->map(strval(...))->unique()->values()->all();
+            $connection = $connections->first(fn (ProviderConnection $c): bool => in_array((string) $c->getKey(), $owning, true)) ?? $connections->first();
 
             $state = match (true) {
                 /*
