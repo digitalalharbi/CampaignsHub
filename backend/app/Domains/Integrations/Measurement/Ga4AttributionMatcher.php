@@ -290,17 +290,20 @@ final class Ga4AttributionMatcher
         ];
     }
 
-    /** @param  list<?float>  $values  null when NO value is known, and when ANY is missing: a partial sum is not the sum */
+    /**
+     * A total over the campaigns that reported the figure. A campaign that reported nothing (an awareness campaign has no
+     * conversions) is outside the total, not a zero inside it; null when no campaign reported it at all.
+     *
+     * @param  list<?float>  $values
+     */
     private function sumNullable(array $values): ?float
     {
-        if ($values === [] || in_array(null, $values, true)) {
-            return null;
-        }
+        $known = array_filter($values, static fn ($v): bool => $v !== null);
 
-        return round(array_sum($values), 2);
+        return $known === [] ? null : round(array_sum($known), 2);
     }
 
-    /** @return array{sessions: float, purchases: float, revenue: float, revenue_usd: float, usd_complete: bool}|null */
+    /** @return array{sessions: float, purchases: float, revenue: float, revenue_usd: float, usd_complete: bool} */
     private function add(?array $acc, array $u): array
     {
         $acc ??= ['sessions' => 0.0, 'purchases' => 0.0, 'revenue' => 0.0, 'revenue_usd' => 0.0, 'usd_complete' => true];
@@ -357,11 +360,11 @@ final class Ga4AttributionMatcher
         return $platform === null || $ga4 === null || $platform <= 0.0 ? null : round(($platform - $ga4) / $platform, 4);
     }
 
-    /** One spelling of a campaign name: what a UTM template and a platform's own name have in common. */
+    /** One spelling of a campaign name: what a UTM template and a platform's own name have in common — letters and digits, lower-cased, everything between them one underscore («Meta — Retargeting» and `meta_retargeting` are the same name). */
     public function norm(string $name): string
     {
         $n = mb_strtolower(trim($name));
 
-        return trim((string) preg_replace('/[\s_\-]+/u', '_', $n), '_');
+        return trim((string) preg_replace('/[^\p{L}\p{N}]+/u', '_', $n), '_');
     }
 }

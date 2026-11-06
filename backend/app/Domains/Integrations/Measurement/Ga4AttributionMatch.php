@@ -31,7 +31,6 @@ final class Ga4AttributionMatch
 
     public function __construct(
         private readonly Ga4AttributionMatcher $matcher,
-        private readonly Ga4PlatformGap $gap,
         private readonly CurrencyConverter $converter,
         private readonly ReportingTimezone $timezones,
     ) {}
@@ -173,7 +172,7 @@ final class Ga4AttributionMatch
     /** @return list<array<string, mixed>> */
     private function campaigns(string $tenantId, string $projectId, string $fromDate, string $toDate): array
     {
-        $campaigns = ExternalCampaign::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('project_id', $projectId)->get(['id', 'provider', 'external_id', 'name']);
+        $campaigns = ExternalCampaign::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('project_id', $projectId)->get(['id', 'provider', 'external_id', 'name', 'unified_campaign_id']);
         if ($campaigns->isEmpty()) {
             return [];
         }
@@ -183,14 +182,30 @@ final class Ga4AttributionMatch
             ->whereBetween('metric_date', [$fromDate, $toDate])
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
             ->whereIn('metric_key', ['conversions', 'revenue', 'spend', 'clicks'])
-            ->groupBy('external_campaign_id', 'metric_key', 'project_currency', 'metric_date')
-            ->select('external_campaign_id', 'metric_key', 'project_currency', 'metric_date')
+            ->groupBy('external_campaign_id', 'unified_campaign_id', 'provider', 'metric_key', 'project_currency', 'metric_date')
+            ->select('external_campaign_id', 'unified_campaign_id', 'provider', 'metric_key', 'project_currency', 'metric_date')
             ->selectRaw('SUM(value) AS total')
             ->toBase()->get();
 
+        // A row names its campaign by id; where it names one the project's campaigns do not carry (seeded history), it is
+        // read through the unified campaign it belongs to, per platform, and only where that is unambiguous.
+        $ids = $campaigns->pluck('id')->map(static fn ($v): string => (string) $v)->flip()->all();
+        $byUnified = [];
+        foreach ($campaigns as $c) {
+            if ($c->unified_campaign_id !== null) {
+                $byUnified[$c->unified_campaign_id.'|'.AdPlatforms::canonical((string) $c->provider)][] = (string) $c->id;
+            }
+        }
         $acc = [];
         foreach ($rows as $r) {
             $id = (string) $r->external_campaign_id;
+            if (! isset($ids[$id])) {
+                $via = $byUnified[$r->unified_campaign_id.'|'.AdPlatforms::canonical((string) $r->provider)] ?? [];
+                if (count($via) !== 1) {
+                    continue;
+                }
+                $id = $via[0];
+            }
             $key = (string) $r->metric_key;
             $v = (float) $r->total;
             if ($key === 'conversions' || $key === 'clicks') {
