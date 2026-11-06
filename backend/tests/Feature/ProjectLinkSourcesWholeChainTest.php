@@ -6,7 +6,6 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
-use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Services\StoreSyncer;
@@ -22,6 +21,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;

@@ -86,6 +86,9 @@ export function LinkSuccess({ projectId, connectionId, onReturn }: {
   const platformAccount = connection.platform_account === null ? null : (connection.platform_account.email ?? connection.platform_account.label)
   const organisations = [...new Set(accounts.map((a) => a.organisation).filter((name): name is string => name !== null && name !== ''))]
   const Arrow = ar ? ArrowLeft : ArrowRight
+  // INTEG-PROJECT-LINK-STORES-GA4-001 — the same ending for a store and a property, named as what they are.
+  const kind = connection.kind ?? 'advertising'
+  const linkedWord = kind === 'commerce' ? { ar: 'المتاجر', en: 'Stores' } : kind === 'measurement' ? { ar: 'الخصائص', en: 'Properties' } : { ar: 'الحسابات', en: 'Accounts' }
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="link-success" onPointerDown={() => setStaying(true)} onKeyDown={() => setStaying(true)}>
@@ -108,7 +111,8 @@ export function LinkSuccess({ projectId, connectionId, onReturn }: {
           icon={<ProviderMark provider={connection.provider} size={16} />}
           label={ar ? 'المنصة' : 'Platform'}
           value={ar ? connection.label_ar : connection.label}
-          sub={platformAccount ?? (ar ? 'حساب المنصة غير مسجَّل' : 'Platform account not recorded')}
+          // A store's authorisation and a Google sign-in record no platform account here: nothing is said about one.
+          sub={platformAccount ?? (kind === 'advertising' ? (ar ? 'حساب المنصة غير مسجَّل' : 'Platform account not recorded') : undefined)}
           subTestId="link-fact-platform-account"
         />
         {organisations.length > 0 && (
@@ -121,7 +125,7 @@ export function LinkSuccess({ projectId, connectionId, onReturn }: {
         <Node
           testId="link-fact-accounts"
           icon={<Wallet size={15} aria-hidden />}
-          label={ar ? 'الحسابات' : 'Accounts'}
+          label={ar ? linkedWord.ar : linkedWord.en}
           value={accounts.length.toLocaleString('en-US')}
         />
       </ol>
@@ -138,14 +142,17 @@ export function LinkSuccess({ projectId, connectionId, onReturn }: {
             return (
               <li key={account.id} className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border px-3 py-2" data-testid={`link-account-${account.id}`}>
                 <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{account.name}</span>
-                <span
-                  title={ar ? mark.ar : mark.en}
-                  aria-label={`${moneyChipText(account, reporting)} — ${ar ? mark.ar : mark.en}`}
-                  data-testid={`link-account-money-${account.id}`}
-                  data-money={account.money.state}
-                >
-                  <Badge tone={mark.tone}><span className="tnum" dir="ltr">{moneyChipText(account, reporting)}</span></Badge>
-                </span>
+                {/* A property states its currency on its first read, not at the link: no money mark is drawn for one. */}
+                {kind !== 'measurement' && (
+                  <span
+                    title={ar ? mark.ar : mark.en}
+                    aria-label={`${moneyChipText(account, reporting)} — ${ar ? mark.ar : mark.en}`}
+                    data-testid={`link-account-money-${account.id}`}
+                    data-money={account.money.state}
+                  >
+                    <Badge tone={mark.tone}><span className="tnum" dir="ltr">{moneyChipText(account, reporting)}</span></Badge>
+                  </span>
+                )}
                 <span data-testid={`link-account-sync-${account.id}`}>
                   <Badge tone={accountHealthBadgeTone(health)}>{accountHealthLabel(health, ar)}</Badge>
                 </span>

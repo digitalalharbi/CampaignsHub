@@ -95,6 +95,9 @@ vi.mock('@/features/campaigns/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listExternalCampaigns: () => Promise.resolve([]),
 }))
+// The stores and the measurement provider take the same journey and are held in ProjectSourceJourney.test.tsx; none is set up here.
+vi.mock('@/features/commerce/api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), listStoreProviders: () => Promise.resolve([]) }))
+vi.mock('@/features/measurement/api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), listMeasurementProviders: () => Promise.resolve([]) }))
 vi.mock('@/features/projects/PlatformIntegrationsPanel', () => ({ PlatformIntegrationsPanel: () => null }))
 vi.mock('@/features/projects/ProjectSyncHistory', () => ({ ProjectSyncHistory: () => null }))
 vi.mock('@/features/commerce/ProjectStores', () => ({ ProjectStores: () => null }))
