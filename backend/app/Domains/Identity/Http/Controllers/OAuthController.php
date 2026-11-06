@@ -11,6 +11,7 @@ use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\GoogleIdTokenVerifier;
 use App\Domains\Identity\Services\OAuthFlow;
 use App\Domains\Identity\Services\OAuthProviderRegistry;
+use App\Domains\Identity\Services\PendingOAuthLink;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Services\PortalResolver;
@@ -49,6 +50,7 @@ final class OAuthController extends Controller
         private readonly GoogleIdTokenVerifier $googleTokens,
         private readonly ResolveOAuthIdentity $identities,
         private readonly PortalResolver $portals,
+        private readonly PendingOAuthLink $pendingLinks,
     ) {}
 
     /** GET /auth/oauth/providers — public; no secrets, only whether each provider can be used. */
@@ -130,6 +132,7 @@ final class OAuthController extends Controller
     public function callback(Request $request, string $provider): RedirectResponse
     {
         $pending = null;
+        $profile = null;
 
         try {
             $pending = $this->flow->consume($request, $provider, (string) $request->input('state'));
@@ -177,6 +180,30 @@ final class OAuthController extends Controller
             // LOGIN-SINGLE-DOOR-001 — the same answer the password path gets, by the same method.
             return redirect()->away(Frontend::url($this->portals->postAuthDestination($user, $requested, is_string($pending['redirect']) ? $pending['redirect'] : null)));
         } catch (OAuthOutcome $outcome) {
+            /*
+             * LOGIN-004 — a VERIFIED address that matches an account is not a dead end.
+             *
+             * It is not a sign-in either: the profile is kept for ten minutes in this browser's session and the sign-in page asks for
+             * the proof — the account's password or a link to its own address. Nothing is linked and nobody is signed in until then.
+             * An address the provider did not verify carries no matched account here and is refused as before.
+             */
+            if (
+                $outcome->reason === ResolveOAuthIdentity::LINK_REQUIRED
+                && $outcome->matchedUserId !== null
+                && ($pending['intent'] ?? null) === 'login'
+            ) {
+                $this->pendingLinks->offer(
+                    $request,
+                    $provider,
+                    $profile,
+                    $outcome->matchedUserId,
+                    is_string($pending['portal'] ?? null) ? $pending['portal'] : null,
+                    is_string($pending['redirect'] ?? null) ? $pending['redirect'] : null,
+                );
+
+                return $this->back('link');
+            }
+
             return $this->back($outcome->reason, ['message' => $outcome->getMessage()]);
         } catch (Throwable) {
             // Nothing from the provider or the exchange is echoed back — an error string reflected
