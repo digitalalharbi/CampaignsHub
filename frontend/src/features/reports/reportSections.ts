@@ -81,6 +81,8 @@ export function withStoreAnalyticsSlide<S extends { id: string; type: string; or
 /** GA4-REPORT-SECTIONS-001 — rows of a GA4 table on one fixed printed page, and how many of a table a file carries. */
 export const GA4_ROWS_PER_PAGE = 8
 export const GA4_PRINT_ROWS_MAX = 24
+/** Platform rows of the attribution match on one printed page. */
+export const GA4_MATCH_ROWS_PER_PAGE = 6
 const GA4_TABLE_ORDER = ['sources', 'campaigns', 'landing_pages', 'products', 'countries'] as const
 
 /**
@@ -103,9 +105,24 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
   if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9992, visible: true } as S)
   // GA4-ATTRIBUTION-MATCH-001 — the measurement parts, one page each; a table inside is its fixed page, never a shrunken one.
   if (named('ga4_pulse', data.ga4_pulse)) slides.push({ id: '__ga4_pulse', type: '__ga4_pulse', order: 9994, visible: true } as S)
-  if (named('ga4_attribution', data.ga4_attribution)) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9995, visible: true } as S)
+  if (named('ga4_attribution', data.ga4_attribution)) {
+    // On paper the platform rows are split across pages of six, never shrunk onto one.
+    const n = ((data.ga4_attribution as { platforms?: unknown[] }).platforms ?? []).length
+    if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9995, visible: true } as S)
+    else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9995, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
+  }
   if (named('ga4_gap_reasons', data.ga4_gap_reasons)) slides.push({ id: '__ga4_reasons', type: '__ga4_reasons', order: 9996, visible: true } as S)
-  if (named('ga4_classification', data.ga4_classification)) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9996, visible: true } as S)
+  if (named('ga4_classification', data.ga4_classification)) {
+    const groups = (data.ga4_classification as { groups?: Record<string, { rows?: unknown[] }> }).groups ?? {}
+    if (!paged) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9996, visible: true } as S)
+    else {
+      // One page per grouping and per eight rows: a long grouping splits, so no row is cut and no page is shrunk.
+      for (const [group, block] of Object.entries(groups)) {
+        const n = block.rows?.length ?? 0
+        for (let i = 0; i < Math.max(n, 1); i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_classification:${group}:${i}`, type: '__ga4_classification', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, n)] } as S)
+      }
+    }
+  }
   if (named('ga4_products', data.ga4_products)) {
     const rows = Math.min(data.ga4_products?.table?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
     if (!paged || rows <= GA4_ROWS_PER_PAGE) slides.push({ id: '__ga4_products:0', type: '__ga4_products', order: 9996, visible: true, range: [0, Math.min(rows, GA4_ROWS_PER_PAGE)] } as S)

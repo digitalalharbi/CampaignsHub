@@ -119,13 +119,13 @@ export function AttributionTable({ rows, ar, internal, onDrill, testKey }: { row
 }
 
 /** The claimed-vs-measured bars for the rows shown: the platform's figure beside GA4's, never added. */
-export function MatchBars({ rows, ar }: { rows: MatchRow[]; ar: boolean }) {
+export function MatchBars({ rows, ar, height }: { rows: MatchRow[]; ar: boolean; height?: number }) {
   const data = rows.filter((r) => r.kind !== 'channel').map((r) => ({ label: r.name ?? providerLabel(r.platform, ar ? 'ar' : 'en'), claimed: r.claimed, ga4: r.ga4?.purchases ?? null }))
   if (data.length === 0) return null
 
   return (
     <div data-testid="match-bars" data-rows={data.length}>
-      <RankingBarChart height={Math.max(220, Math.min(data.length, 8) * 48)} horizontal data={data.slice(0, 8)}
+      <RankingBarChart height={height ?? Math.max(220, Math.min(data.length, 8) * 48)} horizontal data={data.slice(0, 8)}
         bars={[{ key: 'claimed', name: ar ? 'المنصة' : 'Platform', kind: 'num', color: 'var(--brand-600)' }, { key: 'ga4', name: 'GA4', kind: 'num', color: 'var(--teal)' }]} />
     </div>
   )
@@ -146,20 +146,26 @@ export function Buckets({ data, ar }: { data: Pick<MatchPayload, 'unattributed' 
   )
 }
 
-/** The part drawn in a report (live, saved, PDF): level one only unless the server sent campaigns (internal reader). */
-export function AttributionMatchBlock({ data, ar, pageSize = 8 }: { data: MatchPayload; ar: boolean; pageSize?: number }) {
+/**
+ * The part drawn in a report (live, saved, PDF): level one only unless the server sent campaigns (internal reader).
+ * On paper (`paged`) the table cannot be paged by hand, so the deck splits the rows across pages (`range`) and the chart is
+ * short; nothing is shrunk to fit.
+ */
+export function AttributionMatchBlock({ data, ar, pageSize = 8, paged = false, range }: { data: MatchPayload; ar: boolean; pageSize?: number; paged?: boolean; range?: [number, number] }) {
   const platforms = data.platforms ?? []
-  const rows = platformRows(platforms)
+  const all = platformRows(platforms)
+  const rows = range ? all.slice(range[0], range[1]) : all
   const internal = platforms.some((p) => p.campaigns !== undefined)
+  const first = !range || range[0] === 0
 
   return (
     <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<Badge tone="info" data-testid="match-basis">GA4</Badge>}>
       <div data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-3">
-        <MatchBars rows={rows} ar={ar} />
-        <FixedPageTable testId="match-table" ar={ar} pageSize={pageSize} rows={rows} rowKey={(r) => r.key}
+        <MatchBars rows={rows} ar={ar} height={paged ? 150 : undefined} />
+        <FixedPageTable testId="match-table" ar={ar} pageSize={pageSize} pager={!paged} rows={rows} rowKey={(r) => r.key}
           columns={matchColumns(ar, internal, () => undefined).map((c) => (c.key === 'name' ? { ...c, render: (r: MatchRow) => <span className="inline-flex items-center gap-2 font-semibold"><ProviderMark provider={r.platform} size={16} />{providerLabel(r.platform, ar ? 'ar' : 'en')}</span> } : c))}
           initialSort={{ key: 'sessions', dir: 'desc' }} />
-        {(data.unattributed || data.unmatched) && <Buckets data={data} ar={ar} />}
+        {first && (data.unattributed || data.unmatched) && <Buckets data={data} ar={ar} />}
       </div>
     </ChartCard>
   )

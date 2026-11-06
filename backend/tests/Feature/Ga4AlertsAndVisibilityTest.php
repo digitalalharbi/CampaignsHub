@@ -20,8 +20,11 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Notifications\Mail\DailyDigestMail;
+use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
+use App\Domains\Projects\Services\ProjectListSummary;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -201,6 +204,44 @@ final class Ga4AlertsAndVisibilityTest extends TestCase
             $this->assertStringNotContainsString('spend', strtolower($text));
         }
         $this->assertNull(Ga4DigestBlock::line(null, false));
+    }
+
+    public function test_the_digest_ga4_line_is_direction_safe_in_arabic_and_english(): void
+    {
+        foreach (['ar' => 'rtl', 'en' => 'ltr'] as $lang => $dir) {
+            $html = (new DailyDigestMail(MailGallery::digest(), $lang, 'M', 'daily'))->render();
+            $this->assertSame(1, preg_match('#<div data-block="ga4-line"([^>]*)>(.*?)</div>#s', $html, $m), "$lang: the GA4 line is not in the mail");
+            // An explicit direction from the locale, never `auto` (which takes the first strong letter: the Latin «GA4»).
+            $this->assertStringContainsString('dir="'.$dir.'"', $m[1], $lang);
+            $this->assertStringNotContainsString('dir="auto"', $m[1].$m[2]);
+            // Every Latin fragment (counts, dollars, signs) is its own left-to-right island inside the line.
+            $this->assertGreaterThanOrEqual(4, substr_count($m[2], 'dir="ltr"'), "$lang: Latin fragments are not isolated");
+            foreach (['12,480', '214', '$31,800', '48'] as $figure) {
+                $this->assertMatchesRegularExpression('#<span dir="ltr"[^>]*>[^<]*'.preg_quote($figure, '#').'[^<]*</span>#u', $m[2], "$lang: $figure sits outside an island");
+            }
+        }
+    }
+
+    public function test_the_project_list_summary_carries_ga4_health_for_a_project_with_a_property_and_nothing_for_one_without(): void
+    {
+        $ws = ClientWorkspace::create(['name' => 'C3', 'slug' => 'c3-'.uniqid(), 'mode' => 'managed']);
+        $bare = Project::create(['client_workspace_id' => $ws->id, 'name' => 'Bare', 'status' => 'active']);
+        $property = $this->property($this->project);
+        $property->forceFill(['last_synced_at' => Carbon::now()->subHours(3)])->save();
+        $this->rate('SAR', 'USD', '2026-09-01', 0.25);
+        $this->campaign('meta', '1', 'a', ['conversions' => 40, 'revenue' => 4000, 'spend' => 100]);
+        DB::table('daily_metrics')->where('project_id', $this->project->id)->update(['metric_date' => Carbon::today()->subDays(3)->toDateString()]);
+        $this->dimRows($property, $this->project, 'campaign', Carbon::today()->subDays(3)->toDateString(), [['a', 'facebook / paid_social', ['sessions' => 100, 'purchases' => 10, 'revenue' => 400]]]);
+
+        $out = app(ProjectListSummary::class)->for(collect([$this->project, $bare]));
+
+        $this->assertSame('connected', $out[(string) $this->project->id]['ga4']['state']);
+        $this->assertNotNull($out[(string) $this->project->id]['ga4']['last_read_at']);
+        $this->assertEquals(0.75, $out[(string) $this->project->id]['ga4']['gap_share'], '(40 claimed - 10 measured) / 40');
+        $this->assertNull($out[(string) $bare->id]['ga4']);
+
+        $property->forceFill(['last_synced_at' => Carbon::now()->subDays(5)])->save();
+        $this->assertSame('stale', app(ProjectListSummary::class)->for(collect([$this->project]))[(string) $this->project->id]['ga4']['state']);
     }
 
     public function test_a_member_without_the_store_capability_never_receives_a_sales_figure_from_the_api_or_the_digest(): void

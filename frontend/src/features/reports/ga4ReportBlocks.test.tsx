@@ -67,6 +67,24 @@ describe('the GA4 parts of a report', () => {
     expect(withGa4Slides<Page>([], payload(ALL, { ga4_tables: null }), true).some((s) => s.type === '__ga4_table')).toBe(false)
   })
 
+  it('splits the measurement parts across printed pages: a long grouping and a long match table are never cut or shrunk', () => {
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `r${i}` }))
+    const p = payload(['ga4_attribution', 'ga4_classification', 'ga4_products'], {
+      ga4_attribution: { platforms: Array.from({ length: 7 }, (_, i) => ({ platform: `p${i}` })) },
+      ga4_classification: { groups: { channel: { rows: rows(10) }, platform: { rows: rows(3) } } },
+      ga4_products: { table: { rows: Array.from({ length: 11 }, (_, i) => ({ name: `x${i}` })) } },
+    } as never)
+    const paper = withGa4Slides<Page>([], p as never, true)
+
+    expect(paper.filter((s) => s.type === '__ga4_attribution').map((s) => s.range)).toEqual([[0, 6], [6, 7]])
+    expect(paper.filter((s) => s.type === '__ga4_classification').map((s) => [s.id, s.range])).toEqual([
+      ['__ga4_classification:channel:0', [0, 8]], ['__ga4_classification:channel:8', [8, 10]], ['__ga4_classification:platform:0', [0, 3]],
+    ])
+    expect(paper.filter((s) => s.type === '__ga4_products').map((s) => s.range)).toEqual([[0, 8], [8, 11]])
+    // On screen each part is one page.
+    expect(withGa4Slides<Page>([], p as never).map((s) => s.type)).toEqual(['__ga4_attribution', '__ga4_classification', '__ga4_products'])
+  })
+
   it('prints a table page as exactly its rows, padded to the page, with the range stated', () => {
     const data = payload(ALL)
     renderWithProviders(<Ga4Slide slide={{ id: '__ga4_table:sources:16', type: '__ga4_table', range: [16, 24] }} data={data} ar={false} paged />, { locale: 'en' })

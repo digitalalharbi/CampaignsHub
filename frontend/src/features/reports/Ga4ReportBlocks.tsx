@@ -95,17 +95,17 @@ function classificationColumns(ar: boolean, first: string): FixedColumn<Classifi
 }
 
 /** The grouping the saved report froze: a short tab per grouping, one fixed-size table under it. */
-export function ClassificationBlock({ data, ar, pageSize = 8 }: { data: NonNullable<WithGa4Sections['ga4_classification']>; ar: boolean; pageSize?: number }) {
-  const keys = Object.keys(data.groups)
+export function ClassificationBlock({ data, ar, pageSize = 8, paged = false, group, range }: { data: NonNullable<WithGa4Sections['ga4_classification']>; ar: boolean; pageSize?: number; paged?: boolean; group?: string; range?: [number, number] }) {
+  const keys = group && data.groups[group] ? [group] : Object.keys(data.groups)
   const [chosen, setChosen] = useState<string | null>(null)
   const active = chosen !== null && keys.includes(chosen) ? chosen : keys[0]
   if (active === undefined) return null
 
   return (
-    <ChartCard title={ar ? 'تصنيف' : 'Classify'} action={<div role="tablist" className="flex gap-1">{keys.map((k) => (
+    <ChartCard title={ar ? 'تصنيف' : 'Classify'} action={paged ? <Badge tone="neutral">{ar ? GROUP_TITLE[active]?.ar ?? active : GROUP_TITLE[active]?.en ?? active}</Badge> : <div role="tablist" className="flex gap-1">{keys.map((k) => (
       <button key={k} type="button" role="tab" aria-selected={k === active} data-testid={`ga4-classification-tab-${k}`} onClick={() => setChosen(k)} className={`rounded-full px-3 py-1 text-xs font-bold ${k === active ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-text-secondary'}`}>{ar ? GROUP_TITLE[k]?.ar ?? k : GROUP_TITLE[k]?.en ?? k}</button>
     ))}</div>}>
-      <FixedPageTable key={active} testId="ga4-classification-table" ar={ar} pageSize={pageSize} rows={data.groups[active].rows} rowKey={(r) => r.label} columns={classificationColumns(ar, ar ? GROUP_TITLE[active]?.ar ?? active : GROUP_TITLE[active]?.en ?? active)} initialSort={{ key: 'sessions', dir: 'desc' }} />
+      <FixedPageTable key={active} testId="ga4-classification-table" ar={ar} pageSize={pageSize} pager={!paged} rows={range ? data.groups[active].rows.slice(range[0], range[1]) : data.groups[active].rows} rowKey={(r) => r.label} columns={classificationColumns(ar, ar ? GROUP_TITLE[active]?.ar ?? active : GROUP_TITLE[active]?.en ?? active)} initialSort={{ key: 'sessions', dir: 'desc' }} />
     </ChartCard>
   )
 }
@@ -159,11 +159,11 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_pulse':
       return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
     case '__ga4_attribution':
-      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}<AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={paged ? 6 : 8} /></div> : null
+      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}<AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={paged ? 6 : 8} paged={paged} range={slide.range} /></div> : null
     case '__ga4_reasons':
       return data.ga4_gap_reasons ? <div data-testid="slide-ga4-reasons">{head('__ga4_reasons')}<GapReasonsBlock data={data.ga4_gap_reasons} ar={ar} /></div> : null
     case '__ga4_classification':
-      return data.ga4_classification ? <div data-testid="slide-ga4-classification">{head('__ga4_classification')}<ClassificationBlock data={data.ga4_classification} ar={ar} pageSize={paged ? 6 : 8} /></div> : null
+      return data.ga4_classification ? <div data-testid="slide-ga4-classification">{head('__ga4_classification')}<ClassificationBlock data={data.ga4_classification} ar={ar} pageSize={8} paged={paged} group={slide.id.split(':')[1]} range={slide.range} /></div> : null
     case '__ga4_products': {
       const rows = data.ga4_products?.table.rows ?? []
       const [from, to] = slide.range ?? [0, 8]
