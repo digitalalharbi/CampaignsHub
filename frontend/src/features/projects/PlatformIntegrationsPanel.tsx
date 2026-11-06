@@ -11,6 +11,7 @@ import { useAuth } from '@/stores/auth'
 import { syncStatusMeaning } from '@/lib/syncStatus'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
 import { useUi } from '@/stores/ui'
 import { CopyId } from '@/components/ui/CopyId'
 
@@ -268,7 +269,11 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                       </span>
                       {p.last_sync.is_demo && <Badge tone="warning">{ar ? 'تجريبية' : 'Demo'}</Badge>}
                     </span>
-                    {p.last_sync.error && <p className="rounded bg-danger/10 p-1.5 text-danger" dir="ltr">{p.last_sync.error}</p>}
+                    {p.last_sync.error && (
+                      <div className="rounded bg-danger/10 p-1.5">
+                        <ProviderErrorNote error={p.last_sync.error} locale={ar ? 'ar' : 'en'} provider={p.key} testId={`platform-sync-error-${p.key}`} />
+                      </div>
+                    )}
                   </>
                 ) : (
                   <span className="flex items-center gap-1.5 text-text-muted">
@@ -276,10 +281,10 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                   </span>
                 )}
                 {p.connections.map((c) => c.last_error && (
-                  <p key={c.id} className="flex items-start gap-1.5 rounded bg-warning/10 p-1.5 text-warning">
-                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                    <span dir="ltr">{c.last_error}</span>
-                  </p>
+                  <div key={c.id} className="flex items-start gap-1.5 rounded bg-warning/10 p-1.5">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0 text-warning" />
+                    <ProviderErrorNote error={c.last_error} locale={ar ? 'ar' : 'en'} provider={p.key} testId={`platform-connection-error-${c.id}`} />
+                  </div>
                 ))}
                 {/*
                   §12 — what used to be here described THIS PRODUCT's build state to a customer:

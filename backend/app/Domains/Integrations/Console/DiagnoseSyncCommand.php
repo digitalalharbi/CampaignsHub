@@ -24,6 +24,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\InsightPayloadRows;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Support\NoDataReading;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -364,6 +365,19 @@ final class DiagnoseSyncCommand extends Command
                 if (($run->error ?? '') !== '') {
                     $this->line(sprintf('  %s → %s', $run->started_at?->toDateTimeString() ?? '?', $run->error));
                 }
+            }
+
+            /*
+             * META-NO-DATA-READING-001 — which «nothing» the latest run is, said once and in words.
+             *
+             * A column of `no_data | 0 | 0 | 0 | 0` reads the same for an account that stopped delivering
+             * last week and for one whose answer nobody could read. The latest run only: twelve identical
+             * sentences under twelve identical rows would be the table again.
+             */
+            $reading = NoDataReading::for($runs->first());
+
+            if ($reading['sentence'] !== null) {
+                $this->line('  latest run reads: '.$reading['sentence']);
             }
         }
 
@@ -1799,7 +1813,9 @@ final class DiagnoseSyncCommand extends Command
             ->get();
 
         $this->line('');
-        $this->line(sprintf('  Structure runs (last %d):', $runs->count()));
+        // The runs are the CONNECTION's: every account under one authorisation prints the same four. Said in
+        // the heading, because «structure succeeds with 254 records» was read as a fact about this account.
+        $this->line(sprintf('  Structure runs of this CONNECTION, all of its accounts (last %d):', $runs->count()));
 
         if ($runs->isEmpty()) {
             $this->line('  none recorded.');

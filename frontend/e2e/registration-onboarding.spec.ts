@@ -72,7 +72,26 @@ async function registerAndVerify(
     await page.getByLabel(/Account type|نوع الحساب/).selectOption(opts.selfType)
   }
   await page.getByTestId(`plan-${opts.plan}`).click()
-  await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
+  /*
+   * The server's answer first, then the navigation — two separate facts.
+   *
+   * This was a bare `toHaveURL(/signup/status)` on the default five seconds, straight after the
+   * click. Applying hashes a password and writes several rows; on a slow runner that round trip
+   * alone outlasted the window, and the walk failed still standing on `/register` with nothing to
+   * say whether the server had refused or merely not answered yet (webkit, 2026-11-06, a 1.1 h
+   * gate). Waiting on the application's own response makes a refusal fail at once, WITH its body,
+   * and leaves the URL assertion measuring only the navigation. A 419 the client heals itself
+   * (CSRF-SELF-HEAL-001) is not the deciding answer, so it is not the one waited on.
+   */
+  const [applied] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/v1/auth/register') && r.request().method() === 'POST' && r.status() !== 419,
+      { timeout: 45_000 },
+    ),
+    page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click(),
+  ])
+  const appliedBody = await applied.text().catch(() => '<unreadable>')
+  expect(applied.status(), `the application for ${email} was refused: ${appliedBody.slice(0, 400)}`).toBeLessThan(300)
 
   /*
    * Applying lands on the registration STATUS page, not in the app (SIGNUP-002).
@@ -80,7 +99,7 @@ async function registerAndVerify(
    * The state is read from the page's own attribute rather than from a translated string, so this
    * assertion is about the application's actual state and not about the wording of a label.
    */
-  await expect(page).toHaveURL(/\/signup\/status/)
+  await expect(page).toHaveURL(/\/signup\/status/, { timeout: 30_000 })
   await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'email_verification_required', STATE_ARRIVES)
 
   // No mail provider is configured, so the dev link is what stands in for the message.
@@ -530,7 +549,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await page.getByTestId('plan-team').click()
   await expect(page.getByTestId('plan-team')).toHaveAttribute('data-selected', 'true')
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
-  await expect(page).toHaveURL(/\/signup\/status/)
+  await expect(page).toHaveURL(/\/signup\/status/, { timeout: 30_000 })
 })
 
 /**

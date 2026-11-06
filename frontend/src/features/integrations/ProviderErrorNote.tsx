@@ -15,12 +15,14 @@ export function ProviderErrorNote({
   error,
   locale,
   testId,
+  provider,
 }: {
   error: string | null | undefined
   locale: Locale
   testId: string
+  provider?: string
 }) {
-  const reading = readProviderError(error, locale)
+  const reading = readProviderError(error, locale, provider)
   if (reading === null) return null
 
   const ar = locale === 'ar'
