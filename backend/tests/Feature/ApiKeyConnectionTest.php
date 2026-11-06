@@ -7,10 +7,13 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -195,6 +198,70 @@ final class ApiKeyConnectionTest extends TestCase
      * A hand-pasted OAuth access token works until it expires and then fails with no refresh token
      * to recover from — a connection that breaks days later for a reason no screen can explain.
      */
+    /**
+     * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — a key pasted FOR a project opens that project's own
+     * connection and catalogues nothing; the account is stored when it is confirmed on the project's step.
+     */
+    public function test_a_key_pasted_for_a_project_opens_that_projects_connection_and_stores_no_account(): void
+    {
+        $this->providerReturnsAccount();
+        $project = $this->project('Project A');
+
+        $response = $this->connect(project: $project)->assertCreated();
+        $connection = ProviderConnection::withoutGlobalScopes()->findOrFail($response->json('data.connection'));
+
+        $this->assertSame((string) $project->id, (string) $connection->project_id);
+        $this->assertSame((string) $project->client_workspace_id, (string) $connection->client_workspace_id);
+        $this->assertSame((string) $project->id, $response->json('data.project_id'));
+        // Nothing the key can list is stored by connecting.
+        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $connection->id)->count());
+        $this->assertSame(0, ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $project->id)->count());
+
+        // The server knows this user opened it for this project: the project's account step resumes on it.
+        $link = $this->actingAs($this->operator, 'sanctum')->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->getJson("/api/v1/projects/{$project->id}/integrations/link/{$connection->id}")->assertOk();
+        $this->assertTrue($link->json('data.pending'));
+
+        // The account step asks the provider on demand, and the confirmation stores exactly one account.
+        $accounts = $this->actingAs($this->operator, 'sanctum')->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->getJson("/api/v1/projects/{$project->id}/integrations/link/{$connection->id}/accounts")->assertOk();
+        $this->assertSame(['acct_live_1'], array_column($accounts->json('data.accounts'), 'external_id'));
+        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $connection->id)->count());
+
+        $this->actingAs($this->operator, 'sanctum')->withHeader('X-Tenant-ID', $this->tenant->id)
+            ->postJson("/api/v1/projects/{$project->id}/integrations/link/{$connection->id}/accounts", ['external_id' => 'acct_live_1', 'organisation' => null])
+            ->assertSuccessful();
+
+        $stored = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $connection->id)->get();
+        $this->assertSame(['acct_live_1'], $stored->pluck('external_id')->all());
+        $this->assertSame(
+            [(string) $project->id],
+            ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $stored->first()->id)->where('is_active', true)->pluck('project_id')->map(strval(...))->all(),
+        );
+    }
+
+    public function test_a_second_projects_key_connection_is_its_own_and_another_tenants_project_is_refused(): void
+    {
+        $this->providerReturnsAccount();
+        $a = $this->project('Project A');
+        $b = $this->project('Project B');
+
+        $first = $this->connect(project: $a)->assertCreated()->json('data.connection');
+        $second = $this->connect(project: $b)->assertCreated()->json('data.connection');
+        $this->assertNotSame($first, $second);
+
+        // The workspace-wide connect is unchanged: no project, the account is catalogued as before.
+        $wide = $this->connect()->assertCreated()->json('data.connection');
+        $this->assertNull(ProviderConnection::withoutGlobalScopes()->findOrFail($wide)->project_id);
+        $this->assertSame(1, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $wide)->count());
+
+        $rival = Tenant::create(['name' => 'Rival', 'slug' => 'rv-'.uniqid(), 'status' => 'active']);
+        $theirs = $this->project('Their Project', $rival);
+        $before = ProviderConnection::withoutGlobalScopes()->count();
+        $this->connect(project: $theirs)->assertStatus(422);
+        $this->assertSame($before, ProviderConnection::withoutGlobalScopes()->count());
+    }
+
     public function test_an_oauth_provider_refuses_a_pasted_key(): void
     {
         Http::fake();
@@ -253,10 +320,23 @@ final class ApiKeyConnectionTest extends TestCase
         ]);
     }
 
-    private function connect(string $key = self::KEY): TestResponse
+    private function connect(string $key = self::KEY, ?Project $project = null): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')
             ->withHeader('X-Tenant-ID', $this->tenant->id)
-            ->postJson('/api/v1/integrations/openai_ads/api-key/connect', ['api_key' => $key]);
+            ->postJson('/api/v1/integrations/openai_ads/api-key/connect', ['api_key' => $key] + ($project === null ? [] : ['project_id' => $project->id]));
+    }
+
+    private function project(string $name, ?Tenant $tenant = null): Project
+    {
+        $tenant ??= $this->tenant;
+        $workspace = ClientWorkspace::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'name' => $name, 'slug' => 'w-'.uniqid(),
+            'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+        ]);
+
+        return Project::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'client_workspace_id' => $workspace->id, 'name' => $name, 'status' => 'active',
+        ]);
     }
 }

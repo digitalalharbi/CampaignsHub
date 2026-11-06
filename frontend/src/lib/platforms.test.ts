@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PLATFORM_ORDER, canonicalPlatform, platformRank, sortByPlatform, sortPlatforms } from './platforms'
+import { PLATFORM_ORDER, canonicalPlatform, platformRank, sortByPlatform, sortPlatforms, platformLabel } from './platforms'
 
 /**
  * PLATFORM-ORDER-001 — the mirror of the server's rule, tested against the same cases.
@@ -70,5 +70,14 @@ describe('the product platform order', () => {
   /** Stable: two unknowns keep the order they arrived in rather than swapping between renders. */
   it('keeps unknown platforms in the order they arrived', () => {
     expect(sortPlatforms(['ga4', 'crm', 'snapchat'])).toEqual(['snapchat', 'ga4', 'crm'])
+  })
+
+  /** A store or a GA4 property listed beside ad accounts reads as its name, never as its key — and takes no place in the platform order. */
+  it('names the stores and the measurement property without ranking them as ad platforms', () => {
+    expect(platformLabel('salla', true)).toBe('سلة')
+    expect(platformLabel('zid', false)).toBe('Zid')
+    expect(platformLabel('ga4', true)).toBe('جوجل أناليتكس 4')
+    expect(platformLabel('openai_ads', true)).toBe('إعلانات ChatGPT')
+    expect(sortPlatforms(['ga4', 'salla', 'snapchat'])).toEqual(['snapchat', 'ga4', 'salla'])
   })
 })

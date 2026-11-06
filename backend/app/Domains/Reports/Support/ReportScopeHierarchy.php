@@ -75,6 +75,45 @@ final class ReportScopeHierarchy
     }
 
     /**
+     * The ad accounts a scope of this project may name: the ones it is linked to, and the ones it holds
+     * figures for that are still shown.
+     *
+     * @return list<string>
+     */
+    public static function accountsOf(string $project): array
+    {
+        $withFigures = DailyMetric::query()
+            ->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_account_id')
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+
+        return array_values(array_unique(array_merge($withFigures, BoundAccountVisibility::activeAccountIds($project))));
+    }
+
+    /**
+     * INTEG-PROJECT-SPACE-001 — an account of ANOTHER project named in a scope is refused, never dropped.
+     *
+     * The pickers used to drop an id that was not this project's and carry on. Nothing leaked — every read
+     * behind them is bound to the project — but the sender was told «accepted» for a scope that was not the
+     * one they sent, and a mixed list silently became a narrower one. A scope names this project's accounts
+     * or it is not a scope of this project.
+     *
+     * @param  list<string>  $accountIds
+     */
+    public static function refuseForeignAccounts(string $project, array $accountIds): void
+    {
+        if ($accountIds === []) {
+            return;
+        }
+
+        abort_unless(array_diff($accountIds, self::accountsOf($project)) === [], 422, 'An ad account is not part of this project.');
+    }
+
+    /**
      * Whether every ad belongs to one of the campaigns.
      *
      * @param  list<string>  $adIds

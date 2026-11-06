@@ -77,8 +77,7 @@ test('an operator changes which accounts a project uses, without authorising aga
    */
   const actions = page
     .locator('li[data-provider="sandbox"] [data-testid^="hub-actions-"]')
-    // The row carries the menu twice — once beside the name for a phone, once at the end for a
-    // desktop — and only one of them is ever on screen. `visible=true` picks whichever this is.
+    // The row carries its menu once now; `visible=true` stays so a hidden control is never the one pressed.
     .locator('visible=true')
     .first()
 
