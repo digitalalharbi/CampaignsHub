@@ -10,6 +10,7 @@ import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { IntegrationAudit } from './IntegrationAudit'
 import { ProjectLinkFlow } from './ProjectLinkFlow'
+import { SourcePlatformRows } from './SourcePlatformRows'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { listProjects } from '@/features/projects/api'
@@ -292,8 +293,10 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
               </li>
             )
           })}
+          {/* INTEG-PROJECT-LINK-STORES-GA4-001 — سلة, زد and GA4 are linked from the same list, by the same journey. */}
+          <SourcePlatformRows projectId={currentProjectId} ar={ar} onLink={startLink} />
         </ul>
-        {/* Stores and GA4 are this project's too: asked for it alone, and chosen only for it. */}
+        {/* What this project reads from them: its own store and property, and nothing to choose from. */}
         <StoresPanel projectId={currentProjectId} />
         <PropertiesPanel projectId={currentProjectId} />
         </div>

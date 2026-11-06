@@ -68,17 +68,27 @@ final class StoreController extends Controller
         foreach ($this->registry->all() as $key => $connector) {
             $creds = PlatformCredentials::for($key);
 
-            $connection = ProviderConnection::query()
+            /*
+             * INTEG-PROJECT-LINK-STORES-GA4-001 — a project links its store through its OWN authorisation, so one
+             * platform now holds one connection per project beside any older workspace-wide one. Asked for a
+             * project, every connection that project may read through is looked at — its own and the
+             * workspace-wide ones — and never another project's. Unasked, the answer is the latest connection's,
+             * exactly as before.
+             */
+            $connections = ProviderConnection::query()
                 ->where('provider', $key)
                 ->whereIn('status', ['connected', 'error'])
+                ->when($space !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('project_id')->orWhere('project_id', $space->getKey())))
                 ->latest('updated_at')
-                ->first();
+                ->limit($space === null ? 1 : 200)
+                ->get();
 
-            $stores = $connection === null
+            $stores = $connections->isEmpty()
                 ? collect()
                 : ExternalAccount::query()
-                    ->where('provider_connection_id', $connection->getKey())
+                    ->whereIn('provider_connection_id', $connections->modelKeys())
                     ->where('account_type', 'store')
+                    ->where('status', '!=', 'superseded')
                     ->get();
 
             if ($space !== null) {
@@ -91,9 +101,13 @@ final class StoreController extends Controller
                 })->values();
             }
 
+            // The connection the answer speaks about: the one a listed store is read through, else the latest.
+            $owning = $stores->pluck('provider_connection_id')->map(strval(...))->unique()->values()->all();
+            $connection = $connections->first(fn (ProviderConnection $c): bool => in_array((string) $c->getKey(), $owning, true)) ?? $connections->first();
+
             $syncing = $stores->isNotEmpty() && IntegrationSyncRun::query()
                 ->where('type', 'commerce')
-                ->where('provider_connection_id', $connection?->getKey())
+                ->whereIn('provider_connection_id', $owning)
                 ->where('status', 'running')
                 ->exists();
 

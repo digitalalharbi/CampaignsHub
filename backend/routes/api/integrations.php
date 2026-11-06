@@ -15,6 +15,7 @@ use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
 use App\Domains\Integrations\Http\Controllers\ProjectLinkController;
 use App\Domains\Integrations\Http\Controllers\ProjectLinkDirectoryController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkSourceController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
@@ -183,6 +184,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
             ->middleware(['project.can:integrations.manage', 'throttle:120,1'])->name('link.accounts');
         Route::post('link/{connection}/accounts', [ProjectLinkDirectoryController::class, 'confirm'])->whereUuid('connection')
             ->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('link.confirm');
+        // INTEG-PROJECT-LINK-STORES-GA4-001 — the same journey for a store or a GA4 property: what THIS project's own sign-in
+        // reaches (asked, never stored), then the one that is confirmed (stored and bound to this project).
+        Route::get('link/{connection}/sources', [ProjectLinkSourceController::class, 'index'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:120,1'])->name('link.sources');
+        Route::post('link/{connection}/sources', [ProjectLinkSourceController::class, 'confirm'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('link.sources.confirm');
         // PROJINT-001: the same project's integrations organised by the real ad platforms the registry
         // publishes — the count is `AdPlatforms::ORDER`'s to state, not this comment's.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');

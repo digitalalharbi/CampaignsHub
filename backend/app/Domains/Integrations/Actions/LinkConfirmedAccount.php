@@ -49,8 +49,18 @@ final class LinkConfirmedAccount
      * @throws AccountAssignedElsewhere 409 — the same real account already feeds another project
      * @throws PlanLimitReached 422 — no seat left for one more account
      */
-    public function execute(ProviderConnection $connection, Project $project, array $listed): array
-    {
+    public function execute(
+        ProviderConnection $connection,
+        Project $project,
+        array $listed,
+        /*
+         * INTEG-PROJECT-LINK-STORES-GA4-001 — WHAT is being linked. A store and a GA4 property end their
+         * journey through the same two cases as an ad account (a new row, or the row this project already
+         * reads moved onto its own connection with its id kept), with their own type and purpose.
+         */
+        string $accountType = 'ad_account',
+        string $purpose = 'advertising',
+    ): array {
         $externalId = (string) $listed['external_id'];
         $facts = [
             'name' => (string) $listed['name'],
@@ -60,18 +70,20 @@ final class LinkConfirmedAccount
             'parent_external_id' => $listed['parent_external_id'] ?? null,
             'parent_name' => $listed['parent_name'] ?? null,
         ];
+        /** @var array<string,mixed> $extra what only this kind of source carries (a store's domain and plan) */
+        $extra = array_filter((array) ($listed['metadata'] ?? []), static fn ($v): bool => $v !== null);
 
-        return DB::transaction(function () use ($connection, $project, $externalId, $facts): array {
+        return DB::transaction(function () use ($connection, $project, $externalId, $facts, $extra, $accountType, $purpose): array {
             $now = Carbon::now();
 
             $here = ExternalAccount::withoutGlobalScopes()
                 ->where('provider_connection_id', $connection->getKey())
                 ->where('external_id', $externalId)
-                ->where('account_type', 'ad_account')
+                ->where('account_type', $accountType)
                 ->lockForUpdate()
                 ->first();
 
-            $older = $this->readByThisProjectThroughAnotherConnection($connection, $project, $externalId);
+            $older = $this->readByThisProjectThroughAnotherConnection($connection, $project, $externalId, $accountType);
 
             if ($older !== null) {
                 if ($here !== null) {
@@ -90,7 +102,7 @@ final class LinkConfirmedAccount
                     'provider_connection_id' => $connection->getKey(),
                     'discovered_at' => $now,
                     'access_lost_at' => null,
-                    'metadata' => array_merge((array) ($older->metadata ?? []), [
+                    'metadata' => array_merge((array) ($older->metadata ?? []), $extra, [
                         'moved_from_connection_id' => $from, 'moved_at' => $now->toIso8601String(), 'moved_by_relink_of_project' => (string) $project->getKey(),
                     ]),
                 ])->save();
@@ -109,26 +121,26 @@ final class LinkConfirmedAccount
                 'provider_connection_id' => $connection->getKey(),
                 'provider' => $connection->provider,
                 'external_id' => $externalId,
-                'account_type' => 'ad_account',
+                'account_type' => $accountType,
                 'discovered_at' => $now,
                 'access_lost_at' => null,
-            ])->save();
+            ] + ($extra === [] ? [] : ['metadata' => array_merge((array) ($account->metadata ?? []), $extra)]))->save();
 
             // Throws inside this transaction, so a refused binding leaves no row behind.
-            $this->confirm->execute($connection, $project, [(string) $account->getKey()], 'advertising');
+            $this->confirm->execute($connection, $project, [(string) $account->getKey()], $purpose);
 
             return ['account' => $account, 'relinked' => false, 'created' => $created];
         });
     }
 
     /** The row of the same REAL account that this project already holds actively, on a different connection. */
-    private function readByThisProjectThroughAnotherConnection(ProviderConnection $connection, Project $project, string $externalId): ?ExternalAccount
+    private function readByThisProjectThroughAnotherConnection(ProviderConnection $connection, Project $project, string $externalId, string $accountType): ?ExternalAccount
     {
         return ExternalAccount::withoutGlobalScopes()
             ->where('tenant_id', $connection->tenant_id)
             ->where('provider', $connection->provider)
             ->where('external_id', $externalId)
-            ->where('account_type', 'ad_account')
+            ->where('account_type', $accountType)
             ->where('status', '!=', 'superseded')
             ->where('provider_connection_id', '!=', $connection->getKey())
             ->whereIn('id', ProjectIntegrationBinding::withoutGlobalScopes()

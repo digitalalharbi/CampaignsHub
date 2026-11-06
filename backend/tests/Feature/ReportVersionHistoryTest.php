@@ -123,6 +123,8 @@ final class ReportVersionHistoryTest extends TestCase
 
     public function test_the_files_are_made_from_the_stored_copy_while_it_is_rebuilt(): void
     {
+        // The file carries its own «File created» stamp; two downloads a second apart differ by that line alone.
+        $this->freezeTime();
         $report = $this->report();
         [$share, $raw] = $this->link($report);
         $before = $this->get("/api/v1/reports/shared/{$raw}/download/csv")->assertOk()->streamedContent();

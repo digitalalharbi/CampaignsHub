@@ -90,7 +90,7 @@ final class ConfirmAccountSelection
              */
             DB::table('tenants')->where('id', $connection->tenant_id)->lockForUpdate()->first();
 
-            $accounts = $this->accountsOfThisConnection($connection, $accountIds);
+            $accounts = $this->accountsOfThisConnection($connection, $accountIds, $purpose);
 
             foreach ($accounts as $account) {
                 // The client-workspace fence. The tenant check above stops another COMPANY; this
@@ -222,7 +222,7 @@ final class ConfirmAccountSelection
      * @param  list<string>  $accountIds
      * @return EloquentCollection<int, ExternalAccount>
      */
-    private function accountsOfThisConnection(ProviderConnection $connection, array $accountIds): EloquentCollection
+    private function accountsOfThisConnection(ProviderConnection $connection, array $accountIds, string $purpose): EloquentCollection
     {
         if (! in_array($connection->status, ['connected'], true)) {
             throw ValidationException::withMessages([
@@ -242,7 +242,9 @@ final class ConfirmAccountSelection
              * `store` is what gives a merchant the same explicit decision, through the same
              * transaction, the same quota lock and the same client-workspace fence.
              */
-            ->whereIn('account_type', ['ad_account', 'store'])
+            // INTEG-PROJECT-LINK-STORES-GA4-001 — a GA4 property is selectable for `analytics` and for nothing else:
+            // it is a measurement source, never an account a campaign purpose could be bound to.
+            ->whereIn('account_type', $purpose === 'analytics' ? ['ad_account', 'store', 'ga4_property'] : ['ad_account', 'store'])
             // SYNC-GATE-001 — an account the credential no longer lists cannot be selected: it would
             // claim a seat and then never sync, because the gate refuses it.
             ->whereNull('access_lost_at')
