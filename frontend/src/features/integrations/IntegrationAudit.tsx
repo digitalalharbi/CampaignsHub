@@ -44,11 +44,6 @@ export function IntegrationAudit({ connections, projectId = null, loading = fals
     <section className="flex min-w-0 flex-col gap-4" data-testid="hub-section-audit" id="hub-audit" aria-labelledby="hub-audit-title">
       <div className="min-w-0">
         <h2 id="hub-audit-title" className="text-base font-bold text-text-primary">{ar ? 'التدقيق' : 'Audit'}</h2>
-        <p className="text-xs text-text-secondary">
-          {ar
-            ? 'صحة الاتصال والتفويض وما يحتاج إجراءً، ثم سجل من فعل ماذا بكل مصدر.'
-            : 'Connection and authorisation health and what needs action, then the log of who did what to each source.'}
-        </p>
       </div>
 
       <div className="flex min-w-0 flex-col gap-2" data-testid="audit-attention">

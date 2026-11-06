@@ -9,6 +9,7 @@ import type {
 } from './api'
 import { renderWithProviders } from '@/test/utils'
 import { useProject } from '@/stores/project'
+import { useAgencyClient } from '@/stores/agencyClient'
 
 /**
  * INTEG-UNIFIED-002 (Owner contract 2026-11-05 §1.3, §1.12, §1.13) — the Integrations Centre.
@@ -492,6 +493,24 @@ describe('the Integrations Centre: no project selected — the chooser', () => {
 
     fireEvent.change(screen.getByTestId('hub-project-search'), { target: { value: 'zzz' } })
     expect(screen.getByTestId('hub-project-none')).toBeInTheDocument()
+  })
+
+  /** In the agency portal the sidebar switcher is client → project: the chooser follows it, and tells it what was chosen. */
+  it('in the agency portal offers the selected client\'s projects only, and hands the choice to the switcher', async () => {
+    useAgencyClient.setState({ currentClientId: 'ws-2' })
+    const { unmount } = renderWithProviders(<IntegrationsPage />, { route: '/agency/integrations' })
+
+    expect(await screen.findByTestId('hub-choose-p-new')).toBeInTheDocument()
+    expect(screen.queryByTestId('hub-choose-p-1')).toBeNull()
+    unmount()
+
+    // No client chosen yet: every project is offered, and choosing one selects its client too.
+    useAgencyClient.setState({ currentClientId: null })
+    renderWithProviders(<IntegrationsPage />, { route: '/agency/integrations' })
+    fireEvent.click(await screen.findByTestId('hub-choose-p-1'))
+    expect(useProject.getState().currentProjectId).toBe('p-1')
+    expect(useAgencyClient.getState().currentClientId).toBe('ws-1')
+    useAgencyClient.setState({ currentClientId: null })
   })
 
   /** The project comes first: there is no way to reach a platform before one is chosen, and after it is fixed. */

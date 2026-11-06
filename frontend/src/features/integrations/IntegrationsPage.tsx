@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
@@ -20,9 +20,11 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { Plus } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
-import { platformLabel, sortByPlatform } from '@/lib/platforms'
+import { PLATFORM_ORDER, canonicalPlatform, platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
+import { useAgencyClient } from '@/stores/agencyClient'
+import { accounts as countedAccounts, campaigns as countedCampaigns } from '@/lib/counted'
 
 /**
  * INTEG-PROJECT-SPACE-001 — the project's space has three tabs, in this order:
@@ -49,12 +51,20 @@ export function IntegrationsPage() {
   return currentProjectId === null ? <ProjectChooser /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} />
 }
 
+const isAdPlatform = (key: string): boolean => (PLATFORM_ORDER as readonly string[]).includes(canonicalPlatform(key))
+
 function ProjectChooser() {
   const ar = useUi((s) => s.locale) === 'ar'
   const choose = useProject((s) => s.setCurrentProjectId)
+  const setClient = useAgencyClient((s) => s.setCurrentClientId)
+  const inAgency = useLocation().pathname.startsWith('/agency')
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
   const [search, setSearch] = useState('')
-  const shown = (projects.data ?? []).filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+  // The agency's switcher may already have narrowed to one client: the chooser offers that client's projects.
+  const client = useAgencyClient((s) => s.currentClientId)
+  const shown = (projects.data ?? [])
+    .filter((p) => !inAgency || client === null || p.client_workspace_id === client)
+    .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="hub-project-chooser" dir={ar ? 'rtl' : 'ltr'}>
@@ -74,7 +84,11 @@ function ProjectChooser() {
             <li key={p.id} className="min-w-0">
               <button
                 type="button"
-                onClick={() => choose(p.id)}
+                onClick={() => {
+                  // The agency's sidebar switcher is client → project: it is told the client too, so it shows this choice.
+                  if (inAgency) setClient(p.client_workspace_id)
+                  choose(p.id)
+                }}
                 className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-start transition-colors hover:bg-surface-hover"
                 data-testid={`hub-choose-${p.id}`}
               >
@@ -82,15 +96,15 @@ function ProjectChooser() {
                   <span className="truncate text-sm font-bold text-text-primary">{p.name}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
                     <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5" data-testid={`hub-card-accounts-${p.id}`}>
-                      {(p.summary?.accounts ?? 0).toLocaleString('en-US')} {ar ? 'حساب' : 'accounts'}
+                      {countedAccounts(p.summary?.accounts ?? 0, ar ? 'ar' : 'en')}
                     </span>
                     <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5" data-testid={`hub-card-campaigns-${p.id}`}>
-                      {(p.summary?.campaigns ?? 0).toLocaleString('en-US')} {ar ? 'حملة' : 'campaigns'}
+                      {countedCampaigns(p.summary?.campaigns ?? 0, ar ? 'ar' : 'en')}
                     </span>
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
-                  {sortByPlatform(p.summary?.providers ?? [], (key) => key).map((key) => <ProviderMark key={key} provider={key} size={18} />)}
+                  {sortByPlatform((p.summary?.providers ?? []).filter(isAdPlatform), (key) => key).map((key) => <ProviderMark key={key} provider={key} size={18} />)}
                 </span>
               </button>
             </li>
