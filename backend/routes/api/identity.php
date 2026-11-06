@@ -8,6 +8,7 @@ use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OAuthController;
+use App\Domains\Identity\Http\Controllers\OAuthPendingLinkController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
@@ -116,6 +117,21 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
             ->middleware('auth:sanctum')->name('oauth.identities');
         Route::post('/oauth/{provider}/link', [OAuthController::class, 'linkStart'])
             ->middleware(['auth:sanctum', 'throttle:10,1'])->name('oauth.link');
+        /*
+         * LOGIN-004 — linking a Google account in place, after proof. The pending link lives in THIS browser's session, so these
+         * need the session the callback wrote it to. `password` spends the sign-in form's own `auth-login` allowance; the mailed
+         * link is checked like any other one-time code.
+         */
+        Route::prefix('/oauth/pending-link')->name('oauth.pending-link.')->group(function (): void {
+            Route::get('/', [OAuthPendingLinkController::class, 'show'])->name('show');
+            Route::post('/password', [OAuthPendingLinkController::class, 'password'])
+                ->middleware('throttle:auth-login')->name('password');
+            Route::post('/email', [OAuthPendingLinkController::class, 'email'])
+                ->middleware('throttle:6,1')->name('email');
+            Route::post('/confirm-email', [OAuthPendingLinkController::class, 'confirmEmail'])
+                ->middleware('throttle:otp-check')->name('confirm-email');
+            Route::delete('/', [OAuthPendingLinkController::class, 'destroy'])->name('destroy');
+        });
         // Apple posts the callback back as a form when scopes are requested; Google uses GET.
         Route::match(['get', 'post'], '/oauth/{provider}/callback', [OAuthController::class, 'callback'])
             ->name('oauth.callback');

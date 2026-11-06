@@ -7,6 +7,7 @@ import { resolvePostAuthOutcome } from './postAuthDestination'
 import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
 import { EmailCodeSignIn } from './EmailCodeSignIn'
+import { OAuthLinkCard, type LinkedSignIn } from './OAuthLinkCard'
 import { OtpField } from './OtpField'
 import { HelpRequestModal } from './HelpRequestModal'
 import { ErrorNote, IconField } from './loginFields'
@@ -149,7 +150,7 @@ const OAUTH_NOTES: Record<'ar' | 'en', Record<string, string>> = {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const setUser = useAuth((s) => s.setUser)
   const status = useAuth((s) => s.status)
   const { locale } = useUi()
@@ -176,6 +177,15 @@ export function LoginPage() {
   const phoneCompat = import.meta.env.DEV && params.get('e2e') === 'phone'
 
   const signedInHere = useRef(false)
+  // LOGIN-004 — the secret of a mailed link, taken once and then removed from the address bar.
+  const [linkToken] = useState(() => (params.get('oauth') === 'link' ? params.get('confirm') : null))
+  useEffect(() => {
+    if (!params.has('confirm')) return
+    const next = new URLSearchParams(params)
+    next.delete('confirm')
+    setParams(next, { replace: true })
+  }, [params, setParams])
+
   const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
   const [emailCodeOpen, setEmailCodeOpen] = useState(false)
@@ -352,6 +362,37 @@ export function LoginPage() {
   }
 
   const oauthReason = params.get('oauth')
+
+  /*
+   * LOGIN-004 — Google returned an address that matches an account here: prove it is yours, in this card, instead of a dead end.
+   *
+   * The secret in a mailed link is read once and taken out of the address bar at once; the rest (who Google is, which account it
+   * matches) stays on the server and arrives through the card's own request.
+   */
+  if (oauthReason === 'link') {
+    return (
+      <AuthShell portal="default">
+        <div data-testid="login-column" className="mx-auto w-full max-w-[440px]">
+          <OAuthLinkCard
+            locale={locale}
+            confirmToken={linkToken}
+            onSignedIn={({ user, destination }: LinkedSignIn) => {
+              // Same rule as the password and code paths: this request owns the redirect, the «already signed in» effect does not.
+              signedInHere.current = true
+              setUser(user)
+              navigate(destination, { replace: true })
+            }}
+            onLeave={() => {
+              const next = new URLSearchParams(params)
+              next.delete('oauth')
+              next.delete('confirm')
+              setParams(next, { replace: true })
+            }}
+          />
+        </div>
+      </AuthShell>
+    )
+  }
   const oauthNote = oauthReason !== null ? (OAUTH_NOTES[locale][oauthReason] ?? OAUTH_NOTES[locale].failed) : null
 
   return (

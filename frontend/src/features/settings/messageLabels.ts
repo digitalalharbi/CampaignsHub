@@ -113,6 +113,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   password_reset: { ar: 'إعادة تعيين كلمة المرور', en: 'Password reset' },
   email_verification: { ar: 'تأكيد البريد الإلكتروني', en: 'Email verification' },
   sign_in_code: { ar: 'رمز تسجيل الدخول', en: 'Sign-in code' },
+  oauth_link: { ar: 'تأكيد ربط Google', en: 'Google link confirmation' },
   member_setup: { ar: 'تهيئة حساب عضو جديد', en: 'New member account setup' },
   invitation: { ar: 'دعوة للانضمام', en: 'Invitation to join' },
   security_alert: { ar: 'تنبيه أمني', en: 'Security alert' },

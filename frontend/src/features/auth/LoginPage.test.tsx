@@ -12,10 +12,14 @@ vi.mock('./api', async (orig) => {
       { provider: 'google', label: { en: 'Google', ar: 'Google' }, status: 'live', available: true },
     ], emailCode: false }),
     startOAuth: vi.fn(),
+    fetchPendingLink: vi.fn(),
+    confirmLinkWithPassword: vi.fn(),
+    confirmLinkWithEmail: vi.fn(),
+    cancelPendingLink: vi.fn(),
   }
 })
 
-import { fetchSignInOptions, login, startOAuth } from './api'
+import { cancelPendingLink, confirmLinkWithEmail, confirmLinkWithPassword, fetchPendingLink, fetchSignInOptions, login, startOAuth } from './api'
 
 function typeEmail(value: string) {
   fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value } })
@@ -340,5 +344,75 @@ describe('LoginPage — nothing secret is printed on the page', () => {
     expect(screen.queryByText(/حسابات تجريبية|Demo accounts/i)).not.toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/@demo-/)
     expect(document.body.textContent).not.toMatch(/password:/i)
+  })
+})
+
+/**
+ * LOGIN-004 — Google came back with an address that matches an account: the page shows «ربط Google» instead of a dead end.
+ */
+describe('LoginPage — linking Google in place', () => {
+  const pending = { provider: 'google', name: 'Mohammed G', email: 'owner@example.com', avatar: null, local_email: 'ow•••@example.com', expires_in: 600, email_sent: false, can_email: true }
+  afterEach(() => { signOut(); vi.clearAllMocks() })
+
+  it('?oauth=link replaces the form with the card', async () => {
+    signOut()
+    vi.mocked(fetchPendingLink).mockResolvedValue(pending)
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link', locale: 'en' })
+
+    expect(await screen.findByTestId('oauth-link-card')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-identify')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('login-oauth-note')).not.toBeInTheDocument()
+  })
+
+  it('a correct password signs in and goes where the server says', async () => {
+    signOut()
+    vi.mocked(fetchPendingLink).mockResolvedValue(pending)
+    vi.mocked(confirmLinkWithPassword).mockResolvedValue({ user: { id: 'u1' } as never, destination: '/app/campaigns' })
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link', locale: 'en' })
+
+    fireEvent.change(await screen.findByLabelText('Password', { selector: 'input' }), { target: { value: 'correct-horse' } })
+    fireEvent.click(screen.getByTestId('oauth-link-submit'))
+
+    await waitFor(() => expect(confirmLinkWithPassword).toHaveBeenCalledWith('correct-horse'))
+  })
+
+  it('a mailed link is spent once and its secret is taken out of the address', async () => {
+    signOut()
+    vi.mocked(fetchPendingLink).mockResolvedValue(pending)
+    vi.mocked(confirmLinkWithEmail).mockResolvedValue({ user: { id: 'u1' } as never, destination: '/app/campaigns' })
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link&confirm=secret-from-mail', locale: 'en' })
+
+    await waitFor(() => expect(confirmLinkWithEmail).toHaveBeenCalledWith('secret-from-mail'))
+    expect(confirmLinkWithEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancel goes back to the ordinary form', async () => {
+    signOut()
+    vi.mocked(fetchPendingLink).mockResolvedValue(pending)
+    vi.mocked(cancelPendingLink).mockResolvedValue(undefined)
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('oauth-link-cancel'))
+
+    expect(await screen.findByTestId('login-identify')).toBeInTheDocument()
+    expect(screen.queryByTestId('oauth-link-card')).not.toBeInTheDocument()
+  })
+
+  it('an expired pending link says so and leads back to the form', async () => {
+    signOut()
+    vi.mocked(fetchPendingLink).mockRejectedValue({ isAxiosError: true, response: { status: 410, data: { success: false, message: 'x', errors: null, meta: { state: 'expired' } } } })
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link', locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('oauth-link-back'))
+
+    expect(await screen.findByTestId('login-identify')).toBeInTheDocument()
+  })
+
+  it('the refusal for an address Google did not verify keeps its message', async () => {
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login?oauth=link_required', locale: 'en' })
+
+    expect(await screen.findByTestId('login-oauth-note')).toHaveTextContent('not connected yet')
+    expect(screen.queryByTestId('oauth-link-card')).not.toBeInTheDocument()
   })
 })

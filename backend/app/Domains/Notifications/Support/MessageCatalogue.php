@@ -185,6 +185,8 @@ final class MessageCatalogue
             'email_verification' => self::mandatory('RegistrationVerificationService'),
             'sign_in_code' => self::mandatory('CredentialMail::SIGN_IN_CODE'),
             'member_setup' => self::mandatory('PasswordResetService::inviteExistingMember'),
+            // LOGIN-004 — proof that a Google account belongs with this account; without it a person could not finish signing in.
+            'oauth_link' => self::mandatory('OAuthPendingLinkController::email'),
             'invitation' => self::mandatory('InvitationService'),
             'security_alert' => self::mandatory('SecurityAlertMail'),
             // A person's standing in a workspace changed: they must be able to notice somebody else did it.
@@ -212,7 +214,7 @@ final class MessageCatalogue
      */
     public static function carriesSecret(string $kind): bool
     {
-        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'invitation'], true);
+        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'oauth_link', 'invitation'], true);
     }
 
     /**
