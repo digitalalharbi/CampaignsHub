@@ -18,16 +18,31 @@ import { lazy, Suspense, type ComponentType } from 'react'
 const RELOAD_FLAG = 'campaignshub.chunk-reload-at'
 const RELOAD_WINDOW_MS = 30_000
 
+/**
+ * REDIRECT-ONCE-002 — a chunk that failed because the page is being LEFT is not a stale chunk.
+ *
+ * Firefox and WebKit abort a document's in-flight requests the moment a navigation starts, before the new document
+ * commits and before `pagehide` fires. A route whose chunk was still downloading then rejects — indistinguishable,
+ * at that instant, from a file a deploy removed — and the reload below ran: `location.reload()` of the OLD address,
+ * which replaced the navigation the person had just asked for. Seen as `page.goto: NS_BINDING_ABORTED` on every
+ * test that opened a page straight after signing in, and as «Navigation to X is interrupted by another navigation
+ * to /app/dashboard»; for a person it is a link that sometimes lands back where they were.
+ *
+ * So the reload waits. A document that is going away takes its timers with it, which makes the delay itself the
+ * answer: if a navigation commits inside the window, nothing runs; if nothing does, the chunk really is gone and the
+ * page reloads. The once-only flag is written when the reload happens, not when it is scheduled, so a spurious
+ * failure cannot spend the single reload a real one needs.
+ */
+const RELOAD_DELAY_MS = 1000
+
+let reloadScheduled = false
+
 function reloadOnceFor<T>(error: unknown): Promise<T> {
   let recent = false
 
   try {
     const last = Number(sessionStorage.getItem(RELOAD_FLAG) ?? 0)
     recent = Date.now() - last < RELOAD_WINDOW_MS
-
-    if (!recent) {
-      sessionStorage.setItem(RELOAD_FLAG, String(Date.now()))
-    }
   } catch {
     // Storage refused: without the flag a reload could loop, so the error boundary takes it.
     throw error
@@ -37,9 +52,22 @@ function reloadOnceFor<T>(error: unknown): Promise<T> {
     throw error
   }
 
-  window.location.reload()
+  if (!reloadScheduled) {
+    reloadScheduled = true
+    window.setTimeout(() => {
+      reloadScheduled = false
 
-  // The page is going away; nothing should render in the meantime.
+      try {
+        sessionStorage.setItem(RELOAD_FLAG, String(Date.now()))
+      } catch {
+        return
+      }
+
+      window.location.reload()
+    }, RELOAD_DELAY_MS)
+  }
+
+  // The page is going away, or is about to reload; nothing should render in the meantime.
   return new Promise<T>(() => {})
 }
 

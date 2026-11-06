@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
@@ -175,6 +175,7 @@ export function LoginPage() {
    */
   const phoneCompat = import.meta.env.DEV && params.get('e2e') === 'phone'
 
+  const signedInHere = useRef(false)
   const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
   const [emailCodeOpen, setEmailCodeOpen] = useState(false)
@@ -206,6 +207,18 @@ export function LoginPage() {
    */
   useEffect(() => {
     if (status !== 'authenticated') return
+    /*
+     * REDIRECT-ONCE-001 — a sign-in made HERE has already decided where it goes.
+     *
+     * `setUser(user)` flips `status`, which is what wakes this effect — so every password and code sign-in
+     * asked the server for the destination twice (two `/auth/memberships`) and navigated twice, a few
+     * milliseconds apart, to the same address. Nothing was visible: both landed on the same page. But the
+     * second `replace` interrupted whatever the browser had started in between — an in-app link, a deep
+     * link typed straight after sign-in — which Firefox and WebKit report as `NS_BINDING_ABORTED` and
+     * «interrupted by another navigation to /app/dashboard». The effect is for the OTHER way onto this page:
+     * a session that already existed.
+     */
+    if (signedInHere.current) return
     /*
      * WORKSPACE-SWITCH-001 — the switcher sent this person here because the server refused the session. If the boot probe
      * still answers 200, bouncing onward returns them to the switcher, which sends them back here, with no end to it.
@@ -262,6 +275,7 @@ export function LoginPage() {
   const signIn = useMutation({
     mutationFn: () => login({ email: email.trim(), password, remember, portal: null }),
     onSuccess: async (user) => {
+      signedInHere.current = true
       setUser(user)
       const { destination } = await resolvePostAuthOutcome(params, null)
       navigate(destination, { replace: true })
@@ -280,6 +294,7 @@ export function LoginPage() {
     mutationFn: async (typed: string) => {
       const user = await phoneSignInVerify(verificationId!, typed, remember)
 
+      signedInHere.current = true
       setUser(user)
       const { destination } = await resolvePostAuthOutcome(params, null)
 
