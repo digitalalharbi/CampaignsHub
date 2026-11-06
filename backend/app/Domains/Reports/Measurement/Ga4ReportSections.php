@@ -128,7 +128,7 @@ final class Ga4ReportSections
     public static function withoutMoney(array $sections): array
     {
         $blank = static function (array $row): array {
-            foreach (['revenue', 'revenue_usd'] as $k) {
+            foreach (['revenue', 'revenue_usd', 'currency'] as $k) {
                 if (array_key_exists($k, $row)) {
                     $row[$k] = null;
                 }

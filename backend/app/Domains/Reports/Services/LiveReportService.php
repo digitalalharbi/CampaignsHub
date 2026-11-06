@@ -2134,7 +2134,7 @@ final class LiveReportService
     /** STORE-ANALYTICS-DEPTH-001 §3.1 — only for a report whose operator switched the category on; nothing is read otherwise. */
     private function storeAnalytics(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
     {
-        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
         if ($report === null || ! app(ReportSectionSurfaces::class)->operatorAllows('store_analytics', $report, $share)) {
             return null;
         }

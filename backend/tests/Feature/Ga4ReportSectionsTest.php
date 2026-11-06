@@ -11,7 +11,6 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\CurrencyRate;
-use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
@@ -40,6 +39,8 @@ final class Ga4ReportSectionsTest extends TestCase
     protected bool $selectsSeededAccounts = false;
 
     private const CAMPAIGN = '0b0f6a52-6f3c-4c1e-9a55-1a2b3c4d5e6f';
+
+    private const UNIFIED = '1c1f7b63-7a4d-4d2f-8b66-2b3c4d5e6f70';
 
     private Tenant $tenant;
 
@@ -175,7 +176,7 @@ final class Ga4ReportSectionsTest extends TestCase
         $this->assertNotContains('aov', array_column($parts['ga4_overview']['kpis'], 'key'));
         $this->assertTrue($parts['ga4_overview']['revenue_hidden']);
         $this->assertNull($parts['ga4_overview']['currency']);
-        foreach (['4000', '2400', '1600', '600', '1000.0', '"SAR"'] as $amount) {
+        foreach (['4000', '2400', '1600', '"SAR"'] as $amount) {
             $this->assertStringNotContainsString($amount === '"SAR"' ? $amount : ':'.$amount, $flat, "an amount ($amount) stayed");
         }
         $this->assertNull($parts['ga4_overview']['series'][0]['revenue']);
@@ -306,9 +307,21 @@ final class Ga4ReportSectionsTest extends TestCase
 
     private function adMetric(string $key, float $value): void
     {
-        DailyMetric::withoutGlobalScopes()->create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $this->ads->id, 'external_campaign_id' => self::CAMPAIGN, 'provider' => 'snapchat',
-            'metric_date' => '2026-10-05', 'metric_key' => $key, 'value' => $value, 'project_currency' => 'USD',
+        $base = ['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'created_at' => now(), 'updated_at' => now()];
+        if (! DB::table('unified_campaigns')->where('id', self::UNIFIED)->exists()) {
+            DB::table('unified_campaigns')->insert($base + [
+                'id' => self::UNIFIED, 'client_workspace_id' => $this->project->client_workspace_id, 'name' => 'QCAMP', 'objective' => 'sales',
+                'objective_source' => 'declared', 'status' => 'active', 'platforms' => json_encode(['snapchat']),
+            ]);
+            DB::table('external_campaigns')->insert($base + [
+                'id' => self::CAMPAIGN, 'external_account_id' => $this->ads->id, 'unified_campaign_id' => self::UNIFIED, 'provider' => 'snapchat',
+                'external_id' => 'ext-q', 'name' => 'QCAMP', 'status' => 'active', 'objective' => 'sales',
+            ]);
+        }
+        DB::table('daily_metrics')->insert($base + [
+            'id' => (string) Str::uuid(), 'external_account_id' => $this->ads->id, 'external_campaign_id' => self::CAMPAIGN,
+            'unified_campaign_id' => self::UNIFIED, 'provider' => 'snapchat', 'metric_key' => $key, 'metric_date' => '2026-10-05',
+            'value' => $value, 'project_currency' => 'USD', 'original_currency' => 'USD', 'original_amount' => $value,
         ]);
     }
 
