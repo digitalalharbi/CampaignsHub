@@ -149,7 +149,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -159,7 +159,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002773",
@@ -176,7 +180,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -186,7 +190,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002775",
@@ -203,7 +211,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -213,7 +221,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002875",
@@ -230,7 +242,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -240,7 +252,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002975",
@@ -267,7 +283,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002977",
@@ -294,7 +314,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002979",
@@ -311,7 +335,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -321,7 +345,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             }
         ],
         "external_accounts": [
@@ -1190,7 +1218,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1200,7 +1228,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002773",
@@ -1217,7 +1249,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1227,7 +1259,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002775",
@@ -1244,7 +1280,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1254,7 +1290,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002875",
@@ -1271,7 +1311,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1281,7 +1321,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002975",
@@ -1308,7 +1352,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002977",
@@ -1335,7 +1383,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002979",
@@ -1352,7 +1404,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1362,7 +1414,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002982",
@@ -1379,7 +1435,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1389,7 +1445,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002984",
@@ -1406,7 +1466,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1416,7 +1476,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002986",
@@ -1433,7 +1497,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1443,7 +1507,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003110",
@@ -1460,7 +1528,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1470,7 +1538,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003234",
@@ -1497,7 +1569,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003236",
@@ -1524,7 +1600,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003238",
@@ -1541,7 +1621,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1551,7 +1631,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             }
         ],
         "external_accounts": [
@@ -2600,7 +2684,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2610,7 +2694,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002773",
@@ -2627,7 +2715,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2637,7 +2725,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002775",
@@ -2654,7 +2746,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2664,7 +2756,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002875",
@@ -2681,7 +2777,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2691,7 +2787,11 @@
                 "creative_status": "success",
                 "creative_rows": 12,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002975",
@@ -2718,7 +2818,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002977",
@@ -2745,7 +2849,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002979",
@@ -2762,7 +2870,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2772,7 +2880,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:00:00"
+                "queued_at": "2026-10-21 09:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002982",
@@ -2789,7 +2901,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2799,7 +2911,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002984",
@@ -2816,7 +2932,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2826,7 +2942,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000002986",
@@ -2843,7 +2963,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2853,7 +2973,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003110",
@@ -2870,7 +2994,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2880,7 +3004,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003234",
@@ -2907,7 +3035,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003236",
@@ -2934,7 +3066,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003238",
@@ -2951,7 +3087,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2961,7 +3097,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 09:30:00"
+                "queued_at": "2026-10-21 09:30:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003240",
@@ -2978,7 +3118,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -2988,7 +3128,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003242",
@@ -3005,7 +3149,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3015,7 +3159,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003244",
@@ -3032,7 +3180,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3042,7 +3190,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003368",
@@ -3059,7 +3211,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3069,7 +3221,11 @@
                 "creative_status": "success",
                 "creative_rows": 16,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003492",
@@ -3096,7 +3252,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003494",
@@ -3123,7 +3283,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000003496",
@@ -3140,7 +3304,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": "Meta Marketing API could not return daily insights: An unknown error occurred · code 1",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\"}",
+                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"provider_requests\": 1}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3150,7 +3314,11 @@
                 "creative_status": null,
                 "creative_rows": null,
                 "creative_error": null,
-                "queued_at": "2026-10-21 10:00:00"
+                "queued_at": "2026-10-21 10:00:00",
+                "dead_lettered_at": null,
+                "dead_letter_category": null,
+                "redriven_at": null,
+                "redriven_by": null
             }
         ],
         "external_accounts": [

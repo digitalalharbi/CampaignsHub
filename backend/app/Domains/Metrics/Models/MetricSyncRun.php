@@ -32,6 +32,9 @@ final class MetricSyncRun extends Model
         'queued_at' => 'datetime',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
+        // INTEG-SYNC-ENGINE-001 — set when the job behind this run exhausted its retries; the status stays one of §8's six words.
+        'dead_lettered_at' => 'datetime',
+        'redriven_at' => 'datetime',
         'metrics_upserted' => 'integer',
         /*
          * INTEG-RUNTIME §7 — nullable integers, and the nullability is the point.

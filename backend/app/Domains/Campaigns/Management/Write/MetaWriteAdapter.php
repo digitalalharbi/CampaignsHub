@@ -96,6 +96,11 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
         }
 
         if ($action === WriteAction::CreateAdSet) {
+            // META-WRITE-PARAMS-001 — Meta's reference requires `promoted_object.page_id` here, and this form holds no page.
+            if (($input['optimization_goal'] ?? null) === 'LEAD_GENERATION') {
+                return WriteOutcome::refused('Meta needs a page (promoted_object.page_id) for a LEAD_GENERATION ad set, and this form does not collect one. Create it in Ads Manager or choose another goal.');
+            }
+
             $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/adsets', array_filter([
                 'name' => (string) $input['name'],
                 'campaign_id' => $node,
@@ -202,6 +207,9 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
             'special_ad_categories' => [],
             'daily_budget' => $command->dailyBudget !== null ? $this->minorUnits($command->dailyBudget, $command->currency) : null,
             'bid_strategy' => $command->dailyBudget !== null ? 'LOWEST_COST_WITHOUT_CAP' : null,
+            // META-WRITE-PARAMS-001 — from v24.0 required when the budget sits on the ad sets (Meta error 4834011),
+            // in Meta's documented spelling; not needed with a campaign budget. False keeps ad-set budgets unshared.
+            'is_adset_budget_sharing_enabled' => $command->dailyBudget === null ? 'False' : null,
         ], static fn ($v) => $v !== null), idempotent: false);
         $id = ($response->json() ?? [])['id'] ?? null;
 

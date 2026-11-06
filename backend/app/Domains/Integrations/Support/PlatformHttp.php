@@ -11,6 +11,8 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * INTEG-RETRY-001 — one HTTP client for every ad platform, with one retry policy.
@@ -59,6 +61,31 @@ final class PlatformHttp
     }
 
     /**
+     * INTEG-SYNC-ENGINE-001 — count this request against the provider's and the connection's budget, and read what the answer says
+     * about them. See {@see ProviderRateBudget}. Every attempt of the retry above passes through here, and each one is a real request.
+     */
+    public static function budgeted(PendingRequest $request, string $platform, ?string $connectionId): PendingRequest
+    {
+        if ($connectionId === null) {
+            return $request;
+        }
+
+        $budget = app(ProviderRateBudget::class);
+
+        return $request
+            ->withRequestMiddleware(static function (RequestInterface $outgoing) use ($budget, $platform, $connectionId): RequestInterface {
+                $budget->beforeRequest($platform, $connectionId);
+
+                return $outgoing;
+            })
+            ->withResponseMiddleware(static function (ResponseInterface $answer) use ($budget, $platform, $connectionId): ResponseInterface {
+                $budget->afterResponse($platform, $connectionId, $answer);
+
+                return $answer;
+            });
+    }
+
+    /**
      * How long to wait before attempt `$attempt` (1-based, so the first wait is attempt 1).
      *
      * A platform that tells us when to come back is believed, within reason — an hour-long
@@ -96,6 +123,11 @@ final class PlatformHttp
         }
 
         $status = $exception->response->status();
+
+        // META-RESILIENCE-001 — a 500 that says the page is too large answers the same to the same request.
+        if (stripos($exception->response->body(), 'reduce the amount of data') !== false) {
+            return false;
+        }
 
         return $status === 429 || $status >= 500;
     }
@@ -188,7 +220,42 @@ final class PlatformHttp
         $explained = is_string($code) ? SnapchatVocabulary::explainError($code) : null;
         $lead = $explained === null ? [] : [$explained['message_en'].' Retry: '.$explained['retry'].'.'];
 
-        return implode(' · ', array_merge($lead, [$sentence], self::identifiers($body, $error)));
+        return implode(' · ', array_merge($lead, [$sentence], self::rejectedParameter($error, $sentence), self::identifiers($body, $error)));
+    }
+
+    /**
+     * META-GRAPH-REFUSAL-001 — what Meta said about a rejected parameter, which `message` does not.
+     *
+     * A Marketing API refusal's `message` is routinely the bare «Invalid parameter». The cause is in
+     * `error_user_title` and `error_user_msg`, and `error_data.blame_field_specs` names the field. All of it is
+     * Meta's text about a request, kept beside the sentence, and only Meta sends these keys.
+     *
+     * @param  array<string,mixed>  $error
+     * @return list<string>
+     */
+    private static function rejectedParameter(array $error, string $sentence): array
+    {
+        $out = [];
+        $words = array_values(array_filter(
+            [$error['error_user_title'] ?? null, $error['error_user_msg'] ?? null],
+            static fn (mixed $v): bool => is_string($v) && trim($v) !== '' && $v !== $sentence,
+        ));
+
+        if ($words !== []) {
+            $out[] = implode(': ', $words);
+        }
+
+        $data = $error['error_data'] ?? null;
+        $data = is_string($data) ? json_decode($data, true) : $data;
+        $blamed = is_array($data) && is_array($data['blame_field_specs'] ?? null) ? $data['blame_field_specs'] : [];
+
+        array_walk_recursive($blamed, static function (mixed $field) use (&$out): void {
+            if (is_string($field) && $field !== '') {
+                $out[] = 'field '.$field;
+            }
+        });
+
+        return $out;
     }
 
     /**
