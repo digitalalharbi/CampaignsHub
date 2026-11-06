@@ -608,7 +608,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -638,7 +639,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -668,7 +670,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             }
         ],
         "period_reach": [
@@ -1891,7 +1894,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -1921,7 +1925,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -1951,7 +1956,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             }
         ],
         "period_reach": [
@@ -3571,7 +3577,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -3601,7 +3608,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -3631,7 +3639,8 @@
                 "removed_at": null,
                 "provider_identity_label": null,
                 "provider_identity_email": null,
-                "provider_identity_fetched_at": null
+                "provider_identity_fetched_at": null,
+                "project_id": null
             }
         ],
         "period_reach": [

@@ -116,12 +116,18 @@ export async function startPlatformOAuth(
   projectId?: string | null,
   /** META-SAAS-APP-001 — which Meta app issues this connection; absent = the platform's choice for new connections. */
   appProfile?: 'live' | 'saas' | null,
+  /**
+   * INTEG-PROJECT-LINK-001 — which portal's PROJECT PAGE the journey returns to. A place to land, not a
+   * permission: the project itself rides the server's single-use state.
+   */
+  returnPortal?: 'app' | 'agency' | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(`/integrations/${provider}/oauth/start`, {
     ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
     ...(projectId ? { project_id: projectId } : {}),
     ...(appProfile ? { app_profile: appProfile } : {}),
+    ...(returnPortal ? { return_portal: returnPortal } : {}),
   })
 }
 
@@ -151,11 +157,6 @@ export async function connectWithApiKey(
     `/integrations/${provider}/api-key/connect`,
     { api_key: apiKey, ...(projectId ? { project_id: projectId } : {}) },
   )
-}
-
-export async function syncConnector(key: string): Promise<{ success: boolean; count: number }> {
-  await ensureCsrfCookie()
-  return postData<{ success: boolean; count: number }>(`/integrations/${key}/sync`)
 }
 
 /*
@@ -491,6 +492,8 @@ export interface AccountRow {
   next_sync_at: string | null
   access_lost_at: string | null
   counts_toward_ad_account_quota: boolean
+  /** INTEG-STATUS-MODEL-001 — the five independent statuses of this resource and its link. */
+  statuses?: IntegrationStatuses | null
 }
 
 export type LinkFilter = 'linked' | 'unlinked'
@@ -668,6 +671,20 @@ export function fetchFirstSyncStatus(
   return getData<FirstSyncStatus>(`/connections/${connectionId}/first-sync?${params.toString()}`)
 }
 
+/**
+ * Queue a sync for ONE selected account, now.
+ *
+ * Goes through the project the account feeds — the same call the project page's «sync now» makes —
+ * so there is one way to start a run and one place the server decides whether it may.
+ */
+export async function syncAccountNow(
+  projectId: string,
+  accountId: string,
+): Promise<{ queued: boolean; will_fetch: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${projectId}/sync-runs`, { external_account_id: accountId })
+}
+
 /** A window the scheduled sweep will never cover — refused for an account no project owns. */
 export async function backfillAccount(
   id: string,
@@ -680,6 +697,29 @@ export async function backfillAccount(
 
 
 /**
+ * INTEG-STATUS-MODEL-001 (contract §1.13) — one status, as the server states it.
+ *
+ * The words (`label_ar` / `label_en`) and the remedy (`action`) are the SERVER's: a surface that
+ * retyped them would be a second vocabulary for the same fact. `state` is only read here to pick a
+ * colour.
+ */
+export interface IntegrationStatus {
+  state: string
+  label_ar: string
+  label_en: string
+  since: string | null
+  as_of: string | null
+  /** A category code, never a provider's own message. */
+  detail: string | null
+  action: { code: string; label_ar: string; label_en: string } | null
+}
+
+/** The five, in the order the contract names them. None implies another; there is no combined «healthy». */
+export const STATUS_DIMENSIONS = ['authorisation', 'binding', 'sync', 'freshness', 'error'] as const
+export type StatusDimension = typeof STATUS_DIMENSIONS[number]
+export type IntegrationStatuses = Record<StatusDimension, IntegrationStatus>
+
+/**
  * INTEGRATION-DATASOURCE-WIZARD-001 §17 — the Connection Hub: one row per AUTHORISATION.
  *
  * Not one per provider. Two Meta authorisations — the agency's own and a client's, granted by two
@@ -687,6 +727,14 @@ export async function backfillAccount(
  * could not say which of the two had gone stale.
  */
 export interface HubConnection {
+  /** The ONE project a link journey opened this connection for; null or absent is a workspace-wide connection. */
+  project_id?: string | null
+  /** What the reader's projects read through this source, by name — what tells two rows of one platform apart. */
+  accounts?: Array<{ id: string; name: string; organisation: string | null; external_id: string; currency: string | null; campaigns?: number }>
+  /** Campaigns THIS reader's projects run through the linked accounts of this source. */
+  campaigns?: number
+  /** The stored status word. `disconnected` with a live link is listed in a project's space, to be linked again. */
+  status?: string
   id: string
   provider: string
   label: string
@@ -718,6 +766,12 @@ export interface HubConnection {
   has_parent: boolean
   discovery_blocked_reason: string | null
   token_expires_at: string | null
+  /** The client this sign-in is filed under. Null is tenant-shared; otherwise it can only feed that client's projects. */
+  client_workspace_id?: string | null
+  /** INTEG-STATUS-MODEL-001 — five independent statuses of this authorisation, resolved on the server. */
+  statuses?: IntegrationStatuses | null
+  /** What this provider can and cannot do, stated rather than hidden (an API-key source has no consent screen). */
+  status_profile?: { kind?: string; auth: string | null; refresh: boolean | null; token_expiry: boolean | null; webhooks: string | null; freshness_mode: string } | null
 }
 
 /** A provider a NEW authorisation can be started for: enabled, and with its system keys present. */
@@ -743,13 +797,17 @@ export interface ConnectionHub {
   connectable: ConnectableProvider[]
 }
 
-export function fetchConnectionHub(): Promise<ConnectionHub> {
-  return getData<ConnectionHub>('/integrations/hub')
+/**
+ * INTEG-PROJECT-SPACE-001 — with a project, the hub is THAT project's own space: the server reads nothing
+ * of another project into the answer. Without one it is the workspace-wide board the older callers use.
+ */
+export function fetchConnectionHub(projectId?: string | null): Promise<ConnectionHub> {
+  return getData<ConnectionHub>(typeof projectId === 'string' ? `/integrations/hub?project_id=${projectId}` : '/integrations/hub')
 }
 
 /** The same board with removed and revoked sources listed (the hub's «show removed» toggle). */
-export function fetchConnectionHubWithRemoved(): Promise<ConnectionHub> {
-  return getData<ConnectionHub>('/integrations/hub?include_removed=1')
+export function fetchConnectionHubWithRemoved(projectId?: string | null): Promise<ConnectionHub> {
+  return getData<ConnectionHub>(`/integrations/hub?include_removed=1${typeof projectId === 'string' ? `&project_id=${projectId}` : ''}`)
 }
 
 /**
@@ -765,4 +823,135 @@ export async function removeConnection(
 ): Promise<{ removed: boolean; disabled_bindings: number }> {
   await ensureCsrfCookie()
   return postData(`/connections/${connectionId}/remove`, options.unconfirmedOnly ? { unconfirmed_only: true } : {})
+}
+
+/**
+ * INTEG-UNIFIED-002 — one row of the centre's «التدقيق» log.
+ *
+ * The tenant's own read of the existing audit trail. The server returns no payload, address or
+ * agent, and names the actor by NAME: a workspace email is not this page's business.
+ */
+export interface IntegrationAuditEntry {
+  id: string
+  action: string
+  category: 'authorisation' | 'binding' | 'sync' | null
+  actor_name: string | null
+  provider: string | null
+  provider_label: string | null
+  provider_label_ar: string | null
+  subject_kind: 'connection' | 'account' | 'project' | 'binding' | null
+  subject_name: string | null
+  created_at: string | null
+}
+
+export interface IntegrationAuditPage {
+  entries: IntegrationAuditEntry[]
+  page_sizes: number[]
+  meta: { total: number; per_page: number; current_page: number; last_page: number }
+}
+
+export function fetchIntegrationAudit(query: {
+  category?: 'authorisation' | 'binding' | 'sync' | null
+  page?: number
+  perPage?: number
+  /** INTEG-PROJECT-SPACE-001 — the selected project's own log; the server lists nothing of another project. */
+  projectId?: string | null
+} = {}): Promise<IntegrationAuditPage> {
+  const params = new URLSearchParams()
+  if (query.projectId) params.set('project_id', query.projectId)
+  if (query.category) params.set('category', query.category)
+  if (query.page) params.set('page', String(query.page))
+  if (query.perPage) params.set('per_page', String(query.perPage))
+  const qs = params.toString()
+  return getData<IntegrationAuditPage>(`/integrations/audit${qs === '' ? '' : `?${qs}`}`)
+}
+
+/**
+ * INTEG-PROJECT-LINK-001 — one project's view of one authorisation.
+ *
+ * `pending` is the SERVER's answer to «did this user open this connection for this project» — the
+ * return from a provider is resumed on it and never on anything in the address. `accounts` are the
+ * accounts of this connection linked to THIS project, and only those.
+ */
+export type LinkMoneyState = 'reporting' | 'converted' | 'withheld_no_rate' | 'withheld_unknown'
+
+export interface ProjectLinkAccount {
+  id: string
+  name: string
+  external_id: string
+  account_type: string
+  organisation: string | null
+  currency: string | null
+  money: { state: LinkMoneyState; rate: number | null; rate_date: string | null }
+  health: string | null
+  last_synced_at: string | null
+}
+
+export interface ProjectLink {
+  pending: boolean
+  project: { id: string; name: string }
+  connection: {
+    id: string
+    provider: string
+    label: string
+    label_ar: string
+    status: string
+    has_parent: boolean
+    platform_account: { label: string | null; email: string | null } | null
+  }
+  reporting_currency: string
+  accounts: ProjectLinkAccount[]
+}
+
+export function fetchProjectLink(projectId: string, connectionId: string): Promise<ProjectLink> {
+  return getData<ProjectLink>(`/projects/${projectId}/integrations/link/${connectionId}`)
+}
+
+/**
+ * INTEG-ON-DEMAND-DISCOVERY-001 (Owner 2026-11-06) — the steps after the platform sign-in, asked of the
+ * provider when the reader reaches them: the organisations, then the CHOSEN organisation's accounts, then
+ * one confirmation. Nothing is stored until the confirmation, and it stores one account.
+ *
+ * `id` null is «no organisation»: the accounts the signed-in identity holds directly.
+ */
+export interface LinkOrganisation { id: string | null; name: string | null }
+
+export interface LinkAccountOption {
+  external_id: string
+  name: string
+  currency: string | null
+  status: string
+  /** `here` — already linked to this project; `elsewhere` — feeds another project and cannot be chosen. */
+  linked: 'here' | 'elsewhere' | null
+}
+
+export function fetchLinkOrganisations(projectId: string, connectionId: string): Promise<{ organisations: LinkOrganisation[] }> {
+  return getData(`/projects/${projectId}/integrations/link/${connectionId}/organisations`)
+}
+
+export function fetchLinkAccounts(
+  projectId: string,
+  connectionId: string,
+  params: { organisation: string | null; q?: string; page?: number },
+): Promise<{ accounts: LinkAccountOption[]; total: number; page: number; per_page: number }> {
+  const query = new URLSearchParams()
+  if (params.organisation !== null) query.set('organisation', params.organisation)
+  if (params.q) query.set('q', params.q)
+  if (params.page && params.page > 1) query.set('page', String(params.page))
+  const qs = query.toString()
+
+  return getData(`/projects/${projectId}/integrations/link/${connectionId}/accounts${qs === '' ? '' : `?${qs}`}`)
+}
+
+export async function confirmLinkAccount(input: {
+  projectId: string
+  connectionId: string
+  externalId: string
+  organisation: string | null
+}): Promise<{ account_id: string; relinked: boolean }> {
+  await ensureCsrfCookie()
+  return postData(`/projects/${input.projectId}/integrations/link/${input.connectionId}/accounts`, {
+    external_id: input.externalId,
+    organisation: input.organisation,
+  })
 }

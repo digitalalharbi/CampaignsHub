@@ -1,4 +1,5 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, RefreshCw, Unplug } from 'lucide-react'
 import {
@@ -10,6 +11,9 @@ import {
   syncBinding,
 } from './api'
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
+import { ProjectLinkFlow, type LinkConnection } from '@/features/integrations/ProjectLinkFlow'
+import { fetchProjectLink } from '@/features/integrations/api'
+import { useAuth } from '@/stores/auth'
 import { ProjectStores } from '@/features/commerce/ProjectStores'
 import { ProjectSyncHistory } from './ProjectSyncHistory'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from '@/features/tasks/labels'
@@ -25,6 +29,8 @@ import { listExternalCampaigns } from '@/features/campaigns/api'
 import { fmtClock, fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { CopyId } from '@/components/ui/CopyId'
+import { sortBySource } from '@/lib/sourceOrder'
 
 /**
  * What a connection's state means to somebody reading a project's account list.
@@ -83,6 +89,53 @@ export function ProjectIntegrationsPage() {
     : '/app/integrations'
 
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
+
+  /*
+   * INTEG-PROJECT-LINK-001 — the link journey starts HERE and ends here.
+   *
+   * «ربط مصدر» opens the one flow with this project fixed. The provider's consent screen returns to this
+   * same page carrying only an outcome and which connection came back (`link`); whether that connection
+   * was opened for THIS project by THIS person is the server's answer (`pending`), never the address's.
+   */
+  const mayLink = useAuth((s) => s.hasPermission)('integrations.connect')
+  const [params, setParams] = useSearchParams()
+  const [linking, setLinking] = useState<{ resume: LinkConnection | null } | null>(null)
+  const [returned, setReturned] = useState<{ outcome: string; link: string | null } | null>(null)
+
+  useEffect(() => {
+    const outcome = params.get('outcome')
+    if (outcome === null) return
+    setReturned({ outcome, link: params.get('link') })
+    // Read once, then clean the address: a reload must not replay a return.
+    setParams((current) => {
+      const next = new URLSearchParams(current)
+      for (const key of ['outcome', 'link', 'provider', 'accounts', 'reason']) next.delete(key)
+      return next
+    }, { replace: true })
+  }, [params, setParams])
+
+  const resumed = useQuery({
+    queryKey: ['project-link', projectId, returned?.link],
+    queryFn: () => fetchProjectLink(projectId, returned!.link!),
+    enabled: Boolean(projectId) && returned?.outcome === 'connected' && returned.link !== null,
+    retry: false,
+  })
+
+  useEffect(() => {
+    if (resumed.data === undefined || !resumed.data.pending) return
+    const { connection } = resumed.data
+    setLinking({ resume: { id: connection.id, provider: connection.provider, has_parent: connection.has_parent, projects: [] } })
+    setReturned(null)
+  }, [resumed.data])
+
+  /** What the return says, in six words or fewer, with one way forward. */
+  const returnNotice: { ar: string; en: string } | null = returned === null ? null
+    : returned.outcome === 'denied' ? { ar: 'أُلغي التفويض. لم يُربط شيء.', en: 'Sign-in cancelled. Nothing linked.' }
+    : returned.outcome === 'failed' ? { ar: 'تعذّر التفويض. لم يُربط شيء.', en: 'Sign-in failed. Nothing linked.' }
+    : returned.outcome === 'invalid_state' ? { ar: 'انتهت صلاحية الرابط.', en: 'The link expired.' }
+    : returned.outcome === 'connected' && (resumed.isError || resumed.data?.pending === false)
+      ? { ar: 'هذا الربط ليس لهذا المشروع.', en: 'This link is not for this project.' }
+      : null
 
   // Query key is namespaced by projectId → switching projects yields a fresh, isolated cache.
   const bindings = useQuery({
@@ -260,7 +313,24 @@ export function ProjectIntegrationsPage() {
         The action that belongs here is the one that takes them to the wizard, with this project in
         hand, where the same accounts are searched, paginated and chosen against the plan quota.
       */}
+      {returnNotice !== null && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--warning-background)] px-4 py-3" role="status" data-testid="project-link-notice" data-outcome={returned?.outcome}>
+          <p className="text-sm font-semibold text-text-primary">{lang === 'ar' ? returnNotice.ar : returnNotice.en}</p>
+          {mayLink && (
+            <Button size="sm" onClick={() => { setReturned(null); setLinking({ resume: null }) }} data-testid="project-link-retry">
+              {lang === 'ar' ? 'إعادة المحاولة' : 'Try again'}
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
+        {/* No permission, no entry point: the server refuses the same person with a 403. */}
+        {mayLink && (
+          <Button data-testid="project-link-source" onClick={() => setLinking({ resume: null })}>
+            <Plug size={15} /> {lang === 'ar' ? 'ربط مصدر' : 'Link a source'}
+          </Button>
+        )}
         <Button
           variant="secondary"
           data-testid="project-manage-sources"
@@ -269,6 +339,21 @@ export function ProjectIntegrationsPage() {
           <Plug size={15} /> {lang === 'ar' ? 'إدارة مصادر البيانات' : 'Manage data sources'}
         </Button>
       </div>
+
+      {linking !== null && projectId && (
+        <ProjectLinkFlow
+          projectId={projectId}
+          resume={linking.resume}
+          onClose={() => { setLinking(null); void invalidate() }}
+          // The journey ends where it began: this page, with the new source in its list.
+          onReturn={() => {
+            setLinking(null)
+            void invalidate()
+            void queryClient.invalidateQueries({ queryKey: ['connection-hub'] })
+            window.scrollTo?.({ top: 0 })
+          }}
+        />
+      )}
 
       {/* COMMERCE-ASSIGN-001 — the stores that feed this project, and the ones nobody has assigned. */}
       {projectId && <ProjectStores projectId={projectId} />}
@@ -301,7 +386,7 @@ export function ProjectIntegrationsPage() {
                 {`${tasks.data?.tasks.length} / ${tasks.data?.total}`}
               </p>
             )}
-            {bindings.data?.map((b) => (
+            {sortBySource(bindings.data ?? [], (b) => ({ platform: b.provider, account: b.account?.name ?? null }), lang === 'ar').map((b) => (
               <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[9px] border border-border p-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -328,7 +413,7 @@ export function ProjectIntegrationsPage() {
                     )}
                   </div>
                   <span className="break-words text-xs text-text-muted">
-                    {b.account?.account_type} · <span className="tnum">{b.account?.external_id}</span>
+                    {b.account?.external_id && <CopyId value={b.account.external_id} testId={`binding-copy-id-${b.id}`} className="align-middle" />}
                     {b.account?.last_synced_at && (
                       <>
                         {' '}

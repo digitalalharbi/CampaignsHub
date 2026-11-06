@@ -12,6 +12,7 @@ import { syncStatusMeaning } from '@/lib/syncStatus'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { CopyId } from '@/components/ui/CopyId'
 
 /**
  * PROJINT-001 / INTEG-UI-001 — project integrations rebuilt around the SIX REAL ad platforms.
@@ -220,10 +221,10 @@ export function PlatformIntegrationsPanel({ projectId }: { projectId: string }) 
                           <span className="truncate font-semibold text-text-primary">{a.name}</span>
                           {a.is_demo && <Badge tone="warning">{ar ? 'تجريبي' : 'Demo'}</Badge>}
                         </span>
-                        {/* Name first, then the organisation it sits under, then the id. */}
-                        <span className="mt-0.5 block text-[11px] text-text-muted">
-                          {a.parent_name && <span>{a.parent_name} · </span>}
-                          <span className="tnum" dir="ltr">{a.external_id}</span>
+                        {/* Name first, then the organisation it sits under; the id is behind the copy icon. */}
+                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-text-muted">
+                          {a.parent_name && <span className="truncate">{a.parent_name}</span>}
+                          <CopyId value={a.external_id} testId={`platform-account-copy-id-${a.external_id}`} />
                         </span>
                         <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
                           <span className={accountHealthTone(a.health)}>{accountHealthLabel(a.health, ar)}</span>
