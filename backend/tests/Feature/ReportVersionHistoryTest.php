@@ -172,6 +172,8 @@ final class ReportVersionHistoryTest extends TestCase
     /** A half-built document is never served: the copy on the row stays the old one until the rebuild commits. */
     public function test_a_rebuild_that_fails_midway_leaves_every_door_on_the_stored_copy(): void
     {
+        // Two CSV downloads compared byte for byte: the file's «File created» stamp must not move between them.
+        $this->freezeTime();
         $report = $this->report();
         [, $raw] = $this->link($report);
         $before = $this->get("/api/v1/reports/shared/{$raw}/download/csv")->assertOk()->streamedContent();

@@ -77,6 +77,9 @@ final class EmailSystemGuardTest extends TestCase
         if (preg_match_all('/<img\b(?![^>]*\balt=")[^>]*>/i', $html) > 0) {
             $wrong[] = 'an image has no alt text';
         }
+        foreach (self::logoViolations($html, $locale) as $logo) {
+            $wrong[] = $logo;
+        }
         // Any fixed width above the container is a horizontal scroll on a phone.
         if (preg_match_all('/(?<![-\w])width:\s*(\d+)px/i', $html, $m) && max(array_map('intval', $m[1])) > 600) {
             $wrong[] = 'a fixed width is wider than the container';
@@ -93,6 +96,92 @@ final class EmailSystemGuardTest extends TestCase
         return $wrong;
     }
 
+    /**
+     * EMAIL-LOGO-GUARD-001 — Owner, 2026-11-06: «واي مراسلات من ايميلات النظام: اضيف لها شعار النظام».
+     *
+     * Exactly one system logo, in the header band: the banner in the reader's language, from an absolute
+     * https address on the app origin, with its box and its name written on the tag so a client that
+     * blocks images still shows the band and the name.
+     *
+     * @return list<string>
+     */
+    private static function logoViolations(string $html, string $locale): array
+    {
+        preg_match_all('#<img\b[^>]*/brand/email/[^>]*>#i', $html, $found);
+        if (count($found[0]) !== 1) {
+            return ['the system logo is shown '.count($found[0]).' times, not once'];
+        }
+
+        $tag = $found[0][0];
+        $wrong = [];
+        if (! str_contains($tag, 'src="'.MailShell::logoUrl($locale === 'ar').'"')) {
+            $wrong[] = 'the logo is not the banner in the reader\'s language';
+        }
+        if (preg_match('#src="https://[^"/]+/brand/email/banner-(ar|en)\.png"#', $tag) !== 1) {
+            $wrong[] = 'the logo is not an absolute https address';
+        }
+        if (! str_contains($tag, 'width="'.MailShell::LOGO_WIDTH.'"') || ! str_contains($tag, 'height="'.MailShell::LOGO_HEIGHT.'"')) {
+            $wrong[] = 'the logo has no width and height attributes';
+        }
+        if (! str_contains($tag, 'alt="'.MailShell::wordmark($locale === 'ar').'"')) {
+            $wrong[] = 'the logo\'s alt text is not the product\'s name';
+        }
+        $band = strpos($html, 'class="ch-hdr"');
+        if ($band === false || strpos($html, $tag) < $band) {
+            $wrong[] = 'the logo is not in the header band';
+        }
+
+        return $wrong;
+    }
+
+    /** The file the address points at is in the repository, at the proportions the tag states. */
+    public function test_the_logo_files_exist_at_the_stated_proportions(): void
+    {
+        foreach (['ar', 'en'] as $locale) {
+            $path = base_path('../frontend/public/brand/email/banner-'.$locale.'.png');
+            $this->assertFileExists($path);
+            [$width, $height] = (array) getimagesize($path);
+            $this->assertSame(MailShell::LOGO_WIDTH * $height, MailShell::LOGO_HEIGHT * $width, "banner-{$locale}.png is not {$width}×{$height} in the tag's proportions");
+            $this->assertGreaterThanOrEqual(2 * MailShell::LOGO_WIDTH, $width, 'the banner is not sharp on a 2x screen');
+        }
+    }
+
+    /** What an admin sends as a test is the same message, so it carries the same logo. */
+    public function test_a_test_send_carries_the_logo_too(): void
+    {
+        config()->set('mail.default', 'array');
+        config()->set('brand.frontend_url', 'https://campaignshub.io');
+
+        $found = [];
+        foreach (['ar', 'en'] as $locale) {
+            foreach ([null, ...MailGallery::keys()] as $key) {
+                $mail = MailGallery::testMessage($key, $locale);
+                $this->assertNotNull($mail);
+                foreach (self::logoViolations((string) $mail->render(), $locale) as $wrong) {
+                    $found[] = ($key ?? 'plain').".{$locale}: {$wrong}";
+                }
+            }
+        }
+
+        $this->assertSame([], $found);
+    }
+
+    public function test_the_contract_catches_a_message_without_the_logo(): void
+    {
+        $band = '<table><tr><td class="ch-hdr">';
+        $logo = '<img src="https://campaignshub.io/brand/email/banner-en.png" width="600" height="150" alt="CampaignsHub" />';
+        config()->set('brand.frontend_url', 'https://campaignshub.io');
+
+        $this->assertSame([], self::logoViolations($band.$logo, 'en'));
+        $this->assertNotSame([], self::logoViolations($band.'<p>CampaignsHub</p>', 'en'), 'no logo at all');
+        $this->assertNotSame([], self::logoViolations($band.$logo.$logo, 'en'), 'two logos');
+        $this->assertNotSame([], self::logoViolations($band.$logo, 'ar'), 'the other language\'s banner');
+        $this->assertNotSame([], self::logoViolations($band.str_replace(' height="150"', '', $logo), 'en'), 'no height');
+        $this->assertNotSame([], self::logoViolations($band.str_replace('alt="CampaignsHub"', 'alt=""', $logo), 'en'), 'no name');
+        $this->assertNotSame([], self::logoViolations($band.str_replace('https://campaignshub.io', '', $logo), 'en'), 'a relative address');
+        $this->assertNotSame([], self::logoViolations($logo.$band, 'en'), 'outside the header band');
+    }
+
     public function test_every_mailable_in_the_code_is_in_the_gallery(): void
     {
         $inGallery = array_values(array_unique(array_map('get_class', array_values(MailGallery::messages('ar')))));
@@ -105,7 +194,7 @@ final class EmailSystemGuardTest extends TestCase
     public function test_every_message_meets_the_contract_in_both_languages(): void
     {
         config()->set('mail.default', 'array');
-        config()->set('app.frontend_url', 'https://campaignshub.io');
+        config()->set('brand.frontend_url', 'https://campaignshub.io');
 
         $found = [];
         foreach (['ar', 'en'] as $locale) {
@@ -144,7 +233,8 @@ final class EmailSystemGuardTest extends TestCase
     {
         $offenders = [];
         foreach ((new Finder)->files()->in(app_path())->name('*.php') as $file) {
-            if (preg_match('/Mail::(raw|html|plain)\(/', $file->getContents()) === 1) {
+            // A framework `MailMessage` (a Notification's `toMail`) renders Laravel's own template: no shell, no logo.
+            if (preg_match('/Mail::(raw|html|plain)\(|\bMailMessage\b|function\s+toMail\s*\(/', $file->getContents()) === 1) {
                 $offenders[] = $file->getRelativePathname();
             }
         }

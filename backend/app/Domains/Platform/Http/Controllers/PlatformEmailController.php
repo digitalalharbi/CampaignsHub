@@ -119,7 +119,12 @@ final class PlatformEmailController extends Controller
             'keys' => MailGallery::keys(),
             'locales' => ['ar', 'en'],
             // EMAIL-TEST-SEND-001 — where a test would go, so the page can say so before anybody presses anything.
-            'test_send' => ['recipient' => (string) $user->email, 'address_proven' => $user->email_verified_at !== null],
+            // EMAIL-TEST-SEND-002 — and the platform's own mailbox, the other of the two places a test may go.
+            'test_send' => [
+                'recipient' => (string) $user->email,
+                'address_proven' => $user->email_verified_at !== null,
+                'platform_mailbox' => self::platformMailbox(),
+            ],
         ], 'Available previews retrieved.');
     }
 
@@ -175,7 +180,7 @@ final class PlatformEmailController extends Controller
                 'address' => (string) config('mail.from.address', ''),
                 'name' => (string) config('mail.from.name', ''),
             ],
-            'reply_to' => (string) (config('mail.reply_to.address') ?? ''),
+            'reply_to' => self::platformMailbox() ?? '',
             'last_success_at' => $this->lastAt(['sent']),
             'last_failure' => $this->lastFailure(),
         ];
@@ -215,39 +220,69 @@ final class PlatformEmailController extends Controller
     }
 
     /**
-     * POST /admin/email/test — EMAIL-TEST-SEND-001 (§17.4.5).
+     * The platform's own mailbox: the configured Reply-To, which is where a human reads this product's mail.
      *
-     * One message, to the signed-in Super Admin's own address, through the one mailer and its ledger.
+     * One reader for the settings row, the test target and the page's chip, so the address a test goes to
+     * is always the address the page shows as «الرد إلى».
+     */
+    private static function platformMailbox(): ?string
+    {
+        $address = trim((string) (config('mail.reply_to.address') ?? ''));
+
+        return filter_var($address, FILTER_VALIDATE_EMAIL) === false ? null : $address;
+    }
+
+    /**
+     * POST /admin/email/test — EMAIL-TEST-SEND-001 (§17.4.5), EMAIL-TEST-SEND-002.
+     *
+     * One message, through the one mailer and its ledger, to one of two addresses the server knows.
      *
      * - **Who.** The `platform` gate on the route; a workspace has no way to reach this.
-     * - **Where to.** `$user->email`, and only when `email_verified_at` says it was proved. Nothing in the
-     *   request is read as an address, so this cannot be used to mail a customer.
+     * - **Where to.** `to` is a choice of two words, never an address: `self` (the default) is `$user->email`,
+     *   and only when `email_verified_at` says it was proved; `platform_mailbox` is the configured Reply-To.
+     *   The second exists because a sign-in address need not have a mailbox behind it (Owner, Production
+     *   2026-11-06: «عندي انفو فقط»), and an accepted message nobody can open proves nothing. Nothing else
+     *   in the request is read, so this cannot be used to mail a customer.
      * - **What.** A gallery fixture marked by `TestSendMark`. No tenant, no database read.
      * - **What it proves.** The answer is what the transport said. `accepted` is not delivery, and the
      *   only thing that makes a row `delivered` is `mail:confirm-delivery` with evidence.
-     * - **Trace.** Audited, with the address masked, whatever the outcome.
+     * - **Trace.** Audited, with the target named and the address masked, whatever the outcome.
      */
     public function test(Request $request, TransactionalMailer $mailer, AuditLogger $audit): JsonResponse
     {
         $user = $request->user();
-        $data = $request->validate(['lang' => ['nullable', 'in:ar,en'], 'key' => ['nullable', 'string', 'max:60']]);
+        $data = $request->validate([
+            'lang' => ['nullable', 'in:ar,en'],
+            'key' => ['nullable', 'string', 'max:60'],
+            'to' => ['nullable', 'string', Rule::in(['self', 'platform_mailbox'])],
+        ]);
         $lang = (string) ($data['lang'] ?? 'ar');
         $key = $data['key'] ?? null;
+        $target = (string) ($data['to'] ?? 'self');
         $template = 'gallery.'.($key ?? 'plain');
 
         $mail = MailGallery::testMessage($key, $lang);
         abort_if($mail === null, 422, 'There is no such message.');
 
-        $recipient = (string) $user->email;
+        $recipient = $target === 'platform_mailbox' ? self::platformMailbox() : (string) $user->email;
+
+        if ($recipient === null) {
+            $audit->log(action: 'mail.test_send.refused', after: ['template' => $template, 'locale' => $lang, 'target' => $target], reason: 'platform_mailbox_not_configured');
+
+            return ApiResponse::error('No Reply-To mailbox is configured, so there is no platform mailbox to test.', ['code' => 'platform_mailbox_not_configured'], status: 422);
+        }
+
         $masked = MailAddress::mask($recipient);
 
-        if ($user->email_verified_at === null) {
-            $audit->log(action: 'mail.test_send.refused', after: ['template' => $template, 'locale' => $lang, 'recipient' => $masked], reason: 'address_not_proven');
+        // The proof is about the admin's own address; the platform's mailbox is the platform's.
+        if ($target === 'self' && $user->email_verified_at === null) {
+            $audit->log(action: 'mail.test_send.refused', after: ['template' => $template, 'locale' => $lang, 'target' => $target, 'recipient' => $masked], reason: 'address_not_proven');
 
             return ApiResponse::error('Your address has not been verified, so no test can be sent to it.', ['code' => 'address_not_proven'], status: 422);
         }
 
-        $dedupKey = 'test:'.$user->id.':'.($key ?? 'plain').':'.$lang.':'.now()->format('YmdHi');
+        // `self` keeps the key it always had; the other target is another message, not a repeat of it.
+        $dedupKey = 'test:'.$user->id.':'.($target === 'self' ? '' : $target.':').($key ?? 'plain').':'.$lang.':'.now()->format('YmdHi');
         $state = $mailer->send(
             recipient: $recipient,
             mail: $mail,
@@ -272,12 +307,13 @@ final class PlatformEmailController extends Controller
             action: 'mail.test_send',
             entityType: 'mail_delivery',
             entityId: $row === null ? null : (string) $row->id,
-            after: ['template' => $template, 'locale' => $lang, 'recipient' => $masked, 'state' => $state] + $answer,
+            after: ['template' => $template, 'locale' => $lang, 'target' => $target, 'recipient' => $masked, 'state' => $state] + $answer,
         );
 
         return ApiResponse::success([
             'state' => $state,
             'delivery_id' => $row === null ? null : (string) $row->id,
+            'to' => $target,
             'recipient' => $recipient,
             'transport' => $row->transport ?? null,
         ] + $answer, 'Test message recorded.');

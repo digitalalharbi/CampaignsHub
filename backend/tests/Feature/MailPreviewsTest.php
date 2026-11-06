@@ -244,17 +244,16 @@ final class MailPreviewsTest extends TestCase
     {
         foreach ($this->render() as $name => $html) {
             $this->assertStringContainsString('/privacy', $html, "{$name} has no privacy link");
+            // EMAIL-FOOTER-001 (Owner, 2026-11-06) supersedes MAIL-009 for this one part: every message,
+            // an account message included, links to the settings page, so a reader manages mail there
+            // instead of blocking the sender.
+            $this->assertStringContainsString('/app/account/notifications', $html, "{$name} has no link to the notification settings");
 
             if (str_starts_with($name, 'account-')) {
-                $this->assertStringNotContainsString(
-                    '/app/account/notifications', $html,
-                    "{$name} offers to unsubscribe from a message that cannot be switched off",
-                );
-
-                continue;
+                $this->assertStringNotContainsString('/mail/unsubscribe/', $html, "{$name} offers to unsubscribe from a message that cannot be switched off");
+                $this->assertStringNotContainsString('إلغاء الاشتراك', $html, "{$name} offers to unsubscribe from a message that cannot be switched off");
+                $this->assertStringNotContainsString('>Unsubscribe<', $html, "{$name} offers to unsubscribe from a message that cannot be switched off");
             }
-
-            $this->assertStringContainsString('/app/account/notifications', $html, "{$name} has no unsubscribe");
         }
     }
 
