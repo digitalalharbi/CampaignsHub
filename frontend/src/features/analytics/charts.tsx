@@ -229,6 +229,7 @@ export function PlatformDonutChart({
   currency = '',
   colorBy = 'platform',
   legend = true,
+  valueKind = 'money',
 }: {
   /** `key` is the platform's stored key, for its colour; `name` is what the reader sees. */
   data: Array<{ name: string; value: number; key?: string }>
@@ -239,6 +240,8 @@ export function PlatformDonutChart({
   colorBy?: 'platform' | 'series'
   /** Off where the surface draws its own legend — the executive summary's legend is interactive. */
   legend?: boolean
+  /** CONTENT-FORMAT-COMPARISON-001 — a share of RESULTS is a count, and its tooltip must not print it as money. */
+  valueKind?: FmtKind
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const total = data.reduce((a, b) => a + b.value, 0)
@@ -256,7 +259,7 @@ export function PlatformDonutChart({
           <Pie data={rows} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="92%" paddingAngle={2} strokeWidth={2} stroke="var(--surface)">
             {rows.map((r, i) => <Cell key={r.name} fill={color(r.name, i)} />)}
           </Pie>
-          <Tooltip {...tooltipProps} formatter={(v: number) => `${money(v, currency)} · ${percent(v / (total || 1), 1)}`} />
+          <Tooltip {...tooltipProps} formatter={(v: number) => `${fmt(valueKind, currency)(v)} · ${percent(v / (total || 1), 1)}`} />
           {/* REPORT-PLATFORM-LOGOS-001 — a platform slice is named with the platform's own logo, not a bare word. */}
           {legend && <Legend wrapperStyle={{ fontSize: 13 }} content={() => (
             <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-secondary" data-testid="donut-legend">

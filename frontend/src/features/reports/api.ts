@@ -5,7 +5,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
-import type { FormatIntelligencePayload } from '@/features/content/api'
+import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import type { BusinessStreamRow } from './BusinessStreamsSection'
@@ -700,6 +700,8 @@ export interface LivePayload {
    * page would render the block and then read a key off it.
    */
   content_formats?: FormatIntelligencePayload | null
+  /** CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», cut for the link's reader on the server. */
+  content_format_comparison?: FormatComparisonPayload | null
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *

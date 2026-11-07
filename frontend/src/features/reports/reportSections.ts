@@ -17,6 +17,7 @@ export type ReportSectionKey =
   | 'budget_pacing'
   | 'funnel'
   | 'content_performance'
+  | 'content_format_comparison'
   | 'site_measurement'
   | 'store_analytics'
   | 'ga4_overview'
@@ -205,3 +206,36 @@ export function withEvidenceSlides<S extends { id: string; type: string; order: 
   return slides
 }
 
+
+/** CONTENT-FORMAT-COMPARISON-001 — format rows on one printed table page; a longer table is split, never shrunk. */
+export const FORMAT_ROWS_PER_PAGE = 6
+
+/**
+ * CONTENT-FORMAT-COMPARISON-001 — the deck's «مقارنة أنواع المحتوى» pages, only where the server named the part and
+ * sent it (a snapshot from before the part existed gains nothing).
+ *
+ * On screen: one page per objective, with its switches and its drill. On paper (`paged`): per objective a charts page
+ * (share, comparison, ranking) and the table split into pages of `FORMAT_ROWS_PER_PAGE` rows.
+ */
+export function withFormatComparisonSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { content_format_comparison?: { objectives?: Array<{ family: string; formats?: unknown[] }> } | null },
+  paged = false,
+): S[] {
+  const list = data.report_sections
+  const block = data.content_format_comparison
+  if (!Array.isArray(list) || !(list as string[]).includes('content_format_comparison') || block == null) return slides
+  for (const objective of block.objectives ?? []) {
+    if (!paged) {
+      slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
+      continue
+    }
+    slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
+    const rows = objective.formats?.length ?? 0
+    for (let i = 0; i < rows; i += FORMAT_ROWS_PER_PAGE) {
+      slides.push({ id: `__formats_table:${objective.family}:${i}`, type: '__formats_table', order: 9989, visible: true, range: [i, Math.min(i + FORMAT_ROWS_PER_PAGE, rows)] } as S)
+    }
+  }
+
+  return slides
+}

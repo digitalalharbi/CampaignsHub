@@ -33,6 +33,7 @@ import {
 } from './LiveSections'
 import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
 import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
+import { FormatComparisonReportBlock } from '../FormatComparisonBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
@@ -691,6 +692,8 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
 
   return (
     <div className="flex flex-col gap-5">
+      {/* CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» lives in the «المحتوى» tab only; drawn where the server named it. */}
+      <FormatComparisonReportBlock payload={payload} ar={ar} />
       <ContentStrip
         title={ar ? 'الأفضل أداءً' : 'Best performing'}
         items={(payload.ads ?? []).slice(0, 4)}
