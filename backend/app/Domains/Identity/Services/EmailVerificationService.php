@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Services;
 
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
@@ -66,6 +67,9 @@ final class EmailVerificationService
         $user = User::findOrFail($row->user_id);
         if ($user->email_verified_at === null) {
             $user->forceFill(['email_verified_at' => Carbon::now()])->save();
+            // NOTIFICATION-ENROLMENT-001 — a grant that came before the address was proved was refused its notification row;
+            // proving the address is the moment the person becomes reachable, so open it now.
+            app(EnrolMemberNotifications::class)->enrolEverywhere($user, 'email_verified');
             // Advance onboarding out of the email step (only if it was waiting there), landing on the first
             // step the visitor has NOT already answered. Someone who picked their path on the public site
             // arrives with account_type and modules set and must not be asked those questions again.

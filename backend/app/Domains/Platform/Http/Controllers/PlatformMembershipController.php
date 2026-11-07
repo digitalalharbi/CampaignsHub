@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\InvitationService;
 use App\Domains\Identity\Support\UserSessions;
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
 use App\Domains\Notifications\Services\MemberNotices;
 use App\Domains\Platform\Support\WorkspaceOwners;
 use App\Domains\Subscriptions\Services\SubscriptionService;
@@ -227,7 +228,7 @@ final class PlatformMembershipController extends Controller
         match ((string) $data['action']) {
             'change_role' => $this->changeRole($tenantId, $user, (string) $data['role'], $isOwner),
             'suspend' => $this->suspend($tenantId, $user, $isOwner, $memberships),
-            'reactivate' => (clone $memberships)->update(['status' => 'active', 'updated_at' => now()]),
+            'reactivate' => $this->reactivate($tenantId, $user, $memberships),
             default => $this->remove($tenantId, $user, $isOwner, $memberships),
         };
 
@@ -244,6 +245,13 @@ final class PlatformMembershipController extends Controller
         );
 
         return ApiResponse::success(['member' => $after], 'Done.');
+    }
+
+    /** Back in, and reachable: a person whose row was never opened (the address was proved later, or they pre-date enrolment) gets it now. */
+    private function reactivate(string $tenantId, User $user, $memberships): void
+    {
+        (clone $memberships)->update(['status' => 'active', 'updated_at' => now()]);
+        app(EnrolMemberNotifications::class)->enrolQuietly($user, $tenantId, 'platform_reactivate');
     }
 
     private function changeRole(string $tenantId, User $user, string $slug, bool $isOwner): void
