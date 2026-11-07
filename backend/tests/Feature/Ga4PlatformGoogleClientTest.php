@@ -73,6 +73,19 @@ final class Ga4PlatformGoogleClientTest extends TestCase
         $this->assertSame('ga4-own.apps.googleusercontent.com', $fresh['platforms']['ga4']['client_id']);
     }
 
+    public function test_the_client_pair_is_never_mixed_across_two_clients(): void
+    {
+        // A GA4 id with no GA4 secret must not borrow the sign-in secret: that pair is invalid_client at Google.
+        $this->setEnv('GA4_CLIENT_ID', 'ga4-own.apps.googleusercontent.com');
+        $this->setEnv('GA4_CLIENT_SECRET', null);
+        $this->setEnv('GOOGLE_CLIENT_ID', 'sign-in.apps.googleusercontent.com');
+        $this->setEnv('GOOGLE_CLIENT_SECRET', 'sign-in-secret');
+        $fresh = require base_path('config/measurement_platforms.php');
+
+        $this->assertSame('ga4-own.apps.googleusercontent.com', $fresh['platforms']['ga4']['client_id']);
+        $this->assertEmpty($fresh['platforms']['ga4']['client_secret']);
+    }
+
     public function test_sign_in_and_google_ads_keep_their_own_keys_and_ga4_keeps_its_callback(): void
     {
         $this->setEnv('GOOGLE_CLIENT_ID', 'sign-in.apps.googleusercontent.com');

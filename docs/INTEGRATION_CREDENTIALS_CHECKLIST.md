@@ -253,7 +253,7 @@ date its own merchant sold it on. Both facts are stored; neither overwrites the 
 | Apple sign-in | `BLOCKED_EXTERNAL_CREDENTIALS` | `APPLE_CLIENT_ID` · `APPLE_TEAM_ID` · `APPLE_KEY_ID` · `APPLE_PRIVATE_KEY` · `APPLE_REDIRECT_URI` |
 | Email delivery | `BLOCKED_EXTERNAL_CREDENTIALS` | SMTP, or `POSTMARK_API_KEY` / `RESEND_API_KEY` |
 | SMS / WhatsApp | `BLOCKED_EXTERNAL_CREDENTIALS` | Per `config/providers.php`; `Null*` adapters are the default |
-| Google Analytics 4 | `AWAITING_CREDENTIALS` | `GA4_CLIENT_ID` · `GA4_CLIENT_SECRET` — **its own OAuth client, not Google Ads'** · see §4a |
+| Google Analytics 4 | `AWAITING_CREDENTIALS` | uses the **sign-in Google client** (`GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET`) unless `GA4_CLIENT_ID` + `GA4_CLIENT_SECRET` are both set (`GA4-PLATFORM-GOOGLE-CLIENT-001`) · see §4a |
 
 **Email is the one to read carefully.** The whole notification system — digests, alerts, report-ready
 messages, invitations, account mail — is built, scheduled, deduplicated by database constraint and
@@ -288,19 +288,23 @@ It is a third `ProviderKind`, and the separation is load-bearing rather than tid
 - It is **not** counted as a connected advertising platform in any «which platforms are connected»
   answer, and it consumes no ad-account quota.
 
-### The two credentials, and why they are GA4's own
+### The credentials: the platform's Google client (`GA4-PLATFORM-GOOGLE-CLIENT-001`)
 
 | | |
 |---|---|
-| Env | `GA4_CLIENT_ID` · `GA4_CLIENT_SECRET` |
+| Env | none of its own by default: GA4 reads `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` (the sign-in client). Optional override, as a PAIR: `GA4_CLIENT_ID` + `GA4_CLIENT_SECRET` (set the id and both GA4 keys are used) |
 | Config | `config/measurement_platforms.php` (its own file, like `commerce_platforms.php`) |
 | Scope requested | `https://www.googleapis.com/auth/analytics.readonly` — **this one only** |
 | Redirect URI | `{AD_PLATFORM_REDIRECT_BASE or APP_URL}/api/v1/oauth/measurement/ga4/callback` — the SAME base every other provider uses (`callbackBase()` reads that variable first). On production: `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback` |
 | Webhook | **None.** GA4 publishes no webhook; it is polled (`WebhookSupport::PollingOnly`) |
 
-**Do not reuse the Google Ads client.** They are different consent screens asking for different
-scopes: a customer connecting Analytics would be asked for advertising access, and revoking one would
-silently break the other.
+**Consents stay apart by scope, not by client.** The GA4 flow requests `analytics.readonly` only and
+never `include_granted_scopes`, so a customer connecting Analytics is not asked for sign-in or
+advertising access. Adding that scope to the SAME client puts a sensitive scope on the sign-in
+consent screen's list: while the app is in Testing only listed test users can connect (refresh tokens
+expire after 7 days); to serve real customers the app must be published and Google verifies the
+sensitive `analytics.readonly` scope. Setting a separate `GA4_CLIENT_ID`/`GA4_CLIENT_SECRET` pair
+keeps sign-in out of that review.
 
 ### What the Owner must do, in order
 
@@ -316,10 +320,12 @@ silently break the other.
    a claim in front of your customers that this product may change their Analytics configuration. It
    cannot and must not ask to.
 
-3. **OAuth client** — type **Web application**. Add the redirect URI above **byte for byte**. Copy the
-   client id and secret.
+3. **OAuth client** — the existing sign-in client (type **Web application**). ADD the GA4 redirect URI
+   above **byte for byte** beside the sign-in one (`…/api/v1/auth/oauth/google/callback`); both stay.
+   While the app is unverified, add the connecting Google accounts as **test users**.
 
-4. **Put them in the environment** on the API host: `GA4_CLIENT_ID`, `GA4_CLIENT_SECRET`. Never in the
+4. **Environment** on the API host: nothing new if `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set.
+   Only for a separate client: `GA4_CLIENT_ID` and `GA4_CLIENT_SECRET` together. Never in the
    repository. Or store them through `/admin` → provider configuration, which encrypts them at rest and
    takes precedence over the environment.
 
