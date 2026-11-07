@@ -68,7 +68,7 @@ final class Ga4TotalsReconciliationTest extends TestCase
 
         $this->assertSame(1000.0, (float) array_sum(array_column($out['channels'], 'sessions')));
         $this->assertNotContains('unclassified', array_column($out['channels'], 'key'));
-        $this->assertEquals(['total' => 1000.0, 'classified' => 1000.0, 'unclassified' => 0.0, 'rescaled' => false, 'days_covered' => 1, 'days_total' => 1], $out['channels_meta']);
+        $this->assertEquals(['total' => 1000.0, 'measured' => 1000.0, 'classified' => 1000.0, 'unclassified' => 0.0, 'over' => 0.0, 'days_covered' => 1, 'days_total' => 1], $out['channels_meta']);
     }
 
     public function test_a_not_set_bucket_is_kept_and_the_missing_remainder_is_an_explicit_unclassified_slice(): void
@@ -113,7 +113,11 @@ final class Ga4TotalsReconciliationTest extends TestCase
         $this->assertSame(3, $out['devices_meta']['days_covered']);
     }
 
-    public function test_a_breakdown_that_exceeds_the_visits_is_rescaled_to_the_visits_with_whole_numbers(): void
+    /**
+     * Every figure is measured: a breakdown that sums ABOVE the visits is never scaled down. Each slice keeps the value GA4 measured,
+     * the meta names the measured sum and the difference, and nothing is added or removed to make the two agree.
+     */
+    public function test_a_breakdown_that_exceeds_the_visits_keeps_every_measured_value_and_states_the_difference(): void
     {
         $property = $this->property($this->project);
         $this->daily($property, '2026-10-05', ['sessions' => 36361]);
@@ -121,14 +125,15 @@ final class Ga4TotalsReconciliationTest extends TestCase
 
         $out = $this->store('from=2026-10-01&to=2026-10-10');
 
-        $sessions = array_column($out['devices'], 'sessions');
-        $this->assertSame(36361.0, (float) array_sum($sessions), 'the donut and the tile say the same number');
-        foreach ($sessions as $s) {
-            $this->assertSame((float) (int) $s, (float) $s);
-        }
-        $this->assertTrue($out['devices_meta']['rescaled']);
-        $this->assertSame(0.0, (float) $out['devices_meta']['unclassified']);
+        $byKey = array_column($out['devices'], 'sessions', 'key');
+        $this->assertEquals(['mobile' => 30000.0, 'desktop' => 6000.0, 'tablet' => 384.0], $byKey, 'a measured slice was altered');
         $this->assertNotContains('unclassified', array_column($out['devices'], 'key'));
+        $meta = $out['devices_meta'];
+        $this->assertSame(36361.0, (float) $meta['total']);
+        $this->assertSame(36384.0, (float) $meta['measured']);
+        $this->assertSame(23.0, (float) $meta['over']);
+        $this->assertSame(0.0, (float) $meta['unclassified']);
+        $this->assertArrayNotHasKey('rescaled', $meta);
     }
 
     public function test_the_funnel_reads_the_same_daily_figures_as_the_tiles(): void

@@ -5,6 +5,7 @@ import { withGa4Slides } from './reportSections'
 interface Page { id: string; type: string; order: number; visible: boolean; range?: [number, number] }
 
 const data = {
+  website_layout: 1,
   report_sections: ['ga4_overview', 'ga4_acquisition', 'ga4_attribution', 'ga4_platform_gap', 'ga4_gap_reasons', 'ga4_classification', 'ga4_tables', 'ga4_products', 'ga4_pulse'],
   ga4_pulse: { kpis: [] }, ga4_overview: {}, ga4_acquisition: {}, ga4_attribution: { platforms: [{}] }, ga4_platform_gap: {}, ga4_gap_reasons: {},
   ga4_classification: { groups: { channel: { rows: [{}] } } }, ga4_tables: { tables: { sources: { rows: [{}] } } }, ga4_products: { table: { rows: [{}] } },
@@ -43,6 +44,16 @@ describe('the saved report and the PDF follow the website tab', () => {
       const ids = withGa4Slides<Page>([...base], data, paged).map((s) => s.id)
       expect(new Set(ids).size, `paged=${paged}`).toBe(ids.length)
     }
+  })
+
+  it('renders a snapshot frozen before the website tab exactly as it was frozen: old order, the pulse page kept', () => {
+    const { website_layout: _stamp, ...frozen } = data
+    expect(withGa4Slides<Page>([...base], frozen).map((s) => s.type)).toEqual([
+      'cover', 'executive_summary', 'platform_comparison',
+      '__ga4_overview', '__ga4_acquisition', '__ga4_gap', '__ga4_pulse', '__ga4_attribution', '__ga4_reasons', '__ga4_classification', '__ga4_products', '__ga4_tables',
+    ])
+    // A new snapshot (stamped) prints no pulse page.
+    expect(withGa4Slides<Page>([...base], data).some((s) => s.type === '__ga4_pulse')).toBe(false)
   })
 
   it('gives a snapshot from before the parts existed no website page', () => {

@@ -499,6 +499,12 @@ final class ReportGenerator
              * platform rows; a client-facing report never receives the campaigns table.
              */
             ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
+            /*
+             * REPORT-WEBSITE-TAB-001 — the layout this snapshot was frozen under. A snapshot WITHOUT this stamp was saved before the
+             * website tab existed and renders its pages exactly as then (its store-pulse page included); one with it renders the website
+             * pages in the tab's order. The stamp is never added to, or removed from, a stored snapshot.
+             */
+            'website_layout' => 1,
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.

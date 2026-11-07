@@ -10,7 +10,7 @@ import { ChartCard } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
 import { useState } from 'react'
 import type { FixedColumn } from '@/components/ui/FixedPageTable'
-import { sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
+import { frozenBeforeWebsiteTab, sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
 
 /**
  * GA4-REPORT-SECTIONS-001 — the store reading inside a report: the live link and the saved report
@@ -171,7 +171,7 @@ export function ClassificationBlock({ data, ar, pageSize = 8, paged = false, gro
 }
 
 const SLIDE_TITLE: Record<string, { ar: string; en: string }> = {
-  __ga4_pulse: { ar: 'الموقع', en: 'Website' },
+  __ga4_pulse: { ar: 'ملخص الموقع', en: 'Website summary' },
   __ga4_attribution: { ar: 'مطابقة الإسناد', en: 'Attribution match' },
   __ga4_reasons: { ar: 'سبب الفرق', en: 'Why the gap' },
   __ga4_classification: { ar: 'تصنيف', en: 'Classify' },
@@ -214,9 +214,10 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_gap':
       return data.ga4_platform_gap ? <div data-testid="slide-ga4-gap">{head('__ga4_gap')}<Ga4Gap gap={data.ga4_platform_gap} ar={ar} /></div> : null
     case '__ga4_tables':
-      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={withoutProducts(data.ga4_tables, (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
+      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={withoutProducts(data.ga4_tables, !frozenBeforeWebsiteTab(data as { website_layout?: unknown }) && (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
     case '__ga4_pulse':
-      return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<WebsiteStrip payload={data} ar={ar} /></div> : null
+      // Only a snapshot frozen before the website tab has this page: it renders as it was frozen, its tiles and funnel included.
+      return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
     case '__ga4_attribution':
       return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}<AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={paged ? 6 : 8} paged={paged} range={slide.range} /></div> : null
     case '__ga4_reasons':

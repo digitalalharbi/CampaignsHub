@@ -404,12 +404,12 @@ final class Ga4StoreAnalytics
      * A one-dimension breakdown as donut slices: sessions, purchases, revenue and each slice's share
      * of the visits. Null when the property never returned the breakdown — absent, not an empty ring.
      *
-     * WEBSITE-TOTALS-001 — the slices ALWAYS sum to the headline visits (`$total`):
-     *   - short of it (the breakdown was synced for fewer days, or GA4 left sessions out): an explicit
-     *     `unclassified` slice carries the remainder, with no purchases or revenue of its own;
-     *   - over it (GA4 restates the two reports at different times): the sessions are scaled down
-     *     proportionally and rounded to whole visits by largest remainder, so the sum is exact. The
-     *     purchases and revenue stay the rows' own.
+     * WEBSITE-TOTALS-001 — every slice is the value GA4 measured; nothing is scaled, ever:
+     *   - short of the headline visits (the breakdown was synced for fewer days, or GA4 left sessions
+     *     out): an explicit, computed `unclassified` slice carries the remainder (visits − measured sum),
+     *     with no purchases or revenue of its own, so the ring closes on the visits;
+     *   - over it (GA4 restates the two reports at different times): the slices stay as measured and the
+     *     meta states the measured sum and the difference (`over`); the page names it, it never hides it.
      * With no headline figure the slices stand on their own sum, as before.
      *
      * @param  list<array{date: string, d1: string, d2: string, m: array<string, mixed>}>|null  $rows
@@ -432,41 +432,19 @@ final class Ga4StoreAnalytics
             'revenue_usd' => $a['revenue_usd'],
         ])->sortBy([['sessions', 'desc'], ['key', 'asc']])->values()->all();
 
-        if ($sum > $total && $sum > 0) {
-            $items = $this->rescaled($items, $total);
-        } elseif ($sum < $total) {
+        if ($sum < $total) {
             $items[] = ['key' => 'unclassified', 'sessions' => round($total - $sum, 2), 'purchases' => null, 'revenue' => null, 'revenue_usd' => null];
         }
 
-        return array_map(static fn (array $i): array => $i + ['share' => $total > 0 ? round($i['sessions'] / $total, 4) : null], $items);
-    }
+        // The ring's whole: the visits when the slices close onto them, the measured sum when they run over.
+        $whole = max($total, $sum);
 
-    /**
-     * @param  list<array<string, mixed>>  $items
-     * @return list<array<string, mixed>>
-     */
-    private function rescaled(array $items, float $total): array
-    {
-        $sum = array_sum(array_column($items, 'sessions'));
-        $target = (int) round($total);
-        $exact = array_map(static fn (array $i): float => $i['sessions'] / $sum * $target, $items);
-        $floor = array_map(static fn (float $e): int => (int) floor($e), $exact);
-        $left = $target - array_sum($floor);
-        $order = array_keys($exact);
-        usort($order, static fn (int $x, int $y): int => ($exact[$y] - $floor[$y]) <=> ($exact[$x] - $floor[$x]) ?: $x <=> $y);
-        foreach (array_slice($order, 0, max(0, $left)) as $i) {
-            $floor[$i]++;
-        }
-        foreach ($items as $i => $item) {
-            $items[$i]['sessions'] = (float) $floor[$i];
-        }
-
-        return $items;
+        return array_map(static fn (array $i): array => $i + ['share' => $whole > 0 ? round($i['sessions'] / $whole, 4) : null], $items);
     }
 
     /**
      * What closed (or did not close) a breakdown against the visits: the figure, what the breakdown held, the remainder,
-     * whether it was scaled, and on how many of the window's days it had rows.
+     * what it measured above the visits, and on how many of the window's days it had rows.
      *
      * @param  list<array{date: string, d1: string, d2: string, m: array<string, mixed>}>|null  $rows
      * @return array<string, mixed>|null
@@ -486,9 +464,10 @@ final class Ga4StoreAnalytics
 
         return [
             'total' => round($total, 2),
+            'measured' => round($sum, 2),
             'classified' => round(min($sum, $total), 2),
             'unclassified' => round(max(0.0, $total - $sum), 2),
-            'rescaled' => $sum > $total,
+            'over' => round(max(0.0, $sum - $total), 2),
             'days_covered' => min(count($dates), max($daysTotal, 1)),
             'days_total' => $daysTotal,
         ];

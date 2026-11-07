@@ -194,6 +194,7 @@ export function donutRows(slices: StoreSlice[], labels: Record<string, L>, ar: b
 function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; title: string; slices: StoreSlice[] | null | undefined; labels: Record<string, L>; ar: boolean; meta?: StoreBreakdownMeta | null }) {
   const rows = slices ? donutRows(slices, labels, ar) : []
   const total = rows.reduce((a, b) => a + b.value, 0)
+  const over = meta?.over ?? 0
 
   return (
     <ChartCard title={title}>
@@ -201,13 +202,21 @@ function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; ti
         <div data-testid={`${testId}-absent`} className="grid place-items-center" style={{ height: 260 }}><Badge tone="neutral">{ar ? 'غير متاح' : 'Unavailable'}</Badge></div>
       ) : (
         <div data-testid={testId} data-slices={rows.length}>
-          <PlatformDonutChart data={rows} colorBy="series" height={260} centerLabel={ar ? 'الزيارات' : 'Sessions'} centerValue={num(total)} />
-          {/* One number per figure: the centre is the visits figure; a breakdown that does not cover it says so with a slice and a chip. */}
-          {meta && (meta.unclassified > 0 || meta.rescaled) && (
+          {/*
+            Every slice is measured; nothing is scaled. A ring that closes onto the visits (an unclassified slice included) is centred
+            on the visits; a ring that runs over them is centred on its own measured sum, labelled as such, and a chip names the difference.
+          */}
+          <PlatformDonutChart data={rows} colorBy="series" height={260}
+            centerLabel={over > 0 ? (ar ? 'مجموع التقسيم' : 'Breakdown sum') : (ar ? 'الزيارات' : 'Sessions')} centerValue={num(total)} />
+          {meta && (meta.unclassified > 0 || over > 0) && (
             <div className="mt-1 flex flex-wrap justify-center gap-1.5" data-testid={`${testId}-coverage`}>
               {meta.unclassified > 0 && <Badge tone="warning">{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></Badge>}
               {meta.days_total > 0 && meta.days_covered < meta.days_total && <Badge tone="neutral"><Num>{`${meta.days_covered}/${meta.days_total}`}</Num> {ar ? 'يوم' : 'days'}</Badge>}
-              {meta.rescaled && <Badge tone="neutral">{ar ? 'مطابَق للإجمالي' : 'Matched to total'}</Badge>}
+              {over > 0 && (
+                <Badge tone="neutral" data-testid={`${testId}-over`}>
+                  <Num>{`+${num(over)}`}</Num> {ar ? 'عن الزيارات (تقارير Google تُحدَّث في أوقات مختلفة)' : 'over visits (Google updates its reports at different times)'}
+                </Badge>
+              )}
             </div>
           )}
         </div>
