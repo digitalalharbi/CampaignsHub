@@ -112,3 +112,12 @@ Provider and credential state is [`docs/INTEGRATION_CREDENTIALS_CHECKLIST.md`](I
 1. `git fetch origin`, then read `docs/RESUME_STATE.md` and the permanent requirements file.
 2. Take the next item in the queue that document names, on a fresh branch from `origin/main`.
 3. Keep this file's *Last verified commit* and *Active pull requests* current at each milestone.
+
+## GA4 attribution match (branch `feat/ga4-attribution-match`, stacked on `feat/ga4-store-analytics`, no PR)
+
+Ledger row 145; matrix rows GA4-ATTRIBUTION-MATCH-001, GA4-CLASSIFICATION-001, GA4-VISIBILITY-001, GA4-GAP-EXPLAINED-001,
+GA4-ALERTS-001. One matcher (`Ga4AttributionMatcher`), one visibility catalogue (`Ga4Visibility`), one gap decomposition
+(`Ga4GapExplainer`), seven `ga4_*` alert types on the existing engine. Nothing here is LIVE_VERIFIED: a real property with
+UTM-tagged ad URLs and a store is the external prerequisite. Verify with `Ga4|Report|Alert|Digest|Guard` on `ptest.sh`,
+`npx tsc -b`, `npx vitest run`, and `e2e/ga4-store-analytics.spec.ts` on chromium. Safe next action: merge `origin/main` when the
+Lander lands the base branch (no rebase, no force-push).

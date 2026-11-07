@@ -634,6 +634,14 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'tracking_health', 'label_ar' => 'سلامة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
                     // LAUNCH-ADVANCE-001 — a launched account that now earns a better stage; an opportunity, never an automatic change.
                     ['key' => 'launch_advance', 'label_ar' => 'مرحلة إطلاق أفضل متاحة', 'label_en' => 'Better launch stage available', 'color' => '#10b981', 'icon' => 'trending-up'],
+                    // GA4-ALERTS-001 — the store as GA4 measured it; rules are created by people, so none exist until somebody makes one.
+                    ['key' => 'ga4_sales_drop', 'label_ar' => 'انخفاض مبيعات المتجر (GA4)', 'label_en' => 'Store sales drop (GA4)', 'color' => '#ef4444', 'icon' => 'trending-down'],
+                    ['key' => 'ga4_bounce_spike', 'label_ar' => 'ارتفاع الارتداد (GA4)', 'label_en' => 'Bounce spike (GA4)', 'color' => '#f59e0b', 'icon' => 'activity'],
+                    ['key' => 'ga4_cvr_drop', 'label_ar' => 'انخفاض التحويل (GA4)', 'label_en' => 'Conversion drop (GA4)', 'color' => '#ef4444', 'icon' => 'trending-down'],
+                    ['key' => 'ga4_aov_shift', 'label_ar' => 'تغيّر متوسط السلة (GA4)', 'label_en' => 'Basket shift (GA4)', 'color' => '#f59e0b', 'icon' => 'shopping-cart'],
+                    ['key' => 'ga4_attribution_gap', 'label_ar' => 'فرق الإسناد (GA4)', 'label_en' => 'Attribution gap (GA4)', 'color' => '#f97316', 'icon' => 'git-compare'],
+                    ['key' => 'ga4_tracking_loss', 'label_ar' => 'فقدان التتبع (GA4)', 'label_en' => 'Tracking loss (GA4)', 'color' => '#dc2626', 'icon' => 'radar'],
+                    ['key' => 'ga4_unmatched_spend', 'label_ar' => 'إنفاق بلا أثر (GA4)', 'label_en' => 'Unmatched spend (GA4)', 'color' => '#f97316', 'icon' => 'circle-slash'],
                 ],
             ],
             [

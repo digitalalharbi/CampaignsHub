@@ -14,7 +14,7 @@ import { useUi } from '@/stores/ui'
 import { SiteKpis, type SiteKpi } from './SiteKpis'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 import { TrafficExplorer } from './TrafficExplorer'
-import { Ga4StoreSection } from './ga4/Ga4StoreSection'
+import { Ga4Workbench } from './ga4/Ga4Workbench'
 import { Num } from '@/components/ui/Num'
 
 /**
@@ -108,7 +108,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
       </div>
 
       {/* GA4-STORE-ANALYTICS-001 — the store reading: tiles, charts, GA4 vs platforms, fixed-size tables. */}
-      {projectId && <Ga4StoreSection projectId={projectId} range={range} ar={ar} />}
+      {projectId && <Ga4Workbench projectId={projectId} range={range} ar={ar} />}
 
       {d.kpis && d.previous_period && <SiteKpis kpis={d.kpis} previous={d.previous_period} ar={ar} />}
 

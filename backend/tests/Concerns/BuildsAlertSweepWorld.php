@@ -82,6 +82,8 @@ trait BuildsAlertSweepWorld
         $this->otherSignals();
         $this->tenantRules();
         $this->secondTenant();
+        // GA4-ALERTS-001 — last, so the identifiers every earlier row was given stay where the baseline has them.
+        $this->ga4Signals();
 
         // A sweep runs with no project open, and the tenant it reads is the one it sets.
         app(ProjectContext::class)->forget();
@@ -332,6 +334,42 @@ trait BuildsAlertSweepWorld
     }
 
     /** @param array<string, mixed> $over */
+    /**
+     * GA4-ALERTS-001 — a selected property whose store fell off a cliff while the platforms kept spending: every GA4 type fires.
+     *
+     * Sales, conversion and sessions collapse, bounce rises, the basket moves, and the platforms' campaigns have claims, spend and
+     * no GA4 trace. Added to the world without touching a row any earlier type reads.
+     */
+    private function ga4Signals(): void
+    {
+        $tokens = app(TokenVault::class)->open(tenantId: (string) $this->tenant->id, provider: 'ga4', tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)), connectionName: 'ga4-store-conn');
+        $property = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id, 'provider_connection_id' => $tokens->getKey(), 'provider' => 'ga4',
+            'account_type' => 'ga4_property', 'external_id' => '424242', 'name' => 'Store', 'status' => 'active', 'discovered_at' => Carbon::now(), 'currency' => 'USD', 'timezone' => 'Asia/Riyadh', 'last_synced_at' => Carbon::now(),
+        ]);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id, 'project_id' => $this->project->id,
+            'external_account_id' => $property->id, 'provider' => 'ga4', 'purpose' => 'analytics', 'is_active' => true,
+        ]);
+        // The campaigns' money is SAR; the share of spend that has no GA4 trace needs it in one unit.
+        DB::table('currency_rates')->insert(['id' => (string) Str::uuid(), 'base_currency' => 'USD', 'quote_currency' => 'SAR', 'rate' => 3.75, 'rate_date' => '2026-09-01', 'source' => 'manual', 'created_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
+        foreach ([
+            '2026-10-10' => ['sessions' => 5000, 'bounce_rate' => 0.30, 'transactions' => 100, 'revenue' => 10000],
+            '2026-10-17' => ['sessions' => 100, 'bounce_rate' => 0.70, 'transactions' => 1, 'revenue' => 600],
+        ] as $date => $values) {
+            foreach ($values as $key => $value) {
+                DB::table('measurement_daily_metrics')->insert([
+                    'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $property->id,
+                    'property_id' => '424242', 'metric_date' => $date, 'metric_key' => $key, 'value' => $value, 'currency' => $key === 'revenue' ? 'USD' : null,
+                    'timezone' => 'Asia/Riyadh', 'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+                ]);
+            }
+        }
+        foreach (['ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend'] as $ga4Type) {
+            $this->alertRule(str_replace('_', '-', $ga4Type), $ga4Type, ['threshold' => ['pct' => 20, 'days' => 7], 'project_id' => (string) $this->project->id]);
+        }
+    }
+
     private function alertRule(string $label, string $type, array $over = [], ?Tenant $tenant = null): void
     {
         $this->rules[$label] = AlertRule::create($over + [
