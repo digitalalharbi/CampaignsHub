@@ -295,8 +295,7 @@ final class CreativePresenter
          * what a cover cache is for.
          */
         $cover = CoverCache::urlFor($creative);
-        $demo = (bool) $creative->is_demo;
-        $still = fn (?string $url): ?string => CoverCache::hotlinkable($creative->provider, $url, $demo) ? $url : null;
+        $still = fn (?string $url): ?string => CoverCache::hotlinkable($url) ? $url : null;
         $image = $cover ?? $still($this->safe($creative->asset_url));
         $video = $this->safe($creative->video_url);
         // TIKTOK-MEDIA-002 — cached cover first, the provider's live link second, the honest absence last.
@@ -780,7 +779,7 @@ final class CreativePresenter
     {
         $safe = $this->safe($url);
 
-        return CoverCache::hotlinkable($creative->provider, $safe, (bool) $creative->is_demo) ? $safe : null;
+        return CoverCache::hotlinkable($safe) ? $safe : null;
     }
 
     private function text(mixed $value): ?string

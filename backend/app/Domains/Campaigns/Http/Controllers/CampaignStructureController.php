@@ -185,7 +185,7 @@ final class CampaignStructureController extends Controller
                 'name' => $ad->creative->name,
                 'format' => $ad->creative->format,
                 // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
-                'thumbnail_url' => CoverCache::displayUrlFor($ad->creative->provider, $ad->creative->cover_path, $ad->creative->thumbnail_url, (bool) $ad->creative->is_demo),
+                'thumbnail_url' => CoverCache::displayUrlFor($ad->creative->cover_path, $ad->creative->thumbnail_url),
                 'preview_url' => $ad->creative->preview_url,
             ],
         ];

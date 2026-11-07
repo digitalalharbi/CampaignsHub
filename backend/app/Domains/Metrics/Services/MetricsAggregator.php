@@ -1611,9 +1611,9 @@ final class MetricsAggregator
             ->join('external_creatives as c', 'c.id', '=', 'm.creative_id')
             ->whereIn('m.campaign_id', $campaignIds)
             ->whereBetween('m.metric_date', [$from->toDateString(), $to->toDateString()])
-            ->select('m.campaign_id', 'c.id as creative_id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path', 'c.is_demo')
+            ->select('m.campaign_id', 'c.id as creative_id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path')
             ->selectRaw('SUM(m.spend) AS spend, SUM(m.impressions) AS impressions, SUM(m.clicks) AS clicks, SUM(m.conversions) AS conversions')
-            ->groupBy('m.campaign_id', 'c.id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path', 'c.is_demo')
+            ->groupBy('m.campaign_id', 'c.id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path')
             ->orderByDesc('spend')
             ->get();
 
@@ -1632,7 +1632,7 @@ final class MetricsAggregator
                 'format' => $r->format,
                 'provider' => $r->provider,
                 // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
-                'thumbnail_url' => CoverCache::displayUrlFor($r->provider, $r->cover_path, $r->thumbnail_url, (bool) $r->is_demo),
+                'thumbnail_url' => CoverCache::displayUrlFor($r->cover_path, $r->thumbnail_url),
                 'spend' => round($spend, 2),
                 'impressions' => round($impr, 2),
                 'clicks' => round((float) $r->clicks, 2),

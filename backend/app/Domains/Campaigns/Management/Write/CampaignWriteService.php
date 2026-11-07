@@ -457,9 +457,9 @@ final class CampaignWriteService
                 ->whereNotNull('external_creative_id')
                 ->orderByDesc('last_active_at')
                 ->limit(60)
-                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id', 'provider', 'cover_path', 'is_demo'])
+                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id', 'cover_path'])
                 // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
-                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => CoverCache::displayUrlFor($c->provider, $c->cover_path, $c->thumbnail_url, (bool) $c->is_demo)])
+                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => CoverCache::displayUrlFor($c->cover_path, $c->thumbnail_url)])
                 ->values()->all();
         }
 

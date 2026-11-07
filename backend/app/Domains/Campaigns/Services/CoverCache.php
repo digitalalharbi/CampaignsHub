@@ -48,15 +48,12 @@ final class CoverCache
     public const STATE_FAILED = 'failed';
 
     /**
-     * Platforms whose media links are short-lived signed CDN grants. Their links are COPIED, never handed to a
-     * browser: Meta's `scontent-*.fbcdn.net` (`oe=`), TikTok's `*-sign.tiktokcdn.com` / `ibyteimg.com`
-     * (`x-expires`). Snapchat is deliberately absent — its media link is what draws today, and the Owner's
-     * report names it as the one platform that works.
+     * The CDNs whose media links are short-lived signed grants: Meta's `scontent-*.fbcdn.net` (`oe=`) and its
+     * `facebook.com` / Instagram image hosts, TikTok's `*-sign.tiktokcdn.com` / `ibyteimg.com` (`x-expires`).
+     * Their links are COPIED, never handed to a browser. Snapchat's media host is deliberately absent — its link
+     * is what draws today, and the Owner's report names it as the one platform that works.
      */
-    public const COPY_ONLY_PROVIDERS = ['meta', 'tiktok'];
-
-    /** The CDN hosts of those grants, for a row whose provider column alone would not say so. */
-    private const COPY_ONLY_HOSTS = ['fbcdn.net', 'facebook.com', 'fbsbx.com', 'cdninstagram.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'ibyteimg.com', 'byteimg.com'];
+    private const COPY_ONLY_HOSTS = ['fbcdn.net', 'facebook.com', 'fbsbx.com', 'cdninstagram.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'tiktokcdn-eu.com', 'ibyteimg.com', 'byteimg.com', 'byteoversea.com'];
 
     private const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -105,11 +102,11 @@ final class CoverCache
     /**
      * CREATIVE-PREVIEWS-001 — may a browser be handed this link for a still?
      *
-     * Our own root-relative paths and inline images, yes. A short-lived platform grant (by provider, or by
-     * host for a row that does not say), never — it is copied instead. Anyone else's link, while the expiry
+     * Our own root-relative paths and inline images, yes. A short-lived platform grant (known by its CDN
+     * host), never — it is copied instead. Anyone else's link, while the expiry
      * it states (if any) has not passed: a lapsed link draws a broken frame, which reads as a broken product.
      */
-    public static function hotlinkable(?string $provider, ?string $url, bool $demo = false): bool
+    public static function hotlinkable(?string $url): bool
     {
         if (! is_string($url) || trim($url) === '') {
             return false;
@@ -117,7 +114,9 @@ final class CoverCache
         if ((str_starts_with($url, '/') && ! str_starts_with($url, '//')) || str_starts_with(strtolower($url), 'data:image/')) {
             return true;
         }
-        if ((! $demo && in_array(strtolower((string) $provider), self::COPY_ONLY_PROVIDERS, true)) || self::isCopyOnlyHost($url)) {
+        // Known by its HOST, not by the row's provider: Meta's and TikTok's grants live on these CDNs only, and a
+        // link of theirs on any other host is not one of the short-lived grants this rule is about.
+        if (self::isCopyOnlyHost($url)) {
             return false;
         }
         $expiry = AssetExpiry::fromUrl($url);
@@ -126,9 +125,9 @@ final class CoverCache
     }
 
     /** The still for a row read straight from the table (no model): our copy, else a link that may be shown. */
-    public static function displayUrlFor(?string $provider, mixed $coverPath, ?string $providerUrl, bool $demo = false): ?string
+    public static function displayUrlFor(mixed $coverPath, ?string $providerUrl): ?string
     {
-        return self::urlForPath($coverPath) ?? (self::hotlinkable($provider, $providerUrl, $demo) ? $providerUrl : null);
+        return self::urlForPath($coverPath) ?? (self::hotlinkable($providerUrl) ? $providerUrl : null);
     }
 
     public static function isCopyOnlyHost(string $url): bool
