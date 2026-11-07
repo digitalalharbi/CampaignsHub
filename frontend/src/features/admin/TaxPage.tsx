@@ -84,7 +84,7 @@ export function TaxPage() {
                     {review.data.rows.map((r) => (
                       <tr key={r.invoice_id} data-testid={`tax-review-${r.number}`} className="border-t border-border">
                         <td className="px-3 py-2 text-text-primary"><bdi>{r.number}</bdi> <span className="text-text-muted">{r.tenant}</span>
-                          {r.issued_at && <span className="ms-2 text-[11px] text-text-muted">{fmtDate(r.issued_at)}</span>}</td>
+                          {r.issued_at && <span className="ms-2 text-xs text-text-muted">{fmtDate(r.issued_at)}</span>}</td>
                         <td className="px-3 py-2"><Num>{r.total}</Num> {r.currency}</td>
                         <td className="px-3 py-2">{r.charged === null ? '—' : <><Num>{r.charged}</Num> {r.currency}</>}</td>
                         <td className="px-3 py-2 text-warning">{r.issues.map((i) => (ar ? ISSUE[i]?.ar : ISSUE[i]?.en) ?? i).join(' · ')}</td>
@@ -116,7 +116,7 @@ function EditionRow({ e, ar, treatments }: { e: TaxEdition; ar: boolean; treatme
     <li data-testid={`tax-edition-${e.number}`} className="grid gap-2 rounded-xl border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-text-primary">{e.label}</span>
-        <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">{e.currency} · {e.status}</span>
+        <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{e.currency} · {e.status}</span>
         <span className="text-xs text-text-muted">
           {ar ? `${e.subscriptions_keeping_their_terms} اشتراك قائم يحتفظ بشروطه` : `${e.subscriptions_keeping_their_terms} existing subscriptions keep their terms`}
         </span>

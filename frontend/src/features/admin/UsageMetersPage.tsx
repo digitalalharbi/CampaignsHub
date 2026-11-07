@@ -59,10 +59,10 @@ function MeterRow({ m, ar }: { m: AdminUsageMeter; ar: boolean }) {
     <li data-testid={`admin-meter-${m.code}`} className="grid gap-2 rounded-xl border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-text-primary">{ar ? m.name_ar : m.name}</span>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ownKey ? 'bg-info/15 text-info' : 'bg-surface-secondary text-text-secondary'}`}>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ownKey ? 'bg-info/15 text-info' : 'bg-surface-secondary text-text-secondary'}`}>
           {ownKey ? (ar ? 'على مفتاح العميل — لا يُخصم أبدًا' : "Customer's own key — never charged") : (ar ? 'تدفعه المنصة' : 'Paid by the platform')}
         </span>
-        <span data-testid={`admin-meter-state-${m.code}`} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.charges ? 'bg-warning/15 text-warning' : 'bg-surface-secondary text-text-muted'}`}>
+        <span data-testid={`admin-meter-state-${m.code}`} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${m.charges ? 'bg-warning/15 text-warning' : 'bg-surface-secondary text-text-muted'}`}>
           {m.charges ? (ar ? 'يُخصم من الرصيد' : 'Charges credits') : (ar ? 'يُسجَّل فقط' : 'Recorded only')}
         </span>
       </div>

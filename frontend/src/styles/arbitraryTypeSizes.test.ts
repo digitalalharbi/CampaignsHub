@@ -29,11 +29,12 @@ const ALLOW = {
 /**
  * Post-migration count (1,115 before the codemod, counting everything). Only ever lower it.
  *
- * 2026-11-07 — re-baselined once, at the merge of the type-scale branch with the main that had moved on (batch/pricing-tenancy-1):
- * the codemod was re-run over the merged tree, and the 39 sizes it leaves are ones with no scale step within 1px (11px, 9px)
- * that landed in main (GA4, integrations, reports, console panels) after 729 was measured. From here the number only goes down.
+ * 2026-11-07 — re-based once at the merge of the type-scale branch into a main that had moved on (batch/pricing-tenancy-1).
+ * Measured: origin/main with this codemod applied is already 762 (729 was measured on an older main; the extra sizes are
+ * 11px/10px in GA4, integrations and reports code with no scale step within 1px). The batch's own nine 11px sizes were
+ * migrated to text-xs (13px, the smallest step; +2px on captions), so the batch adds none. From here the number only goes down.
  */
-const REMAINING = 768
+const REMAINING = 759
 
 /** Scale classes the migration emits; each must resolve to a real token. */
 const MAPPED_STEPS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'] as const

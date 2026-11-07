@@ -51,7 +51,7 @@ export function TenantCreditsPanel({ tenantId, ar }: { tenantId: string; ar: boo
                 <span className="text-text-primary">{ar ? m.name_ar : m.name}</span>
                 <span className="ms-auto text-text-secondary">
                   <Num>{m.used.toLocaleString('en-US')}</Num>{m.included !== null && <> / <Num>{m.included.toLocaleString('en-US')}</Num></>}
-                  {m.funded_by === 'customer' && <span className="ms-2 text-[11px] text-text-muted">{ar ? 'على مفتاح العميل' : "on the customer's key"}</span>}
+                  {m.funded_by === 'customer' && <span className="ms-2 text-xs text-text-muted">{ar ? 'على مفتاح العميل' : "on the customer's key"}</span>}
                 </span>
               </li>
             ))}
