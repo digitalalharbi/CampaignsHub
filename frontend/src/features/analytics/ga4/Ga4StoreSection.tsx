@@ -6,6 +6,7 @@ import { useSwrQuery } from '@/lib/query/swr'
 import { ChartCard } from '../charts'
 import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tables, Ga4Tiles } from './Ga4StoreView'
 import type { StorePayload } from './storeTypes'
+import { hideParam } from './visibility'
 
 /**
  * GA4-STORE-ANALYTICS-001 — the store reading on the Analytics «site» tab: tiles first, then the
@@ -14,12 +15,12 @@ import type { StorePayload } from './storeTypes'
  * The tab above this decides «not connected / not selected / empty»; this part draws only a ready
  * reading and stays silent otherwise, so the page never says the same thing twice.
  */
-export function Ga4StoreSection({ projectId, range, ar }: { projectId: string; range: { from: string; to: string }; ar: boolean }) {
+export function Ga4StoreSection({ projectId, range, ar, hide = [] }: { projectId: string; range: { from: string; to: string }; ar: boolean; hide?: string[] }) {
   const q = useSwrQuery({
     name: 'ga4-store',
-    scope: [projectId],
+    scope: [projectId, [...hide].sort().join(',')],
     window: [range.from, range.to],
-    queryFn: () => getData<StorePayload>(`/projects/${projectId}/measurement/store?from=${range.from}&to=${range.to}`),
+    queryFn: () => getData<StorePayload>(`/projects/${projectId}/measurement/store?from=${range.from}&to=${range.to}${hideParam(hide)}`),
   })
 
   if (q.isLoading) {

@@ -86,14 +86,18 @@ final class Ga4SiteAnalyticsTest extends TestCase
         // GA4-CAMPAIGN-LANDING-PATH-001 — the campaign → landing page path is asked in GA4's own names.
         Http::assertSent(fn (Request $r) => str_contains($r->url(), ':runReport') && array_column($r['dimensions'], 'name') === ['date', 'sessionCampaignName', 'landingPage']
             && in_array('ecommercePurchases', array_column($r['metrics'], 'name'), true));
-        $this->assertSame(14, DB::table('measurement_dimension_rows')->count(), 'eight breakdowns, five added by TRAFFIC-DRILLDOWN-001, and the product breakdown (GA4-STORE-ANALYTICS-001)');
+        $this->assertSame(18, DB::table('measurement_dimension_rows')->count(), 'eight breakdowns, five added by TRAFFIC-DRILLDOWN-001, the product breakdown (GA4-STORE-ANALYTICS-001), and four for the attribution match (GA4-ATTRIBUTION-MATCH-001)');
+        // GA4-ATTRIBUTION-MATCH-001 — the match's keys are asked in GA4's documented dimension names.
+        foreach ([['sessionCampaignId', 'sessionCampaignName'], ['sessionGoogleAdsCampaignId', 'sessionGoogleAdsCampaignName'], ['landingPagePlusQueryString'], ['itemCategory']] as $dims) {
+            Http::assertSent(fn (Request $r) => str_contains($r->url(), ':runReport') && array_column($r['dimensions'], 'name') === ['date', ...$dims]);
+        }
         $row = DB::table('measurement_dimension_rows')->where('breakdown', 'source_medium')->first();
         $this->assertSame('sessionSource-value', $row->dimension_1);
         $this->assertSame('sessionMedium-value', $row->dimension_2);
         $this->assertSame(3.0, (float) json_decode($row->metrics, true)['purchases']);
         $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->sole();
         $this->assertSame(1, (int) $run->records, 'records stay the daily figures');
-        $this->assertSame(14, $run->meta['breakdown_rows']);
+        $this->assertSame(18, $run->meta['breakdown_rows']);
     }
 
     public function test_a_failing_breakdown_is_named_and_the_daily_figures_still_land(): void

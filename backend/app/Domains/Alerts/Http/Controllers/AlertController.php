@@ -67,6 +67,8 @@ final class AlertController extends Controller
         'tracking_health',
         // LAUNCH-ADVANCE-001 — an account that earned a better launch stage since its plan went out.
         'launch_advance',
+        // GA4-ALERTS-001 — the store as GA4 measured it.
+        'ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend',
     ];
 
     /**

@@ -199,6 +199,10 @@
                     @if ($row['attention'] || $row['follow'])
                         <div style="font-size:12px; color:{{ $row['attention'] ? $tone['warn'] : '#5b6b68' }}; line-height:1.6; margin-top:2px;">{{ $t['follow_up'] }}: {{ $row['attention'] ?? $row['follow'] }}</div>
                     @endif
+                    @if (! empty($row['ga4']))
+                        {{-- GA4-DIGEST-001 — the block takes the locale's direction and every Latin fragment is its own left-to-right island: `dir="auto"` read the Latin «GA4» first and reversed the Arabic line. --}}
+                        <div data-block="ga4-line" dir="{{ $dir }}" style="font-size:12px; color:#5b6b68; line-height:1.6; margin-top:2px; text-align:{{ $startSide }}; direction:{{ $dir }};"><span dir="ltr" style="unicode-bidi:isolate;">GA4</span>@foreach ($row['ga4'] as $part) &middot; <span dir="ltr" style="unicode-bidi:isolate;">{{ $part['value'] }}</span>{{ $part['label'] !== '' ? ' '.$part['label'] : '' }}@endforeach</div>
+                    @endif
                 </td>
                 @if ($row['objective'])
                     <td width="104" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:{{ $toneBg[$row['tone']] }}; border-radius:{{ $startSide === 'right' ? '12px 0 12px 0' : '0 12px 0 12px' }};">

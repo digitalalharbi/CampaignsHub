@@ -100,4 +100,112 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('slide-ga4-tables')).toBeVisible()
     await expect(page.getByTestId('slide-ga4-tables').getByTestId('ga4-table-tab-campaigns')).toHaveCount(0)
   })
+  // ---------------------------------------------------------------- GA4-ATTRIBUTION-MATCH-001 / GA4-VISIBILITY-001 / GA4-GAP-EXPLAINED-001
+
+  test('the match drills platform to campaign to landing pages in a box that never moves, and the filter chips narrow it', async ({ page, request }) => {
+    test.setTimeout(150_000)
+    await selectProject(page, await seededProject(request, STORE_PROJECT))
+    await page.goto('/agency/analytics?tab=site')
+
+    await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('match-basis')).toHaveText(/GA4/)
+    const table = page.getByTestId('match-table-box')
+    await table.scrollIntoViewIfNeeded()
+    const level1 = await box(table)
+    const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
+
+    // Platform -> campaigns.
+    await page.locator('[data-testid^="match-drill-platform-"]').first().click()
+    await expect(page.getByTestId('match-crumb-platform')).toBeVisible()
+    expect(await box(page.getByTestId('match-table-box')), 'drilling to campaigns resized the table').toEqual(level1)
+    await expect(page.getByTestId('confidence-utm').or(page.getByTestId('confidence-id')).first()).toBeVisible()
+
+    // Campaign -> landing pages, then back with the breadcrumb.
+    await page.locator('[data-testid^="match-drill-campaign-"]').first().click()
+    await expect(page.getByTestId('match-crumb-campaign')).toBeVisible()
+    expect(await box(page.getByTestId('match-landing-table-box')), 'the landing level resized the table').toEqual(level1)
+    await page.getByTestId('match-crumb-platform').click()
+    await expect(page.getByTestId('match-table-box')).toBeVisible()
+    await page.getByTestId('match-crumb-root').click()
+    expect(await box(page.getByTestId('match-table-box'))).toEqual(level1)
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(pageHeight)
+
+    // A platform chip narrows the match, the classification and the gap together.
+    const rowsBefore = await page.locator('[data-testid^="match-drill-platform-"]').count()
+    await page.locator('[data-testid^="ga4-filter-platform-"]:not([data-testid$="-all"])').first().click()
+    await expect(page.locator('[data-testid^="match-drill-platform-"]')).toHaveCount(1)
+    expect(rowsBefore).toBeGreaterThan(1)
+    await page.getByTestId('ga4-filter-platform-all').click()
+  })
+
+  test('the classification switches grouping with one control and keeps its box', async ({ page, request }) => {
+    test.setTimeout(120_000)
+    await selectProject(page, await seededProject(request, STORE_PROJECT))
+    await page.goto('/agency/analytics?tab=site')
+    await expect(page.getByTestId('ga4-classify')).toBeVisible({ timeout: 30000 })
+
+    const table = page.getByTestId('ga4-classify-table-box')
+    await table.scrollIntoViewIfNeeded()
+    const first = await box(table)
+    for (const group of ['source_medium', 'platform', 'campaign', 'landing_page', 'device', 'country', 'user_type', 'product', 'product_category', 'channel']) {
+      await page.getByTestId(`ga4-group-${group}`).click()
+      await expect(page.getByTestId(`ga4-group-${group}`)).toHaveAttribute('aria-checked', 'true')
+      expect(await box(table), `grouping by ${group} resized the table`).toEqual(first)
+    }
+  })
+
+  test('the reasons of the gap are measured: they sum to the gap, the unmeasured carry no number, and a reason opens its rows', async ({ page, request }) => {
+    test.setTimeout(120_000)
+    await selectProject(page, await seededProject(request, STORE_PROJECT))
+    await page.goto('/agency/analytics?tab=site')
+    await expect(page.getByTestId('gap-reasons')).toBeVisible({ timeout: 30000 })
+
+    await expect(page.getByTestId('gap-headline-gap')).toBeVisible()
+    await expect(page.getByTestId('gap-bar')).toBeVisible()
+    await expect(page.getByTestId('gap-unexplained')).toBeVisible()
+    const unmeasured = page.getByTestId('gap-unmeasured-view_through')
+    await expect(unmeasured).toBeVisible()
+    expect(((await unmeasured.textContent()) ?? '').replace(/[^0-9]/g, '')).toBe('')
+    await page.getByTestId('gap-reason-no_trace').click()
+    await expect(page.getByTestId('gap-reason-drill')).toBeVisible()
+  })
+
+  test('sales can be hidden in one click and the figures are gone from the data, not only the page; a saved view remembers it', async ({ page, request }) => {
+    test.setTimeout(120_000)
+    await selectProject(page, await seededProject(request, STORE_PROJECT))
+    await page.goto('/agency/analytics?tab=site')
+    await expect(page.getByTestId('ga4-tile-revenue')).toBeVisible({ timeout: 30000 })
+
+    const responses: string[] = []
+    page.on('response', async (r) => {
+      if (r.url().includes('/measurement/store')) responses.push(await r.text())
+    })
+    await page.getByTestId('ga4-visibility-preset-marketing').click()
+    await expect(page.getByTestId('ga4-tile-revenue')).toHaveCount(0)
+    await expect(page.getByTestId('ga4-tile-aov')).toHaveCount(0)
+    await expect(page.getByTestId('ga4-tile-sessions')).toBeVisible()
+    await expect.poll(() => responses.length).toBeGreaterThan(0)
+    expect(responses.at(-1), 'the store response still carried a revenue tile').not.toContain('"key":"revenue"')
+
+    await page.getByTestId('ga4-visibility-preset-all').click()
+    await expect(page.getByTestId('ga4-tile-revenue')).toBeVisible()
+  })
+
+  test('the live link carries the attribution part for a client, scoped to what it names, without a campaign name or a spend figure', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.context().clearCookies()
+    await page.goto(`/r/${LIVE_TOKEN}?view=dashboard`)
+    const ga4 = page.getByTestId('report-ga4')
+    await expect(ga4).toBeVisible({ timeout: 30000 })
+
+    await expect(ga4.getByTestId('report-ga4-attribution')).toBeVisible()
+    // The demo link names campaigns, so the store-wide parts (pulse, classification, products, reasons) are not its to carry.
+    await expect(ga4.getByTestId('report-ga4-reasons')).toHaveCount(0)
+    await expect(ga4.getByTestId('report-ga4-pulse')).toHaveCount(0)
+    await expect(ga4.getByTestId('report-ga4-classification')).toHaveCount(0)
+    for (const campaign of ['eid_collection', 'retargeting_30d', 'abaya_search', 'new_arrivals']) {
+      await expect(ga4).not.toContainText(campaign)
+    }
+    await expect(ga4).not.toContainText(/الإنفاق|Spend|ROAS/)
+  })
 })
