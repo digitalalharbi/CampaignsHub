@@ -38,7 +38,7 @@ test.describe('the website tab of a live link', () => {
     await expect(page.getByTestId('live-freshness')).toHaveCount(0)
   })
 
-  test('the summary strip opens the website tab; a part can be hidden and shown again', async ({ page }) => {
+  test('the summary strip opens the website tab', async ({ page }) => {
     test.setTimeout(120_000)
     await page.goto(`/r/${LIVE_TOKEN}`)
     const strip = page.getByTestId('website-strip')
@@ -75,4 +75,22 @@ test.describe('the website tab of a live link', () => {
     // No spend on a link that hides spend: the demo client link carries none.
     await expect(page.getByTestId('daily-metric-spend')).toHaveCount(0)
   })
+
+  for (const theme of ['dark', 'light'] as const) {
+    test(`the website tab and the chart do not scroll sideways on a phone, Arabic, ${theme}`, async ({ page }) => {
+      test.setTimeout(120_000)
+      await page.addInitScript(([l, t]) => {
+        window.localStorage.setItem('campaign-hub-locale', l)
+        window.localStorage.setItem('campaign-hub-theme', t)
+      }, ['ar', theme] as const)
+      await page.setViewportSize({ width: 375, height: 812 })
+      for (const view of ['website', 'tables']) {
+        await page.goto(`/r/${LIVE_TOKEN}?view=${view}`)
+        await expect(page.getByTestId(`live-mode-${view}`)).toBeVisible({ timeout: 30_000 })
+        await page.waitForLoadState('networkidle')
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+        expect(overflow, `${view} scrolls sideways at 375px`).toBeLessThanOrEqual(0)
+      }
+    })
+  }
 })
