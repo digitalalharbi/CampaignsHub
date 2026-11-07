@@ -51,8 +51,11 @@ final class CredentialMail extends Mailable
     /** A member added to a workspace by somebody else, choosing their password for the first time. */
     public const MEMBER_SETUP = 'member_setup';
 
+    /** LOGIN-004 — proof, by mail, that a provider account belongs with this account: opened in the browser that asked. */
+    public const OAUTH_LINK = 'oauth_link';
+
     public function __construct(
-        /** One of the four constants above. */
+        /** One of the five constants above. */
         public readonly string $purpose,
         public readonly string $lang = 'ar',
         /** A code the reader types. Mutually exclusive with `$url`. */
@@ -63,6 +66,8 @@ final class CredentialMail extends Mailable
         public readonly int $expiresInMinutes = 60,
         /** Which workspace they were added to. Only `MEMBER_SETUP` has one. */
         public readonly string $workspace = '',
+        /** Which provider is being connected. Only `OAUTH_LINK` has one. */
+        public readonly string $provider = '',
     ) {}
 
     public function envelope(): Envelope
@@ -190,6 +195,20 @@ final class CredentialMail extends Mailable
                     : 'Your account was added to CampaignsHub. Choose a password to sign in.',
                 'action' => 'Choose a password',
                 'not_you' => 'Not expecting this message? Ignore it. The account cannot be used until a password is chosen.',
+            ],
+
+            self::OAUTH_LINK => $ar ? [
+                'subject' => "ربط حساب {$this->provider}",
+                'title' => "ربط حساب {$this->provider}",
+                'intro' => "طلبت ربط حساب {$this->provider} بحسابك في كامبينز هب. افتح الرابط من المتصفح نفسه الذي بدأت منه لإكمال الربط والدخول.",
+                'action' => 'ربط ودخول',
+                'not_you' => 'إذا لم تطلب ذلك فتجاهل الرسالة؛ لن يُربط شيء ولن يُفتح أي حساب. إن تكررت دون طلب منك، غيّر كلمة المرور من إعدادات الأمان.',
+            ] : [
+                'subject' => "Connect your {$this->provider} account",
+                'title' => "Connect your {$this->provider} account",
+                'intro' => "You asked to connect a {$this->provider} account to your CampaignsHub account. Open the link in the same browser you started from to finish and sign in.",
+                'action' => 'Connect and sign in',
+                'not_you' => 'If you did not ask for this, ignore the message. Nothing is connected and no account is opened. If it keeps arriving, change your password in your security settings.',
             ],
 
             self::EMAIL_VERIFICATION => $ar ? [

@@ -141,6 +141,12 @@ export interface CatalogueType {
    */
   digest_switch: 'daily' | 'weekly' | 'monthly' | null
   sent_by: string
+  /**
+   * NOTIFICATION-CHANNELS-001 — what the PRODUCT does with this type, from the server's one policy:
+   * whether there is a bell item at all, whether the email is a switch, a digest or a lock, and whether
+   * WhatsApp is planned for it. Optional so an older payload still renders as before.
+   */
+  channels?: { in_app: boolean; email: 'immediate' | 'digest' | 'mandatory' | 'off'; whatsapp: 'planned' | 'never' }
 }
 
 export interface NotifPrefs {
@@ -152,7 +158,9 @@ export interface NotifPrefs {
    * screen renders these directly rather than re-deriving them, so there is one resolution order in
    * the product and it lives in PHP.
    */
-  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm; min_severity?: Importance | null }>
+  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm; min_severity?: Importance | null; whatsapp?: boolean }>
+  /** Whether WhatsApp can be switched on by THIS person today. The number is only ever a hint (last four). */
+  whatsapp?: { provider_configured: boolean; opted_in: boolean; opted_out: boolean; number_hint: string | null }
   /** What this install has. SMS is listed and unavailable until an adapter is wired. */
   available_channels?: { key: string; available: boolean }[]
   catalogue: { key: string; types: CatalogueType[] }[]
@@ -196,6 +204,27 @@ export type NotifPrefsInput = Partial<
 
 export function useNotifPrefs() {
   return useQuery({ queryKey: ['settings', 'notifications'], queryFn: () => getData<NotifPrefs>('/settings/notifications') })
+}
+export type TestChannel = 'in_app' | 'email' | 'whatsapp'
+export function useTestChannel() {
+  return useMutation({
+    mutationFn: (channel: TestChannel) => postData<{ channel: TestChannel; state: string }>('/settings/notifications/channel-test', { channel }),
+  })
+}
+export function useWhatsAppOptIn() {
+  const qc = useQueryClient()
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['settings', 'notifications'] }) }
+  return {
+    start: useMutation({
+      mutationFn: (b: { phone: string; consent: boolean }) =>
+        postData<{ verification_id: string; delivery_status: string; resend_after: number; dev_code: string | null }>('/settings/notifications/whatsapp/start', b),
+    }),
+    confirm: useMutation({
+      mutationFn: (b: { verification_id: string; code: string; consent: boolean }) => postData('/settings/notifications/whatsapp/confirm', b),
+      onSuccess: refresh,
+    }),
+    withdraw: useMutation({ mutationFn: () => deleteData('/settings/notifications/whatsapp'), onSuccess: refresh }),
+  }
 }
 export function useSaveNotifPrefs() {
   const qc = useQueryClient()

@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { deleteData, ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export interface LoginInput {
@@ -211,4 +211,55 @@ export async function startOAuth(
 ): Promise<{ authorize_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorize_url: string }>(`/auth/oauth/${provider}/start`, context)
+}
+
+/**
+ * LOGIN-004 — a Google account whose verified address matches an account here, waiting for its owner to prove it.
+ *
+ * The server keeps the profile (ten minutes, one use) in THIS browser's session; the page only ever sees what it needs to draw the
+ * card. The masked address is the account's own, never anybody else's, and nothing here is a secret.
+ */
+export interface PendingLink {
+  provider: string
+  name: string | null
+  email: string | null
+  avatar: string | null
+  /** `mo•••@example.com` — enough to recognise your own address. */
+  local_email: string
+  expires_in: number
+  email_sent: boolean
+  can_email: boolean
+}
+
+export async function fetchPendingLink(): Promise<PendingLink> {
+  return getData<PendingLink>('/auth/oauth/pending-link')
+}
+
+interface LinkedSignIn {
+  user: AuthUser
+  /** Where the server sends this account — the same answer the password form and the Google callback get. */
+  destination: string
+}
+
+/** Prove ownership with the account's password: the sign-in form's own check, then link and sign in. */
+export async function confirmLinkWithPassword(password: string): Promise<LinkedSignIn> {
+  await ensureCsrfCookie()
+  return postData<LinkedSignIn>('/auth/oauth/pending-link/password', { password })
+}
+
+/** Mail a one-time link to the account's own address. `delivery` is honest: `awaiting_credentials` means nothing left. */
+export async function sendLinkEmail(): Promise<{ delivery: string; resend_after: number }> {
+  await ensureCsrfCookie()
+  return postData('/auth/oauth/pending-link/email')
+}
+
+/** Spend the mailed link — only works in the browser session that asked for it. */
+export async function confirmLinkWithEmail(token: string): Promise<LinkedSignIn> {
+  await ensureCsrfCookie()
+  return postData<LinkedSignIn>('/auth/oauth/pending-link/confirm-email', { token })
+}
+
+export async function cancelPendingLink(): Promise<void> {
+  await ensureCsrfCookie()
+  await deleteData<null>('/auth/oauth/pending-link')
 }

@@ -165,6 +165,17 @@ final class MessageCatalogue
             'journey_transition' => self::event('operations', null, 'RequestJourneyService'),
             'client_needs_attention' => self::event('operations', null, 'ClientManagementService'),
             /*
+             * NOTIFICATION-CHANNELS-001 — a rule the person built, matched something.
+             *
+             * It reached the bell only: the type was in no list, so the dispatcher wrote `in_app_only`.
+             * Email is ON by default because this goes to the rule's author alone, about a rule they
+             * wrote to be told. `legacy` is `performance` — the category it was ACTUALLY resolved under
+             * until now — so a person who switched «الأداء» email off keeps it off rather than being
+             * surprised by a new mail; the category here is `operations` so that a manager's
+             * «performance» recipient arrangement does not start including it.
+             */
+            'automation_rule' => self::event('operations', 'performance', 'RuleEvaluator', defaultEmail: true),
+            /*
              * LEAD-SLA-NOTIFICATION-001 — a promise to a buyer that has not been kept.
              *
              * Email is ON by default, which is deliberate and rare here. The other operations types
@@ -185,6 +196,8 @@ final class MessageCatalogue
             'email_verification' => self::mandatory('RegistrationVerificationService'),
             'sign_in_code' => self::mandatory('CredentialMail::SIGN_IN_CODE'),
             'member_setup' => self::mandatory('PasswordResetService::inviteExistingMember'),
+            // LOGIN-004 — proof that a Google account belongs with this account; without it a person could not finish signing in.
+            'oauth_link' => self::mandatory('OAuthPendingLinkController::email'),
             'invitation' => self::mandatory('InvitationService'),
             'security_alert' => self::mandatory('SecurityAlertMail'),
             // A person's standing in a workspace changed: they must be able to notice somebody else did it.
@@ -212,7 +225,7 @@ final class MessageCatalogue
      */
     public static function carriesSecret(string $kind): bool
     {
-        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'invitation'], true);
+        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'oauth_link', 'invitation'], true);
     }
 
     /**

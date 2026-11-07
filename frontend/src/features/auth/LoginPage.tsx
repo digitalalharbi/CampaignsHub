@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
@@ -7,6 +7,7 @@ import { resolvePostAuthOutcome } from './postAuthDestination'
 import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
 import { EmailCodeSignIn } from './EmailCodeSignIn'
+import { OAuthLinkCard, type LinkedSignIn } from './OAuthLinkCard'
 import { OtpField } from './OtpField'
 import { HelpRequestModal } from './HelpRequestModal'
 import { ErrorNote, IconField } from './loginFields'
@@ -149,7 +150,7 @@ const OAUTH_NOTES: Record<'ar' | 'en', Record<string, string>> = {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const setUser = useAuth((s) => s.setUser)
   const status = useAuth((s) => s.status)
   const { locale } = useUi()
@@ -174,6 +175,16 @@ export function LoginPage() {
    * same thing, which is the only way a review of it means anything.
    */
   const phoneCompat = import.meta.env.DEV && params.get('e2e') === 'phone'
+
+  const signedInHere = useRef(false)
+  // LOGIN-004 — the secret of a mailed link, taken once and then removed from the address bar.
+  const [linkToken] = useState(() => (params.get('oauth') === 'link' ? params.get('confirm') : null))
+  useEffect(() => {
+    if (!params.has('confirm')) return
+    const next = new URLSearchParams(params)
+    next.delete('confirm')
+    setParams(next, { replace: true })
+  }, [params, setParams])
 
   const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
@@ -206,6 +217,18 @@ export function LoginPage() {
    */
   useEffect(() => {
     if (status !== 'authenticated') return
+    /*
+     * REDIRECT-ONCE-001 — a sign-in made HERE has already decided where it goes.
+     *
+     * `setUser(user)` flips `status`, which is what wakes this effect — so every password and code sign-in
+     * asked the server for the destination twice (two `/auth/memberships`) and navigated twice, a few
+     * milliseconds apart, to the same address. Nothing was visible: both landed on the same page. But the
+     * second `replace` interrupted whatever the browser had started in between — an in-app link, a deep
+     * link typed straight after sign-in — which Firefox and WebKit report as `NS_BINDING_ABORTED` and
+     * «interrupted by another navigation to /app/dashboard». The effect is for the OTHER way onto this page:
+     * a session that already existed.
+     */
+    if (signedInHere.current) return
     /*
      * WORKSPACE-SWITCH-001 — the switcher sent this person here because the server refused the session. If the boot probe
      * still answers 200, bouncing onward returns them to the switcher, which sends them back here, with no end to it.
@@ -262,6 +285,7 @@ export function LoginPage() {
   const signIn = useMutation({
     mutationFn: () => login({ email: email.trim(), password, remember, portal: null }),
     onSuccess: async (user) => {
+      signedInHere.current = true
       setUser(user)
       const { destination } = await resolvePostAuthOutcome(params, null)
       navigate(destination, { replace: true })
@@ -280,6 +304,7 @@ export function LoginPage() {
     mutationFn: async (typed: string) => {
       const user = await phoneSignInVerify(verificationId!, typed, remember)
 
+      signedInHere.current = true
       setUser(user)
       const { destination } = await resolvePostAuthOutcome(params, null)
 
@@ -337,6 +362,37 @@ export function LoginPage() {
   }
 
   const oauthReason = params.get('oauth')
+
+  /*
+   * LOGIN-004 — Google returned an address that matches an account here: prove it is yours, in this card, instead of a dead end.
+   *
+   * The secret in a mailed link is read once and taken out of the address bar at once; the rest (who Google is, which account it
+   * matches) stays on the server and arrives through the card's own request.
+   */
+  if (oauthReason === 'link') {
+    return (
+      <AuthShell portal="default">
+        <div data-testid="login-column" className="mx-auto w-full max-w-[440px]">
+          <OAuthLinkCard
+            locale={locale}
+            confirmToken={linkToken}
+            onSignedIn={({ user, destination }: LinkedSignIn) => {
+              // Same rule as the password and code paths: this request owns the redirect, the «already signed in» effect does not.
+              signedInHere.current = true
+              setUser(user)
+              navigate(destination, { replace: true })
+            }}
+            onLeave={() => {
+              const next = new URLSearchParams(params)
+              next.delete('oauth')
+              next.delete('confirm')
+              setParams(next, { replace: true })
+            }}
+          />
+        </div>
+      </AuthShell>
+    )
+  }
   const oauthNote = oauthReason !== null ? (OAUTH_NOTES[locale][oauthReason] ?? OAUTH_NOTES[locale].failed) : null
 
   return (

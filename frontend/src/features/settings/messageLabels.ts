@@ -106,6 +106,8 @@ export const TYPE_LABELS: Record<string, Words> = {
   request: { ar: 'طلب جديد أو تحديث عليه', en: 'A request, new or updated' },
   journey_transition: { ar: 'انتقال طلب إلى مرحلة جديدة', en: 'A request moved to a new stage' },
   client_needs_attention: { ar: 'عميل يحتاج انتباهًا', en: 'A client needs attention' },
+  // NOTIFICATION-CHANNELS-001 — what a rule the person built did, which used to reach the bell and nothing else.
+  automation_rule: { ar: 'تطابق قاعدة أتمتة', en: 'An automation rule matched' },
   client_request: { ar: 'طلب عميل جديد أو تحديث عليه', en: 'A client request, new or updated' },
   // المالية
   subscription: { ar: 'الاشتراك والفواتير', en: 'Subscription and invoices' },
@@ -113,6 +115,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   password_reset: { ar: 'إعادة تعيين كلمة المرور', en: 'Password reset' },
   email_verification: { ar: 'تأكيد البريد الإلكتروني', en: 'Email verification' },
   sign_in_code: { ar: 'رمز تسجيل الدخول', en: 'Sign-in code' },
+  oauth_link: { ar: 'تأكيد ربط Google', en: 'Google link confirmation' },
   member_setup: { ar: 'تهيئة حساب عضو جديد', en: 'New member account setup' },
   invitation: { ar: 'دعوة للانضمام', en: 'Invitation to join' },
   security_alert: { ar: 'تنبيه أمني', en: 'Security alert' },
@@ -147,6 +150,10 @@ export const TYPE_NOTES: Record<string, Words> = {
   message: {
     ar: 'يصلك داخل النظام دائمًا. البريد مغلق افتراضيًا لأن رسائل المحادثات كثيرة.',
     en: 'Always reaches the bell. Email is off by default — conversations are frequent.',
+  },
+  automation_rule: {
+    ar: 'يصلك على البريد وداخل النظام عندما تطابق قاعدة كتبتها حملة أو إعلانًا.',
+    en: 'Reaches your inbox and the bell when a rule you wrote matches a campaign or an ad.',
   },
   security_alert: {
     ar: 'عند تسجيل دخول جديد أو تغيير كلمة المرور.',
