@@ -70,6 +70,8 @@ final class AgencyRequestsInboxColumnsTest extends TestCase
         ]);
 
         $rows = collect($this->actingAs($user, 'sanctum')->getJson('/api/v1/app/requests')->assertOk()->json('data'))->keyBy('reference');
+        // UX-COMPACT-CHARTS-001 — the same request query yields the daily inflow without an aggregate error (sorted, eager-loaded).
+        $this->assertCount(14, $this->actingAs($user, 'sanctum')->getJson('/api/v1/app/requests')->json('meta.inflow'));
 
         $this->assertSame('Razzah Avenue', $rows['REQ-2026-INBOX1']['client']);
         $this->assertSame('Razzah Store', $rows['REQ-2026-INBOX1']['project']);

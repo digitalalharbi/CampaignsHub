@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, Send } from 'lucide-react'
-import { createPortalRequest } from '../clientPortalApi'
+import { ArrowLeft, Loader2, Paperclip, Send } from 'lucide-react'
+import { createPortalRequest, portalStartUpload, portalUploadFile } from '../clientPortalApi'
 import { getRequestMeta } from '../api'
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { fetchPortalOverview, fetchPortalVisibility } from './portalOverviewApi'
 import { listClientReports, listPortalInvoices } from './portalAccountApi'
 import { useClientSpacePath, useClientSpaceSlug } from './clientSpace'
+import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -40,6 +41,25 @@ export function ClientNewRequestPage() {
   const [message, setMessage] = useState('')
   const [relatedKind, setRelatedKind] = useState<'' | 'report' | 'invoice'>('')
   const [relatedId, setRelatedId] = useState('')
+  // CP-REQ-ONE-001 — attachments go to a temporary upload session first; the request claims them when it is sent.
+  const [uploadToken, setUploadToken] = useState<string | null>(null)
+  const [attached, setAttached] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const onFile = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      let token = uploadToken
+      if (!token) { token = (await portalStartUpload()).upload_token; setUploadToken(token) }
+      const m = await portalUploadFile(token, file)
+      setAttached((a) => [...a, m.original_name])
+    } catch (e) {
+      setUploadError(toApiError(e).message)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const create = useMutation({
     mutationFn: () => createPortalRequest({
@@ -48,6 +68,7 @@ export function ClientNewRequestPage() {
       priority,
       ...(projectId === '' ? {} : { project_id: projectId }),
       ...(relatedKind === '' || relatedId === '' ? {} : { related: { kind: relatedKind, id: relatedId } }),
+      ...(uploadToken === null ? {} : { upload_token: uploadToken }),
     }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['client', 'requests'] })
@@ -63,7 +84,7 @@ export function ClientNewRequestPage() {
     ? (reports.data ?? []).map((r) => ({ id: r.id, label: r.name }))
     : relatedKind === 'invoice' ? (invoices.data?.items ?? []).map((i) => ({ id: i.id, label: i.number })) : []
   const projects = overview.data?.projects ?? []
-  const ready = type !== '' && message.trim().length >= 5 && !create.isPending
+  const ready = type !== '' && message.trim().length >= 5 && !create.isPending && !uploading
 
   const field = 'w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text-primary'
 
@@ -145,6 +166,18 @@ export function ClientNewRequestPage() {
               className={field}
             />
           </label>
+
+          <div className="grid gap-1.5">
+            <label className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary">
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />} {ar ? 'إرفاق ملف' : 'Attach a file'}
+              <input data-testid="new-request-attach" type="file" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = '' }} />
+            </label>
+            {attached.length > 0 && (
+              <p data-testid="new-request-attached" className="text-[12px] text-text-secondary">{ar ? 'المرفقات' : 'Attached'}: {attached.join('، ')}</p>
+            )}
+            {uploadError && <p role="alert" data-testid="new-request-upload-error" className="text-[12px] text-danger">{uploadError}</p>}
+          </div>
 
           {create.isError && (
             <p role="alert" className="text-sm text-danger">
