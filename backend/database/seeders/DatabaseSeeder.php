@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
 
         // 1c) Global subscription plan catalogue (starter/growth/scale) — structural, safe in production.
         $this->call(SubscriptionPlanSeeder::class);
+        $this->call(AddonSeeder::class);
 
         // 1d) Canonical platform taxonomy (definitions + options) — structural, idempotent, all environments.
         $this->call(TaxonomyEngineSeeder::class);

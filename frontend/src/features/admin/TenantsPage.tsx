@@ -16,6 +16,7 @@ import { SupportAccessDialog } from './SupportAccessDialog'
 import { TenantLimitsPanel } from './TenantLimitsPanel'
 import { TenantSubscriptionPanel } from './TenantSubscriptionPanel'
 import { AddTenantMember, PendingInvitations } from './TenantPeoplePanel'
+import { TenantAddonsPanel } from './TenantAddonsPanel'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -276,6 +277,8 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 
           {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
           <TenantCapabilitiesPanel tenantId={id} ar={ar} />
+          {/* PRICING-ADDONS-001 — requests to approve, add-ons to cancel or grant. */}
+          <TenantAddonsPanel tenantId={id} ar={ar} />
 
           <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}

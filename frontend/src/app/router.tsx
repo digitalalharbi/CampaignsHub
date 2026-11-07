@@ -113,6 +113,7 @@ const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 
 const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
 const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
 const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
+const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'AddonsPage')
 const AgencyDashboardPage = lazyPage(() => import('@/features/agency/AgencyDashboardPage'), 'AgencyDashboardPage')
 const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
 const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
@@ -542,6 +543,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // own entry rather than a tab inside Tenants.
             { path: 'registrations', element: <RegistrationsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
+            { path: 'addons', element: <AddonsPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.

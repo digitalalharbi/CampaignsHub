@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Database\Seeders\AddonSeeder;
 use Database\Seeders\MetricDefinitionSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
@@ -73,6 +74,7 @@ final class ProvisionPlatformCommand extends Command
         PermissionSeeder::class,
         RequestCatalogSeeder::class,
         SubscriptionPlanSeeder::class,
+        AddonSeeder::class,
         TaxonomyEngineSeeder::class,
         MetricDefinitionSeeder::class,
     ];
