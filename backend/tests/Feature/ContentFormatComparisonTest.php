@@ -279,6 +279,29 @@ final class ContentFormatComparisonTest extends TestCase
         $this->assertSame(['from' => '2026-08-02', 'to' => '2026-08-31'], $this->ask()['previous_period']);
     }
 
+    /**
+     * A format whose creatives delivered nothing in this window is no gap in the money: the formats that did deliver
+     * still add to the total, and the comparison says so rather than «cannot tell».
+     */
+    public function test_a_format_with_no_delivery_in_the_window_does_not_break_reconciliation(): void
+    {
+        $c = $this->campaign('sales');
+        $this->creatives($this->meta, $c, 'image', 2, ['spend' => 40.0, 'conversions' => 4.0]);
+        $idle = $this->creative($this->meta, $c, 'video', ['spend' => 70.0, 'conversions' => 7.0]);
+        DB::table('creative_daily_metrics')->where('creative_id', $idle)->update(['metric_date' => '2026-06-01']);
+        $other = $this->campaign('traffic', 'T');
+        $quiet = $this->creative($this->meta, $other, 'image', ['spend' => 5.0, 'clicks' => 5.0]);
+        DB::table('creative_daily_metrics')->where('creative_id', $quiet)->update(['metric_date' => '2026-06-01']);
+
+        $answer = $this->ask();
+        $sales = collect($answer['objectives'])->firstWhere('family', 'sales');
+
+        $this->assertEquals(80.0, $answer['totals']['spend']);
+        $this->assertTrue($sales['reconciles'], 'an idle format is not an unknown part of the money');
+        $this->assertTrue($answer['totals']['reconciles'], 'an idle objective is not an unknown part of the money');
+        $this->assertNull(collect($sales['formats'])->firstWhere('format', 'video')['spend'], 'no delivery reads as no figure, never as zero');
+    }
+
     // ── the Analytics endpoint ───────────────────────────────────────────────────────────────────────
 
     public function test_the_endpoint_returns_the_service_answer_and_requires_a_session(): void
@@ -329,6 +352,34 @@ final class ContentFormatComparisonTest extends TestCase
         $internal = $this->read($this->link($this->report('internal')))[ContentFormatComparison::KEY];
         $this->assertEquals(200.0, $internal['totals']['spend']);
         $this->assertEquals(4.0, $internal['objectives'][0]['winner']['value']);
+    }
+
+    /**
+     * The link's own switches reach the comparison: hidden spend takes every money figure from an INTERNAL link too,
+     * a chosen KPI list takes the figures it left out, and «compared with the previous period» off takes each format's
+     * «before» and the window it names.
+     */
+    public function test_the_links_switches_reach_the_comparison(): void
+    {
+        $this->reportFixture();
+
+        $hidden = $this->read($this->link($this->report('internal'), ['hide_spend' => true]))[ContentFormatComparison::KEY];
+        $this->assertSame([], $this->moneyNumbers($hidden), 'a link that hides spend carries no money in the comparison');
+        $this->assertEquals(35.0, $hidden['objectives'][0]['totals']['results']);
+
+        $open = $this->read($this->link($this->report('client'), ['settings' => ['sections' => ['previous_comparison' => true]]]))[ContentFormatComparison::KEY];
+        $this->assertArrayHasKey('previous', $open['objectives'][0]['formats'][0]);
+        $this->assertIsNumeric($open['objectives'][0]['formats'][0]['ctr'] ?? 0.0);
+
+        $cut = $this->read($this->link($this->report('client'), [
+            'settings' => ['sections' => ['previous_comparison' => false]],
+            'scope' => ['metrics' => ['conversions']],
+        ]))[ContentFormatComparison::KEY];
+        $format = $cut['objectives'][0]['formats'][0];
+        $this->assertArrayNotHasKey('previous_period', $cut, 'the previous window is not named when the comparison with it is off');
+        $this->assertArrayNotHasKey('previous', $format);
+        $this->assertNull($format['ctr'], 'an unchosen KPI is not carried');
+        $this->assertNotNull($format['results'], 'the chosen result is');
     }
 
     public function test_hiding_the_part_takes_it_out_of_the_json_the_csv_and_the_pdf_data(): void
@@ -428,13 +479,14 @@ final class ContentFormatComparisonTest extends TestCase
         ]);
     }
 
-    private function link(Report $report): string
+    /** @param array<string, mixed> $opts */
+    private function link(Report $report, array $opts = []): string
     {
         app(TenantContext::class)->setTenantId((string) $this->tenant->getKey());
         [, $raw] = app(ShareService::class)->create($report->fresh(), ['scope' => [
             'project_id' => (string) $this->project->getKey(), 'campaign_ids' => [], 'account_ids' => [(string) $this->meta->getKey(), (string) $this->snap->getKey()],
             'providers' => [], 'dynamic_campaigns' => true, 'earliest' => '2026-09-01', 'latest' => '2026-09-30',
-        ]], null);
+        ] + (array) ($opts['scope'] ?? [])] + array_diff_key($opts, ['scope' => true]), null);
         app(ProjectContext::class)->forget();
         app(TenantContext::class)->forget();
 

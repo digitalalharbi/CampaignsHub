@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeResultAttribution;
 use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Reports\Services\CreativeRankingService;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\HiddenMoney;
 use Illuminate\Support\Carbon;
 
@@ -183,10 +184,13 @@ final class ContentFormatComparison
             }
             $result = (string) ($objective['result_metric'] ?? '');
             $cost = (string) ($objective['cost_metric'] ?? '');
-            if (isset($off['results']) || ($result !== '' && isset($off[$result]))) {
+            // The objective's result is answered by its own KPI («conversions» for sales) or by the generic «results»:
+            // it leaves only when neither was chosen. Its cost likewise — and a per-unit cost is a KPI of its own,
+            // chosen or not with spend ({@see ChosenFigures}); a link hiding spend is cut by forAudience(), not here.
+            if (isset($off['results']) && ($result === '' || isset($off[$result]))) {
                 $keys = [...$keys, 'results', 'share_of_results', 'results_known_share'];
             }
-            if (isset($off['spend']) || isset($off['cost_per_result']) || ($cost !== '' && isset($off[$cost]))) {
+            if (isset($off['cost_per_result']) && ($cost === '' || isset($off[$cost]))) {
                 $keys = [...$keys, 'cost_per_result', 'value'];
             }
 
@@ -265,7 +269,7 @@ final class ContentFormatComparison
                 'original_currency' => $spend === null ? ($total['money_original_currency'] ?? null) : null,
                 'impressions' => $total['impressions'] ?? null,
                 'clicks' => $total['clicks'] ?? null,
-                'reconciles' => $this->reconciles($spend, array_map(static fn (array $o) => $o['totals']['spend'], $objectives)),
+                'reconciles' => $this->reconciles($spend, array_map(static fn (array $o) => $o['totals']['spend'], self::delivered($objectives, static fn (array $o): int => (int) $o['totals']['creatives_with_metrics']))),
             ],
             'coverage' => [
                 'creatives_total' => count($creatives),
@@ -337,12 +341,13 @@ final class ContentFormatComparison
             'lower_is_better' => $cost === null ? null : RankingMetric::of($cost)->direction === RankingDirection::LowerIsBetter,
             'totals' => [
                 'creatives' => count($members),
+                'creatives_with_metrics' => count($allRows),
                 'spend' => $familySpend,
                 'results' => $familyResults,
                 'cost_per_result' => $cost === null || $familySpend === null ? null : $this->number($this->metrics->aggregate($attrRows)[$cost] ?? null),
             ],
             'coverage' => ['spend_known_share' => $knownSpend, 'results_known_share' => $knownResults],
-            'reconciles' => $this->reconciles($familySpend, array_map(static fn (array $f) => $f['spend'], $formats)),
+            'reconciles' => $this->reconciles($familySpend, array_map(static fn (array $f) => $f['spend'], self::delivered($formats, static fn (array $f): int => (int) $f['creatives_with_metrics']))),
             'formats' => $formats,
             'winner' => $winner,
             'winner_refusal' => $refusal,
@@ -570,6 +575,18 @@ final class ContentFormatComparison
     private function number(mixed $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    /**
+     * The parts that read any row in this window. A format (or objective) whose creatives delivered nothing has no
+     * figure — shown as «no data», never 0 — and is no unknown part of the whole either, so it does not stop the sum.
+     *
+     * @param  list<array<string, mixed>>  $parts
+     * @return list<array<string, mixed>>
+     */
+    private static function delivered(array $parts, callable $rows): array
+    {
+        return array_values(array_filter($parts, static fn (array $p): bool => $rows($p) > 0));
     }
 
     /** @param list<?float> $parts */

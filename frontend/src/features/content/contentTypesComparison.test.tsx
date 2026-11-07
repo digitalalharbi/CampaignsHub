@@ -69,7 +69,11 @@ describe('the content type comparison', () => {
     expect(screen.getByTestId('format-tokens')).toHaveTextContent('story_ad')
     expect(screen.getByTestId('format-coverage')).toHaveTextContent('90%')
     // The unclassified slice ranks last whatever its cost; a format without a figure is never ranked as a zero.
-    expect(rankedFormats(sales(formats)).map((f) => f.format)).toEqual(['carousel', 'video', 'image', 'unclassified'])
+    // The server's verdict leads the ranking: a small sample (carousel, cheaper on two ads) never sits above the format
+    // the card calls «الأقل تكلفة», and a client — who has no cost to sort on — sees «الأنسب» first, not second.
+    expect(rankedFormats(sales(formats)).map((f) => f.format)).toEqual(['video', 'carousel', 'image', 'unclassified'])
+    const clientCopy = sales(formats.map((f) => ({ ...f, cost_per_result: null, results: f.format === 'image' ? 30 : 10 })))
+    expect(rankedFormats(clientCopy)[0].format).toBe('video')
   })
 
   it('leads with a big card per format — result and cost of a result — with sub-cards, then charts, then a short table', () => {

@@ -79,10 +79,15 @@ export function barMetrics(objective: FormatComparisonObjective, client: boolean
   return all.filter((m) => !(client && MONEY_METRICS.includes(m)) && objective.formats.some((f) => typeof f[m] === 'number'))
 }
 
-/** Best first by cost per result (smaller is better), then by results; a format without the figure goes last. */
+/**
+ * The server's verdict first — the ranking never puts a small sample, or (for a client, who has no cost to sort on) a
+ * format with more but dearer results, above the one its card calls the best. Then by cost per result (smaller is
+ * better), then by results; a format without the figure goes last, and the unclassified slice after everything.
+ */
 export function rankedFormats(objective: FormatComparisonObjective): FormatComparisonRow[] {
+  const winner = objective.winner?.format ?? null
   const key = (f: FormatComparisonRow): [number, number, number] => [
-    f.format === 'unclassified' ? 1 : 0,
+    f.format === winner ? 0 : f.format === 'unclassified' ? 2 : 1,
     typeof f.cost_per_result === 'number' ? f.cost_per_result : Number.POSITIVE_INFINITY,
     -(f.results ?? -1),
   ]
