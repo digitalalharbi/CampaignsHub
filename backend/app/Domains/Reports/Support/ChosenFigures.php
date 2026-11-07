@@ -450,6 +450,9 @@ final class ChosenFigures
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
         }
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY] = ContentFormatComparison::withoutMetrics($payload[ContentFormatComparison::KEY], array_keys($cut));
+        }
         if (($hideSpend || $hideRevenue) && is_array($payload[ContentFormatComparison::KEY] ?? null)) {
             $payload[ContentFormatComparison::KEY] = ContentFormatComparison::forAudience($payload[ContentFormatComparison::KEY], false, $hideSpend, $hideRevenue);
         }

@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -248,6 +249,11 @@ final class CreativeFormatIntelligence
 
     private function currency(string $projectId): ?string
     {
+        return ReportReadMemo::remember('format-currency|'.$projectId, fn (): ?string => $this->readCurrency($projectId));
+    }
+
+    private function readCurrency(string $projectId): ?string
+    {
         $currencies = DB::table('daily_metrics')
             ->where('project_id', $projectId)
             ->whereNotNull('project_currency')
@@ -278,6 +284,22 @@ final class CreativeFormatIntelligence
      * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string, campaign_id: ?string, name: string}>
      */
     private function creatives(string $projectId, ?string $accountId, ?string $campaignId, ?array $ceiling = null): array
+    {
+        /*
+         * CONTENT-FORMAT-COMPARISON-001 / PERF-RECOVERY-001 — the format intelligence and the per-format comparison
+         * ask this same question inside one report build; it is read once. Every input is in the key.
+         */
+        return ReportReadMemo::remember(
+            'format-creatives|'.$projectId.'|'.($accountId ?? '').'|'.($campaignId ?? '').'|'.md5((string) json_encode($ceiling)),
+            fn (): array => $this->readCreatives($projectId, $accountId, $campaignId, $ceiling),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $ceiling
+     * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string, campaign_id: ?string, name: string}>
+     */
+    private function readCreatives(string $projectId, ?string $accountId, ?string $campaignId, ?array $ceiling = null): array
     {
         $rows = ExternalCreative::query()
             ->where('external_creatives.project_id', $projectId)

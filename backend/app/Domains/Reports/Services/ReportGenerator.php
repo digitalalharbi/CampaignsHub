@@ -1183,7 +1183,9 @@ final class ReportGenerator
     {
         $audience = (string) ($report->audience ?? 'client');
         $registry = app(ReportSectionRegistry::class);
-        if ($report->project_id === null || ! $report->sectionSettings()->enabled($registry->get(ContentFormatComparison::KEY), $audience)) {
+        $settings = $report->sectionSettings();
+        $contentOff = $settings->chose('content_performance') && ! $settings->enabled($registry->get('content_performance'), $audience);
+        if ($report->project_id === null || $contentOff || ! $settings->enabled($registry->get(ContentFormatComparison::KEY), $audience)) {
             return null;
         }
 

@@ -56,6 +56,8 @@ final class ReportSectionResolverTest extends TestCase
             'ga4_classification' => ['groups' => []],
             'ga4_products' => ['table' => ['rows' => []]],
             'ga4_gap_reasons' => ['reasons' => []],
+            // CONTENT-FORMAT-COMPARISON-001 — a comparison with one objective in it.
+            'content_format_comparison' => ['objectives' => [['family' => 'sales', 'formats' => []]]],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -78,7 +80,7 @@ final class ReportSectionResolverTest extends TestCase
     public function test_the_registry_covers_the_sections_in_reading_order(): void
     {
         $this->assertSame([
-            'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
+            'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'content_format_comparison',
             'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }

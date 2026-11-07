@@ -39,9 +39,9 @@ export function FormatComparisonPanel({
       description={ar ? 'صورة، فيديو، كاروسيل… لكل هدف' : 'Image, video, carousel… per goal'}
       loading={q.isLoading}
       error={q.isError}
-      empty={!q.isLoading && !q.isError && (q.data?.objectives.length ?? 0) === 0}
+      empty={!q.isLoading && !q.isError && (Array.isArray(q.data?.objectives) ? q.data.objectives.length : 0) === 0}
     >
-      {q.data && (
+      {q.data && Array.isArray(q.data.objectives) && q.data.objectives.length > 0 && (
         <div data-testid="analytics-format-comparison">
           <ContentTypesComparison
             data={q.data}

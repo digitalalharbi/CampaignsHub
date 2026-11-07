@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/Badge'
+import { StatCard } from '@/components/ui/StatCard'
 import { FixedPageTable, type FixedColumn } from '@/components/ui/FixedPageTable'
 import { Num } from '@/components/ui/Num'
 import { ChartCard, MetricLineChart, PlatformDonutChart, RankingBarChart } from '@/features/analytics/charts'
@@ -323,16 +324,20 @@ export function ObjectiveFormats({
               {isWinner && <Badge tone="success">{client ? (ar ? 'الأنسب' : 'Best fit') : (ar ? 'الأقل تكلفة' : 'Lowest cost')}</Badge>}
               {f.small_sample && <SmallSample ar={ar} />}
             </header>
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-1">
-              <div className="flex flex-col">
-                <span className="text-xs text-text-muted">{ar ? resultWord.ar : resultWord.en}</span>
-                <span className="tnum text-2xl font-extrabold text-text-primary" data-testid={`format-card-results-${f.format}`}><Num>{metricText('results', f.results, currency)}</Num></span>
-              </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <StatCard
+                testid={`format-card-results-${f.format}`}
+                label={ar ? resultWord.ar : resultWord.en}
+                value={metricText('results', f.results, currency)}
+                delta={objective.result_metric ? { metric: objective.result_metric, current: f.results, previous: f.previous?.results } : undefined}
+              />
               {!client && (
-                <div className="flex flex-col">
-                  <span className="text-xs text-text-muted">{ar ? 'تكلفة النتيجة' : 'Cost/result'}</span>
-                  <span className="tnum text-xl font-bold text-text-primary" data-testid={`format-card-cost-${f.format}`}><Num>{metricText('cost_per_result', f.cost_per_result, currency)}</Num></span>
-                </div>
+                <StatCard
+                  testid={`format-card-cost-${f.format}`}
+                  label={ar ? 'تكلفة النتيجة' : 'Cost/result'}
+                  value={metricText('cost_per_result', f.cost_per_result, currency)}
+                  delta={objective.cost_metric ? { metric: objective.cost_metric, current: f.cost_per_result, previous: f.previous?.cost_per_result } : undefined}
+                />
               )}
             </div>
             <dl className="grid grid-cols-2 gap-2">
@@ -444,7 +449,8 @@ export function ContentTypesComparison({
   title?: boolean
 }) {
   const [index, setIndex] = useState(0)
-  const objectives = data.objectives
+  // A payload that is not this shape (an older or foreign answer) draws the empty state, never a crash.
+  const objectives = Array.isArray(data?.objectives) ? data.objectives : []
   const objective = objectives[Math.min(index, objectives.length - 1)]
   const hidesMoney = client || data.spend_hidden === true
 

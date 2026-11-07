@@ -146,6 +146,57 @@ final class ContentFormatComparison
     }
 
     /**
+     * REPORT-KPI-CONTRACT-001 — a report or link that chose its KPIs carries no figure it did not choose, here too.
+     *
+     * `$cut` is the list of KPI keys left out. Each objective names its own result and cost metric, so «conversions not
+     * chosen» takes a sales objective's results (and their share) but leaves a traffic objective's clicks.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $cut
+     * @return array<string, mixed>
+     */
+    public static function withoutMetrics(array $block, array $cut): array
+    {
+        if ($cut === []) {
+            return $block;
+        }
+        $off = array_fill_keys($cut, true);
+        $direct = ['ctr', 'cpm', 'cpc', 'conversion_rate', 'roas', 'revenue', 'impressions', 'clicks'];
+        if (isset($off['spend'])) {
+            $block['totals']['spend'] = null;
+            $block['totals']['spend_original'] = null;
+            $block['coverage']['spend_known_share'] = null;
+        }
+        foreach (['impressions', 'clicks'] as $k) {
+            if (isset($off[$k]) && array_key_exists($k, (array) ($block['totals'] ?? []))) {
+                $block['totals'][$k] = null;
+            }
+        }
+
+        $block['objectives'] = array_map(static function ($objective) use ($off, $direct) {
+            if (! is_array($objective)) {
+                return $objective;
+            }
+            $keys = array_values(array_filter($direct, static fn (string $k): bool => isset($off[$k])));
+            if (isset($off['spend'])) {
+                $keys = [...$keys, 'spend', 'spend_original', 'share_of_spend', 'spend_known_share'];
+            }
+            $result = (string) ($objective['result_metric'] ?? '');
+            $cost = (string) ($objective['cost_metric'] ?? '');
+            if (isset($off['results']) || ($result !== '' && isset($off[$result]))) {
+                $keys = [...$keys, 'results', 'share_of_results', 'results_known_share'];
+            }
+            if (isset($off['spend']) || isset($off['cost_per_result']) || ($cost !== '' && isset($off[$cost]))) {
+                $keys = [...$keys, 'cost_per_result', 'value'];
+            }
+
+            return $keys === [] ? $objective : self::without($objective, array_values(array_unique($keys)));
+        }, (array) ($block['objectives'] ?? []));
+
+        return $block;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @param  list<string>  $keys
      * @return array<string, mixed>
