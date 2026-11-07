@@ -1,4 +1,5 @@
 import { ProviderMark } from '@/components/ProviderMark'
+import { numberFormatter } from '@/lib/numerals'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -80,7 +81,7 @@ function moneyHelpers(ar: boolean, currency: string) {
   const full = (v: number | null): string | null => {
     if (v === null) return null
     const shown = compact(v)
-    const whole = v.toLocaleString('en-US')
+    const whole = numberFormatter('en-US').format(v)
 
     return shown === whole ? null : whole
   }

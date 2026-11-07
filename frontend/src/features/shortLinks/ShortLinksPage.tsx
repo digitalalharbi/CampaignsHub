@@ -317,25 +317,26 @@ export function ShortLinksPage() {
         conversion or engagement is invented to fill a card — this product counts redirects, and
         that is what it says it counts.
 
-        The KPIs render only when a link exists. Two zeros over an empty library say nothing an
-        empty state does not already say better.
+        The KPI row is ALWAYS in the same DOM slot, with «—» until a link exists: when it appeared on the
+        first link it pushed the «create another» button down under the user's pointer. Placeholders,
+        not zeros: two zeros over an empty library say nothing.
       */}
       <PageIntro
         testid="short-links-intro"
         title={t.title}
         purpose={t.subtitle}
-        kpis={rows.length === 0 ? undefined : (
+        kpis={(
           <>
             <StatCard
               label={t.title}
-              value={rows.length.toLocaleString('en-US')}
+              value={rows.length === 0 ? '—' : rows.length.toLocaleString('en-US')}
               tone="brand"
               dot
               testid="short-links-kpi-total"
             />
             <StatCard
               label={t.clicks}
-              value={rows.reduce((sum, l) => sum + (l.clicks ?? 0), 0).toLocaleString('en-US')}
+              value={rows.length === 0 ? '—' : countedTotal.toLocaleString('en-US')}
               tone="neutral"
               dot
               testid="short-links-kpi-clicks"

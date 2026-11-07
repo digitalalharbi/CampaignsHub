@@ -5,6 +5,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
 import { Num } from '@/components/ui/Num'
+import { MetaDiagnosisPanel } from './MetaDiagnosisPanel'
 
 /**
  * The three read surfaces of ADMIN-003, mounted as tabs on `/admin/settings` rather than given rail
@@ -107,6 +108,8 @@ export function IntegrationsTab() {
           ))}
         </ul>
       )}
+
+      <MetaDiagnosisPanel />
     </>
   )
 }

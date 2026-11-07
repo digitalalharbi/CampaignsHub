@@ -6,7 +6,7 @@ import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, CheckCircle2, FileText, LayoutDashboard, LogIn,
   Megaphone, ShieldCheck, Sparkles, Target, UserCircle, Wallet,
 } from 'lucide-react'
-import * as LucideIcons from 'lucide-react'
+import { LucideByName } from '@/components/icons/LucideByName'
 import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
@@ -40,13 +40,8 @@ const PLATFORM_BAR: Record<string, string> = {
 /** Resolve a taxonomy icon name to its component; unknown names simply render nothing. */
 function ServiceCategoryIcon({ name, size = 18 }: { name?: string | null; size?: number }) {
   if (!name) return <Megaphone size={size} />
-  const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
-  const Resolved = (LucideIcons as unknown as Record<string, unknown>)[pascal]
-  const isComponent =
-    typeof Resolved === 'function' || (typeof Resolved === 'object' && Resolved !== null && '$$typeof' in (Resolved as object))
-  if (!isComponent) return <Megaphone size={size} />
-  const Icon = Resolved as React.ComponentType<{ size?: number }>
-  return <Icon size={size} />
+
+  return <LucideByName name={name} fallback={<Megaphone size={size} />} render={(Icon) => <Icon size={size} />} />
 }
 
 const FEATURE_ICONS = [LayoutDashboard, BarChart3, FileText, Wallet, Megaphone, Bell]

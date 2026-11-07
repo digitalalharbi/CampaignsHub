@@ -7,11 +7,15 @@ use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
 use App\Domains\Integrations\Http\Controllers\ApiKeyConnectionController;
 use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
+use App\Domains\Integrations\Http\Controllers\IntegrationAuditController;
 use App\Domains\Integrations\Http\Controllers\IntegrationController;
 use App\Domains\Integrations\Http\Controllers\IntegrationWebhookController;
 use App\Domains\Integrations\Http\Controllers\MetaConnectionMigrationController;
 use App\Domains\Integrations\Http\Controllers\PlatformOverviewController;
 use App\Domains\Integrations\Http\Controllers\ProjectIntegrationController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkDirectoryController;
+use App\Domains\Integrations\Http\Controllers\ProjectLinkSourceController;
 use App\Domains\Integrations\Http\Controllers\ProviderConnectionController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
@@ -66,6 +70,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
          * Above `{key}` in the file so the literal segment is never read as a provider key.
          */
         Route::get('hub', ConnectionHubController::class)->name('hub');
+        // INTEG-UNIFIED-002 — the centre's «التدقيق» section: the tenant's own read of its integration audit rows.
+        Route::get('audit', IntegrationAuditController::class)->name('audit');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');
         Route::post('{key}/connect', [IntegrationController::class, 'connect'])->name('connect')
             ->middleware(EnsureWithinPlanLimit::class.':connections');
@@ -100,6 +106,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
 
     Route::get('connections', [ProviderConnectionController::class, 'index'])->name('connections.index');
     Route::post('connections/{connection}/revoke', [ProviderConnectionController::class, 'revoke'])->name('connections.revoke');
+    // INTEG-SOURCE-REMOVAL-001 — take a source out of the hub (soft hide; history kept).
+    Route::post('connections/{connection}/remove', [ProviderConnectionController::class, 'remove'])->name('connections.remove');
 
     /*
      * ORCH-100 — the connection wizard's reads: the hierarchy an authorisation discovered, a page of
@@ -167,6 +175,21 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
     ->name('projects.integrations.')
     ->group(function (): void {
         Route::get('/', [ProjectIntegrationController::class, 'index'])->middleware('project.can:integrations.manage')->name('index');
+        // INTEG-PROJECT-LINK-001 — is a link journey waiting for THIS project, and what has been linked to it. Read-only.
+        Route::get('link/{connection}', ProjectLinkController::class)->whereUuid('connection')->middleware('project.can:integrations.manage')->name('link');
+        // INTEG-ON-DEMAND-DISCOVERY-001 — organisations → the chosen organisation's accounts → confirm ONE. Asked on demand, stored on confirm.
+        Route::get('link/{connection}/organisations', [ProjectLinkDirectoryController::class, 'organisations'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:60,1'])->name('link.organisations');
+        Route::get('link/{connection}/accounts', [ProjectLinkDirectoryController::class, 'accounts'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:120,1'])->name('link.accounts');
+        Route::post('link/{connection}/accounts', [ProjectLinkDirectoryController::class, 'confirm'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('link.confirm');
+        // INTEG-PROJECT-LINK-STORES-GA4-001 — the same journey for a store or a GA4 property: what THIS project's own sign-in
+        // reaches (asked, never stored), then the one that is confirmed (stored and bound to this project).
+        Route::get('link/{connection}/sources', [ProjectLinkSourceController::class, 'index'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:120,1'])->name('link.sources');
+        Route::post('link/{connection}/sources', [ProjectLinkSourceController::class, 'confirm'])->whereUuid('connection')
+            ->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('link.sources.confirm');
         // PROJINT-001: the same project's integrations organised by the real ad platforms the registry
         // publishes — the count is `AdPlatforms::ORDER`'s to state, not this comment's.
         Route::get('platforms', [PlatformOverviewController::class, 'index'])->middleware('project.can:integrations.manage')->name('platforms');

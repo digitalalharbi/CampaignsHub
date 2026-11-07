@@ -82,6 +82,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   // العمليات
   /* Somebody waiting for the call they were sold. It printed as «lead_sla». */
   lead_sla: { ar: 'تأخّر الرد على عميل محتمل', en: 'A lead has waited too long' },
+  delivery_reminder: { ar: 'تذكير بتسليم التقارير', en: 'Report delivery reminder' },
   // التكاملات
   stale_data: { ar: 'بيانات لم تُحدَّث', en: 'Data has stopped updating' },
   data_gap: { ar: 'انقطاع في البيانات', en: 'A gap in the data' },
@@ -99,20 +100,27 @@ export const TYPE_LABELS: Record<string, Words> = {
   monthly_digest: { ar: 'الملخص الشهري', en: 'Monthly summary' },
   report_ready: { ar: 'تقرير جاهز', en: 'A report is ready' },
   report_failed: { ar: 'تعذّر إنشاء تقرير', en: 'A report could not be built' },
+  scheduled_report: { ar: 'التقرير المجدول', en: 'A scheduled report' },
   // التشغيل
   message: { ar: 'رسالة جديدة', en: 'A new message' },
   request: { ar: 'طلب جديد أو تحديث عليه', en: 'A request, new or updated' },
   journey_transition: { ar: 'انتقال طلب إلى مرحلة جديدة', en: 'A request moved to a new stage' },
   client_needs_attention: { ar: 'عميل يحتاج انتباهًا', en: 'A client needs attention' },
+  // NOTIFICATION-CHANNELS-001 — what a rule the person built did, which used to reach the bell and nothing else.
+  automation_rule: { ar: 'تطابق قاعدة أتمتة', en: 'An automation rule matched' },
+  client_request: { ar: 'طلب عميل جديد أو تحديث عليه', en: 'A client request, new or updated' },
   // المالية
   subscription: { ar: 'الاشتراك والفواتير', en: 'Subscription and invoices' },
   // الحساب
   password_reset: { ar: 'إعادة تعيين كلمة المرور', en: 'Password reset' },
   email_verification: { ar: 'تأكيد البريد الإلكتروني', en: 'Email verification' },
   sign_in_code: { ar: 'رمز تسجيل الدخول', en: 'Sign-in code' },
+  oauth_link: { ar: 'تأكيد ربط Google', en: 'Google link confirmation' },
   member_setup: { ar: 'تهيئة حساب عضو جديد', en: 'New member account setup' },
   invitation: { ar: 'دعوة للانضمام', en: 'Invitation to join' },
   security_alert: { ar: 'تنبيه أمني', en: 'Security alert' },
+  role_changed: { ar: 'تغيّر دورك في مساحة العمل', en: 'Your workspace role changed' },
+  member_welcome: { ar: 'الترحيب بعد الانضمام', en: 'Welcome after joining' },
 }
 
 export const TYPE_NOTES: Record<string, Words> = {
@@ -142,6 +150,10 @@ export const TYPE_NOTES: Record<string, Words> = {
   message: {
     ar: 'يصلك داخل النظام دائمًا. البريد مغلق افتراضيًا لأن رسائل المحادثات كثيرة.',
     en: 'Always reaches the bell. Email is off by default — conversations are frequent.',
+  },
+  automation_rule: {
+    ar: 'يصلك على البريد وداخل النظام عندما تطابق قاعدة كتبتها حملة أو إعلانًا.',
+    en: 'Reaches your inbox and the bell when a rule you wrote matches a campaign or an ad.',
   },
   security_alert: {
     ar: 'عند تسجيل دخول جديد أو تغيير كلمة المرور.',

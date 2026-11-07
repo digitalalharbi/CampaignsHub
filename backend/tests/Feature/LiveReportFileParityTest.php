@@ -24,6 +24,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
  */
 final class LiveReportFileParityTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -81,6 +83,7 @@ final class LiveReportFileParityTest extends TestCase
             'provider' => 'meta', 'account_type' => 'ad_account', 'external_id' => 'acc-'.uniqid(),
             'name' => 'Shop', 'currency' => 'SAR', 'status' => 'active',
         ]);
+        $this->bindSeededAccount((string) $this->project->getKey(), $this->account->getKey(), 'meta');
         $this->campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
             'name' => 'Sales', 'status' => 'active', 'objective' => 'sales', 'platforms' => ['meta'],

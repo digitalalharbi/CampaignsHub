@@ -1,45 +1,132 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ProjectsEstate } from './ProjectsEstate'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import {
-  fetchConnectionHub,
+  fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
 } from './api'
-import { ConnectionHub } from './ConnectionHub'
-import { SectionHeader } from '@/components/patterns/Status'
+import { ConnectionHub, HubSummary, isGone } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
-import { AccountsPanel } from './AccountsPanel'
+import { IntegrationAudit } from './IntegrationAudit'
+import { ProjectLinkFlow } from './ProjectLinkFlow'
+import { SourcePlatformRows } from './SourcePlatformRows'
+import { useNavigate } from 'react-router-dom'
+import { usePortalPath } from '@/app/portalPath'
+import { listProjects } from '@/features/projects/api'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
-import { platformColor } from '@/features/analytics/components'
-import { platformLabel, sortByPlatform } from '@/lib/platforms'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { Skeleton } from '@/components/ui/States'
+import { Plus } from 'lucide-react'
+import { ProviderMark } from '@/components/ProviderMark'
+import { PLATFORM_ORDER, canonicalPlatform, platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import { useProject } from '@/stores/project'
+import { useAgencyClient } from '@/stores/agencyClient'
+import { accounts as countedAccounts, campaigns as countedCampaigns } from '@/lib/counted'
 
 /**
- * INTEGRATION-DATASOURCE-WIZARD-001 §§17, 22 — the Connection Hub is the page.
+ * INTEG-PROJECT-SPACE-001 — the project's space has three tabs, in this order:
+ * «المصادر» (its linked sources and their controls), «المنصات» (what can be linked, one press each) and
+ * «التدقيق» (what needs an action, and this project's own log). `connection-hub` names the whole space.
+ */
+export const HUB_SECTIONS: Array<{ key: 'sources' | 'platforms' | 'audit'; ar: string; en: string }> = [
+  { key: 'sources', ar: 'المصادر', en: 'Sources' },
+  { key: 'platforms', ar: 'المنصات', en: 'Platforms' },
+  { key: 'audit', ar: 'التدقيق', en: 'Audit' },
+]
+
+/**
+ * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — «شاشة التكاملات هي مساحة المشروع المحدد».
  *
- * ## What this replaced
- *
- * A grid of six provider cards, each carrying a state, a sentence and up to four buttons, with
- * every discovered account listed underneath. It was a CATALOGUE — «here are the platforms» — and
- * the reader of this page is not shopping: they connected something already and want to know
- * whether it still works, which accounts it reads, and who authorised it.
- *
- * Those are a table's questions, so the surface is a table of AUTHORISATIONS, with everything else
- * one press away in a drawer. The grid survives only as the short list behind «ربط مصدر», which is
- * the one moment a reader is genuinely choosing a platform.
- *
- * Tenant-level, deliberately: an authorisation belongs to the tenant and is LENT to projects
- * through a binding, so this page is reachable before any project is chosen.
+ * The centre is the SELECTED project's own space. Switching the project in the sidebar remounts it
+ * (`key`), and every query it makes carries the project id — so nothing of the previous project is
+ * rendered, or even held in a cache entry this project reads. With no project selected there is a simple
+ * project chooser and nothing else: never a mixed list of everybody's accounts.
  */
 export function IntegrationsPage() {
+  const currentProjectId = useProject((s) => s.currentProjectId)
+
+  return currentProjectId === null ? <ProjectChooser /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} />
+}
+
+const isAdPlatform = (key: string): boolean => (PLATFORM_ORDER as readonly string[]).includes(canonicalPlatform(key))
+
+function ProjectChooser() {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const choose = useProject((s) => s.setCurrentProjectId)
+  const setClient = useAgencyClient((s) => s.setCurrentClientId)
+  const inAgency = useLocation().pathname.startsWith('/agency')
+  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
+  const [search, setSearch] = useState('')
+  // The agency's switcher may already have narrowed to one client: the chooser offers that client's projects.
+  const client = useAgencyClient((s) => s.currentClientId)
+  const shown = (projects.data ?? [])
+    .filter((p) => !inAgency || client === null || p.client_workspace_id === client)
+    .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-testid="hub-project-chooser" dir={ar ? 'rtl' : 'ltr'}>
+      <PageIntro testid="integrations-intro" title={ar ? 'التكاملات' : 'Integrations'} purpose={ar ? 'اختر مشروعًا' : 'Choose a project'} />
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={ar ? 'بحث' : 'Search'}
+        aria-label={ar ? 'بحث' : 'Search'}
+        className="w-full max-w-sm rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none"
+        data-testid="hub-project-search"
+      />
+      {projects.isLoading ? <Skeleton className="h-32 w-full" /> : (
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {shown.map((p) => (
+            <li key={p.id} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  // The agency's sidebar switcher is client → project: it is told the client too, so it shows this choice.
+                  if (inAgency) setClient(p.client_workspace_id)
+                  choose(p.id)
+                }}
+                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-start transition-colors hover:bg-surface-hover"
+                data-testid={`hub-choose-${p.id}`}
+              >
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="truncate text-sm font-bold text-text-primary">{p.name}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
+                    <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5" data-testid={`hub-card-accounts-${p.id}`}>
+                      {countedAccounts(p.summary?.accounts ?? 0, ar ? 'ar' : 'en')}
+                    </span>
+                    <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5" data-testid={`hub-card-campaigns-${p.id}`}>
+                      {countedCampaigns(p.summary?.campaigns ?? 0, ar ? 'ar' : 'en')}
+                    </span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {sortByPlatform((p.summary?.providers ?? []).filter(isAdPlatform), (key) => key).map((key) => <ProviderMark key={key} provider={key} size={18} />)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!projects.isLoading && shown.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-border px-6 py-8 text-center text-xs text-text-secondary" data-testid="hub-project-none">
+          {ar ? 'لا مشروع' : 'No project'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
-  const currentProjectId = useProject((s) => s.currentProjectId)
+  const [tab, setTab] = useState<'sources' | 'platforms' | 'audit'>('sources')
+  const project = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false }).data?.find((p) => p.id === currentProjectId) ?? null
+  const projectName = project?.name ?? null
 
   /*
    * WHICH project «إدارة الحسابات» edits, and why the reader's own comes first.
@@ -56,8 +143,12 @@ export function IntegrationsPage() {
   const manageDestination = (connection: HubConnection): string | null =>
     currentProjectId ?? (connection.projects.length === 1 ? connection.projects[0]!.id : null)
 
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
+  const hub = useQuery({ queryKey: ['connection-hub', currentProjectId, 'live'], queryFn: () => fetchConnectionHub(currentProjectId), retry: false })
 
+  /*
+   * «Manage link» on a SELECTED account: its own connection, edited for the project it feeds.
+   * Both come from the account row, so nothing here guesses a client.
+   */
   /*
    * The return from a consent screen lands HERE, carrying what it left with.
    *
@@ -69,15 +160,22 @@ export function IntegrationsPage() {
    */
   const [params, setParams] = useSearchParams()
   const returning = params.get('connection')
-  const returningProject = params.get('project')
 
   const [flow, setFlow] = useState<
-    { mode: 'connect' | 'manage'; provider: ConnectableProvider | null; connection: HubConnection | null; projectId: string | null } | null
+    { mode: 'connect' | 'manage' | 'reauthorise'; provider: ConnectableProvider | null; connection: HubConnection | null; projectId: string | null } | null
   >(null)
-  const [picking, setPicking] = useState(false)
   const [drawer, setDrawer] = useState<{ id: string; tab: DrawerTab } | null>(null)
   const [menu, setMenu] = useState<HubConnection | null>(null)
-  const [inventoryOpen, setInventoryOpen] = useState(false)
+  const [removing, setRemoving] = useState<HubConnection | null>(null)
+  /*
+   * INTEG-PROJECT-LINK-001 — linking from the centre IS the project's journey: the same flow the
+   * project page opens, with the project fixed, ending on that project's page.
+   */
+  const [linking, setLinking] = useState<{ projectId: string; provider: ConnectableProvider | null } | null>(null)
+  // One way in: this project's own journey. There is no project to pick — the space IS the project.
+  const startLink = (provider: ConnectableProvider | null = null) => setLinking({ projectId: currentProjectId, provider })
+  const navigate = useNavigate()
+  const to = usePortalPath()
 
   const connections = hub.data?.connections ?? []
   const open = drawer === null ? null : connections.find((c) => c.id === drawer.id) ?? null
@@ -94,14 +192,15 @@ export function IntegrationsPage() {
     const connection = connections.find((c) => c.id === returning)
     if (connection === undefined) return
 
-    setFlow({ mode: 'connect', provider: null, connection, projectId: returningProject })
+    // A project in the address is never believed (INTEG-PROJECT-LINK-001): project journeys return to the project page.
+    setFlow({ mode: 'connect', provider: null, connection, projectId: null })
     setParams((current) => {
       const next = new URLSearchParams(current)
       next.delete('connection')
       next.delete('project')
       return next
     }, { replace: true })
-  }, [returning, returningProject, connections, setParams])
+  }, [returning, connections, setParams])
 
   const close = () => {
     setFlow(null)
@@ -109,97 +208,122 @@ export function IntegrationsPage() {
     void queryClient.invalidateQueries({ queryKey: ['connectors'] })
   }
 
+  /*
+   * Re-authorise — ONE way in, whichever control was pressed (the row, the menu, the drawer, the
+   * audit finding). It renews the grant through the centre's own flow and leaves the selection alone.
+   */
+  const reauthorise = (connection: HubConnection) => {
+    setDrawer(null)
+    setMenu(null)
+    setFlow({ mode: 'reauthorise', provider: null, connection, projectId: manageDestination(connection) })
+  }
+
+  const manage = (connection: HubConnection) => {
+    setMenu(null)
+    setFlow({ mode: 'manage', provider: null, connection, projectId: manageDestination(connection) })
+  }
+
+  const live = connections.filter((c) => !isGone(c))
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* INTEGRATION-ESTATE-001 — client first: what feeds each project, with linking and removing on the row. */}
-      <ProjectsEstate
-        connectable={hub.data?.connectable ?? []}
-        onLink={(projectId, provider) => setFlow({ mode: 'connect', provider, connection: null, projectId })}
-      />
-
-      <ConnectionHub
-        onConnect={() => setPicking(true)}
-        onOpen={(connection, tab) => setDrawer({ id: connection.id, tab: tab ?? 'overview' })}
-        onAction={(connection) => setMenu(connection)}
-      />
-
+    <div className="flex min-w-0 flex-col gap-6" data-testid="connection-hub" dir={ar ? 'rtl' : 'ltr'}>
       {/*
-        INTEGRATION-DATASOURCE-WIZARD-001 §11 §28 — «everything we can SEE» is a real question, and
-        it is not this page's.
-
-        The inventory used to sit open beneath the cards: on the live Snapchat estate, three hundred
-        rows under the six things somebody came for. It is not permanently rendered any more and it
-        is not gone either — a reader asks for it, and the control says what it will show. The
-        drawer's Accounts tab answers the narrower and far commoner question of «which of THIS
-        authorisation's accounts are ours».
+        UX-PAGE-HERO-001 — the page's one shared head. It carries the ONE connect entry (with nothing
+        connected the sources section's empty state carries it instead, so the button is never drawn
+        twice), and no figures: those are the summary under the work.
       */}
-      <section className="flex flex-col gap-3">
-        {/*
-          A labelled section, not a button floating in the margin.
+      <PageIntro
+        testid="integrations-intro"
+        title={projectName ?? (ar ? 'التكاملات' : 'Integrations')}
+        purpose={ar ? 'التكاملات' : 'Integrations'}
+        // One primary action: with nothing linked the sources' empty state carries it instead.
+        actions={live.length === 0 ? undefined : (
+          <Button onClick={() => startLink()} data-testid="hub-connect">
+            <Plus size={15} /> {ar ? 'ربط' : 'Link'}
+          </Button>
+        )}
+      />
 
-          The Arabic dark review of `/app/integrations` on a workspace with nothing connected showed
-          this control alone in the middle of the page: a bordered button, no heading above it and no
-          content under it, reading as something half-rendered. It is not gated on the hub having
-          rows, because the inventory is tenant-wide — the sandbox and anything else non-advertising
-          is discovered without ever appearing as a hub authorisation — so what it needed was a name.
-        */}
-        <SectionHeader
-          title={ar ? 'جميع الحسابات المكتشفة' : 'Every discovered account'}
-          question={ar
-            ? 'ما الذي نراه في هذه المساحة، سواء اخترته أم لا؟'
-            : 'What can this workspace see, whether or not it was selected?'}
-          action={
-            /*
-             * «عرض القائمة», not «عرض جميع الحسابات المكتشفة».
-             *
-             * The heading beside it now says which accounts, so a button repeating the heading word
-             * for word reads as the same sentence printed twice. The control says only what pressing
-             * it does.
-             */
-            <button
-              type="button"
-              data-testid="toggle-account-inventory"
-              aria-expanded={inventoryOpen}
-              onClick={() => setInventoryOpen((open) => !open)}
-              className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-            >
-              {inventoryOpen
-                ? (ar ? 'إخفاء القائمة' : 'Hide the list')
-                : (ar ? 'عرض القائمة' : 'Show the list')}
-            </button>
-          }
+      <HubSummary connections={connections} campaigns={project?.summary?.campaigns ?? null} projectId={currentProjectId} />
+
+      <div role="tablist" aria-label={ar ? 'التكاملات' : 'Integrations'} data-testid="hub-sections" className="flex min-w-0 gap-1 overflow-x-auto rounded-[13px] border border-border bg-surface-secondary p-1">
+        {HUB_SECTIONS.map((section) => (
+          <button
+            key={section.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === section.key}
+            data-testid={`hub-section-link-${section.key}`}
+            onClick={() => setTab(section.key)}
+            className={`shrink-0 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-colors ${tab === section.key ? 'bg-surface text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+          >
+            {ar ? section.ar : section.en}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'sources' && (
+        <ConnectionHub
+          projectId={currentProjectId}
+          onConnect={() => startLink()}
+          onOpen={(connection, t) => setDrawer({ id: connection.id, tab: t ?? 'overview' })}
+          onAction={(connection) => setMenu(connection)}
+          onRemove={(connection) => setRemoving(connection)}
+          onReauthorise={reauthorise}
+          // A legacy (workspace-wide) row re-links through this project's own journey, platform already known.
+          onRelink={(connection) => startLink((hub.data?.connectable ?? []).find((p) => p.key === connection.provider) ?? null)}
         />
+      )}
 
-        {inventoryOpen && <AccountsPanel />}
-      </section>
+      {tab === 'platforms' && (
+        <div className="flex min-w-0 flex-col gap-6">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="hub-platforms">
+          {hub.isLoading && <li><Skeleton className="h-16 w-full" /></li>}
+          {sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key).map((provider) => {
+            const linked = live.filter((c) => c.provider === provider.key).reduce((n, c) => n + c.selected_accounts, 0)
+            return (
+              <li key={provider.key} className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3" data-testid={`hub-platform-${provider.key}`}>
+                <ProviderMark provider={provider.key} size={26} />
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{platformLabel(provider.key, ar)}</span>
+                {linked > 0 && <span className="tnum rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success" data-testid={`hub-platform-linked-${provider.key}`}>{linked.toLocaleString('en-US')}</span>}
+                {/* «إعادة الربط» and «ربط» are the same journey: the platform's own sign-in, for this project. */}
+                <Button size="sm" variant={linked > 0 ? 'ghost' : 'primary'} onClick={() => startLink(provider)} data-testid={`hub-platform-link-${provider.key}`}>
+                  {linked > 0 ? (ar ? 'إعادة الربط' : 'Re-link') : (ar ? 'ربط' : 'Link')}
+                </Button>
+              </li>
+            )
+          })}
+          {/* INTEG-PROJECT-LINK-STORES-GA4-001 — سلة, زد and GA4 are linked from the same list, by the same journey. */}
+          <SourcePlatformRows projectId={currentProjectId} ar={ar} onLink={startLink} />
+        </ul>
+        {/* What this project reads from them: its own store and property, and nothing to choose from. */}
+        <StoresPanel projectId={currentProjectId} />
+        <PropertiesPanel projectId={currentProjectId} />
+        </div>
+      )}
 
-      {/*
-        INTEG-STORES-001 — Salla and Zid keep their own journey (§7).
+      {tab === 'audit' && (
+        <IntegrationAudit
+          connections={live}
+          projectId={currentProjectId}
+          loading={hub.isLoading}
+          onReauthorise={reauthorise}
+          onManage={manage}
+          onOpen={(connection) => setDrawer({ id: connection.id, tab: 'overview' })}
+        />
+      )}
 
-        They are commerce connectors with a store, an order stream and no ad accounts at all, so the
-        «organisation → ad account» flow above asks them a question they have no answer to.
-      */}
-      <StoresPanel />
-
-      {/*
-        GA4-INTEGRATION-001 / constitution §23 — measurement has its own section, below paid media.
-
-        Not a hub row, and not folded into the stores section either. The hub is the paid-media board
-        and a property answers none of its questions; a store and a property are different sources
-        with different journeys. The order is deliberate: paid media, then commerce, then the
-        client's own site measurement — widest claim to narrowest.
-      */}
-      <PropertiesPanel />
-
-      {picking && (
-        <ProviderPicker
-          providers={hub.data?.connectable ?? []}
-          ar={ar}
-          onPick={(provider) => {
-            setPicking(false)
-            setFlow({ mode: 'connect', provider, connection: null, projectId: null })
+      {linking !== null && (
+        <ProjectLinkFlow
+          projectId={linking.projectId}
+          provider={linking.provider}
+          onClose={() => { setLinking(null); close() }}
+          onReturn={() => {
+            const { projectId } = linking
+            setLinking(null)
+            close()
+            navigate(to(`/projects/${projectId}/integrations`))
           }}
-          onClose={() => setPicking(false)}
         />
       )}
 
@@ -217,18 +341,20 @@ export function IntegrationsPage() {
       {open !== null && drawer !== null && (
         <ConnectionDrawer
           connection={open}
+          projectId={currentProjectId}
           tab={drawer.tab}
           onTab={(tab) => setDrawer({ id: open.id, tab })}
           onClose={() => setDrawer(null)}
-          onManageAccounts={(connection) => {
+          onManageAccounts={(connection, projectId) => {
             setDrawer(null)
             setFlow({
               mode: 'manage',
               provider: null,
               connection,
-              projectId: manageDestination(connection),
+              projectId: projectId ?? manageDestination(connection),
             })
           }}
+          onReauthorise={reauthorise}
         />
       )}
 
@@ -237,9 +363,22 @@ export function IntegrationsPage() {
           ar={ar}
           onClose={() => setMenu(null)}
           onOpen={(tab) => { setDrawer({ id: menu.id, tab }); setMenu(null) }}
-          onManageAccounts={() => {
-            setFlow({ mode: 'manage', provider: null, connection: menu, projectId: manageDestination(menu) })
-            setMenu(null)
+          onManageAccounts={() => manage(menu)}
+          onReauthorise={menu.status_profile?.auth === 'api_key' ? undefined : () => reauthorise(menu)}
+          onRemove={() => { setRemoving(menu); setMenu(null) }}
+        />
+      )}
+
+      {removing !== null && (
+        <RemoveSourceDialog
+          connection={removing}
+          ar={ar}
+          onClose={() => setRemoving(null)}
+          onRemoved={() => {
+            setRemoving(null)
+            void queryClient.invalidateQueries({ queryKey: ['connection-hub'] })
+            void queryClient.invalidateQueries({ queryKey: ['connectors'] })
+            void queryClient.invalidateQueries({ queryKey: ['accounts'] })
           }}
         />
       )}
@@ -247,74 +386,6 @@ export function IntegrationsPage() {
   )
 }
 
-/**
- * Which provider a new authorisation is for.
- *
- * Deliberately a short list and not the card grid this page used to be: the grid was a catalogue,
- * and a reader who has pressed «Connect a source» has already decided to shop. Only providers this
- * install can actually start appear — offering one it cannot produces a request the server refuses.
- *
- * Each row says HOW it connects, because the two are different acts and the difference matters
- * before the press, not after: one hands you to the platform's own sign-in, the other asks for a key
- * you must already have. A reader who expected a consent screen and met a key box goes looking for
- * the key with the dialog open; one told beforehand brings it.
- */
-function ProviderPicker({ providers, ar, onPick, onClose }: {
-  providers: ConnectableProvider[]
-  ar: boolean
-  onPick: (provider: ConnectableProvider) => void
-  onClose: () => void
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl" data-testid="provider-picker">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-text-primary">{ar ? 'اختر المنصة' : 'Choose a platform'}</h2>
-          <Button variant="ghost" onClick={onClose} data-testid="provider-picker-close">{ar ? 'إغلاق' : 'Close'}</Button>
-        </div>
-
-        {providers.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-border p-4 text-center text-xs text-text-secondary" data-testid="provider-picker-empty">
-            {/*
-              Said as the operator's business and not as the customer's fault: no system credential
-              for any platform is a setup that has not happened, and nothing on this page can do it.
-            */}
-            {ar
-              ? 'لا توجد منصة مهيّأة للربط بعد. يتولّى مشغّل المنصة تجهيزها.'
-              : 'No platform is set up for connecting yet. The platform operator is preparing them.'}
-          </p>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-1.5">
-            {sortByPlatform(providers, (p) => p.key).map((provider) => (
-              <li key={provider.key}>
-                <button
-                  type="button"
-                  onClick={() => onPick(provider)}
-                  data-testid={`provider-pick-${provider.key}`}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors hover:bg-surface-hover"
-                >
-                  <span className="h-7 w-1 shrink-0 rounded-full" style={{ background: platformColor(provider.key) }} aria-hidden />
-                  <span className="flex min-w-0 flex-col">
-                    {/* «اختر المنصة» lists platforms. The interface's own name belongs on a hub row,
-                        which describes one authorisation, not here. */}
-                    <span className="truncate text-sm font-semibold text-text-primary">
-                      {platformLabel(provider.key, ar)}
-                    </span>
-                    <span className="truncate text-xs text-text-secondary">
-                      {provider.auth === 'api_key'
-                        ? (ar ? 'بمفتاح واجهة تملكه' : 'With an API key you hold')
-                        : (ar ? 'بتسجيل الدخول لدى المنصة' : 'By signing in at the platform')}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /**
  * The row's «…» — every act a connected source admits, in one list, each said as what it does.
@@ -325,11 +396,14 @@ function ProviderPicker({ providers, ar, onPick, onClose }: {
  * confusion support transcripts are full of: an account made last week is missing, so somebody
  * re-authorises instead of re-reading the catalogue.
  */
-function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
+function ActionMenu({ ar, onClose, onOpen, onManageAccounts, onReauthorise, onRemove }: {
   ar: boolean
   onClose: () => void
   onOpen: (tab: DrawerTab) => void
   onManageAccounts: () => void
+  /** Absent for an API-key source: it has no consent screen to return to. */
+  onReauthorise?: () => void
+  onRemove: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">
@@ -338,8 +412,13 @@ function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
           {ar ? 'عرض التفاصيل' : 'View details'}
         </MenuItem>
         <MenuItem testId="action-manage" onClick={onManageAccounts}>
-          {ar ? 'إدارة الحسابات' : 'Manage accounts'}
+          {ar ? 'تعديل الاختيار' : 'Edit the selection'}
         </MenuItem>
+        {onReauthorise !== undefined && (
+          <MenuItem testId="action-reauthorise" onClick={onReauthorise}>
+            {ar ? 'إعادة المصادقة' : 'Re-authorise'}
+          </MenuItem>
+        )}
         <MenuItem testId="action-history" onClick={() => onOpen('history')}>
           {ar ? 'سجل المزامنة' : 'Sync history'}
         </MenuItem>
@@ -347,6 +426,10 @@ function ActionMenu({ ar, onClose, onOpen, onManageAccounts }: {
           {ar ? 'المزامنة وإعدادات الاتصال' : 'Sync and connection settings'}
         </MenuItem>
         <div className="my-1 border-t border-border" />
+        {/* INTEG-SOURCE-REMOVAL-001 — takes the source off this page for good; its stored figures stay. */}
+        <MenuItem testId="action-remove" onClick={onRemove}>
+          {ar ? 'إزالة المصدر' : 'Remove source'}
+        </MenuItem>
         <MenuItem testId="action-close" onClick={onClose}>
           {ar ? 'إغلاق' : 'Close'}
         </MenuItem>
@@ -365,5 +448,46 @@ function MenuItem({ onClick, testId, children }: { onClick: () => void; testId: 
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * INTEG-SOURCE-REMOVAL-001 — the confirmation: two buttons and one line.
+ *
+ * «إزالة» sounds like deletion, and the fear that stops people pressing it is losing a client's history —
+ * so the one line says the history stays and the source can be linked again.
+ */
+function RemoveSourceDialog({ connection, ar, onClose, onRemoved }: {
+  connection: HubConnection
+  ar: boolean
+  onClose: () => void
+  onRemoved: () => void
+}) {
+  const remove = useMutation({ mutationFn: () => removeConnection(connection.id), onSuccess: onRemoved })
+  // The short platform name, as the row is titled — never the API's own title.
+  const name = platformLabel(connection.provider, ar)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl" data-testid="remove-source-dialog">
+        <h2 className="text-base font-bold text-text-primary">{ar ? `إزالة ${name}؟` : `Remove ${name}?`}</h2>
+        <p className="mt-2 text-xs text-text-secondary">
+          {ar
+            ? 'يبقى السجل، ويمكن ربطه من جديد.'
+            : 'Its history stays, and it can be linked again.'}
+        </p>
+        {remove.isError && (
+          <p className="mt-2 text-xs text-danger" data-testid="remove-source-error">
+            {ar ? 'تعذّرت الإزالة، حاول مرة أخرى.' : 'Could not remove it. Try again.'}
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} data-testid="remove-source-keep">{ar ? 'إبقاء' : 'Keep'}</Button>
+          <Button loading={remove.isPending} onClick={() => remove.mutate()} data-testid="remove-source-confirm">
+            {ar ? 'إزالة المصدر' : 'Remove source'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }

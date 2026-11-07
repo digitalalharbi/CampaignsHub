@@ -15,6 +15,8 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -23,6 +25,7 @@ use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
+use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
@@ -205,7 +208,16 @@ final class ReportGenerator
              * consulted. Adding a second `config['depth']` beside it — which is what I wrote first —
              * would have been the duplicate taxonomy this product has spent several units removing.
              */
-            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form);
+            /*
+             * REPORT-DUPLICATE-001 — the layout is ADDED to what the report was saved with, not written over it.
+             *
+             * This assigned the default layout as the whole config, so the first generation of a report dropped everything
+             * it had been created with: the identity choice, the typed names, the chosen columns, the period mode and the name
+             * switches. A copy published from the editor is generated for the first time like any new report, and it lost
+             * the «generic names» it carried from its original — it came out more open than the report it was copied from.
+             * The layout's own keys still win; every other key stays as saved.
+             */
+            $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form) + (array) $config;
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         } else {
             /*
@@ -241,10 +253,23 @@ final class ReportGenerator
          */
         $links = $this->reportLinks->forWindow((string) $report->project_id, $from, $to);
 
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — and bounded by the ACCOUNTS the report's sources name.
+         *
+         * The Owner's stored report (2026-11-04) was scoped to one ad account; its KPIs, platforms and account rows honoured
+         * that, and its ads section listed the creatives of a second account of the same project, because this call passed
+         * project, providers and campaigns and never the account axis — with a scope naming accounts and no campaigns,
+         * `resolvedCampaignIds()` is null and the section was bounded by the project alone. The live link resolves the
+         * account ceiling to campaigns through `AccountCampaignCeiling` and the snapshot never did: one report, two answers.
+         *
+         * Both bounds travel now: the campaigns the chosen accounts spent on, inside this project, and the account axis
+         * itself, which `CreativeRows` applies to the creative's own account and refuses when none can be resolved.
+         */
         $ads = $this->reportAds->for($objective, $from, $to, [
             'project_ids' => $scope->projectIds !== [] ? $scope->projectIds : [(string) $report->project_id],
             'providers' => $scope->providers,
-            'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+            'campaign_ids' => AccountCampaignCeiling::campaigns($scope->resolvedCampaignIds() ?? [], $scope->accountIds, (string) $report->project_id),
+            'account_ids' => $scope->accountIds,
             'creative_ids' => $scope->creativeIds,
         ], (string) $report->form);
 
@@ -464,6 +489,16 @@ final class ReportGenerator
             'business_streams' => $this->businessStreams($report, $agg, $scope, $from, $to, $totals),
             'business_streams_cover_total' => $report->sectionSettings()->streams() !== []
                 && app(BusinessStreams::class)->coversTotal($agg, $report->sectionSettings()->streams(), $from, $to),
+            // STORE-ANALYTICS-DEPTH-001 §3.1 — frozen with the snapshot, and only when the operator switched the category on.
+            'store_analytics' => $report->sectionSettings()->enabled(app(ReportSectionRegistry::class)->get('store_analytics'), (string) ($report->audience ?? 'client'))
+                ? app(StoreAnalyticsSection::class)->build((string) $report->tenant_id, (string) $report->project_id, $from, $to, false, $scope->accountIds === [] && $scope->resolvedCampaignIds() === [])
+                : null,
+            /*
+             * GA4-REPORT-SECTIONS-001 — the four GA4 parts, FROZEN with the snapshot: the saved report keeps the figures
+             * it was saved with, and the section system removes a part the operator hid. Read against this report's own
+             * platform rows; a client-facing report never receives the campaigns table.
+             */
+            ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.
@@ -1130,5 +1165,24 @@ final class ReportGenerator
 
         return ($results->configured() ? $results->over($campaigns, $destinations) : $none)
             + ['leads' => $leads->configured() ? $leads->leadBreakdown($campaigns, $destinations) : $none + ['landing' => null, 'native' => null]];
+    }
+
+    /**
+     * @param  array<int, mixed>  $platforms
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function ga4Sections(Report $report, Carbon $from, Carbon $to, array $platforms, ?string $currency): array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        $settings = $report->sectionSettings();
+        if (array_filter(Ga4ReportSections::KEYS, static fn (string $key): bool => $settings->enabled($registry->get($key), $audience)) === []) {
+            return array_fill_keys(Ga4ReportSections::KEYS, null);
+        }
+
+        return app(Ga4ReportSections::class)->build(
+            (string) $report->tenant_id, (string) $report->project_id, $from, $to,
+            array_values(array_filter($platforms, 'is_array')), $currency, false, $audience !== 'internal',
+        );
     }
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { StoresPanel } from './StoresPanel'
-import type { StoreProvider } from './api'
+import type { StoreProvider, StoreRow } from './api'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
 vi.mock('./api', () => ({
@@ -10,195 +10,121 @@ vi.mock('./api', () => ({
   syncStore: vi.fn(),
   assignStore: vi.fn(),
 }))
-vi.mock('@/features/projects/api', () => ({ listClientWorkspaces: vi.fn(), listProjects: vi.fn() }))
 
 import { assignStore, listStoreProviders, startStoreOAuth, syncStore } from './api'
-import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 
-function provider(over: Partial<StoreProvider> = {}): StoreProvider {
+function store(over: Partial<StoreRow> = {}): StoreRow {
   return {
-    key: 'salla',
-    label: 'Salla',
-    state: 'disconnected',
-    connection_error: null,
-    token_expires_at: null,
-    stores: [],
-    supports_abandoned_carts: true,
+    id: 's1', external_id: 'store-9', name: 'متجر تجريبي', project_id: 'p1', project_name: 'Project 1', domain: 'demo.salla.sa', currency: 'SAR',
+    last_synced_at: null, counts: { products: 12, orders: 3401, abandoned_carts: 7 }, last_run: null,
     ...over,
   }
 }
 
+function provider(over: Partial<StoreProvider> = {}): StoreProvider {
+  return {
+    key: 'salla', label: 'Salla', state: 'disconnected', connection_error: null, token_expires_at: null, stores: [], supports_abandoned_carts: true,
+    ...over,
+  }
+}
+
+/**
+ * INTEG-PROJECT-LINK-STORES-GA4-001 — the panel is the project's own stores and nothing else. The older
+ * connect step — a «belongs to client» dropdown, a connect button, a project dropdown per store — is gone:
+ * a store is linked from the project's journey.
+ */
 describe('StoresPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     signInWith(['integrations.view', 'integrations.connect'])
-    vi.mocked(listClientWorkspaces).mockResolvedValue([])
-    vi.mocked(listProjects).mockResolvedValue([{ id: 'p1', name: 'Project 1' }, { id: 'p2', name: 'Project 2' }] as never)
   })
   afterEach(() => signOut())
 
-  /**
-   * The layer separation, on the surface a merchant actually sees: a provider the operator has not
-   * finished setting up offers NO button and names NO key.
-   */
-  it('offers no connect button and names no system key when the platform is awaiting credentials', async () => {
-    vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({ state: 'awaiting_credentials' }),
-      provider({ key: 'zid', label: 'Zid', state: 'awaiting_credentials', supports_abandoned_carts: false }),
-    ])
+  it('asks for the one project it is given and never for the whole workspace', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', stores: [store()] })])
 
-    const { container } = renderWithProviders(<StoresPanel />, { locale: 'ar' })
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
 
-    expect(await screen.findByTestId('store-needs-operator-salla')).toBeInTheDocument()
-    expect(screen.queryByTestId('connect-store-salla')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('store-s1')).toHaveTextContent('متجر تجريبي')
+    expect(listStoreProviders).toHaveBeenCalledTimes(1)
+    expect(listStoreProviders).toHaveBeenCalledWith('p1')
+  })
+
+  it('draws nothing at all when the project reads no store: the platform row carries «ربط»', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider(), provider({ key: 'zid', label: 'Zid', state: 'awaiting_credentials' })])
+
+    const { container } = renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
+
+    await waitFor(() => expect(listStoreProviders).toHaveBeenCalled())
+    await waitFor(() => expect(container.querySelector('.animate-pulse')).toBeNull())
+    expect(screen.queryByTestId('stores-panel')).not.toBeInTheDocument()
     expect(container.innerHTML).not.toContain('client_secret')
-    expect(container.innerHTML).not.toContain('webhook_secret')
   })
 
-  it('sends the merchant to the platform’s own consent screen', async () => {
-    vi.mocked(listStoreProviders).mockResolvedValue([provider()])
-    vi.mocked(startStoreOAuth).mockResolvedValue({ authorization_url: 'https://accounts.salla.sa/oauth2/auth?x=1' })
+  it('has no connect step: no client dropdown, no project dropdown, no connect button', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', stores: [store()] })])
 
-    renderWithProviders(<StoresPanel />, { locale: 'ar' })
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
+    await screen.findByTestId('store-s1')
 
-    fireEvent.click(await screen.findByTestId('connect-store-salla'))
-
-    // React Query v5 hands the mutation fn a context object as a second argument; only the first
-    // is ours, so the assertion names it rather than pinning the library's internals.
-    await waitFor(() => expect(vi.mocked(startStoreOAuth).mock.calls[0]?.slice(0, 2)).toEqual(['salla', null]))
+    expect(screen.queryByTestId('store-client-workspace')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('store-project-s1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('connect-store-salla')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('select')).toHaveLength(0)
+    expect(screen.queryByText('المتجر يخصّ العميل')).not.toBeInTheDocument()
+    expect(startStoreOAuth).not.toHaveBeenCalled()
+    expect(assignStore).not.toHaveBeenCalled()
   })
 
-  /**
-   * Zid publishes no abandoned carts, and the card must say so rather than show a zero.
-   *
-   * «0 سلة متروكة» reads as a perfect checkout — a claim, where the truth is that the platform does
-   * not report them at all.
-   */
-  it('says a platform does not offer abandoned carts instead of showing zero', async () => {
+  it('shows the store’s figures in Latin digits and its own currency as a chip', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', stores: [store()] })])
+
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
+
+    const card = await screen.findByTestId('store-s1')
+    expect(card).toHaveTextContent('3,401')
+    expect(card.textContent ?? '').not.toMatch(/[٠-٩]/)
+    expect(screen.getByTestId('store-currency-s1')).toHaveTextContent('SAR')
+  })
+
+  it('states an unknown currency as unknown and never assumes one', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', stores: [store({ currency: null })] })])
+
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
+
+    const chip = await screen.findByTestId('store-currency-s1')
+    expect(chip).toHaveTextContent('?')
+    expect(chip).not.toHaveTextContent('SAR')
+    expect(chip).toHaveAttribute('title', 'العملة غير معروفة: المبالغ محجوبة')
+  })
+
+  it('says abandoned carts are not offered by Zid rather than showing a zero', async () => {
     vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({
-        key: 'zid',
-        label: 'Zid',
-        state: 'connected',
-        supports_abandoned_carts: false,
-        stores: [{
-          id: 's1', external_id: 'z-1', name: 'متجر زد', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
-          last_synced_at: '2026-08-05T09:00:00+00:00',
-          counts: { products: 12, orders: 4, abandoned_carts: 0 },
-          last_run: null,
-        }],
-      }),
+      provider({ key: 'zid', label: 'Zid', state: 'connected', supports_abandoned_carts: false, stores: [store({ id: 'z1', counts: { products: 1, orders: 2, abandoned_carts: 0 } })] }),
     ])
 
-    renderWithProviders(<StoresPanel />, { locale: 'ar' })
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
 
-    const marker = await screen.findByTestId('carts-unsupported')
-    expect(marker.textContent).toMatch(/لا توفّرها المنصة/)
-    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(await screen.findByTestId('carts-unsupported')).toBeInTheDocument()
   })
 
-  it('queues a sync and says a request was sent, never that a sync completed', async () => {
-    vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({
-        state: 'connected',
-        stores: [{
-          id: 's1', external_id: 'sa-1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: 'demo.salla.sa', currency: 'SAR',
-          last_synced_at: null,
-          counts: { products: 0, orders: 0, abandoned_carts: 0 },
-          last_run: null,
-        }],
-      }),
-    ])
-    vi.mocked(syncStore).mockResolvedValue({ queued: 1, window_start: '2026-07-22' })
+  it('queues a read of one store', async () => {
+    vi.mocked(listStoreProviders).mockResolvedValue([provider({ state: 'connected', stores: [store()] })])
+    vi.mocked(syncStore).mockResolvedValue({ queued: 1, window_start: '2026-10-01' })
 
-    renderWithProviders(<StoresPanel />, { locale: 'ar' })
-
-    fireEvent.click(await screen.findByRole('button', { name: /زامن الآن/ }))
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('store-sync-s1'))
 
     await waitFor(() => expect(vi.mocked(syncStore).mock.calls[0]?.[0]).toBe('s1'))
-
-    const notice = await screen.findByTestId('store-sync-queued')
-    expect(notice.textContent).toMatch(/أُرسل طلب المزامنة/)
-    expect(notice.textContent).not.toMatch(/تمت المزامنة/)
   })
 
-  /** A discovered-but-never-synced store says so, rather than showing a date it was never asked. */
-  it('distinguishes a store that has been discovered from one that has been synced', async () => {
+  it('shows why the last read failed, in the store’s own card', async () => {
     vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({
-        state: 'connected',
-        stores: [{
-          id: 's1', external_id: 'sa-1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
-          last_synced_at: null,
-          counts: { products: 0, orders: 0, abandoned_carts: 0 },
-          last_run: null,
-        }],
-      }),
+      provider({ state: 'connected', stores: [store({ last_run: { status: 'failed', records: 0, error: 'The store refused the request.', finished_at: null } })] }),
     ])
 
-    renderWithProviders(<StoresPanel />, { locale: 'ar' })
+    renderWithProviders(<StoresPanel projectId="p1" />, { locale: 'en' })
 
-    expect(await screen.findByText(/لم تصل بيانات بعد/)).toBeInTheDocument()
-  })
-
-  /** The `→ Client` link of the chain is offered only when the workspace actually has clients. */
-  it('asks which client a store belongs to only when the workspace has clients', async () => {
-    vi.mocked(listStoreProviders).mockResolvedValue([provider()])
-    vi.mocked(listClientWorkspaces).mockResolvedValue([{ id: 'w1', name: 'Acme' } as never])
-
-    renderWithProviders(<StoresPanel />, { locale: 'ar' })
-
-    expect(await screen.findByTestId('store-client-workspace')).toBeInTheDocument()
-  })
-
-  /**
-   * COMMERCE-ASSIGN-001 — a store with no project asks for one in words and cannot be synced into
-   * nothing; choosing a project calls the assignment with that project.
-   */
-  it('asks an unassigned store for a project, and assigns the one chosen', async () => {
-    vi.mocked(assignStore).mockResolvedValue({} as never)
-    vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({
-        state: 'connected',
-        stores: [{
-          id: 's1', external_id: '793298857', name: 'dev-store', project_id: null, project_name: null, domain: null, currency: 'SAR',
-          last_synced_at: null, counts: { products: 0, orders: 0, abandoned_carts: 0 }, last_run: null,
-        }],
-      }),
-    ])
-
-    renderWithProviders(<StoresPanel />, { locale: 'en' })
-
-    expect(await screen.findByTestId('store-needs-project-s1')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Sync now/ })).toBeDisabled()
-
-    const select = screen.getByTestId('store-project-s1') as HTMLSelectElement
-    expect(select.value).toBe('')
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Choose a project', 'Project 1', 'Project 2'])
-
-    fireEvent.change(select, { target: { value: 'p1' } })
-    await waitFor(() => expect(assignStore).toHaveBeenCalledWith('s1', 'p1'))
-  })
-
-  it('shows progress while the first read is queued, and lets the project be detached', async () => {
-    vi.mocked(assignStore).mockResolvedValue({} as never)
-    vi.mocked(listStoreProviders).mockResolvedValue([
-      provider({
-        state: 'connected',
-        stores: [{
-          id: 's1', external_id: '1', name: 'متجر', project_id: 'p1', project_name: 'Project 1', domain: null, currency: 'SAR',
-          last_synced_at: null, counts: { products: 0, orders: 0, abandoned_carts: 0 },
-          last_run: { status: 'queued', records: 0, error: null, finished_at: null },
-        }],
-      }),
-    ])
-
-    renderWithProviders(<StoresPanel />, { locale: 'en' })
-
-    expect(await screen.findByTestId('store-reading-s1')).toBeInTheDocument()
-    expect((screen.getByTestId('store-project-s1') as HTMLSelectElement).value).toBe('p1')
-
-    fireEvent.change(screen.getByTestId('store-project-s1'), { target: { value: '' } })
-    await waitFor(() => expect(assignStore).toHaveBeenCalledWith('s1', null))
+    expect(await screen.findByTestId('store-failed')).toHaveTextContent('The store refused the request.')
   })
 })

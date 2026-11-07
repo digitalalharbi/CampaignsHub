@@ -61,18 +61,22 @@ jobs:
               exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
             echo "── live report build"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done)
+              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
+              || echo "PROFILER FAILED: see above — other sections are valid"
             echo "── postgres top statements"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available"
+              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
             select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
                    left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
               from pg_stat_statements order by total_exec_time desc limit 20;
             SQL
             if [ -n "${RACCOUNT}" ]; then
               echo "── spend reconcile"
+              set +e
               docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"}
+                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
+                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
+              set -e
             fi
             # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
             echo "── google client check"

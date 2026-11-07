@@ -7,6 +7,7 @@ namespace App\Domains\Tenancy\Services;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Reads and writes the membership the user has switched into, in the server-side session (ADR 0002).
@@ -35,9 +36,9 @@ final class MembershipSelector
             return null;
         }
 
-        // forUser() + active() are the whole guarantee: ownership and status are re-checked here,
-        // every request, rather than trusted from whatever the session happens to hold.
-        return Membership::query()->forUser($user->id)->active()->whereKey($id)->first();
+        // forUser() + active() are the guarantee: ownership and status are re-checked here, every
+        // request, rather than trusted from whatever the session happens to hold.
+        return $this->held($user, $id);
     }
 
     /**
@@ -46,7 +47,7 @@ final class MembershipSelector
      */
     public function select(Request $request, User $user, string $membershipId): ?Membership
     {
-        $membership = Membership::query()->forUser($user->id)->active()->whereKey($membershipId)->first();
+        $membership = $this->held($user, $membershipId);
 
         if ($membership === null) {
             return null;
@@ -61,6 +62,23 @@ final class MembershipSelector
         $this->resolver->markUsed($membership);
 
         return $membership;
+    }
+
+    /**
+     * This person's own active membership by this id, provided it can still be worked in (WORKSPACE-SWITCH-001).
+     *
+     * The id is checked for shape first because the column is a uuid: Postgres answers anything else with 22P02, so a
+     * value the validator had let through as «a string» turned a refusal into a 500.
+     */
+    private function held(User $user, string $id): ?Membership
+    {
+        if (! Str::isUuid($id)) {
+            return null;
+        }
+
+        $membership = Membership::query()->forUser($user->id)->active()->whereKey($id)->first();
+
+        return $membership !== null && $this->resolver->isUsable($membership) ? $membership : null;
     }
 
     public function clear(Request $request): void

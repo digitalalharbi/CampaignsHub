@@ -9,7 +9,6 @@ use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
-use App\Domains\Integrations\Providers\ReportsPeriodReach;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Metrics\Models\PeriodReach;
 use Illuminate\Support\Carbon;
@@ -29,9 +28,9 @@ final class PeriodReachFetcher
     /** Whether this account's provider deduplicates reach over this window at all. */
     public function supports(ExternalAccount $account, Carbon $from, Carbon $to): bool
     {
-        $connector = $this->registry->get($account->provider);
+        $connector = $this->registry->periodReach($account->provider);
 
-        if (! $connector instanceof ReportsPeriodReach || $connector->periodReachGrains() === []) {
+        if ($connector === null || $connector->periodReachGrains() === []) {
             return false;
         }
 
@@ -55,9 +54,9 @@ final class PeriodReachFetcher
             return 0;
         }
 
-        $connector = $this->registry->get($account->provider);
+        $connector = $this->registry->periodReach($account->provider);
 
-        if (! $connector instanceof ReportsPeriodReach) {
+        if ($connector === null) {
             return 0;
         }
 
@@ -117,6 +116,7 @@ final class PeriodReachFetcher
                 'impressions' => $row['impressions'],
                 'state' => $row['reach'] === null ? PeriodReach::NOT_REPORTED : PeriodReach::REPORTED,
                 'fetched_at' => Carbon::now(),
+                'stale_at' => null,
             ],
         );
     }

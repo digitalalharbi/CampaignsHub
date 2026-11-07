@@ -45,51 +45,51 @@ final class SubscriptionNotificationTemplates
              */
             'subscription_started' => $ar ? [
                 'subject' => "تم تفعيل اشتراكك — باقة {$plan}",
-                'body' => "تم تأكيد الدفع ({$amount}) وتفعيل مساحة عملك.\n"
-                    ."يتجدد اشتراكك في {$date}، ويمكنك إدارته أو إلغاؤه من إعدادات الاشتراك.\n{$url}",
+                'body' => "تم تأكيد الدفع ({$amount}).\n"
+                    ."يتجدد اشتراكك في {$date}، ويمكنك إلغاؤه من إعدادات الاشتراك.\n{$url}",
             ] : [
                 'subject' => "Your subscription is active — {$plan}",
-                'body' => "Your payment ({$amount}) was confirmed and your workspace is active.\n"
-                    ."It renews on {$date}, and you can manage or cancel it from subscription settings.\n{$url}",
+                'body' => "Your payment ({$amount}) was confirmed.\n"
+                    ."It renews on {$date}, and you can cancel it in subscription settings.\n{$url}",
             ],
 
             'trial_started' => $ar ? [
                 'subject' => "بدأت تجربتك لمدة {$days} أيام — باقة {$plan}",
-                'body' => "تم تأكيد رسوم التجربة ({$amount}) وتفعيل مساحة عملك.\n"
-                    ."تنتهي التجربة في {$date}، وعندها تتحول تلقائيًا إلى الاشتراك الذي اخترته.\n"
-                    ."يمكنك الإلغاء قبل ذلك التاريخ من إعدادات الاشتراك دون أي رسوم إضافية.\n{$url}",
+                'body' => "تم تأكيد رسوم التجربة ({$amount}).\n"
+                    ."تنتهي التجربة في {$date} وتتحول تلقائيًا إلى الاشتراك الذي اخترته.\n"
+                    ."يمكنك الإلغاء قبلها من إعدادات الاشتراك دون رسوم إضافية.\n{$url}",
             ] : [
                 'subject' => "Your {$days}-day trial has started — {$plan}",
-                'body' => "The trial fee ({$amount}) was confirmed and your workspace is active.\n"
-                    ."The trial ends on {$date}, when it converts to the subscription you chose.\n"
-                    ."You can cancel before then from subscription settings at no further charge.\n{$url}",
+                'body' => "The trial fee ({$amount}) was confirmed.\n"
+                    ."The trial ends on {$date} and converts to the subscription you chose.\n"
+                    ."Cancel before then in subscription settings at no further charge.\n{$url}",
             ],
 
             // Sent BEFORE the charge, because the point of a warning is that it arrives in time to act on.
             'trial_ending' => $ar ? [
                 'subject' => "تنتهي تجربتك خلال {$days} أيام",
-                'body' => "تنتهي تجربتك في {$date}، وسيتم عندها تحصيل {$amount} لباقة {$plan}.\n"
-                    ."إن لم ترغب في المتابعة، ألغِ الاشتراك قبل ذلك التاريخ ولن يُخصم أي مبلغ.\n{$url}",
+                'body' => "تنتهي تجربتك في {$date}، ويُحصَّل عندها {$amount} لباقة {$plan}.\n"
+                    ."ألغِ قبل ذلك التاريخ ولن يُخصم أي مبلغ.\n{$url}",
             ] : [
                 'subject' => "Your trial ends in {$days} days",
-                'body' => "Your trial ends on {$date}, when {$amount} will be charged for {$plan}.\n"
-                    ."If you would rather not continue, cancel before then and nothing will be charged.\n{$url}",
+                'body' => "Your trial ends on {$date}, when {$amount} is charged for {$plan}.\n"
+                    ."Cancel before then and nothing is charged.\n{$url}",
             ],
 
             'trial_converted' => $ar ? [
                 'subject' => 'انتهت التجربة — بانتظار تأكيد الدفع',
-                'body' => "انتهت فترة التجربة وتم إنشاء طلب دفع بقيمة {$amount} لباقة {$plan}.\n"
-                    ."لن يُجدَّد اشتراكك إلا بعد تأكيد المزوّد للعملية.\n{$url}",
+                'body' => "أُنشئ طلب دفع بقيمة {$amount} لباقة {$plan}.\n"
+                    ."يتجدد اشتراكك بعد تأكيد المزوّد.\n{$url}",
             ] : [
                 'subject' => 'Your trial has ended — awaiting payment confirmation',
-                'body' => "The trial has ended and a charge of {$amount} was opened for {$plan}.\n"
-                    ."Your subscription renews once the provider confirms the payment.\n{$url}",
+                'body' => "A charge of {$amount} was opened for {$plan}.\n"
+                    ."Your subscription renews once the provider confirms it.\n{$url}",
             ],
 
             'payment_confirmed' => $ar ? [
                 'subject' => "تم تأكيد الدفع — {$amount}",
-                'body' => "استلمنا تأكيد المزوّد لمبلغ {$amount} لباقة {$plan}.\n"
-                    ."فترة الاشتراك الحالية تنتهي في {$date}.\n{$url}",
+                'body' => "أكّد المزوّد {$amount} لباقة {$plan}.\n"
+                    ."تنتهي الفترة الحالية في {$date}.\n{$url}",
             ] : [
                 'subject' => "Payment confirmed — {$amount}",
                 'body' => "The provider confirmed {$amount} for {$plan}.\n"
@@ -99,38 +99,38 @@ final class SubscriptionNotificationTemplates
             'renewal_failed' => $ar ? [
                 'subject' => 'تعذّر تجديد اشتراكك',
                 'body' => "رفض المزوّد عملية التجديد بقيمة {$amount}.\n"
-                    ."حسابك ما زال يعمل حتى {$date} — حدّث وسيلة الدفع قبل ذلك التاريخ لتفادي التعليق.\n{$url}",
+                    ."حسابك يعمل حتى {$date}. حدّث وسيلة الدفع قبلها لتفادي التعليق.\n{$url}",
             ] : [
                 'subject' => 'We could not renew your subscription',
                 'body' => "The provider refused the renewal of {$amount}.\n"
-                    ."Your account keeps working until {$date} — update your payment method before then to avoid suspension.\n{$url}",
+                    ."Your account works until {$date}. Update your payment method before then to avoid suspension.\n{$url}",
             ],
 
             // Past due is an OPERATING state, and the message says so rather than alarming somebody
             // whose account is still working.
             'past_due' => $ar ? [
                 'subject' => 'اشتراكك متأخر السداد',
-                'body' => "لم يُستلم تأكيد الدفع للفترة الحالية. حسابك يعمل بشكل طبيعي حتى {$date}.\n"
-                    ."بعد ذلك التاريخ سيُعلَّق الحساب مع الاحتفاظ الكامل ببياناتك.\n{$url}",
+                'body' => "لم يصل تأكيد الدفع. حسابك يعمل حتى {$date}.\n"
+                    ."بعدها يُعلَّق الحساب وتبقى بياناتك محفوظة.\n{$url}",
             ] : [
                 'subject' => 'Your subscription is past due',
-                'body' => "No payment confirmation was received for the current period. Your account works normally until {$date}.\n"
-                    ."After that it will be suspended, with all of your data kept.\n{$url}",
+                'body' => "No payment confirmation arrived. Your account works until {$date}.\n"
+                    ."After that it is suspended, and your data is kept.\n{$url}",
             ],
 
             'suspended' => $ar ? [
                 'subject' => 'تم تعليق حسابك',
-                'body' => "انتهت مهلة السماح دون تأكيد دفع، وتم تعليق الوصول إلى مساحة العمل.\n"
-                    ."بياناتك محفوظة بالكامل ولم يُحذف منها شيء. أكمل الدفع لإعادة التفعيل فورًا.\n{$url}",
+                'body' => "انتهت مهلة السماح دون تأكيد دفع، فعُلّق الوصول إلى مساحة العمل.\n"
+                    ."بياناتك محفوظة بالكامل. أكمل الدفع لإعادة التفعيل.\n{$url}",
             ] : [
                 'subject' => 'Your account has been suspended',
-                'body' => "The grace period ended without a confirmed payment, and access to the workspace has stopped.\n"
-                    ."All of your data is kept and nothing has been deleted. Complete the payment to reactivate.\n{$url}",
+                'body' => "The grace period ended without a confirmed payment, so access to the workspace has stopped.\n"
+                    ."All of your data is kept. Complete the payment to reactivate.\n{$url}",
             ],
 
             'reactivated' => $ar ? [
                 'subject' => 'تمت إعادة تفعيل حسابك',
-                'body' => "عاد حسابك للعمل، والفترة الحالية تنتهي في {$date}.\n{$url}",
+                'body' => "عاد حسابك للعمل، وتنتهي الفترة الحالية في {$date}.\n{$url}",
             ] : [
                 'subject' => 'Your account is active again',
                 'body' => "Your account is working again, and the current period runs until {$date}.\n{$url}",
@@ -162,46 +162,102 @@ final class SubscriptionNotificationTemplates
              */
             'plan_change_scheduled' => $ar ? [
                 'subject' => "سيتم تحويلك إلى باقة {$planName} في {$effectiveAt}",
-                'body' => "سجّلنا طلب تغيير باقتك إلى {$planName}.\n"
-                    ."يبدأ التغيير في {$effectiveAt}، وحتى ذلك التاريخ تحتفظ بباقتك الحالية بالكامل لأنك دفعت ثمنها.\n"
+                'body' => "تحتفظ بباقتك الحالية كاملة حتى {$effectiveAt}، ثم تنتقل إلى {$planName}.\n"
                     ."لم يُخصم أي مبلغ ولم يُسترد أي مبلغ.\n{$url}",
             ] : [
                 'subject' => "You move to {$planName} on {$effectiveAt}",
-                'body' => "Your change to {$planName} is recorded.\n"
-                    ."It starts on {$effectiveAt}. Until then you keep your current plan in full, because you have paid for it.\n"
-                    ."Nothing has been charged and nothing has been refunded.\n{$url}",
+                'body' => "You keep your current plan in full until {$effectiveAt}, then move to {$planName}.\n"
+                    ."Nothing was charged or refunded.\n{$url}",
             ],
 
             'registration_approved' => $ar ? [
                 'subject' => 'تم اعتماد طلب تسجيلك',
-                'body' => "راجعنا طلبك واعتمدناه.\n"
-                    .($amount !== '' ? "الخطوة التالية هي إتمام الدفع ({$amount}).\n" : "يمكنك الآن استخدام مساحة عملك.\n")
+                'body' => "اعتمدنا طلبك.\n"
+                    .($amount !== '' ? "الخطوة التالية: إتمام الدفع ({$amount}).\n" : "مساحة عملك جاهزة.\n")
                     .$url,
             ] : [
                 'subject' => 'Your registration has been approved',
-                'body' => "We reviewed your application and approved it.\n"
-                    .($amount !== '' ? "The next step is to complete the payment ({$amount}).\n" : "Your workspace is ready.\n")
+                'body' => "We approved your application.\n"
+                    .($amount !== '' ? "Next: complete the payment ({$amount}).\n" : "Your workspace is ready.\n")
                     .$url,
+            ],
+
+            /*
+             * SIGNUP-DECISION-001 — four different things that all begin with «approved», told apart, because each one
+             * asks something different of the reader or asks nothing.
+             */
+            'registration_approved_steps_remain' => $ar ? [
+                'subject' => 'تم اعتماد طلبك، وبقيت خطوات للتفعيل',
+                'body' => "اعتمدنا طلبك، ولم يُفعَّل الحساب بعد. أكمل الخطوات المتبقية من صفحة حالة الطلب.\n".$url,
+            ] : [
+                'subject' => 'Your application is approved, with steps left',
+                'body' => "We approved your application. The account is not active yet: finish the remaining steps from your status page.\n".$url,
+            ],
+
+            'registration_approved_discount' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بخصم، وبانتظار سداد المبلغ المتبقي',
+                'body' => "اعتمدنا طلبك بخصم {$days}% على الفترة الأولى. المبلغ المتبقي {$amount}.\n"
+                    ."لن يُفعَّل الحساب قبل تأكيد الدفع.\n".$url,
+            ] : [
+                'subject' => 'Approved with a discount: the remainder is awaiting payment',
+                'body' => "We approved your application with {$days}% off the first period. The remainder is {$amount}.\n"
+                    ."The account activates once that payment is confirmed.\n".$url,
+            ],
+
+            'registration_approved_waived' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بإعفاء من رسوم الفترة الأولى، وحسابك نشط',
+                'body' => "أعفيناك من رسوم الفترة الأولى، وحسابك نشط الآن. لم يُخصم منك أي مبلغ.\n"
+                    ."ينتهي الإعفاء في {$date}، ويصبح الاشتراك بعدها مستحقًا بقيمة {$amount}.\n".$url,
+            ] : [
+                'subject' => 'Approved with the first period waived: your account is active',
+                'body' => "We waived the first period's fee and your account is active. Nothing was charged.\n"
+                    ."The waiver ends on {$date}. After that the subscription is due at {$amount}.\n".$url,
+            ],
+
+            'registration_approved_complimentary' => $ar ? [
+                'subject' => 'تمت الموافقة على طلبك: دخول مباشر دون دفع، وحسابك نشط',
+                'body' => "حسابك نشط الآن بدخول مباشر دون دفع، بلا تاريخ انتهاء ولا فاتورة. لم يُخصم منك أي مبلغ.\n".$url,
+            ] : [
+                'subject' => 'Approved: direct entry with no payment, and your account is active',
+                'body' => "Your account is active with direct entry and no payment, with no end date and no invoice. Nothing was charged.\n".$url,
+            ],
+
+            'registration_approved_trial' => $ar ? [
+                'subject' => 'تم اعتماد طلبك بفترة تجربة، وحسابك نشط',
+                'body' => "حسابك نشط بفترة تجربة تنتهي في {$date}. لن يُخصم منك أي مبلغ تلقائيًا.\n"
+                    ."بعد انتهائها يصبح الدفع مستحقًا بقيمة {$amount} لمواصلة الخدمة.\n".$url,
+            ] : [
+                'subject' => 'Approved with a trial: your account is active',
+                'body' => "Your account is active on a trial ending {$date}. Nothing is charged automatically.\n"
+                    ."After it ends, {$amount} is due to continue.\n".$url,
+            ],
+
+            'admin_trial_ending' => $ar ? [
+                'subject' => "تنتهي فترة تجربتك في {$date}",
+                'body' => "تنتهي فترة تجربتك في {$date}، وبعدها يصبح الدفع مستحقًا لمواصلة الخدمة. لن يُخصم أي مبلغ تلقائيًا.\n".$url,
+            ] : [
+                'subject' => "Your trial ends on {$date}",
+                'body' => "Your trial ends on {$date}. After that, payment is due to continue. Nothing is charged automatically.\n".$url,
             ],
 
             // A refusal always carries its reason: "rejected" with no explanation is a support ticket
             // nobody can answer either.
             'registration_rejected' => $ar ? [
                 'subject' => 'لم نتمكن من اعتماد طلب تسجيلك',
-                'body' => "بعد المراجعة، لم نتمكن من اعتماد الطلب.\nالسبب: {$reason}\n"
-                    .'إن كان لديك ما يوضّح الأمر، يمكنك التقديم مرة أخرى.',
+                'body' => "السبب: {$reason}\n"
+                    .'يمكنك التقديم مرة أخرى.',
             ] : [
                 'subject' => 'We could not approve your registration',
-                'body' => "After review, we were not able to approve the application.\nReason: {$reason}\n"
-                    .'If you have something that clarifies it, you are welcome to apply again.',
+                'body' => "Reason: {$reason}\n"
+                    .'You can apply again.',
             ],
 
             'registration_information_requested' => $ar ? [
                 'subject' => 'نحتاج معلومات إضافية لإكمال طلبك',
-                'body' => "طلبك قيد المراجعة، ونحتاج منك التالي:\n{$reason}\n{$url}",
+                'body' => "نحتاج منك التالي:\n{$reason}\n{$url}",
             ] : [
                 'subject' => 'We need a little more to finish your application',
-                'body' => "Your application is under review and we need the following from you:\n{$reason}\n{$url}",
+                'body' => "We need the following from you:\n{$reason}\n{$url}",
             ],
 
             /*
@@ -222,6 +278,8 @@ final class SubscriptionNotificationTemplates
             'renewal_failed', 'past_due', 'suspended', 'reactivated',
             'plan_changed', 'plan_change_scheduled',
             'registration_approved', 'registration_rejected', 'registration_information_requested',
+            'registration_approved_steps_remain', 'registration_approved_discount', 'registration_approved_waived',
+            'registration_approved_trial', 'registration_approved_complimentary', 'admin_trial_ending',
         ];
     }
 }

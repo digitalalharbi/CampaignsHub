@@ -23,6 +23,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -97,6 +98,35 @@ final class ActionsHonourTheProjectBindingTest extends TestCase
             ->assertSuccessful();
 
         Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+    }
+
+    /**
+     * INTEGRATIONS-CENTRE-001 §4 — the per-account button on the selected-accounts list goes through
+     * this route, so it answers to the same two-minute window as the per-binding one. The second
+     * press is a 429 naming the first request's time, and it queues nothing.
+     */
+    public function test_a_second_manual_sync_of_the_same_account_within_two_minutes_is_refused_and_queues_nothing(): void
+    {
+        Queue::fake();
+        $this->bind($this->projectA);
+        $url = "/api/v1/projects/{$this->projectA->id}/sync-runs";
+        $body = ['external_account_id' => $this->account->id];
+
+        Carbon::setTestNow('2026-11-02 10:00:00');
+        $this->actingAs($this->user, 'sanctum')->postJson($url, $body)->assertStatus(202);
+
+        Carbon::setTestNow('2026-11-02 10:01:00');
+        $this->actingAs($this->user, 'sanctum')->postJson($url, $body)
+            ->assertStatus(429)
+            ->assertHeader('Retry-After', '60')
+            ->assertJsonPath('errors.last_requested_at', Carbon::parse('2026-11-02 10:00:00')->toIso8601String());
+
+        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+
+        Carbon::setTestNow('2026-11-02 10:02:01');
+        $this->actingAs($this->user, 'sanctum')->postJson($url, $body)->assertStatus(202);
+
+        Carbon::setTestNow();
     }
 
     public function test_the_legacy_connector_sync_calls_no_provider_for_an_unselected_account(): void

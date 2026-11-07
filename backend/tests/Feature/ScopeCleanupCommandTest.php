@@ -27,6 +27,8 @@ final class ScopeCleanupCommandTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected bool $selectsSeededAccounts = false;
+
     private Tenant $tenant;
 
     private ClientWorkspace $workspace;

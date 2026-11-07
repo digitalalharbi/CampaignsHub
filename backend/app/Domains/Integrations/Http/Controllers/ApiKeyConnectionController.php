@@ -12,11 +12,16 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\PendingProjectLink;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountDiscovery;
+use App\Domains\Integrations\Services\ProviderIdentity;
 use App\Domains\Integrations\Support\ProviderErrorText;
+use App\Domains\Projects\Access\ProjectAbilities;
+use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -136,6 +141,25 @@ final class ApiKeyConnectionController extends Controller
         $key = trim($validated['api_key']);
 
         /*
+         * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — a key pasted FOR a project opens that project's own connection.
+         *
+         * The same rule a platform sign-in follows: the connection belongs to the one project, nothing the key
+         * can list is catalogued, and the account is stored when the reader confirms it on the project's
+         * account step ({@see ProjectLinkDirectoryController::confirm()}). Without a project this is the older
+         * workspace-wide connect, unchanged.
+         */
+        $projectId = isset($validated['project_id']) ? (string) $validated['project_id'] : null;
+        $project = null;
+        if ($projectId !== null) {
+            abort_unless(
+                app(ProjectAbilities::class)->allows($request->user(), $projectId, ProjectCapability::INTEGRATIONS_MANAGE),
+                403,
+                'You may not link sources to this project.',
+            );
+            $project = Project::withoutGlobalScopes()->where('tenant_id', $tenant->tenantId())->whereKey($projectId)->firstOrFail();
+        }
+
+        /*
          * No expiry, and that is a fact about the credential rather than a default.
          *
          * `OAuthTokens::isExpired()` returns false for a null expiry, so `TokenVault::fresh()` hands
@@ -164,21 +188,34 @@ final class ApiKeyConnectionController extends Controller
                 throw new RuntimeException('The key was accepted, but it lists no ad account.');
             }
 
-            [$connection, $discovered] = DB::transaction(function () use ($tenant, $definition, $tokens, $validated, $request, $owner): array {
+            [$connection, $discovered] = DB::transaction(function () use ($tenant, $definition, $tokens, $validated, $request, $owner, $project): array {
                 $connection = $this->vault->open(
                     tenantId: (string) $tenant->tenantId(),
                     provider: $definition->key,
                     tokens: $tokens,
                     connectionName: $definition->label,
-                    clientWorkspaceId: $validated['client_workspace_id'] ?? null,
+                    // A project's connection is its client's: the project decides, never a second field.
+                    clientWorkspaceId: $project === null ? ($validated['client_workspace_id'] ?? null) : (string) $project->client_workspace_id,
                     createdBy: $request->user()->getKey(),
                     externalOwnerId: $owner,
                     credentialType: 'api_key',
+                    projectId: $project === null ? null : (string) $project->getKey(),
                 );
+
+                if ($project !== null) {
+                    // Nothing is catalogued: the key was proven to list an account above, and the one the
+                    // reader confirms is the one that is stored.
+                    app(ProviderIdentity::class)->capture($connection, $tokens);
+
+                    return [$connection, 1];
+                }
 
                 $this->reclaimAccountRow($connection, $owner);
 
                 $discovered = $this->discovery->refresh($connection)['discovered'];
+
+                // INTEG-PROVIDER-IDENTITY-001 — a key has no person behind it: the ad account's name is the identity.
+                app(ProviderIdentity::class)->capture($connection, $tokens);
 
                 /*
                  * A key the provider accepts for an account we cannot list is not a connection.
@@ -207,6 +244,11 @@ final class ApiKeyConnectionController extends Controller
                 meta: ['status' => 'rejected', 'provider' => $definition->key],
                 status: 422,
             );
+        }
+
+        // Which project this connection was opened for is kept on the server, as it is after a platform sign-in.
+        if ($project !== null) {
+            PendingProjectLink::put((string) $connection->getKey(), (string) $tenant->tenantId(), (string) $project->getKey(), (int) $request->user()->getKey());
         }
 
         $audit->log(

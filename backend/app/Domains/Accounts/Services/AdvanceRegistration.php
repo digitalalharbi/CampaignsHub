@@ -6,10 +6,12 @@ namespace App\Domains\Accounts\Services;
 
 use App\Domains\Accounts\Actions\ProvisionWorkspace;
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Subscriptions\Notifications\SubscriptionNotifier;
 use App\Support\Frontend;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Moves an application to the next thing it is actually waiting on (SIGNUP-002).
@@ -30,6 +32,7 @@ final class AdvanceRegistration
         private readonly ProvisionWorkspace $provision,
         private readonly AuditLogger $audit,
         private readonly SubscriptionNotifier $notify,
+        private readonly RegistrationCommercialGate $gate,
     ) {}
 
     /** The applicant proved their email address. */
@@ -59,12 +62,17 @@ final class AdvanceRegistration
      * depends on whether payment is also required, which is exactly the distinction the two states
      * `PendingApproval` and `ApprovedAwaitingPayment` exist to keep apart.
      */
-    public function approved(RegistrationRequest $request, ?int $reviewerId = null, ?string $note = null): RegistrationRequest
+    public function approved(RegistrationRequest $request, ?int $reviewerId = null, ?string $note = null, bool $notify = true): RegistrationRequest
     {
+        // A concession on a row already approved is on the record as its own decision. It is not another approval.
+        $alreadyApproved = in_array($request->state, [AccountState::ApprovedAwaitingPayment, AccountState::PaymentPending], true)
+            && ($request->approved_at !== null || $request->reviewed_at !== null);
+
         $request->forceFill([
             'reviewed_by' => $reviewerId,
             'reviewed_at' => now(),
             'review_note' => $note,
+            'approved_at' => now(),
         ])->save();
 
         /*
@@ -74,14 +82,18 @@ final class AdvanceRegistration
          * page — an approval that nobody is told about is indistinguishable from one that never
          * happened.
          */
-        $this->tell($request, 'registration_approved', ['reason' => $note ?? '']);
+        if ($notify) {
+            $this->tell($request, 'registration_approved', ['reason' => $note ?? '']);
+        }
 
-        $this->audit->log(
-            action: 'registration.approved',
-            entityType: RegistrationRequest::class,
-            entityId: (string) $request->getKey(),
-            after: ['note' => $note, 'reviewer' => $reviewerId],
-        );
+        if (! $alreadyApproved) {
+            $this->audit->log(
+                action: 'registration.approved',
+                entityType: RegistrationRequest::class,
+                entityId: (string) $request->getKey(),
+                after: ['note' => $note, 'reviewer' => $reviewerId],
+            );
+        }
 
         return $this->advance($request->refresh(), approvalGranted: true);
     }
@@ -131,6 +143,55 @@ final class AdvanceRegistration
     }
 
     /**
+     * Ask again what this application is waiting on, with no new fact.
+     *
+     * For an application opened with a gate already off, and for an explicit re-evaluation. It can grant nothing the
+     * row does not already justify: `ProvisionWorkspace` still checks every gate.
+     */
+    public function reconcile(RegistrationRequest $request): RegistrationRequest
+    {
+        return $this->advance($request->refresh());
+    }
+
+    /**
+     * Re-fix this application to the platform's verification policy as it stands now (SIGNUP-VERIFY-POLICY-001).
+     *
+     * The authorized way to move somebody already in the queue, one application at a time, with a reason. Facts already
+     * proved stay proved, and approval and payment are not touched.
+     */
+    public function reevaluateVerification(RegistrationRequest $request, array $snapshot, string $reason, ?int $actorId): RegistrationRequest
+    {
+        $before = $request->effective_policy;
+
+        $request->forceFill(['effective_policy' => $snapshot])->save();
+
+        $this->audit->log(
+            action: 'registration.verification_reevaluated',
+            entityType: RegistrationRequest::class,
+            entityId: (string) $request->getKey(),
+            before: ['effective_policy' => $before, 'state' => $request->state->value],
+            after: ['effective_policy' => $snapshot],
+            reason: $reason,
+            userId: $actorId,
+        );
+
+        $wasAtEmailGate = $request->state === AccountState::EmailVerificationRequired;
+        $request = $this->reconcile($request);
+
+        // Sent back to a gate nobody is holding a challenge for: send one, or the applicant waits for nothing. Issued
+        // here because the normal route into this state is opening the application, which sends its own.
+        if (! $wasAtEmailGate && $request->state === AccountState::EmailVerificationRequired) {
+            try {
+                app(RegistrationVerificationService::class)->send($request, 'email');
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $request;
+    }
+
+    /**
      * Work out what this application is now waiting on, and move it there.
      *
      * The two flags are facts the CALLER has just established and that are not yet readable from the
@@ -149,7 +210,7 @@ final class AdvanceRegistration
 
         $policy = $this->policy->for($request);
 
-        if (! $request->emailIsVerified()) {
+        if ($policy['requires_email'] && ! $request->emailIsVerified()) {
             return $this->moveTo($request, AccountState::EmailVerificationRequired);
         }
 
@@ -159,13 +220,16 @@ final class AdvanceRegistration
 
         // Approval counts as outstanding until it has actually been granted — `reviewed_at` alone
         // is not enough, because a rejection also sets it.
-        $approved = $approvalGranted || $request->state === AccountState::ApprovedAwaitingPayment;
+        $approved = $approvalGranted || $request->approved_at !== null || $request->state === AccountState::ApprovedAwaitingPayment;
         if ($policy['requires_approval'] && ! $approved) {
             return $this->moveTo($request, AccountState::PendingApproval);
         }
 
-        if ($policy['requires_payment'] && ! $paymentConfirmed) {
-            return $this->moveTo($request, AccountState::ApprovedAwaitingPayment);
+        if ($policy['requires_payment'] && ! $paymentConfirmed && $this->gate->clearedBy($request) === null) {
+            // A charge already opened stays in its own state: asking again says nothing about the money.
+            return $request->state === AccountState::PaymentPending
+                ? $request
+                : $this->moveTo($request, AccountState::ApprovedAwaitingPayment);
         }
 
         /*
@@ -178,7 +242,46 @@ final class AdvanceRegistration
         $request = $this->moveTo($request, AccountState::ApprovedAwaitingPayment);
         $this->provision->execute($request);
 
-        return $request->refresh();
+        $request = $request->refresh();
+
+        // A decision taken while a verification was still open activates here, so the applicant hears about it here.
+        $decision = $this->gate->inForce($request);
+        if ($decision !== null && in_array($decision->outcome, [
+            RegistrationDecision::WAIVER, RegistrationDecision::TRIAL, RegistrationDecision::EXTERNAL_SETTLEMENT, RegistrationDecision::JOIN_EXISTING, RegistrationDecision::COMPLIMENTARY,
+        ], true)) {
+            $this->tellDecision($request, $decision);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Tell the applicant what was decided, once, and only after it has really been committed.
+     *
+     * The wording follows where the application actually is. «Approved» alone said «your workspace is ready» to somebody
+     * still owing a payment, which is what an applicant was shown while the account said awaiting payment.
+     */
+    public function tellDecision(RegistrationRequest $request, RegistrationDecision $decision): void
+    {
+        $terms = (array) $decision->terms;
+        $money = ['amount' => (string) ($terms['amount_due'] ?? ''), 'currency' => (string) ($terms['currency'] ?? '')];
+        $provisioned = $request->isProvisioned();
+
+        [$event, $context] = match (true) {
+            ! $provisioned && $request->state !== AccountState::ApprovedAwaitingPayment && $request->state !== AccountState::PaymentPending => ['registration_approved_steps_remain', []],
+            $decision->outcome === RegistrationDecision::WAIVER => ['registration_approved_waived', [
+                'amount' => (string) ($terms['renewal_amount'] ?? ''), 'currency' => $money['currency'], 'date' => (string) ($terms['renewal_on'] ?? ''),
+            ]],
+            $decision->outcome === RegistrationDecision::COMPLIMENTARY => ['registration_approved_complimentary', []],
+            $decision->outcome === RegistrationDecision::TRIAL => ['registration_approved_trial', [
+                'amount' => (string) ($terms['renewal_amount'] ?? ''), 'currency' => $money['currency'], 'date' => (string) ($terms['renewal_on'] ?? ''),
+            ]],
+            $decision->outcome === RegistrationDecision::DISCOUNT => ['registration_approved_discount', $money + ['days' => (int) ($terms['discount_percent'] ?? 0)]],
+            $provisioned => ['registration_approved', []],
+            default => ['registration_approved', $money],
+        };
+
+        DB::afterCommit(fn () => $this->tell($request, $event, $context, $decision->getKey().':'.$event));
     }
 
     /**
@@ -187,13 +290,13 @@ final class AdvanceRegistration
      * A notifier that threw here would roll back an approval, and an application stuck in a queue
      * because a template was wrong is a worse failure than a message nobody received.
      */
-    private function tell(RegistrationRequest $request, string $event, array $context): void
+    private function tell(RegistrationRequest $request, string $event, array $context, ?string $occasion = null): void
     {
         try {
             $this->notify->notifyApplicant($request, $event, $context + [
                 'url' => Frontend::origin()
                     .'/signup/status?request='.$request->getKey(),
-            ]);
+            ], occasion: $occasion);
         } catch (\Throwable $e) {
             report($e);
         }

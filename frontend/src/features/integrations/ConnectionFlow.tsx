@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { ProjectAccountPicker } from './ProjectAccountPicker'
 import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
-  connectWithApiKey, fetchMetaApps, startPlatformOAuth, type ConnectableProvider, type HubConnection,
+  connectWithApiKey, fetchMetaApps, removeConnection, startPlatformOAuth, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
+import { LinkSuccess } from './LinkSuccess'
 import { listProjects } from '@/features/projects/api'
 import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
@@ -46,10 +48,16 @@ export type Stage = 'login' | 'parent' | 'accounts'
  * it does not pretend a completed journey is still in progress.
  */
 export function ConnectionFlow({ mode, provider, connection, projectId, onClose, onDone }: {
-  /** `connect` runs all three stages; `manage` reopens the selector on a connection that exists. */
-  mode: 'connect' | 'manage'
+  /**
+   * `connect` runs all three stages; `manage` reopens the selector on a connection that exists;
+   * `reauthorise` renews the consent of a connection that exists, through the SAME sign-in stage and
+   * the same OAuth start as a new connection — with the connection's client workspace and project on
+   * the state, so the callback finds that connection again instead of opening a second one.
+   */
+  mode: 'connect' | 'manage' | 'reauthorise'
   provider: ConnectableProvider | null
-  connection: HubConnection | null
+  /** Only what the flow reads, so a journey resumed on a project page can hand over the connection it came back with. */
+  connection: Pick<HubConnection, 'id' | 'provider' | 'has_parent' | 'projects'> | null
   /** Fixed for the whole flow once chosen — through OAuth and back. */
   projectId: string | null
   onClose: () => void
@@ -58,8 +66,15 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
   const ar = useUi((s) => s.locale) === 'ar'
 
   const [destination, setDestination] = useState<string | null>(projectId)
+  /*
+   * INTEG-PROJECT-LINK-001 — a journey that starts from a project keeps it. There is no project picker
+   * inside a `connect` flow that was handed one: the heading states it, the provider's consent screen
+   * carries it on the server's state, and the wizard is fixed to it. (Re-authorising keeps its choice
+   * among the connection's own clients — that is a different question.)
+   */
+  const projectFixed = mode === 'connect' && projectId !== null
   const [stage, setStage] = useState<Stage>(
-    mode === 'manage' || connection !== null ? (provider?.has_parent ?? connection?.has_parent ? 'parent' : 'accounts') : 'login',
+    mode === 'reauthorise' ? 'login' : mode === 'manage' || connection !== null ? (provider?.has_parent ?? connection?.has_parent ? 'parent' : 'accounts') : 'login',
   )
   const [finished, setFinished] = useState(false)
   /*
@@ -71,9 +86,12 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
    * would put a spinner between «connected» and the question it unblocks.
    */
   const [openedByKey, setOpenedByKey] = useState<string | null>(null)
+  const projectNames = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), enabled: projectFixed })
 
   const hasParent = connection?.has_parent ?? provider?.has_parent ?? false
-  const stages: Stage[] = mode === 'manage'
+  const stages: Stage[] = mode === 'reauthorise'
+    ? ['login']
+    : mode === 'manage'
     ? (hasParent ? ['parent', 'accounts'] : ['accounts'])
     : (hasParent ? ['login', 'parent', 'accounts'] : ['login', 'accounts'])
 
@@ -94,6 +112,31 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
   const providerKey = connection?.provider ?? provider?.key ?? ''
   const connectionId = connection?.id ?? openedByKey
 
+  /*
+   * INTEG-PROJECT-LINK-001 — a key pasted FOR a project opens that project's own connection, and the
+   * steps after it are the project's: organisation → account → «تم», asked of the provider on demand,
+   * storing only the account that is confirmed. The estate wizard is for a workspace-wide connection.
+   */
+  const keyedForProject = projectFixed && openedByKey !== null && destination !== null
+
+  const cancel = useMutation({
+    mutationFn: () => removeConnection(connectionId ?? '', { unconfirmedOnly: true }),
+    // Whatever the server answered, the dialog ends: a refusal means the source is in use and was kept.
+    onSettled: onClose,
+  })
+
+  if (keyedForProject) {
+    return (
+      <ProjectAccountPicker
+        projectId={destination}
+        projectName={projectNames.data?.find((p) => p.id === destination)?.name ?? null}
+        connection={{ id: openedByKey, provider: providerKey }}
+        onClose={onClose}
+        onReturn={onDone}
+      />
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="dialog" aria-modal="true">
       <div className="w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl" data-testid="connection-flow">
@@ -103,10 +146,30 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
             <h2 className="min-w-0 flex-1 truncate text-base font-bold text-text-primary">
               {finished
                 ? (ar ? `تم ربط ${label}` : `${label} connected`)
+                : mode === 'reauthorise'
+                  ? (ar ? `إعادة المصادقة — ${label}` : `Reconnect — ${label}`)
                 : mode === 'manage'
-                  ? (ar ? `إدارة الحسابات — ${label}` : `Manage accounts — ${label}`)
+                  ? (ar ? `تعديل الاختيار — ${label}` : `Edit the selection — ${label}`)
                   : (ar ? `ربط ${label}` : `Connect ${label}`)}
             </h2>
+            {/*
+              INTEG-SOURCE-REMOVAL-001 — «إلغاء» is an act, «إغلاق» is leaving.
+
+              A connection this flow opened and nobody confirmed is removed on cancel, so nothing half-made is left
+              on the hub. The server removes it only if nothing was ever selected or synced on it, so cancelling a
+              re-authorisation of a working source changes nothing. Closing the tab instead is covered by the
+              abandoned-connection sweep.
+            */}
+            {mode === 'connect' && !finished && connectionId !== null && (
+              <Button
+                variant="ghost"
+                loading={cancel.isPending}
+                onClick={() => cancel.mutate()}
+                data-testid="flow-cancel"
+              >
+                {ar ? 'إلغاء' : 'Cancel'}
+              </Button>
+            )}
             <Button variant="ghost" onClick={onClose} data-testid="flow-close">{ar ? 'إغلاق' : 'Close'}</Button>
           </div>
 
@@ -116,7 +179,9 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
 
         <div className="p-5">
           {finished ? (
-            <Receipt ar={ar} label={label} onDone={onDone} />
+            destination !== null && connectionId !== null && mode !== 'reauthorise'
+              ? <LinkSuccess projectId={destination} connectionId={connectionId} onReturn={onDone} />
+              : <Receipt ar={ar} label={label} onDone={onDone} />
           ) : mode === 'manage' && destination === null ? (
             /*
              * Managing needs a client, and nothing decided one.
@@ -143,6 +208,7 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
                 providerKey={providerKey}
                 destination={destination}
                 onDestination={setDestination}
+                locked={projectFixed}
                 onConnected={(id) => { setOpenedByKey(id); setStage('accounts') }}
               />
             ) : (
@@ -152,6 +218,11 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
                 providerKey={providerKey}
                 destination={destination}
                 onDestination={setDestination}
+                locked={projectFixed}
+                reauthorise={mode === 'reauthorise'}
+                allowedProjectIds={mode === 'reauthorise' && (connection?.projects.length ?? 0) > 0
+                  ? connection!.projects.map((p) => p.id)
+                  : null}
               />
             )
           ) : connectionId === null ? (
@@ -233,7 +304,9 @@ function ChooseClient({ ar, onChoose }: { ar: boolean; onChoose: (id: string) =>
  * offering to remember it under this origin is a copy nobody asked for. There is no «show» toggle —
  * the thing it would reveal is the one thing this screen never needs to display back.
  */
-function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnected }: {
+function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnected, locked = false }: {
+  /** INTEG-PROJECT-LINK-001 — the project was decided before this flow opened and cannot be changed inside it. */
+  locked?: boolean
   ar: boolean
   label: string
   providerKey: string
@@ -262,7 +335,9 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
     <div className="flex flex-col gap-5" data-testid="flow-step-key">
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-bold text-text-primary">
-          {ar ? 'لأي عميل هذه الحسابات؟' : 'Which client are these accounts for?'}
+          {locked
+            ? (ar ? 'المشروع' : 'Project')
+            : (ar ? 'لأي عميل هذه الحسابات؟' : 'Which client are these accounts for?')}
         </h3>
         <p className="text-xs text-text-secondary">
           {ar
@@ -270,7 +345,9 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
             : 'Settled now and fixed for the whole flow.'}
         </p>
 
-        {projects.isLoading ? (
+        {locked ? (
+          <FixedProject ar={ar} name={projects.data?.find((p) => p.id === destination)?.name ?? null} loading={projects.isLoading} />
+        ) : projects.isLoading ? (
           <Skeleton className="h-10 w-full" />
         ) : (
           <select
@@ -364,12 +441,17 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
  * reads because they have already decided. This says it in ours, before they leave, and it names the
  * client the accounts will belong to — the one decision that is expensive to change afterwards.
  */
-function Login({ ar, label, providerKey, destination, onDestination }: {
+function Login({ ar, label, providerKey, destination, onDestination, reauthorise = false, allowedProjectIds = null, locked = false }: {
+  /** INTEG-PROJECT-LINK-001 — the project was decided before this flow opened and cannot be changed inside it. */
+  locked?: boolean
   ar: boolean
   label: string
   providerKey: string
   destination: string | null
   onDestination: (id: string) => void
+  /** Renewing an existing connection: the selection is untouched, and only its own clients are offered. */
+  reauthorise?: boolean
+  allowedProjectIds?: string[] | null
 }) {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
 
@@ -394,7 +476,7 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
      * own — its own consent, its own credential — and the account step offers only what that login can see, which the assignment fence
      * already keeps off every other client's projects.
      */
-    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination, providerKey === 'meta' ? metaApp : null),
+    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination, providerKey === 'meta' ? metaApp : null, window.location.pathname.startsWith('/agency') ? 'agency' : 'app'),
     onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
   })
 
@@ -402,7 +484,9 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
     <div className="flex flex-col gap-5" data-testid="flow-step-login">
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-bold text-text-primary">
-          {ar ? 'لأي عميل هذه الحسابات؟' : 'Which client are these accounts for?'}
+          {locked
+            ? (ar ? 'المشروع' : 'Project')
+            : (ar ? 'لأي عميل هذه الحسابات؟' : 'Which client are these accounts for?')}
         </h3>
         <p className="text-xs text-text-secondary">
           {/* Asked here because it is free here and expensive afterwards. */}
@@ -411,7 +495,9 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
             : 'Settled now and fixed for the whole flow, so nothing asks again after you return.'}
         </p>
 
-        {projects.isLoading ? (
+        {locked ? (
+          <FixedProject ar={ar} name={projects.data?.find((p) => p.id === destination)?.name ?? null} loading={projects.isLoading} />
+        ) : projects.isLoading ? (
           <Skeleton className="h-10 w-full" />
         ) : (
           <select
@@ -422,9 +508,11 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
           >
             <option value="">{ar ? 'اختر العميل' : 'Choose a client'}</option>
-            {(projects.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {(projects.data ?? [])
+              .filter((p) => allowedProjectIds === null || allowedProjectIds.includes(p.id))
+              .map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
           </select>
         )}
       </section>
@@ -475,9 +563,13 @@ function Login({ ar, label, providerKey, destination, onDestination }: {
               : 'Read only — CampaignsHub never creates a campaign, changes a budget or spends anything.'}
           </li>
           <li>
-            · {ar
-              ? 'لن يُزامَن أي حساب لم تختره في الخطوة الأخيرة.'
-              : 'No account is ever synced unless you choose it in the last stage.'}
+            · {reauthorise
+              ? (ar
+                ? 'تُجدَّد المصادقة فقط. لا تتغيّر الحسابات المختارة ولا ارتباطها بالعملاء.'
+                : 'Renews the authorisation only. Your selected accounts and their clients are untouched.')
+              : (ar
+                ? 'لن يُزامَن أي حساب لم تختره في الخطوة الأخيرة.'
+                : 'No account is ever synced unless you choose it in the last stage.')}
           </li>
         </ul>
       </section>
@@ -576,4 +668,15 @@ const STAGE_LABELS: Record<Stage, { ar: string; en: string }> = {
   login: { ar: 'تسجيل الدخول', en: 'Sign in' },
   parent: { ar: 'المنظمة', en: 'Organisation' },
   accounts: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
+}
+
+/** The project this journey is for — stated, never asked (INTEG-PROJECT-LINK-001). */
+function FixedProject({ ar, name, loading }: { ar: boolean; name: string | null; loading: boolean }) {
+  if (loading) return <Skeleton className="h-10 w-full" />
+
+  return (
+    <p className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm font-semibold text-text-primary" data-testid="flow-project-fixed">
+      {name ?? (ar ? 'المشروع المحدد' : 'The chosen project')}
+    </p>
+  )
 }

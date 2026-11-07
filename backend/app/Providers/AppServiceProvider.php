@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Domains\Accounts\Services\AccountGrants;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
 use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
@@ -14,10 +15,12 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Metrics\Services\PeriodReachReader;
@@ -28,6 +31,7 @@ use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
@@ -71,7 +75,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(PerformanceRecorder::class);
         // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
         $this->app->scoped(PeriodReachReader::class);
+        // PERF-RECOVERY-001 — a read repeated inside one report build is answered once; discarded when the build ends.
+        $this->app->scoped(ReportReadMemo::class);
         $this->app->scoped(PresentationAudience::class);
+        // INTEG-SYNC-ENGINE-001 — what the last request on a connection came to belongs to one job.
+        $this->app->scoped(ProviderRateBudget::class);
         $this->app->scoped(RefusedCreativeAccess::class);
 
         /*
@@ -223,6 +231,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
 
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
+        // EMAIL-GAPS — recognises a new device. Queues its mail and swallows its own failures: see the class.
+        Event::listen(Login::class, [NewSignInAlert::class, 'handle']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
         /*
@@ -257,6 +267,17 @@ class AppServiceProvider extends ServiceProvider
          * is exactly where that happens). Off-production the allowance is large for the same reason
          * `auth-login`'s is: the acceptance suite submits back to back from one address.
          */
+        /*
+         * EMAIL-TEST-SEND-001 — named, because an unnamed `throttle:3,1` shares its counter with every
+         * other route written the same way. Strict in every environment: it can only ever be a person
+         * reviewing templates, and it spends the provider's sending reputation.
+         */
+        RateLimiter::for('mail-test-send', static function (Request $request): array {
+            $who = (string) $request->user()?->getAuthIdentifier();
+
+            return [Limit::perMinute(3)->by('m:'.$who), Limit::perDay(20)->by('d:'.$who)];
+        });
+
         RateLimiter::for('public-form', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 40 : 600;
 
@@ -285,12 +306,22 @@ class AppServiceProvider extends ServiceProvider
          * Raising the production limit or retrying the test would both have been wrong: the first
          * weakens a real control, the second hides it.
          */
-        RateLimiter::for('registration', function (Request $request): Limit {
-            $perMinute = $this->app->environment('production')
-                ? (int) config('accounts.registration_throttle', 6)
-                : 60;
+        RateLimiter::for('registration', function (Request $request): array {
+            $production = $this->app->environment('production');
+            $perMinute = $production ? (int) config('accounts.registration_throttle', 6) : 60;
 
-            return Limit::perMinute($perMinute)->by((string) $request->ip());
+            $limits = [Limit::perMinute($perMinute)->by((string) $request->ip())];
+
+            // SIGNUP-VERIFY-POLICY-001 — with the email gate off an application costs nothing to open, so one address
+            // also gets an hourly ceiling. It does not exist while the gate is on.
+            if (! app(RegistrationVerificationSettings::class)->emailEnabled()) {
+                $limits[] = Limit::perHour($production
+                    ? (int) config('accounts.unverified_registration_per_hour', 20)
+                    : (int) config('accounts.unverified_registration_per_hour_local', 1000)
+                )->by('registration-unverified:'.$request->ip());
+            }
+
+            return $limits;
         });
 
         /*

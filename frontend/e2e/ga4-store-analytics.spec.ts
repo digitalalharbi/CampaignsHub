@@ -1,0 +1,103 @@
+import { expect, test, type Locator } from '@playwright/test'
+import { API_HEADERS, AUTH, csrfHeaders, seededProject, selectProject } from './helpers'
+
+/**
+ * GA4-STORE-ANALYTICS-001 / GA4-REPORT-SECTIONS-001 / TABLE-FIXED-PAGE-001 — the store as its GA4
+ * property measured it, on the three surfaces that show it, against the DEMO property
+ * (`DemoGa4Seeder`, labelled demo end to end). No live GA4 is involved.
+ *
+ * What only a browser can say: the reading reaches the rendered page; moving a table to another page
+ * leaves its box exactly the size it was; and the client's link and the saved report carry the same
+ * parts without a campaign name.
+ */
+const STORE_PROJECT = 'متجر تجريبي — Demo'
+const LIVE_TOKEN = 'demo-live-report-token'
+
+const box = async (l: Locator) => {
+  const b = await l.boundingBox()
+  expect(b, 'the table box was not laid out').not.toBeNull()
+
+  return { w: Math.round(b!.width), h: Math.round(b!.height) }
+}
+
+test.describe('GA4 store analytics', () => {
+  test.use({ storageState: AUTH.owner })
+
+  test('Analytics draws the store reading, and paging a table never changes its size', async ({ page, request }) => {
+    test.setTimeout(120_000)
+    await selectProject(page, await seededProject(request, STORE_PROJECT))
+    await page.goto('/agency/analytics?tab=site')
+
+    await expect(page.getByTestId('ga4-store')).toBeVisible({ timeout: 30000 })
+    for (const key of ['sessions', 'bounce_rate', 'revenue', 'aov', 'conversion_rate']) {
+      await expect(page.getByTestId(`ga4-tile-${key}`)).toBeVisible()
+    }
+    // Money reads in USD with the property's own currency kept beside it.
+    await expect(page.getByTestId('ga4-tile-revenue')).toContainText('USD')
+    await expect(page.getByTestId('ga4-tile-revenue')).toContainText('SAR')
+    await expect(page.getByTestId('ga4-channels')).toBeVisible()
+    await expect(page.getByTestId('ga4-devices')).toBeVisible()
+    await expect(page.getByTestId('ga4-gap')).toBeVisible()
+    await expect(page.getByTestId('ga4-gap-not-summed')).toBeVisible()
+
+    const table = page.getByTestId('ga4-table-box')
+    await table.scrollIntoViewIfNeeded()
+    const first = await box(table)
+    const pageBefore = await page.evaluate(() => document.documentElement.scrollHeight)
+
+    // Sources has more rows than one page; walk to the last page.
+    await page.getByTestId('ga4-table-tab-sources').click()
+    while (await page.getByTestId('ga4-table-next').isEnabled()) {
+      await page.getByTestId('ga4-table-next').click()
+      expect(await box(table), 'a page change resized the table').toEqual(first)
+    }
+    await page.getByTestId('ga4-table-tab-products').click()
+    expect(await box(table), 'a tab change resized the table').toEqual(first)
+    expect(await page.evaluate(() => document.documentElement.scrollHeight), 'the page grew or shrank').toBe(pageBefore)
+  })
+
+  test('the client link shows the store parts, without a campaign name or a spend figure', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.context().clearCookies()
+    await page.goto(`/r/${LIVE_TOKEN}?view=dashboard`)
+    await expect(page.getByTestId('live-mode-dashboard')).toBeVisible({ timeout: 30000 })
+
+    const ga4 = page.getByTestId('report-ga4')
+    await expect(ga4).toBeVisible({ timeout: 30000 })
+    await expect(ga4.getByTestId('report-ga4-overview')).toBeVisible()
+    await expect(ga4.getByTestId('report-ga4-gap')).toBeVisible()
+    await expect(ga4.getByTestId('ga4-table-tab-campaigns')).toHaveCount(0)
+    for (const campaign of ['eid_collection', 'retargeting_30d', 'abaya_search', 'new_arrivals']) {
+      await expect(ga4).not.toContainText(campaign)
+    }
+    await expect(ga4).not.toContainText(/الإنفاق|Spend/)
+  })
+
+  test('the saved report carries the store pages it was saved with', async ({ page, request }) => {
+    test.setTimeout(120_000)
+    const projectId = await seededProject(request, STORE_PROJECT)
+    const headers = await csrfHeaders(request)
+    const list = ((await (await request.get(`/api/v1/projects/${projectId}/reports`, { headers: API_HEADERS })).json()).data?.reports ?? []) as Array<{ id: string; status?: string }>
+    const report = list.find((r) => r.status === 'completed')
+    expect(report, 'the store project has no completed report').toBeTruthy()
+
+    const created = await request.post(`/api/v1/projects/${projectId}/reports/${report!.id}/shares`, {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { mode: 'snapshot' },
+    })
+    expect(created.ok(), `share creation returned ${created.status()}`).toBe(true)
+    const body = (await created.json()).data as Record<string, string>
+    const raw = body.raw_token ?? body.token ?? body.url?.split('/r/')[1]
+    expect(raw).toBeTruthy()
+
+    await page.context().clearCookies()
+    await page.goto(`/r/${raw}`)
+    await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
+    // The scroll mode lays every page out at once.
+    await page.getByRole('button', { name: 'صفحة', exact: true }).click()
+    await expect(page.getByTestId('slide-ga4-overview')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('slide-ga4-gap')).toBeVisible()
+    await expect(page.getByTestId('slide-ga4-tables')).toBeVisible()
+    await expect(page.getByTestId('slide-ga4-tables').getByTestId('ga4-table-tab-campaigns')).toHaveCount(0)
+  })
+})

@@ -34,7 +34,7 @@ final class PlatformSetting extends Model
         'payment_primary_gateway', 'payment_primary_set_at', 'payment_primary_set_by', 'disabled_capabilities',
     ];
 
-    protected $casts = ['payment_primary_set_at' => 'datetime', 'disabled_capabilities' => 'array'];
+    protected $casts = ['payment_primary_set_at' => 'datetime', 'disabled_capabilities' => 'array', 'registration_verification_policy' => 'array', 'auth_code_switches' => 'array'];
 
     /**
      * The singleton, created empty on first read.

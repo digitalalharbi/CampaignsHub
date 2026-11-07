@@ -18,6 +18,8 @@ return [
     'linkedin' => 'لينكدإن',
     'google_ads' => 'إعلانات جوجل',
     'google' => 'إعلانات جوجل',
+    'openai_ads' => 'إعلانات ChatGPT',
+    'ga4' => 'جوجل أناليتكس 4',
     'salla' => 'سلة',
     'zid' => 'زد',
     'sandbox' => 'بيئة تجريبية',

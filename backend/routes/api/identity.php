@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Identity\Http\Controllers\AuthController;
-use App\Domains\Identity\Http\Controllers\EmailSignInController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
 use App\Domains\Identity\Http\Controllers\MeController;
 use App\Domains\Identity\Http\Controllers\OAuthController;
+use App\Domains\Identity\Http\Controllers\OAuthPendingLinkController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
-use App\Domains\Identity\Http\Controllers\SignInMethodsController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
@@ -40,6 +39,8 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
      */
     Route::post('/register', [RegistrationController::class, 'store'])->name('register')
         ->middleware('throttle:registration');
+    Route::get('/registration-policy', [RegistrationController::class, 'publicPolicy'])->name('registration-policy')
+        ->middleware('throttle:60,1');
     Route::prefix('registration')->name('registration.')->group(function (): void {
         Route::post('/verify-email', [RegistrationController::class, 'verifyEmail'])->name('verify-email')
             ->middleware('throttle:otp-check');
@@ -55,15 +56,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         Route::post('/{registration}/resend', [RegistrationController::class, 'resend'])->name('resend')
             ->middleware('throttle:registration-resend');
     });
-
-    /*
-     * LOGIN-UNIFIED-001. The single sign-in page asks this which form to render for an identifier,
-     * so the visitor never picks a portal. Throttled like a sign-in attempt because it takes an
-     * identifier and touches the users table — an unthrottled version would be a cheap way to probe
-     * addresses even though the answer is deliberately uninformative.
-     */
-    Route::post('/method', [AuthController::class, 'method'])->name('method')
-        ->middleware('throttle:auth-login');
 
     Route::post('/login', [AuthController::class, 'login'])->name('login')
         ->middleware('throttle:auth-login');
@@ -84,17 +76,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
     Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
         ->middleware('throttle:otp-check');
 
-    /*
-     * LOGIN-OTP-001 — the email path, which is the whole of the production sign-in UI.
-     *
-     * Throttled exactly like the phone pair, and for the same reason: `start` answers identically
-     * for an address nobody holds, which is the property that keeps it from being a directory of
-     * who has an account here, and the throttle is what bounds the cost of that answer.
-     */
-    Route::post('/email-code/start', [EmailSignInController::class, 'start'])->name('email-code.start')
-        ->middleware('throttle:otp-request');
-    Route::post('/email-code/verify', [EmailSignInController::class, 'verify'])->name('email-code.verify')
-        ->middleware('throttle:otp-check');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
     /*
@@ -115,8 +96,6 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
      * `callback` are public too: they ARE the sign-in.
      */
     Route::get('/oauth/providers', [OAuthController::class, 'providers'])->name('oauth.providers');
-    // AUTH-LOGIN-UX-002 — which ways in the page may offer (a way that cannot work is not shown).
-    Route::get('/methods', SignInMethodsController::class)->middleware('throttle:60,1')->name('methods');
 
     /*
      * `start` and `callback` need a SESSION of their own, stated explicitly here.
@@ -138,6 +117,21 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
             ->middleware('auth:sanctum')->name('oauth.identities');
         Route::post('/oauth/{provider}/link', [OAuthController::class, 'linkStart'])
             ->middleware(['auth:sanctum', 'throttle:10,1'])->name('oauth.link');
+        /*
+         * LOGIN-004 — linking a Google account in place, after proof. The pending link lives in THIS browser's session, so these
+         * need the session the callback wrote it to. `password` spends the sign-in form's own `auth-login` allowance; the mailed
+         * link is checked like any other one-time code.
+         */
+        Route::prefix('/oauth/pending-link')->name('oauth.pending-link.')->group(function (): void {
+            Route::get('/', [OAuthPendingLinkController::class, 'show'])->name('show');
+            Route::post('/password', [OAuthPendingLinkController::class, 'password'])
+                ->middleware('throttle:auth-login')->name('password');
+            Route::post('/email', [OAuthPendingLinkController::class, 'email'])
+                ->middleware('throttle:6,1')->name('email');
+            Route::post('/confirm-email', [OAuthPendingLinkController::class, 'confirmEmail'])
+                ->middleware('throttle:otp-check')->name('confirm-email');
+            Route::delete('/', [OAuthPendingLinkController::class, 'destroy'])->name('destroy');
+        });
         // Apple posts the callback back as a form when scopes are requested; Google uses GET.
         Route::match(['get', 'post'], '/oauth/{provider}/callback', [OAuthController::class, 'callback'])
             ->name('oauth.callback');

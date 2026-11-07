@@ -7,11 +7,13 @@ namespace App\Domains\Reports\Jobs;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ReportVersions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /** Generates a report's data snapshot on the reports queue. Idempotent: re-running re-snapshots. */
@@ -40,14 +42,22 @@ final class GenerateReportJob implements ShouldQueue
         if (! $report) {
             return;
         }
+        // REPORT-DUPLICATE-001 — a draft is not built until it is published; publishing is what moves it to `processing`.
+        if ($report->isDraft()) {
+            return;
+        }
         $report->update(['status' => 'processing', 'error' => null]);
         try {
             $data = $generator->generate($report);
-            $report->update(['data' => $data, 'status' => 'completed', 'generated_at' => now(), 'error' => null]);
+            // REPORT-SNAPSHOT-PROTECT-001 — every path that rebuilds a report ends here, so the copy it replaces is kept here.
+            DB::transaction(function () use ($report, $data): void {
+                app(ReportVersions::class)->keep($report);
+                $report->update(['data' => $data, 'status' => 'completed', 'generated_at' => now(), 'error' => null]);
+            });
             $this->tell($report, 'report_ready');
         } catch (Throwable $e) {
             // Retries stay quiet; the terminal failure speaks once, from failed().
-            $report->update(['status' => 'failed', 'error' => $e->getMessage()]);
+            $report->update(['status' => $report->hasStoredCopy() ? 'completed' : 'failed', 'error' => $e->getMessage()]);
             throw $e;
         }
     }
@@ -88,10 +98,10 @@ final class GenerateReportJob implements ShouldQueue
 
     public function failed(Throwable $e): void
     {
-        Report::withoutGlobalScopes()->where('id', $this->reportId)->update(['status' => 'failed', 'error' => $e->getMessage()]);
-
         $report = Report::withoutGlobalScopes()->find($this->reportId);
         if ($report !== null) {
+            // A failed rebuild does not take the copy it failed to replace offline.
+            $report->update(['status' => $report->hasStoredCopy() ? 'completed' : 'failed', 'error' => $e->getMessage()]);
             $this->tell($report, 'report_failed', $e->getMessage());
         }
     }

@@ -320,6 +320,9 @@ final class SnapchatCreativeMetricsTest extends TestCase
             'account_type' => 'ad_account',
             'external_id' => $externalId,
             'name' => $externalId,
+            // MONEY-CURRENCY-NEVER-ASSUMED-001 — an account has a currency; the old fallback to the reporting one is gone.
+            // USD: these cases are about mapping and idempotence, not conversion, so par keeps the figures as asserted.
+            'currency' => 'USD',
             'status' => 'active',
             'discovered_at' => Carbon::now(),
         ]);

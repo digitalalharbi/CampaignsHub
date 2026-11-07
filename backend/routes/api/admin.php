@@ -2,15 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\PlatformWebhookEventController;
 use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
+use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
@@ -21,12 +24,15 @@ use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
+use App\Domains\Platform\Http\Controllers\SyncDeadLetterController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
@@ -58,8 +64,8 @@ Route::middleware(['auth:sanctum', 'platform'])
          * to mail thousands of people by mis-click.
          */
         Route::get('/email/deliveries', [PlatformEmailController::class, 'index'])->name('email.deliveries');
-        // EMAIL-SETTINGS-PAGE-001 — one message to the signed-in operator, never to an address in the request.
-        Route::post('/email/test', [PlatformEmailController::class, 'test'])->middleware('throttle:3,1')->name('email.test');
+        // EMAIL-TEST-SEND-001 — one message to the signed-in admin's proven address, never to an address in the request.
+        Route::post('/email/test', [PlatformEmailController::class, 'test'])->middleware('throttle:mail-test-send')->name('email.test');
         Route::get('/email/previews', [PlatformEmailController::class, 'previews'])->name('email.previews');
         Route::get('/email/previews/{key}', [PlatformEmailController::class, 'preview'])->name('email.preview');
 
@@ -71,6 +77,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * would reintroduce exactly what it removes.
          */
         Route::get('/scheduled-work', ScheduledWorkController::class)->name('scheduled-work');
+
+        // INTEG-SYNC-ENGINE-001 — metrics syncs that exhausted their retries. API only for now; a re-drive re-proves the binding.
+        Route::get('/sync-dead-letters', [SyncDeadLetterController::class, 'index'])->middleware('throttle:60,1')->name('sync-dead-letters.index');
+        Route::post('/sync-dead-letters/{run}/redrive', [SyncDeadLetterController::class, 'redrive'])
+            ->whereUuid('run')->middleware('throttle:30,1')->name('sync-dead-letters.redrive');
 
         // SALLA-REVIEW-001 — one-click revoke and extend for the app-store review workspace.
         Route::get('/review-accounts', [PlatformReviewAccountController::class, 'index'])->name('review-accounts.index');
@@ -98,6 +109,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
         // SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace.
         Route::post('/tenants/{tenant}/members/{user}', [PlatformMembershipController::class, 'act'])->middleware('throttle:20,1')->name('tenants.members');
+        // ADMIN-FULL-CONTROL-001 — add a person with a role; a fresh link for an invitation that went nowhere; the subscription with no money moving.
+        Route::post('/tenants/{tenant}/members', [PlatformMembershipController::class, 'add'])->middleware('throttle:20,1')->name('tenants.members.add');
+        Route::post('/tenants/{tenant}/invitations/{invitation}/reissue', [PlatformMembershipController::class, 'reissue'])->middleware('throttle:20,1')->name('tenants.invitations.reissue');
+        Route::get('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'show'])->name('tenants.subscription');
+        Route::post('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'act'])->middleware('throttle:30,1')->name('tenants.subscription.act');
 
         /*
          * GRANT-001 — one account's administrative exceptions.
@@ -127,6 +143,26 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.show');
         Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
             ->name('registrations.terms');
+        Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
+            ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
+        Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
+            ->name('registration-verification-policy.show');
+        Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
+            ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not on it.
+        Route::get('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'show'])->name('auth-code-switches.show');
+        Route::put('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'update'])
+            ->middleware('throttle:30,1')->name('auth-code-switches.update');
+        // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
+        Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
+            ->name('tenants.decision-targets');
+        Route::post('/registrations/{registration}/decision/preview', [PlatformRegistrationController::class, 'previewDecision'])
+            ->middleware('throttle:60,1')->name('registrations.decision.preview');
+        Route::post('/registrations/{registration}/decision', [PlatformRegistrationController::class, 'decide'])
+            ->middleware('throttle:30,1')->name('registrations.decision');
+        Route::post('/registrations/{registration}/decisions/{decision}/verify-settlement', [PlatformRegistrationController::class, 'verifySettlement'])
+            ->whereUuid('decision')->middleware('throttle:30,1')->name('registrations.decision.verify-settlement');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])
@@ -237,6 +273,8 @@ Route::middleware(['auth:sanctum', 'platform'])
         // `/dev/status` runs rather than a second implementation.
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
+        // META-DIAGNOSIS-001 — each Meta connection from what the sync recorded. Reads only; calls nothing.
+        Route::get('/integrations/meta/diagnosis', MetaDiagnosisController::class)->name('integrations.meta.diagnosis');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
 
         /*
@@ -263,6 +301,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * products individually, X gates on a paid tier, and Salla and Zid each need a partner app.
          * A generic list would be wrong in both directions at once.
          */
+        // INTEG-WEBHOOK-ENGINE-001 — the webhook inbox: every delivery with its verdict and state, and a replay for a failed one.
+        Route::get('/webhook-events', [PlatformWebhookEventController::class, 'index'])->name('webhook-events.index');
+        Route::post('/webhook-events/{event}/replay', [PlatformWebhookEventController::class, 'replay'])
+            ->middleware('throttle:30,1')->name('webhook-events.replay');
+
         Route::get('/integrations/review', [ReviewChecklistController::class, 'index'])->name('integrations.review.index');
         Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
         Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])

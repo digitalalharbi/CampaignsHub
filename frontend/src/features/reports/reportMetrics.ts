@@ -1,4 +1,5 @@
 import type { MetricReading } from '@/components/ui/MetricStrip'
+import { carries } from './chosenFigures'
 import { SPECS, layoutFor, readMetric } from '@/features/analytics/metricCatalog'
 import type { ObjectivePerformance } from './InteractiveReport'
 
@@ -325,7 +326,8 @@ export function creativeReadings(
   destination: string | null = null,
 ): Array<{ key: string; label: string; reading: MetricReading }> {
   return creativeChips(objective, destination)
-    .filter((key) => SPECS[key])
+    // REPORT-FILTERS-FUNCTIONAL-001 — a chip of a KPI the link did not choose: the row carries no key for it, so there is no chip.
+    .filter((key) => SPECS[key] && carries(row, key))
     .map((key) => ({
       key,
       label: reportLabel(key, objective, destination, ar) ?? (ar ? SPECS[key].label.ar : SPECS[key].label.en),

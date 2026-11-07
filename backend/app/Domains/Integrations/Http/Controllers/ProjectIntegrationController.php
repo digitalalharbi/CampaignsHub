@@ -16,6 +16,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\ManualSyncDebounce;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -40,6 +41,7 @@ final class ProjectIntegrationController extends Controller
         private readonly ProjectContext $project,
         private readonly AccountAssignment $assignment,
         private readonly AdAccountSeats $seats,
+        private readonly ManualSyncDebounce $debounce,
     ) {}
 
     /** Bindings attached to the current project (project-scoped). */
@@ -117,7 +119,7 @@ final class ProjectIntegrationController extends Controller
         abort_unless(
             $this->assignment->mayAssign($account, $project),
             403,
-            'This account belongs to a different client workspace and cannot be assigned to this project.',
+            'This account belongs to a different client workspace, or to a connection opened for another project, and cannot be assigned to this project.',
         );
 
         /*
@@ -446,6 +448,23 @@ final class ProjectIntegrationController extends Controller
             'This account is not selected for this project, so nothing was fetched. Select it again first.',
         );
 
+        /*
+         * INTEGRATIONS-CENTRE-001 §4 — the second press within two minutes is refused, and told when
+         * the first one was. 429 with `Retry-After`, so a client that retries on its own waits the
+         * right amount, and the time named is the time of the REQUEST — never shown as a completion.
+         */
+        $held = $this->debounce->claim('binding', (string) $model->id);
+
+        if ($held !== null) {
+            $retryAfter = $this->debounce->retryAfter($held);
+
+            return ApiResponse::error(
+                "A sync for this account was already requested at {$held->toIso8601String()}. It can be requested again in {$retryAfter} seconds.",
+                ['last_requested_at' => $held->toIso8601String(), 'retry_after_seconds' => $retryAfter],
+                status: 429,
+            )->header('Retry-After', (string) $retryAfter);
+        }
+
         $run = IntegrationSyncRun::create([
             'binding_id' => $model->id,
             'type' => 'campaigns',
@@ -484,7 +503,12 @@ final class ProjectIntegrationController extends Controller
             'error' => $result->success ? null : $result->message,
             'finished_at' => now(),
         ]);
-        $model->externalAccount->update(['last_synced_at' => now()]);
+
+        // `last_synced_at` is the moment data ARRIVED. A failed run has a request time and a finish
+        // time; it has no synced-at, and stamping one here showed a failure as a fresh sync.
+        if ($result->success) {
+            $model->externalAccount->update(['last_synced_at' => now()]);
+        }
 
         return ApiResponse::success(
             ['sync_run_id' => $run->id, 'status' => $run->status, 'records' => $run->records, 'imported' => $imported],

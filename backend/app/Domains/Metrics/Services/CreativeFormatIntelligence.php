@@ -190,9 +190,20 @@ final class CreativeFormatIntelligence
         $ids = array_map(static fn (array $c): string => $c['id'], $mine);
         $points = [];
 
+        /*
+         * PERF-RECOVERY-001 — every bucket is read in one grouped query per grain, not one `forCreatives()` per bucket.
+         *
+         * The comment above says each bucket is `forCreatives()` for that bucket; it still is, to the figure: the buckets partition the window,
+         * so grouping the same rows by bucket gives each bucket the sums, counts and distinct days a separate read of it would. What is not
+         * computed per bucket any more is what no point on this line reads — the decay and availability notes `forCreatives()` adds.
+         */
+        $buckets = (int) ceil($days / $size);
+        $byBucket = $this->metrics->figuresByBlock($ids, $from->copy(), $size, $buckets, $to);
+        $index = 0;
+
         for ($start = $from->copy(); $start->lessThanOrEqualTo($to); $start->addDays($size)) {
             $end = $start->copy()->addDays($size - 1)->min($to);
-            $figures = $this->metrics->forCreatives($ids, $start, $end);
+            $figures = $byBucket[$index++] ?? [];
 
             $point = ['from' => $start->toDateString(), 'to' => $end->toDateString()];
             $sets = [];
@@ -448,8 +459,11 @@ final class CreativeFormatIntelligence
         /*
          * Largest first — the objective most of this scope's creatives were bought for is the one a
          * reader came to ask about, and a four-creative traffic cut should not lead a sales account.
+         * Ties go to the objective more money was bought for, then the name: the rows arrive in no stated
+         * order, so without this two reads of one report could swap them.
          */
-        usort($out, static fn (array $a, array $b): int => count($b['comparison']['formats'] ?? []) <=> count($a['comparison']['formats'] ?? []));
+        $spend = static fn (array $o): float => array_sum(array_map(static fn (array $f): float => (float) ($f['spend'] ?? 0), $o['comparison']['formats'] ?? []));
+        usort($out, static fn (array $a, array $b): int => [count($b['comparison']['formats'] ?? []), $spend($b), $a['family']] <=> [count($a['comparison']['formats'] ?? []), $spend($a), $b['family']]);
 
         return $out;
     }

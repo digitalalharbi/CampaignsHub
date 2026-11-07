@@ -19,7 +19,7 @@
   No figures, no campaign data, no client names. The reader has no access yet, and an invitation that
   previews the workspace's numbers has disclosed them to an address that may have been mistyped.
 --}}
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:18px; font-weight:800; color:#0b1a16; line-height:1.3;">{{ $title }}</div>
     <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $intro }}</div>
@@ -47,19 +47,12 @@
         </tr>
     </table>
 
-    <div>
-        <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
-    </div>
+    @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])
 
     <div style="font-size:12px; color:#5b6b68; line-height:1.7; margin-top:14px;">{{ $validity }}</div>
 
     {{-- The full address, for every client that rewrites or strips the button. --}}
-    <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:10px; word-break:break-all;">
-        {{ $t['or_paste'] }}<br />
-        <span dir="ltr">{{ $actionUrl }}</span>
-    </div>
+    @include('mail.partials.raw-link', ['url' => $actionUrl])
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
            style="border-top:1px solid #eeeae0; margin-top:22px;">

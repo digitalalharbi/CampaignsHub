@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Services;
 
 use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\Audit\AuditLogger;
@@ -78,7 +79,8 @@ final class SubscriptionLifecycle
             interval: $interval,
         );
 
-        $subscription->forceFill(['provider' => $payment->provider])->save();
+        // Money arrived, so this is an ordinary paid subscription whatever preceded it.
+        $subscription->forceFill(['provider' => $payment->provider, 'commercial_basis' => null, 'registration_decision_id' => null])->save();
 
         $this->tell($tenant, 'subscription_started', $subscription->refresh(), [
             'amount' => (string) $payment->amount,
@@ -184,6 +186,65 @@ final class SubscriptionLifecycle
         return $subscription->refresh();
     }
 
+    /**
+     * A subscription opened by a reviewer's scoped decision, with no money collected (SIGNUP-DECISION-001).
+     *
+     * `commercial_basis` says why it exists, so nobody reads it as paid. There is no payment, no provider and no invoice.
+     * It keeps the plan's own price: when the waived period or trial ends, the ordinary renewal or past-due path applies.
+     * No consent to convert is recorded, because none was given, so nothing is taken from anybody automatically.
+     */
+    public function beginFromDecision(Tenant $tenant, RegistrationRequest $request, RegistrationDecision $decision, string $basis): Subscription
+    {
+        $plan = $this->catalogue->byCode($request->plan_code);
+
+        if ($plan === null) {
+            throw new \RuntimeException('The application names no plan to subscribe to.');
+        }
+
+        $terms = (array) $decision->terms;
+        $interval = (string) ($request->billing_interval ?? 'monthly');
+
+        $end = match ($basis) {
+            RegistrationDecision::BASIS_WAIVED => Carbon::parse((string) $terms['period_end']),
+            RegistrationDecision::BASIS_TRIAL => Carbon::parse((string) $terms['trial_ends_at']),
+            // Open-ended: there is no date, so nothing in the sweep below ever has anything to act on.
+            RegistrationDecision::BASIS_COMPLIMENTARY => null,
+            default => Carbon::now()->{$interval === 'annual' ? 'addYear' : 'addMonth'}(),
+        };
+
+        $subscription = $this->subscriptions->assignPlan(
+            $tenant,
+            $plan,
+            status: $basis === RegistrationDecision::BASIS_TRIAL ? 'trialing' : 'active',
+            currentPeriodEnd: $end,
+            interval: $interval,
+        );
+
+        $subscription->forceFill([
+            'current_period_start' => Carbon::now(),
+            'current_period_end' => $end,
+            'trial_ends_at' => $basis === RegistrationDecision::BASIS_TRIAL ? $end : null,
+            'commercial_basis' => $basis,
+            'registration_decision_id' => $decision->getKey(),
+        ])->save();
+
+        if ($basis === RegistrationDecision::BASIS_TRIAL) {
+            app(TrialEligibility::class)->claim($request, $tenant);
+        }
+
+        $this->audit->log(
+            action: 'subscription.started_by_decision',
+            entityType: Subscription::class,
+            entityId: (string) $subscription->getKey(),
+            after: ['basis' => $basis, 'decision' => (string) $decision->getKey(), 'plan' => $plan->code, 'current_period_end' => $end?->toIso8601String()],
+            reason: $decision->reason,
+            userId: $decision->actor_id === null ? null : (int) $decision->actor_id,
+            tenantId: (string) $tenant->getKey(),
+        );
+
+        return $subscription->refresh();
+    }
+
     // ── The daily sweep ───────────────────────────────────────────────────────────────────────
 
     /**
@@ -209,7 +270,7 @@ final class SubscriptionLifecycle
         return [
             'trials_due' => $this->query()->where('status', 'trialing')->whereNotNull('trial_ends_at')->where('trial_ends_at', '<=', $now)->count(),
             'plan_changes_due' => $this->query()->whereNotNull('scheduled_plan_id')->whereNotNull('scheduled_change_at')->where('scheduled_change_at', '<=', $now)->count(),
-            'renewals_due' => $this->query()->where('status', 'active')->whereNotNull('current_period_end')->where('current_period_end', '<=', $now)->count(),
+            'renewals_due' => $this->billable()->where('status', 'active')->whereNotNull('current_period_end')->where('current_period_end', '<=', $now)->count(),
             'grace_expired' => $this->query()->where('status', 'past_due')->whereNotNull('grace_ends_at')->where('grace_ends_at', '<=', $now)->count(),
         ];
     }
@@ -248,6 +309,14 @@ final class SubscriptionLifecycle
         $converted = 0;
 
         foreach ($due as $subscription) {
+            // A reviewer's trial ends at the payment gate: past due with its grace, and no charge taken from anybody.
+            if ($subscription->commercial_basis === RegistrationDecision::BASIS_TRIAL) {
+                $this->enterPastDue($subscription, 'The trial granted by an administrator ended and the first payment is now due.');
+                $checkout?->chargeSubscription($subscription->refresh(), 'subscription');
+
+                continue;
+            }
+
             if (! $subscription->mayAutoConvert()) {
                 $this->cancel($subscription, 'The trial ended and no consent to convert was recorded.');
 
@@ -295,12 +364,12 @@ final class SubscriptionLifecycle
             ->where('trial_ends_at', '>', Carbon::now())
             ->where('trial_ends_at', '<=', Carbon::now()->addDays($daysAhead))
             ->get()
-            ->filter(fn (Subscription $s) => $s->mayAutoConvert());
+            ->filter(fn (Subscription $s) => $s->mayAutoConvert() || $s->commercial_basis === RegistrationDecision::BASIS_TRIAL);
 
         foreach ($ending as $subscription) {
             $this->tell(
                 $this->tenantOf($subscription),
-                'trial_ending',
+                $subscription->commercial_basis === RegistrationDecision::BASIS_TRIAL ? 'admin_trial_ending' : 'trial_ending',
                 $subscription,
                 [
                     'days' => (int) ceil(Carbon::now()->diffInDays($subscription->trial_ends_at, absolute: true)),
@@ -317,7 +386,7 @@ final class SubscriptionLifecycle
     /** Active subscriptions whose period has ended: open the renewal charge, do not extend anything yet. */
     public function chargeDueRenewals(?SubscriptionCheckout $checkout = null): int
     {
-        $due = $this->query()
+        $due = $this->billable()
             ->where('status', 'active')
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<=', Carbon::now())
@@ -358,7 +427,7 @@ final class SubscriptionLifecycle
      */
     public function markPastDue(): int
     {
-        $lapsed = $this->query()
+        $lapsed = $this->billable()
             ->whereIn('status', ['active'])
             ->whereNotNull('current_period_end')
             ->where('current_period_end', '<=', Carbon::now())
@@ -461,6 +530,9 @@ final class SubscriptionLifecycle
             // start never advances makes every later change look as though almost none of it is left.
             'current_period_start' => Carbon::now(),
             'current_period_end' => $this->nextPeriodEnd($subscription, Carbon::now()),
+            // Money arrived, so whatever explained a period with no money no longer describes this one, and a discount is spent.
+            'commercial_basis' => null,
+            'next_charge_discount_percent' => null,
         ])->save();
 
         $tenant = $this->tenantOf($subscription);
@@ -874,6 +946,11 @@ final class SubscriptionLifecycle
 
     // ── Reading ───────────────────────────────────────────────────────────────────────────────
 
+    public function isComplimentary(Tenant $tenant): bool
+    {
+        return $this->subscriptions->subscriptionFor($tenant)?->isComplimentary() === true;
+    }
+
     private function nextPeriodEnd(Subscription $subscription, Carbon $from): Carbon
     {
         return $subscription->billing_interval === 'annual' ? $from->copy()->addYear() : $from->copy()->addMonth();
@@ -929,6 +1006,17 @@ final class SubscriptionLifecycle
     {
         // The lifecycle runs for every tenant at once, from a schedule that belongs to none of them.
         return Subscription::query()->withoutGlobalScope(TenantScope::class);
+    }
+
+    /**
+     * Everything that can owe a renewal. Complimentary access cannot, whatever date is left on the row: the money question is
+     * answered by the basis, and the missing date is only how that looks when nothing has gone wrong.
+     *
+     * @return Builder<Subscription>
+     */
+    private function billable()
+    {
+        return $this->query()->where(fn ($q) => $q->whereNull('commercial_basis')->orWhere('commercial_basis', '!=', RegistrationDecision::BASIS_COMPLIMENTARY));
     }
 
     /** @return Collection<int, Subscription> */

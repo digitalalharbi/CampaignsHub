@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
@@ -40,11 +41,12 @@ final class MemberNotices
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? "أهلًا بك في {$tenant->name}" : "Welcome to {$tenant->name}",
                 detail: $ar
-                    ? "انضممت إلى مساحة العمل بدور «{$roleName}». يمكنك الآن متابعة الحملات والتقارير من لوحة التحكم."
-                    : "You have joined the workspace as «{$roleName}». You can now follow campaigns and reports from the dashboard.",
+                    ? "انضممت بدور «{$roleName}». تابع الحملات والتقارير من لوحة التحكم."
+                    : "You joined as «{$roleName}». Follow campaigns and reports from the dashboard.",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
                 path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         );
     }
@@ -64,11 +66,12 @@ final class MemberNotices
                 kind: 'role_changed', severity: 'warning',
                 title: $ar ? 'تغيّر دورك في مساحة العمل' : 'Your role in the workspace changed',
                 detail: $ar
-                    ? "تغيّر دورك في {$tenant->name}{$who}: من «{$from}» إلى «{$to}». إن لم تكن تتوقع هذا التغيير فتواصل مع مسؤول الفريق."
-                    : "Your role in {$tenant->name} was changed{$who}: from «{$from}» to «{$to}». If you did not expect this, contact a workspace administrator.",
+                    ? "تغيّر دورك في {$tenant->name}{$who}: من «{$from}» إلى «{$to}». إن لم تتوقعه، تواصل مع مسؤول الفريق."
+                    : "Your role in {$tenant->name} was changed{$who}: from «{$from}» to «{$to}». Not expected? Please contact a workspace administrator.",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
                 path: '/app/dashboard', action: $ar ? 'فتح كامبينز هب' : 'Open CampaignsHub',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         );
     }
@@ -95,6 +98,7 @@ final class MemberNotices
                 title: $ar ? $titleAr : $titleEn, detail: $ar ? $detailAr : $detailEn, context: $clientName,
                 lang: $this->lang($reviewer), recipientName: (string) $reviewer->name,
                 path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
+                why: $ar ? 'وصلتك لأنك مراجع هذا التسليم.' : 'Sent because you review this delivery.',
             ),
         );
     }
@@ -102,7 +106,8 @@ final class MemberNotices
     private function send(User $user, Tenant $tenant, string $kind, string $dedup, OperationalMail $mail): string
     {
         try {
-            return $this->mailer->send(
+            // A notice holds no secret, so it gets the queue, a backoff and a retry. EMAIL-DELIVERY-LEDGER-001.
+            return $this->mailer->queue(
                 recipient: (string) $user->email,
                 mail: $mail,
                 kind: $kind,
@@ -114,7 +119,7 @@ final class MemberNotices
             );
         } catch (Throwable $e) {
             // The grant or the role change has already happened; a message about it must not be able to undo it.
-            Log::warning('Member notice could not be sent.', ['kind' => $kind, 'user_id' => $user->id, 'error' => $e->getMessage()]);
+            Log::warning('Member notice could not be sent.', ['kind' => $kind, 'user_id' => $user->id, 'error' => MailFailure::redact($e->getMessage())]);
 
             return 'failed';
         }

@@ -133,6 +133,9 @@ final class SubscriptionPlanChangeController extends Controller
         $subscription = $this->subscriptions->subscriptionFor($this->tenant());
         abort_if($subscription === null, 404, 'This workspace has no subscription to change.');
 
+        // Nothing is owed here, so there is no difference to quote: the platform owner moves this plan from the console.
+        abort_if($subscription->isComplimentary(), 422, 'This workspace has complimentary access. Its plan is managed by the platform.');
+
         /*
          * Only a plan the customer could have bought in the first place.
          *

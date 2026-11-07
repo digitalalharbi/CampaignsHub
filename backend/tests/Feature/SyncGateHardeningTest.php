@@ -81,6 +81,27 @@ final class SyncGateHardeningTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /** PERF-SYNC-ISOLATION-001 — the half-hourly sweep asks 3 days back, the daily pass 14; both only for bound accounts. */
+    public function test_the_sweep_asks_three_days_and_the_daily_pass_fourteen_for_bound_accounts_only(): void
+    {
+        Queue::fake();
+        Carbon::setTestNow('2026-11-02 10:00:00');
+
+        $accounts = $this->accounts($this->connection('snapchat', $this->tenant), 3);
+        $this->bind($accounts[0], $this->project('P', $this->workspace('W')));
+
+        $this->artisan('integrations:sync')->assertSuccessful();
+        $this->assertSame(['2026-10-30'], Queue::pushed(SyncAccountMetricsJob::class)->map->from->unique()->values()->all());
+        $this->assertSame([$accounts[0]->id], $this->pushed(SyncAccountMetricsJob::class));
+
+        $this->artisan('integrations:sync', ['--days' => 14])->assertSuccessful();
+        $this->assertContains('2026-10-19', Queue::pushed(SyncAccountMetricsJob::class)->map->from->all());
+        $this->assertCount(2, Queue::pushed(SyncAccountMetricsJob::class), 'one job per pass, and only for the bound account');
+        $this->assertSame([$accounts[0]->id], array_values(array_unique($this->pushed(SyncAccountMetricsJob::class))));
+
+        Carbon::setTestNow();
+    }
+
     public function test_an_organisation_of_200_accounts_with_one_selected_queues_exactly_one_job_of_each_kind(): void
     {
         Queue::fake();
@@ -125,6 +146,34 @@ final class SyncGateHardeningTest extends TestCase
         $this->artisan('integrations:sync')->assertSuccessful();
 
         $this->assertSame(collect($bound)->map->id->sort()->values()->all(), $this->pushed(SyncAccountMetricsJob::class));
+    }
+
+    /**
+     * INTEGRATIONS-CENTRE-001 §6 — provider pressure: one queued job per (account, window), however
+     * many sweeps run while it waits. `SyncAccountMetricsJob::uniqueId()` keys on the account and the
+     * window, so a second sweep a minute later — a scheduler restart, an operator running the command
+     * by hand — adds nothing while the first job is still queued.
+     */
+    public function test_two_sweeps_a_minute_apart_queue_one_metrics_job_per_account(): void
+    {
+        Queue::fake();
+        Carbon::setTestNow('2026-11-02 04:00:00');
+
+        $accounts = $this->accounts($this->connection('snapchat', $this->tenant), 3);
+        $project = $this->project('P', $this->workspace('W'));
+        foreach ($accounts as $account) {
+            $this->bind($account, $project);
+        }
+
+        $this->artisan('integrations:sync')->assertSuccessful();
+        Carbon::setTestNow('2026-11-02 04:01:00');
+        $this->artisan('integrations:sync')->assertSuccessful();
+
+        $expected = collect($accounts)->map->id->sort()->values()->all();
+        $this->assertSame($expected, $this->pushed(SyncAccountMetricsJob::class), 'a second sweep queued the same (account, window) twice');
+        $this->assertSame(3, Queue::pushed(SyncAccountMetricsJob::class)->count());
+
+        Carbon::setTestNow();
     }
 
     public function test_a_binding_switched_off_or_a_project_paused_archived_or_deleted_is_not_swept(): void
@@ -185,12 +234,15 @@ final class SyncGateHardeningTest extends TestCase
         $project = $this->project('P', $this->workspace('W'));
         $this->bind($account, $project);
         $job = new SyncAccountMetricsJob($account->id, '2026-10-25', '2026-11-01');
+        $structure = new SyncAccountStructureJob($account->id);
 
         $project->update(['status' => 'paused']);
         app()->call([$job, 'handle']);
+        app()->call([$structure, 'handle']);
 
         Http::assertNothingSent();
         $this->assertSame(0, DB::table('metric_sync_runs')->count());
+        $this->assertSame(0, DB::table('integration_sync_runs')->count());
 
         $project->update(['status' => 'active']);
         $this->assertTrue(app(AccountAssignment::class)->isActivelyAssigned($account->fresh()));

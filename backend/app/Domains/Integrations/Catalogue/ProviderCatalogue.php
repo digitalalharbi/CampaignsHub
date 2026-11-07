@@ -34,6 +34,8 @@ use InvalidArgumentException;
  */
 final class ProviderCatalogue
 {
+    private const SANDBOX = 'sandbox';
+
     /** @var array<string, ProviderDefinition>|null */
     private static ?array $definitions = null;
 
@@ -66,6 +68,53 @@ final class ProviderCatalogue
     public static function ofKind(ProviderKind $kind): array
     {
         return array_values(array_filter(self::all(), static fn (ProviderDefinition $d) => $d->kind === $kind));
+    }
+
+    /**
+     * INTEG-CAPABILITY-CONTRACT-001 — every provider that declares capabilities, sandbox included.
+     *
+     * The sandbox is declared but stays out of `all()`: it is not a provider this product integrates
+     * with, and `all()` is what the setup screens, the hub and the configuration service list.
+     *
+     * @return array<string, ProviderDefinition>
+     */
+    public static function declared(): array
+    {
+        return self::all() + [self::SANDBOX => self::sandbox()];
+    }
+
+    /** The declaration behind a key, or null when nothing declares it. Never a guess. */
+    public static function declaration(string $provider): ?ProviderDefinition
+    {
+        return self::declared()[AdPlatforms::canonical($provider)] ?? null;
+    }
+
+    /**
+     * Whether this provider declares this capability. A key nothing declares does not.
+     *
+     * This asks what is declared. `AdvertisingConnectorRegistry` additionally knows whether an adapter
+     * is present in this build, which is the difference for the sandbox in production.
+     */
+    public static function supports(string $provider, ProviderCapability $capability): bool
+    {
+        return self::declaration($provider)?->supports($capability) ?? false;
+    }
+
+    /**
+     * Add a provider that is not one of the entries below — how the gate-5 test adapter arrives.
+     *
+     * A provider this product ships is an entry in `build()`. Refusing an existing key is what keeps a
+     * registration from quietly replacing a real provider's declaration.
+     *
+     * @throws InvalidArgumentException when the key is already declared
+     */
+    public static function register(ProviderDefinition $definition): void
+    {
+        if (isset(self::declared()[$definition->key])) {
+            throw new InvalidArgumentException("Provider '{$definition->key}' is already declared.");
+        }
+
+        self::$definitions = self::all() + [$definition->key => $definition];
     }
 
     /** Test seams: definitions are memoised because they are pure, so a test that alters config resets them. */
@@ -140,6 +189,16 @@ final class ProviderCatalogue
             rateLimitNote: 'Throttled with HTTP 429 and a Retry-After header; the shared retry policy honours it.',
             paginationNote: 'Cursor pagination through `paging.next_link`. Organisations and their ad accounts '
                 .'come from `GET /me/organizations?with_ad_accounts=true`, scoped to the authorising member.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                tokenExpiry: true,
+                parentLevel: ['key' => 'organization', 'label' => 'Organization', 'labelAr' => 'المؤسسة'],
+                parentStep: true,
+                entityGrains: true,
+                creativeInsights: true,
+                periodReach: true,
+            ),
             // Snapchat publishes no change-notification webhook for the objects we read, and this
             // install holds no keys to discover one behind a partner programme. The 30-minute poll is
             // the honest answer; an endpoint we would refuse every call to is worse than none.
@@ -185,6 +244,11 @@ final class ProviderCatalogue
             rateLimitNote: 'Per-app QPS limits. A 200 response carrying a non-zero `code` is a REFUSAL, '
                 .'not a success — the adapter reads the body, never the status alone.',
             paginationNote: 'Page-number pagination: `page` / `page_size`, with `page_info.total_page`.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                creativeInsights: true,
+            ),
         );
     }
 
@@ -239,9 +303,21 @@ final class ProviderCatalogue
                 'إضافة رابط العودة أدناه ضمن Valid OAuth Redirect URIs.',
             ],
             docsUrl: 'https://developers.facebook.com/docs/marketing-apis',
-            rateLimitNote: 'Usage is reported in the `X-Business-Use-Case-Usage` header rather than by a 429; '
-                .'the adapter backs off as it approaches the ceiling instead of waiting to be refused.',
+            rateLimitNote: 'Usage is reported in the `X-Business-Use-Case-Usage` header. The adapter does not read '
+                .'that header yet: it relies on the shared retry policy when Meta refuses a call.',
             paginationNote: 'Cursor pagination through `paging.cursors.after`.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                tokenExpiry: true,
+                tokenExchange: true,
+                // Recorded on the account row (META-BUSINESS-ACCOUNTS-001); the wizard has no step for it.
+                parentLevel: ['key' => 'business', 'label' => 'Business Manager', 'labelAr' => 'مدير الأعمال'],
+                entityGrains: true,
+                creativeInsights: true,
+                periodReach: true,
+                webhookVerification: WebhookVerification::HmacSha256,
+            ),
         );
     }
 
@@ -298,7 +374,7 @@ final class ProviderCatalogue
                  * they had configured something for everybody.
                  */
             ],
-            scopes: ['https://www.googleapis.com/auth/adwords'],
+            scopes: ['https://www.googleapis.com/auth/adwords', 'openid', 'email'],
             usesPkce: false,
             supportsRefresh: true,
             tokenNote: 'A refresh token is issued only when the authorise URL asks for `access_type=offline` '
@@ -322,6 +398,15 @@ final class ProviderCatalogue
             rateLimitNote: 'Operations are capped per Google Cloud project access level; exhaustion arrives as '
                 .'`RESOURCE_EXHAUSTED` rather than an HTTP 429.',
             paginationNote: '`nextPageToken` on search / searchStream.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                tokenExpiry: true,
+                parentLevel: ['key' => 'manager', 'label' => 'Manager account', 'labelAr' => 'الحساب المدير'],
+                parentStep: true,
+                entityGrains: true,
+                periodReach: true,
+            ),
         );
     }
 
@@ -385,6 +470,13 @@ final class ProviderCatalogue
             rateLimitNote: 'The Data API meters per property per day and per hour in TOKENS, not requests — a '
                 .'wide report costs more than a narrow one, and exhaustion arrives as `RESOURCE_EXHAUSTED`.',
             paginationNote: '`limit` and `offset` on runReport; `pageToken` on the Admin API listings.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::Property,
+                accountType: 'ga4_property',
+                tokenExpiry: true,
+                // The Analytics account above a property. Recorded on the row; there is no wizard step.
+                parentLevel: ['key' => 'account', 'label' => 'Analytics account', 'labelAr' => 'حساب أناليتكس'],
+            ),
         );
     }
 
@@ -427,6 +519,10 @@ final class ProviderCatalogue
             docsUrl: 'https://developer.x.com/en/docs/x-ads-api',
             rateLimitNote: 'Fixed windows (commonly 15 minutes) per endpoint; a 429 carries the reset time.',
             paginationNote: 'Cursor pagination through `next_cursor`.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+            ),
         );
     }
 
@@ -471,6 +567,12 @@ final class ProviderCatalogue
             docsUrl: 'https://learn.microsoft.com/en-us/linkedin/marketing/',
             rateLimitNote: 'Daily application and member throttles, refused with HTTP 429.',
             paginationNote: '`start` / `count` on classic endpoints; `pageToken` on the newer ones.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                tokenExpiry: true,
+                periodReach: true,
+            ),
         );
     }
 
@@ -542,6 +644,11 @@ final class ProviderCatalogue
             docsUrl: 'https://platform.openai.com/docs/ads',
             rateLimitNote: 'Per-key throttles, refused with HTTP 429 and a `retry-after` header.',
             paginationNote: 'Cursor pagination: `after` with the previous page\'s last id, and `has_more`.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                entityGrains: true,
+            ),
             auth: ProviderAuth::ApiKey,
         );
     }
@@ -587,6 +694,13 @@ final class ProviderCatalogue
             docsUrl: 'https://docs.salla.dev/',
             rateLimitNote: 'Per-app throttling refused with HTTP 429.',
             paginationNote: '`pagination.currentPage` / `pagination.totalPages`.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::Store,
+                accountType: 'store',
+                tokenExpiry: true,
+                abandonedCarts: true,
+                webhookVerification: WebhookVerification::HmacSha256,
+            ),
         );
     }
 
@@ -642,6 +756,47 @@ final class ProviderCatalogue
             docsUrl: 'https://docs.zid.sa/',
             rateLimitNote: 'Per-app throttling refused with HTTP 429.',
             paginationNote: 'Page-number pagination with a total count.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::Store,
+                accountType: 'store',
+                tokenExpiry: true,
+                // Zid publishes no abandoned-cart endpoint: `fetchAbandonedCarts()` asks nothing.
+                webhookVerification: WebhookVerification::HttpBasic,
+            ),
+        );
+    }
+
+    /**
+     * The local fake. Nothing to configure, no token, no throttling, and no discovery: it answers
+     * `listAdAccounts()` with a labelled fixture, but `AccountDiscovery` has never read it and its rows
+     * are not in the shape that path stores — `EstablishSandboxConnection` writes its account rows itself.
+     */
+    private static function sandbox(): ProviderDefinition
+    {
+        return new ProviderDefinition(
+            key: self::SANDBOX,
+            kind: ProviderKind::Advertising,
+            label: 'Sandbox (fake provider)',
+            labelAr: 'بيئة تجريبية',
+            fields: [],
+            scopes: [],
+            usesPkce: false,
+            supportsRefresh: false,
+            tokenNote: 'No token. The sandbox never calls out.',
+            tokenNoteAr: 'لا يوجد رمز. البيئة التجريبية لا تتصل بأي جهة.',
+            webhooks: WebhookSupport::PollingOnly,
+            webhookSignatureHeader: null,
+            prerequisites: [],
+            prerequisitesAr: [],
+            docsUrl: '',
+            rateLimitNote: 'Not applicable.',
+            paginationNote: 'Not applicable.',
+            capabilities: new ProviderCapabilities(
+                resourceType: ResourceType::AdAccount,
+                accountType: 'ad_account',
+                discovery: false,
+                rateLimit: null,
+            ),
         );
     }
 }

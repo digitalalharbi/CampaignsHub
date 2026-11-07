@@ -7,10 +7,12 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Notifications\Charts\MailChart;
+use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\AdPlatforms;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
@@ -31,12 +33,13 @@ use Illuminate\Queue\SerializesModels;
  *
  * ## The subject line carries the answer
  *
- * «CampaignsHub — 12,400 SAR, 84 نتيجة» tells somebody on a lock screen whether to open it. A
+ * «كامبينز هَب — 12,400 SAR، 84 نتيجة» tells somebody on a lock screen whether to open it. A
  * subject that says only «Your daily report» makes every day look identical, which is how a daily
  * email stops being read.
  */
 final class DailyDigestMail extends Mailable
 {
+    use OffersUnsubscribe;
     use Queueable;
     use SerializesModels;
 
@@ -110,22 +113,46 @@ final class DailyDigestMail extends Mailable
         $from = (string) ($this->digest['date'] ?? '');
         $to = (string) ($this->digest['to_date'] ?? $from);
         $period = $from === '' ? null : ($from === $to ? $from : "{$from} → {$to}");
+        // The unit the web states for these rows; with mixed units (null) the line says so rather than naming one.
+        $unit = array_key_exists('currency', $this->digest) ? $this->digest['currency'] : ReportingCurrency::DEFAULT;
         $items = array_values(array_filter([
             [$ar ? 'آخر تحديث' : 'Last updated', now($tz)->format('Y-m-d H:i')],
             $period === null ? null : [$ar ? 'الفترة' : 'Period', $period],
-            [$ar ? 'العملة' : 'Currency', ReportingCurrency::DEFAULT],
+            [$ar ? 'العملة' : 'Currency', is_string($unit) ? $unit : ($ar ? 'عدة عملات' : 'mixed')],
             [$ar ? 'المنطقة الزمنية' : 'Time zone', $tz],
         ]));
 
         return [
             'note' => $ar
-                ? 'ملاحظة: تعتمد قراءة النتائج على الأداء والبيانات المتاحة خلال فترة التقرير، وقد تختلف المؤشرات باختلاف مصادر القياس وآليات الإسناد والعوامل المؤثرة على الحملة.'
-                : 'Note: Reading the results depends on the performance and data available during the report period; indicators may differ by measurement sources, attribution methods and other factors affecting the campaign.',
+                ? 'ملاحظة: تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.'
+                : 'Note: Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.',
             'items' => $items,
         ];
     }
 
     /** The name this email presents itself under — the agency's, or the product's. */
+    /**
+     * EMAIL-IDENTITY-001 (§17.2.6) — who sent this, when an agency has a name of its own.
+     *
+     * The platform sends it and the agency is who it is for: both are said, neither is impersonated.
+     * The agency comes from the recipient's own tenant through `SharedLinkBranding`, so it cannot name
+     * another customer. Empty on an unbranded install, where the banner already says it.
+     *
+     * @return array<string,string>
+     */
+    private function senderLine(bool $ar): array
+    {
+        $agency = trim((string) ($this->senderName ?? ''));
+
+        if ($agency === '' || $agency === (string) config('brand.name')) {
+            return [];
+        }
+
+        return ['sender' => $ar
+            ? "أُرسلت عبر كامبينز هب نيابة عن {$agency}."
+            : "Sent via CampaignsHub on behalf of {$agency}."];
+    }
+
     private function brandName(): string
     {
         $name = trim((string) ($this->senderName ?? ''));
@@ -135,36 +162,41 @@ final class DailyDigestMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $ar = $this->lang === 'ar';
         $totals = $this->digest['totals'] ?? [];
 
         $spend = $p->money($totals['spend'] ?? null);
         $results = number_format((float) ($totals['conversions'] ?? 0));
 
-        // The subject names the period it covers. A monthly report labelled «أمس» is a monthly
-        // report nobody opens, because the subject line says it is yesterday's.
-        $when = match ($this->kind) {
-            'monthly' => $ar ? 'هذا الشهر' : 'this month',
-            'weekly' => $ar ? 'هذا الأسبوع' : 'this week',
-            // EMAIL-DAILY-WINDOW-001 — the daily email reports the last seven days, so «أمس» in the
-            // subject would name a span it does not cover. The rhythm is daily; the period is a week.
-            default => $ar ? 'آخر 7 أيام' : 'the last 7 days',
+        /*
+         * EMAIL-SUBJECT-001 — the product first, then the report, then the answer.
+         *
+         * The Owner's §17.3.1 is the later instruction and it wins over BRANDING-HIERARCHY-001 for the
+         * subject line: the inbox names the product on every installation, in the reader's language (Owner, 2026-11-05). The agency a white-label
+         * digest goes out for follows the prefix and is named in the footer, so the reader still sees
+         * whose report this is, and nobody is shown a sender the mail did not come from.
+         *
+         * The subject names the rhythm and, for the daily, the span it really covers (EMAIL-DAILY-WINDOW-001):
+         * a monthly labelled «أمس» is wrong in the one place a reader cannot correct by reading on.
+         */
+        $report = match ($this->kind) {
+            'monthly' => $ar ? 'تقريرك الشهري' : 'Your monthly report',
+            'weekly' => $ar ? 'تقريرك الأسبوعي' : 'Your weekly report',
+            default => $ar ? 'تقريرك اليومي (آخر 7 أيام)' : 'Your daily report (last 7 days)',
         };
+        $agency = trim((string) ($this->senderName ?? ''));
+        $lead = $agency !== '' && $agency !== (string) config('brand.name') ? "{$agency}: {$report}" : $report;
 
-        return new Envelope(
-            // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
-            subject: $this->withholdsMoney()
-                ? ($ar ? $this->brandName()." — {$results} نتيجة {$when}" : $this->brandName()." — {$results} results {$when}")
-                : ($ar
-                    ? $this->brandName()." — {$spend} {$when}، {$results} نتيجة"
-                    : $this->brandName()." — {$spend} {$when}, {$results} results"),
-        );
+        // A client's subject names the outcome, never the money that bought it (CLIENT-REPORT-FRAMING-001).
+        return new Envelope(subject: MailSubject::of($this->withholdsMoney()
+            ? ($ar ? "{$lead}: {$results} نتيجة" : "{$lead}: {$results} results")
+            : ($ar ? "{$lead}: {$spend}، {$results} نتيجة" : "{$lead}: {$spend}, {$results} results"), $ar));
     }
 
     public function content(): Content
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $ar = $this->lang === 'ar';
         $app = rtrim((string) config('brand.application_url'), '/');
         $site = Frontend::origin();
@@ -175,6 +207,7 @@ final class DailyDigestMail extends Mailable
                 // MAIL-DS-001 — one stack per language, Arabic faces first when the mail is Arabic.
                 'font' => MailDesign::font($ar),
                 'numericFont' => MailDesign::numericFont(),
+                'unsubscribeUrl' => $this->unsubscribeUrl,
                 'locale' => $this->lang,
                 'dir' => $ar ? 'rtl' : 'ltr',
                 // Padding and alignment follow the reader's direction; `end` is right in LTR and left
@@ -199,17 +232,20 @@ final class DailyDigestMail extends Mailable
                 'preheader' => match ($this->kind) {
                     'monthly' => $ar ? 'ملخص الشهر عبر مشاريعك ومنصاتك.' : 'The month across your projects and platforms.',
                     'weekly' => $ar ? 'ملخص الأسبوع عبر مشاريعك ومنصاتك.' : 'The week across your projects and platforms.',
-                    default => $ar ? 'ملخص أمس عبر مشاريعك ومنصاتك.' : 'Yesterday across your projects and platforms.',
+                    // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so «أمس» would name a span it does not cover.
+                    default => $ar ? 'آخر 7 أيام عبر مشاريعك ومنصاتك.' : 'The last 7 days across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
                 'scopeNote' => $this->scopeNote($ar),
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
                 'urls' => MailLinks::footer(),
-                // EMAIL-BRAND-001 — the official lockup, same as every other message.
-                'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+                // EMAIL-BRAND-002 — the transparent mark and the live-text wordmark, same as every other message.
+                'logoUrl' => MailShell::logoUrl($ar),
+                'wordmark' => MailShell::wordmark($ar),
+                'wordmarkPlain' => MailShell::wordmarkPlain($ar),
                 // The shared footer words (support, sender) under the digest's own copy.
-                't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar)),
+                't' => array_merge(MailShell::footerStrings($ar), $this->copy($ar), $this->senderLine($ar)),
                 'totals' => $this->accountCards($p, $ar),
                 /*
                   EMAIL-DASHBOARD-UX-001 — the two rows a reader acts on, before the project list.
@@ -298,10 +334,11 @@ final class DailyDigestMail extends Mailable
     {
         $rows = [];
         foreach ($this->digest['projects'] ?? [] as $block) {
+            $bp = $p->forPayload($block);
             $totals = (array) ($block['totals'] ?? []);
             $reported = (array) ($block['reported'] ?? []);
             $change = (array) ($block['change'] ?? []);
-            $verdict = $p->verdict($block);
+            $verdict = $bp->verdict($block);
             $tone = (string) ($verdict['tone'] ?? 'neutral');
             $set = (array) ($block['metric_set'] ?? []);
 
@@ -314,7 +351,7 @@ final class DailyDigestMail extends Mailable
                     break;
                 }
             }
-            $follow = $this->followUp($p, $ar, $block['follow_up'] ?? null);
+            $follow = $this->followUp($bp, $ar, $block['follow_up'] ?? null);
             $attention = $follow === null ? [] : array_values(array_filter((array) ($follow['attention'] ?? []), 'is_string'));
             $followLine = $follow === null ? null : implode(' · ', array_map(
                 static fn (array $cell): string => $cell['label'].' '.$cell['value'],
@@ -331,9 +368,9 @@ final class DailyDigestMail extends Mailable
                     'status' => $this->statusLabel($tone, $ar),
                     'verdict' => $this->clientVerdict($block, $ar, $tone),
                     'spend' => null,
-                    'second' => $p->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
-                    'revenue' => $second === 'revenue' ? $p->card('revenue', $totals, $reported, $change) : null,
-                    'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                    'second' => $bp->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
+                    'revenue' => $second === 'revenue' ? $bp->card('revenue', $totals, $reported, $change) : null,
+                    'objective' => $objectiveKey === null ? null : $bp->card($objectiveKey, $totals, $reported, $change),
                     'rank' => self::TONE_RANK[$tone] ?? 2,
                     'attention' => null,
                     'follow' => null,
@@ -349,9 +386,9 @@ final class DailyDigestMail extends Mailable
                 'tone' => $tone,
                 'status' => $this->statusLabel($tone, $ar),
                 'verdict' => (string) ($verdict['text'] ?? ''),
-                'spend' => $p->card('spend', $totals, $reported, $change),
-                'second' => $p->card($second, $totals, $reported, $change),
-                'objective' => $objectiveKey === null ? null : $p->card($objectiveKey, $totals, $reported, $change),
+                'spend' => $bp->card('spend', $totals, $reported, $change),
+                'second' => $bp->card($second, $totals, $reported, $change),
+                'objective' => $objectiveKey === null ? null : $bp->card($objectiveKey, $totals, $reported, $change),
                 'rank' => self::TONE_RANK[$tone] ?? 2,
                 // EXECUTIVE-DAILY-DIGEST-001 — the one follow-up line that needs a person, counts only; the table went with the analysis.
                 'attention' => $attention === [] ? null : implode(' · ', $attention),
@@ -468,10 +505,10 @@ final class DailyDigestMail extends Mailable
     /** @return array{good: int, warn: int, bad: int, neutral: int} */
     private function health(): array
     {
-        $p = new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1));
+        $p = (new DigestPresenter($this->lang, (int) ($this->digest['days'] ?? 1)))->forPayload($this->digest);
         $counts = ['good' => 0, 'warn' => 0, 'bad' => 0, 'neutral' => 0];
         foreach ($this->digest['projects'] ?? [] as $block) {
-            $tone = (string) ($p->verdict($block)['tone'] ?? 'neutral');
+            $tone = (string) ($p->forPayload($block)->verdict($block)['tone'] ?? 'neutral');
             $counts[array_key_exists($tone, $counts) ? $tone : 'neutral']++;
         }
 
@@ -559,8 +596,8 @@ final class DailyDigestMail extends Mailable
         $ceiling = (int) ($n['ceiling'] ?? 0);
 
         return $ar
-            ? "هذا الملخص يغطي {$chosen} من {$ceiling} مشاريع تصل إليها، حسب اختيارك في الإعدادات."
-            : "This summary covers {$chosen} of the {$ceiling} projects you can reach, per your settings.";
+            ? "يغطي هذا الملخص {$chosen} من {$ceiling} مشاريع، حسب إعداداتك."
+            : "This summary covers {$chosen} of {$ceiling} projects, per your settings.";
     }
 
     /**
@@ -725,12 +762,15 @@ final class DailyDigestMail extends Mailable
 
         usort($moved, static fn (array $a, array $b): int => $b['delta'] <=> $a['delta']);
 
-        $say = static fn (array $row): array => [
-            'name' => $row['name'],
-            'text' => ($ar ? 'النتائج ' : 'Results ')
-                .($row['delta'] >= 0 ? '▲ ' : '▼ ')
-                .number_format(abs($row['delta']) * 100, 1).'%',
-        ];
+        $say = static function (array $row) use ($ar): array {
+            $figure = ($row['delta'] >= 0 ? '▲ ' : '▼ ').number_format(abs($row['delta']) * 100, 1).'%';
+
+            return [
+                'name' => $row['name'],
+                // An isolate around the figure, so the percent sign stays with its number in a right-to-left line.
+                'text' => $ar ? "النتائج \u{2066}{$figure}\u{2069}" : "Results {$figure}",
+            ];
+        };
 
         $best = $moved[0];
         $worst = $moved[count($moved) - 1];
@@ -768,13 +808,14 @@ final class DailyDigestMail extends Mailable
         $out = [];
 
         foreach ($this->digest['projects'] ?? [] as $block) {
+            $bp = $p->forPayload($block);
             $totals = $block['totals'] ?? [];
             $reported = $block['reported'] ?? [];
             $change = $block['change'] ?? [];
 
             $out[] = [
                 'name' => (string) ($block['project_name'] ?? ''),
-                'verdict' => $p->verdict($block),
+                'verdict' => $bp->verdict($block),
                 /*
                   The cards this project's money is judged on — MAIL-005, §14.6 in an inbox.
 
@@ -783,14 +824,14 @@ final class DailyDigestMail extends Mailable
                   reported: an arithmetic accident printed in bold, in a medium where nobody can
                   click through to check it.
                 */
-                'kpis' => $p->cards($block),
-                'paths' => $this->paths($p, $ar, $block['paths'] ?? []),
-                'best' => $this->named($p, $ar, $block['best_platform'] ?? null, $block['best_campaign'] ?? null),
-                'worst' => $this->named($p, $ar, $block['worst_platform'] ?? null, $block['worst_campaign'] ?? null),
+                'kpis' => $bp->cards($block),
+                'paths' => $this->paths($bp, $ar, $block['paths'] ?? []),
+                'best' => $this->named($bp, $ar, $block['best_platform'] ?? null, $block['best_campaign'] ?? null),
+                'worst' => $this->named($bp, $ar, $block['worst_platform'] ?? null, $block['worst_campaign'] ?? null),
                 'freshness' => $this->freshness($ar, $block['freshness'] ?? []),
                 // The funnel, the content and the notes — the three sections that turn a list of
                 // figures into something a reader can act on without opening the product.
-                'funnel' => $this->funnel($p, $ar, $block['funnel'] ?? []),
+                'funnel' => $this->funnel($bp, $ar, $block['funnel'] ?? []),
                 'creatives' => $this->creatives($block['creatives'] ?? null),
                 /*
                   EMAIL-SETTINGS-DEPTH-001 — passed through as the digest produced it.
@@ -816,7 +857,7 @@ final class DailyDigestMail extends Mailable
                   subscribed with, and lead PII is not mailed by default — so the email says «11
                   never contacted» and the link says who.
                 */
-                'follow_up' => $this->followUp($p, $ar, $block['follow_up'] ?? null),
+                'follow_up' => $this->followUp($bp, $ar, $block['follow_up'] ?? null),
                 'url' => $app.'/app/dashboard',
             ];
         }
@@ -1056,16 +1097,16 @@ final class DailyDigestMail extends Mailable
              * which is why reading only them missed it.
              */
             'intro' => match ($this->kind) {
-                'monthly' => 'هذا ما حدث هذا الشهر عبر مشاريعك — والقرارات التي تستحق وقتك.',
-                'weekly' => 'هذا ما حدث هذا الأسبوع عبر مشاريعك — والقرارات التي تستحق وقتك.',
-                default => 'هذا ما حدث أمس عبر مشاريعك — والقرارات التي تستحق وقتك اليوم.',
+                'monthly' => 'ملخص هذا الشهر عبر مشاريعك، وما يحتاج قرارك.',
+                'weekly' => 'ملخص هذا الأسبوع عبر مشاريعك، وما يحتاج قرارك.',
+                default => 'ملخص آخر 7 أيام عبر مشاريعك، وما يحتاج قرارك اليوم.',
             },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
             'results' => 'النتائج',
             'projects' => 'المشاريع',
             'intro_single' => 'ملخص الفترة لمشروع',
-            'intro_client' => 'هذا ما تحقّق في حملاتك هذه الفترة — والقرارات التي تستحق نظرتك.',
+            'intro_client' => 'نتائج حملاتك هذه الفترة، وما يستحق نظرتك.',
             'open_portal' => 'افتح بوابتك ←',
             'portfolio' => 'محفظة المشاريع',
             'highlights' => 'أبرز التحرّكات',
@@ -1099,24 +1140,24 @@ final class DailyDigestMail extends Mailable
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
             'open_dashboard' => 'افتح لوحة التحكم',
-            'footer_note' => 'تصلك هذه الرسالة لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
-            'manage_preferences' => 'تفضيلات الإشعارات',
+            'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
+            'manage_preferences' => 'إعدادات الإشعارات',
             'privacy' => 'الخصوصية',
             'terms' => 'الشروط',
             'security' => 'الأمان',
         ] : [
             'greeting' => "Good morning, {$this->recipientName}",
             'intro' => match ($this->kind) {
-                'monthly' => 'Here is the month across your projects — and what is worth your time.',
-                'weekly' => 'Here is the week across your projects — and what is worth your time.',
-                default => 'Here is what happened yesterday across your projects — and what is worth your time today.',
+                'monthly' => 'Here is the month across your projects, and what needs your decision.',
+                'weekly' => 'Here is the week across your projects, and what needs your decision.',
+                default => 'Here are the last 7 days across your projects, and what needs your decision today.',
             },
             'account_total' => 'Account total',
             'spend' => 'Spend',
             'results' => 'Results',
             'projects' => 'Projects',
             'intro_single' => 'The period for',
-            'intro_client' => 'Here is what your campaigns achieved this period — and the decisions worth your look.',
+            'intro_client' => 'Your campaign results this period, and what deserves a look.',
             'open_portal' => 'Open your portal →',
             'portfolio' => 'Project portfolio',
             'highlights' => 'Biggest moves',
@@ -1150,8 +1191,8 @@ final class DailyDigestMail extends Mailable
             'best' => 'Best',
             'worst' => 'Weakest',
             'open_dashboard' => 'Open the dashboard',
-            'footer_note' => 'You are receiving this because you chose the '.$this->rhythmName(false).'. Change the projects, the time, or turn it off in your notification preferences.',
-            'manage_preferences' => 'Notification preferences',
+            'footer_note' => 'Sent because you chose the '.$this->rhythmName(false).'. Change the projects or the time, or turn it off, in your notification preferences.',
+            'manage_preferences' => 'Notification settings',
             'privacy' => 'Privacy',
             'terms' => 'Terms',
             'security' => 'Security',

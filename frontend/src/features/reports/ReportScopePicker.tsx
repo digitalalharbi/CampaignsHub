@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { isClientAudience } from './InteractiveReport'
+import { isClientAudience } from './reportAudience'
 import { ScopeCheckList } from './ScopeCheckList'
 import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,9 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
+import { ProviderMark } from '@/components/ProviderMark'
+import { platformLabel, sortPlatforms } from '@/lib/platforms'
+import { sortBySource } from '@/lib/sourceOrder'
 
 /**
  * §14.5 — choosing what a report covers.
@@ -386,7 +389,8 @@ export function ReportScopePicker({
 
       <Chips
         label={t.platforms}
-        items={o.providers.map((p) => ({ id: p, label: p }))}
+        // The one label module: a reader is never shown a provider key.
+        items={sortPlatforms(o.providers).map((p) => ({ id: p, label: platformLabel(p, ar), mark: p }))}
         selected={value.providers ?? []}
         onToggle={(id) => toggle('providers', id)}
         ar={ar}
@@ -397,11 +401,11 @@ export function ReportScopePicker({
         kind="accounts"
         label={t.accounts}
         required
-        items={o.accounts.map((a) => ({
+        items={sortBySource(o.accounts, (a) => ({ platform: a.provider, account: a.name }), ar).map((a) => ({
           id: a.id,
           label: a.name,
           // REPORT-BOUND-ACCOUNTS-001 — a bound account with nothing yet is listed and SAYS so.
-          sub: a.state === 'unsynced' ? `${a.provider} · ${ar ? 'لم تتم مزامنته بعد' : 'not synced yet'}` : a.state === 'no_data' ? `${a.provider} · ${ar ? 'لا بيانات بعد' : 'no data yet'}` : a.provider,
+          sub: a.state === 'unsynced' ? `${platformLabel(a.provider, ar)} · ${ar ? 'لم تتم مزامنته بعد' : 'not synced yet'}` : a.state === 'no_data' ? `${platformLabel(a.provider, ar)} · ${ar ? 'لا بيانات بعد' : 'no data yet'}` : platformLabel(a.provider, ar),
         }))}
         selected={value.account_ids ?? []}
         onChange={(next) => set('account_ids', next)}
@@ -857,7 +861,7 @@ function Chips({
 }: {
   label: string
   note?: string
-  items: Array<{ id: string; label: string }>
+  items: Array<{ id: string; label: string; /** A platform key: its logo is drawn before the label. */ mark?: string }>
   selected: string[]
   onToggle: (id: string) => void
   /**
@@ -913,10 +917,11 @@ function Chips({
               aria-pressed={on}
               data-testid={`scope-chip-${item.id}`}
               onClick={() => onToggle(item.id)}
-              className={`rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
                 on ? 'border-brand-500 bg-brand-500/10 font-semibold text-brand-600' : 'border-border text-text-secondary hover:border-border-strong'
               }`}
             >
+              {item.mark !== undefined && <ProviderMark provider={item.mark} size={14} />}
               {item.label}
             </button>
           )

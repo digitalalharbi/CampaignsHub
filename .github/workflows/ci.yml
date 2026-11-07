@@ -74,7 +74,7 @@ jobs:
       - name: Pint (style)
         run: ./vendor/bin/pint --test
       - name: Larastan (static analysis)
-        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
       - name: Tests
         env:
           DB_CONNECTION: pgsql

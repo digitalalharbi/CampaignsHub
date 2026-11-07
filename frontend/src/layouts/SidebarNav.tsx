@@ -60,7 +60,7 @@ export function navLeaves(groups: readonly NavGroup[]): NavLeaf[] {
 }
 
 function leafClass(collapsed: boolean | undefined, isActive: boolean, nested: boolean): string {
-  const base = 'group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-150'
+  const base = 'group relative flex items-center rounded-xl text-sm font-semibold transition'
   const spacing = collapsed ? 'justify-center p-2.5' : `gap-3 px-3 py-2.5 ${nested ? 'ms-3' : ''}`
   const tone = isActive
     ? 'bg-[var(--brand-background)] text-brand-600'

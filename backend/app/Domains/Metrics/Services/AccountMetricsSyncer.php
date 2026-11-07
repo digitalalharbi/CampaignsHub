@@ -18,16 +18,18 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\AccountCurrencyLookup;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
 use App\Domains\Metrics\Enums\SyncRunStatus;
-use App\Domains\Metrics\Jobs\FetchPeriodReachJob;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\PeriodReach;
+use App\Domains\Metrics\Support\NoDataReading;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -52,11 +54,15 @@ final class AccountMetricsSyncer
     /** `integrations:sync` runs every thirty minutes (routes/console.php) — this is that, named. */
     private const SWEEP_INTERVAL_MINUTES = 30;
 
+    /** INTEG-UNIFIED-BOUNDARIES-001 — what a run says when the binding went away while it was reading. */
+    private const UNLINKED_MID_RUN = 'The account was unlinked from this project (or syncing was switched off) while this run was reading from the provider, so what it read was not stored.';
+
     public function __construct(
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly UpsertDailyMetrics $upsert,
         private readonly InsightRowNormaliser $normaliser,
         private readonly AccountAssignment $assignment,
+        private readonly SyncCheckpoints $checkpoints,
     ) {}
 
     /**
@@ -78,7 +84,8 @@ final class AccountMetricsSyncer
             'status' => SyncRunStatus::Running->value,
             'window_start' => $from->toDateString(),
             'window_end' => $to->toDateString(),
-            'attempts' => 1,
+            // INTEG-SYNC-ENGINE-001 — the delivery this is. A retry opens its own run, so the ledger shows every attempt.
+            'attempts' => is_int($meta['attempt'] ?? null) ? $meta['attempt'] : 1,
             // Written by the JOB at dispatch, so the row can say how long this waited to begin.
             'queued_at' => isset($meta['queued_at']) && is_string($meta['queued_at'])
                 ? Carbon::parse($meta['queued_at'])
@@ -146,6 +153,24 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — an account stored without a currency is asked about BEFORE any
+         * money is read.
+         *
+         * Row currency, else account currency, else this: the provider is asked once (see
+         * `AccountCurrencyLookup` for what «once» means and why it is not a full discovery refresh) and the
+         * answer is recorded on the account. If it still has none, every monetary figure of this run is
+         * withheld by the normalisers — original kept, no value, no currency claimed — and the run ends
+         * `partial_mapping` / `currency_unknown` below. It is never stored as the reporting currency.
+         */
+        if ($connector instanceof ApiAdvertisingConnector) {
+            $lookup = app(AccountCurrencyLookup::class)->ensure($account, $connector);
+
+            if ($lookup !== AccountCurrencyLookup::KNOWN) {
+                $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'currency_lookup' => $lookup]])->save();
+            }
+        }
+
         try {
             $result = $connector->syncInsights($account->external_id, $from->toDateString(), $to->toDateString());
         } catch (Throwable $e) {
@@ -179,28 +204,50 @@ final class AccountMetricsSyncer
             $connection->forceFill(['insights_denied_at' => null])->save();
         }
 
-        [$upserted, $skipped, $misfiled] = $this->ingest($account, $result->records, (string) $run->project_id);
+        /*
+         * INTEG-UNIFIED-BOUNDARIES-001 — the binding is re-proved AT the write, not only when the job started.
+         *
+         * The provider call above took as long as it took; the customer may have unlinked the account, switched syncing off or
+         * moved it to another project in the meantime. The write goes through `whileBound()`, which holds the binding row for
+         * the length of the write, so a detach cannot slip between the check and the rows.
+         */
+        $ingested = [0, 0, 0, 0];
+        // INTEG-SYNC-ENGINE-001 — a read cut off at a connector's page ceiling is real rows and an incomplete window.
+        $truncated = $connector instanceof ApiAdvertisingConnector ? $connector->takeTruncatedReads() : [];
+        $held = $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$ingested, $account, $result, $run, $from, $to, $truncated): void {
+            $ingested = $this->ingest($account, $result->records, (string) $run->project_id);
+
+            /*
+             * INTEG-SYNC-ENGINE-001 — in this transaction, so the rows and the claim that they landed commit together.
+             * Whole window or nothing: every page answered, every row placed, no metric refused, no money withheld.
+             */
+            [$upserted, $skipped, , $unlabelled] = $ingested;
+            if ($truncated === [] && $result->refusedMetrics === [] && $skipped === 0 && $unlabelled === 0 && ($result->records === [] || $upserted > 0)) {
+                $this->checkpoints->advance($account, (string) $run->project_id, SyncCheckpoints::CAMPAIGN, $from, $to, $run);
+            }
+        });
+
+        if (! $held) {
+            return $this->finish($run, SyncRunStatus::AwaitingAssignment, 0, self::UNLINKED_MID_RUN, $account, $this->counts($connector));
+        }
+
+        [$upserted, $skipped, $misfiled, $unlabelled] = $ingested;
 
         /*
-         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is asked for again.
+         * REACH-PERIOD-001 — a stored window reach that this sync may have changed is marked stale.
          *
          * A window's reach is the provider's answer at the moment it was fetched. Once new delivery for
          * any day inside that window has arrived, the old answer describes fewer days than the cards
-         * now show, so every stored window overlapping the synced range is re-requested (queued, one
-         * per window). Windows entirely before the sync are untouched: their delivery did not change.
+         * now show. Nothing is fetched here — a sweep over many accounts and stored windows used to
+         * queue hundreds of jobs. One UPDATE marks the overlapping windows `stale_at`; PeriodReachReader
+         * re-requests a stale window lazily, only when a report actually reads it. Windows entirely
+         * before the sync are untouched: their delivery did not change.
          */
         PeriodReach::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->whereDate('date_to', '>=', $from->toDateString())
             ->whereDate('date_from', '<=', $to->toDateString())
-            ->select('date_from', 'date_to')
-            ->distinct()
-            ->get()
-            ->each(static fn (PeriodReach $w) => FetchPeriodReachJob::dispatch(
-                (string) $account->getKey(),
-                Carbon::parse($w->getRawOriginal('date_from'))->toDateString(),
-                Carbon::parse($w->getRawOriginal('date_to'))->toDateString(),
-            ));
+            ->update(['stale_at' => Carbon::now()]);
 
         /*
          * SNAP-CREATIVE-METRICS-001 — the same window, asked again at the creative level.
@@ -216,16 +263,40 @@ final class AccountMetricsSyncer
          * enrichment, and turning a healthy metrics run red because one extra call was throttled
          * would trade a working pipeline for a nicer screen.
          */
+        $unlinkedMidRun = false;
         if ($connector instanceof ReportsCreativeInsights) {
             try {
+                if ($connector instanceof ApiAdvertisingConnector) {
+                    $connector->takeTruncatedReads();
+                }
+
                 $creative = $connector->syncCreativeInsights(
                     $account->external_id,
                     $from->toDateString(),
                     $to->toDateString(),
                 );
 
-                if ($creative->success) {
-                    $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+                $creativeTruncated = $connector instanceof ApiAdvertisingConnector ? $connector->takeTruncatedReads() : [];
+                $written = null;
+                $creativeHeld = $creative->success
+                    ? $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$written, $account, $creative, $creativeTruncated, $run, $from, $to): void {
+                        $written = app(UpsertCreativeDailyMetrics::class)->execute($account, $creative->records);
+
+                        if ($creativeTruncated === [] && $written['skipped'] === 0 && $written['ambiguous'] === 0 && $written['currency_unknown'] === 0) {
+                            $this->checkpoints->advance($account, (string) $run->project_id, SyncCheckpoints::CREATIVE, $from, $to, $run);
+                        }
+                    })
+                    : true;
+
+                if (! $creativeHeld) {
+                    $unlinkedMidRun = true;
+                    $run->forceFill([
+                        'creative_status' => 'failed',
+                        'creative_rows' => 0,
+                        'creative_error' => Str::limit(self::UNLINKED_MID_RUN, 480),
+                    ])->save();
+                } elseif ($creative->success) {
+                    $unlabelled += $written['currency_unknown'];
 
                     /*
                      * CONTENT-STATE-SEMANTICS-001 — «it worked and there was nothing» is an ANSWER.
@@ -260,6 +331,7 @@ final class AccountMetricsSyncer
                             'creative_ids_ambiguous' => $written['ambiguous'],
                             'creative_rows_skipped' => $written['skipped'],
                             'creative_unmapped_sample' => $written['unmapped_sample'],
+                            ...($written['currency_unknown'] > 0 ? ['creative_currency_unknown_rows' => $written['currency_unknown']] : []),
                         ],
                     ])->save();
                 } else {
@@ -268,7 +340,7 @@ final class AccountMetricsSyncer
                         'creative_rows' => 0,
                         // The provider's own words. «Rate limited» and «this account reports no
                         // creative stats» both arrive here and mean entirely different things.
-                        'creative_error' => Str::limit((string) $creative->message, 480),
+                        'creative_error' => Str::limit((string) ProviderErrorText::forStorage((string) $creative->message), 480),
                     ])->save();
                 }
             } catch (Throwable $e) {
@@ -282,7 +354,7 @@ final class AccountMetricsSyncer
                 $run->forceFill([
                     'creative_status' => 'failed',
                     'creative_rows' => 0,
-                    'creative_error' => Str::limit($e->getMessage(), 480),
+                    'creative_error' => Str::limit((string) ProviderErrorText::forStorage($e->getMessage()), 480),
                 ])->save();
             }
         } else {
@@ -326,8 +398,38 @@ final class AccountMetricsSyncer
          * platform's.
          */
         $entityFailure = null;
-        if ($connector instanceof ReportsEntityGrains) {
+        if ($unlinkedMidRun) {
+            $entityFailure = self::UNLINKED_MID_RUN;
+        } elseif ($connector instanceof ReportsEntityGrains) {
             $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
+            $unlabelled += (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0);
+        }
+
+        /*
+         * MONEY-CURRENCY-NEVER-ASSUMED-001 — the run SAYS that money was withheld for want of a currency.
+         *
+         * Counted across the three grains (campaign rows here, ad-set/ad and creative rows from their own
+         * upserts). The number is written to `meta` whatever the final status is, and appended to any
+         * other partial reason, so an operator reading a run that is partial for two reasons sees both.
+         */
+        $currencyNote = null;
+        if ($unlabelled > 0) {
+            $campaignRows = $unlabelled - (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0)
+                - (int) (($run->meta ?? [])['creative_currency_unknown_rows'] ?? 0);
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'currency_unknown_rows' => $campaignRows,
+                'currency_unknown_rows_all_grains' => $unlabelled,
+            ]])->save();
+
+            $currencyNote = "The ad account's currency is unknown: neither the report rows nor the account state one"
+                .match (((array) ($run->meta ?? []))['currency_lookup'] ?? null) {
+                    AccountCurrencyLookup::NOT_STATED => ', and '.$connector->label().' did not state one when asked',
+                    AccountCurrencyLookup::FAILED => ', and '.$connector->label().' could not be asked',
+                    AccountCurrencyLookup::ASKED_RECENTLY => ', and '.$connector->label().' did not state one when last asked',
+                    default => '',
+                }
+            .". The money on {$unlabelled} row(s) was stored WITHHELD (original amount kept, no converted figure, no currency assumed); counts were stored. Refresh the connection's accounts once the platform shows the account's currency, then re-sync the window.";
         }
 
         /*
@@ -368,6 +470,36 @@ final class AccountMetricsSyncer
          * gap, reported as `partial_mapping` rather than as a green tick over an empty dashboard.
          */
         if ($parsed === 0) {
+            /*
+             * META-NO-DATA-READING-001 — rows that arrived and could not be read are not «no data».
+             *
+             * `no_data` says the provider had nothing for the window. A body holding rows of which not one
+             * named an entity we could file it under says something else entirely — the request or the
+             * mapping is wrong — and it used to be filed under the same quiet word, where nobody looks.
+             */
+            if (NoDataReading::of($counts['provider_raw_rows'], $parsed) === NoDataReading::UNREAD_ROWS) {
+                return $this->finish(
+                    $run,
+                    SyncRunStatus::PartialMapping,
+                    0,
+                    $connector->label()." returned {$counts['provider_raw_rows']} row(s) for this window and none of them could be read as a campaign figure, so nothing was stored. This is not «no data»: the rows arrived. Read the retained provider body for this run.",
+                    $account,
+                    $counts,
+                    NoDataReading::UNREAD_ROWS,
+                );
+            }
+
+            /*
+             * The provider answered with an empty list, and the run says so — with the last day this
+             * account does hold a figure for, read once here so «it stopped delivering on the 28th» is on
+             * the run rather than something to be worked out from the tables afterwards.
+             */
+            $run->forceFill(['meta' => [
+                ...(array) ($run->meta ?? []),
+                'no_data_reading' => NoDataReading::NO_DELIVERY,
+                'last_delivery_date' => NoDataReading::lastDeliveryDate((string) $account->getKey()),
+            ]])->save();
+
             return $this->finish(
                 $run,
                 SyncRunStatus::NoData,
@@ -396,7 +528,8 @@ final class AccountMetricsSyncer
                 $run,
                 SyncRunStatus::PartialMapping,
                 $upserted,
-                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.{$note}",
+                "{$skipped} of {$parsed} row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.{$note}"
+                    .($currencyNote === null ? '' : ' '.$currencyNote),
                 $account,
                 $counts,
                 $misfiled > 0 ? 'campaign_not_refiled' : 'unmapped_rows',
@@ -427,10 +560,38 @@ final class AccountMetricsSyncer
                 $run,
                 SyncRunStatus::PartialMapping,
                 $upserted,
-                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure,
+                'Campaign figures were stored; the ad-set/ad grain was not: '.$entityFailure.($currencyNote === null ? '' : ' '.$currencyNote),
                 $account,
                 $counts,
                 'entity_grain_failed',
+            );
+        }
+
+        if ($currencyNote !== null) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                $currencyNote,
+                $account,
+                $counts,
+                'currency_unknown',
+            );
+        }
+
+        /*
+         * INTEG-SYNC-ENGINE-001 — stopped at the page ceiling with the provider still holding pages. What was read is stored; the rest
+         * of the window is missing from every total, so this is not a success and the checkpoint did not move.
+         */
+        if ($truncated !== []) {
+            return $this->finish(
+                $run,
+                SyncRunStatus::PartialMapping,
+                $upserted,
+                'The read stopped at the page ceiling with more pages to come ('.implode(', ', $truncated).'), so this window was stored incomplete.',
+                $account,
+                $counts,
+                'pages_truncated',
             );
         }
 
@@ -603,7 +764,7 @@ final class AccountMetricsSyncer
             $squadThrown,
         );
         // Read now: the ad sweep below resets the connector's own record of a refusal.
-        $squadFailure = $squadThrown ?? $connector->lastEntityFailure();
+        $squadFailure = ProviderErrorText::forStorage($squadThrown ?? $connector->lastEntityFailure()) ?? $this->cutOffAtPageCeiling($connector);
 
         /*
          * The sweep resolves the provider's ids against what the structure sync already discovered.
@@ -628,13 +789,31 @@ final class AccountMetricsSyncer
         // SEC-CLUSTER-2 — only entities filed under the project the account is bound to are written to.
         $knownSquads = $this->filedUnder($knownSquads, (string) $run->project_id);
 
-        $squadResult = app(UpsertEntityDailyMetrics::class)->execute(
-            $account, EntityDailyMetric::AD_SET, $squadRows, $knownSquads, (string) $run->getKey(),
-        );
-        $squadFailure ??= $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted'], $squadResult['unkeyed'], $squadRows);
+        // INTEG-UNIFIED-BOUNDARIES-001 — each grain's write re-proves the binding, like the campaign write.
+        $unlinked = false;
+        $parents = $campaigns->count();
+        $upsertGrain = function (string $type, array $rows, array $known, ?string $fetchFailure) use ($account, $run, &$unlinked, $from, $to, $parents): array {
+            $result = ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0];
+            $held = $this->assignment->whileBound($account, (string) $run->project_id, function () use (&$result, $account, $type, $rows, $known, $run, $fetchFailure, $from, $to, $parents): void {
+                $result = app(UpsertEntityDailyMetrics::class)->execute($account, $type, $rows, $known, (string) $run->getKey());
+
+                // INTEG-SYNC-ENGINE-001 — a grain with no parent to ask read nothing, so it claims nothing.
+                if ($fetchFailure === null && $parents > 0 && $result['skipped'] === 0 && $result['unkeyed'] === 0 && $result['currency_unknown'] === 0 && ($rows === [] || $result['upserted'] > 0)) {
+                    $this->checkpoints->advance($account, (string) $run->project_id, $type === EntityDailyMetric::AD_SET ? SyncCheckpoints::AD_SET : SyncCheckpoints::AD, $from, $to, $run);
+                }
+            });
+            $unlinked = $unlinked || ! $held;
+
+            return $result;
+        };
+
+        $squadResult = $upsertGrain(EntityDailyMetric::AD_SET, $squadRows, $knownSquads, $squadFailure);
+        $squadFailure = $unlinked
+            ? self::UNLINKED_MID_RUN
+            : ($squadFailure ?? $this->nothingPlaced('ad-set', count($squadRows), $squadResult['upserted'], $squadResult['unkeyed'], $squadRows));
 
         $adThrown = null;
-        $adRows = $this->grain(
+        $adRows = $unlinked ? [] : $this->grain(
             /*
              * Ads come from the CAMPAIGN endpoint, not the ad-squad one.
              *
@@ -652,7 +831,7 @@ final class AccountMetricsSyncer
             ),
             $adThrown,
         );
-        $adFailure = $adThrown ?? $connector->lastEntityFailure();
+        $adFailure = $unlinked ? self::UNLINKED_MID_RUN : (ProviderErrorText::forStorage($adThrown ?? $connector->lastEntityFailure()) ?? $this->cutOffAtPageCeiling($connector));
 
         $ads = ExternalAd::withoutGlobalScopes()
             ->whereIn('external_ad_set_id', $squads->modelKeys())
@@ -671,10 +850,12 @@ final class AccountMetricsSyncer
 
         $knownAds = $this->filedUnder($knownAds, (string) $run->project_id);
 
-        $adResult = app(UpsertEntityDailyMetrics::class)->execute(
-            $account, EntityDailyMetric::AD, $adRows, $knownAds, (string) $run->getKey(),
-        );
-        $adFailure ??= $this->nothingPlaced('ad', count($adRows), $adResult['upserted'], $adResult['unkeyed'], $adRows);
+        $adResult = $unlinked
+            ? ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0]
+            : $upsertGrain(EntityDailyMetric::AD, $adRows, $knownAds, $adFailure);
+        $adFailure = $unlinked
+            ? self::UNLINKED_MID_RUN
+            : ($adFailure ?? $this->nothingPlaced('ad', count($adRows), $adResult['upserted'], $adResult['unkeyed'], $adRows));
 
         /*
          * Record WHY the grains are empty, when they are.
@@ -704,10 +885,21 @@ final class AccountMetricsSyncer
                 'entity_failure' => $squadFailure ?? $adFailure,
                 'entity_ad_sets_failure' => $squadFailure,
                 'entity_ads_failure' => $adFailure,
+                ...($squadResult['currency_unknown'] + $adResult['currency_unknown'] > 0
+                    ? ['entity_currency_unknown_rows' => $squadResult['currency_unknown'] + $adResult['currency_unknown']]
+                    : []),
             ],
         ])->save();
 
         return $squadFailure ?? $adFailure;
+    }
+
+    /** INTEG-SYNC-ENGINE-001 — the grain's failure, when the read it just made stopped at the connector's page ceiling. */
+    private function cutOffAtPageCeiling(object $connector): ?string
+    {
+        $cut = $connector instanceof ApiAdvertisingConnector ? $connector->takeTruncatedReads() : [];
+
+        return $cut === [] ? null : 'The read stopped at the page ceiling with more pages to come ('.implode(', ', $cut).').';
     }
 
     /**
@@ -745,7 +937,7 @@ final class AccountMetricsSyncer
              */
             if ($result instanceof SyncResult) {
                 if (! $result->success) {
-                    $failure = Str::limit((string) ($result->message ?? 'The platform reported a failure with no message.'), 480);
+                    $failure = Str::limit((string) ProviderErrorText::forStorage($result->message ?? 'The platform reported a failure with no message.'), 480);
                 }
 
                 return $result->records;
@@ -753,7 +945,7 @@ final class AccountMetricsSyncer
 
             return $result;
         } catch (Throwable $e) {
-            $failure = Str::limit(class_basename($e).': '.$e->getMessage(), 480);
+            $failure = Str::limit((string) ProviderErrorText::forStorage(class_basename($e).': '.$e->getMessage()), 480);
 
             return [];
         }
@@ -789,19 +981,20 @@ final class AccountMetricsSyncer
      * Map provider insight rows onto normalized metrics.
      *
      * @param  array<int,array<string,mixed>>  $records
-     * @return array{0:int,1:int,2:int} [upserted metric rows, skipped records, of which: campaign still filed under another project]
+     * @return array{0:int,1:int,2:int,3:int} [upserted metric rows, skipped records, of which: campaign still filed under another
+     *                                        project, records whose money was withheld for want of a currency]
      */
     private function ingest(ExternalAccount $account, array $records, string $projectId): array
     {
         // Mapping lives in its own class (FX-001): this method is pipeline plumbing, and what a row
         // MEANS — including which currency its money is in — is a separate question with its own tests.
-        [$metrics, $skipped, $misfiled] = $this->normaliser->normalise($account, $records, self::carriedKeys(), $projectId);
+        [$metrics, $skipped, $misfiled, $unlabelled] = $this->normaliser->normalise($account, $records, self::carriedKeys(), $projectId);
 
         if ($metrics !== []) {
             $this->upsert->handle($metrics);
         }
 
-        return [count($metrics), $skipped, $misfiled];
+        return [count($metrics), $skipped, $misfiled, $unlabelled];
     }
 
     /**
@@ -860,7 +1053,8 @@ final class AccountMetricsSyncer
             'parsed_rows' => $counts['parsed_rows'] ?? null,
             'mapped_campaign_rows' => $counts['mapped_campaign_rows'] ?? null,
             'finished_at' => Carbon::now(),
-            'error' => $error,
+            // Guzzle appends the failing URL to a connection error, and Meta's `paging.next` carries the access token in its query.
+            'error' => ProviderErrorText::forStorage($error),
         ])->save();
 
         if ($account !== null) {

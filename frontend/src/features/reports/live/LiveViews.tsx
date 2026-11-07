@@ -1,4 +1,5 @@
 import { basisLine } from './ExecutiveSummary'
+import { carries } from '../chosenFigures'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -30,6 +31,8 @@ import {
   TrendAndDistribution,
   useSpendCharting,
 } from './LiveSections'
+import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
+import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
@@ -164,14 +167,17 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
    * to improve → funnel and measurement coverage → optimisation steps. No spend, no campaign.
    */
   return (
-    <ExecutiveSummary
-      payload={payload}
-      reader={reader}
-      currency={currency}
-      locale={locale}
-      onOpenContent={onOpenContent}
-      sectionOn={(key) => sectionOn(payload, key)}
-    />
+    <div className="flex flex-col gap-6">
+      <ExecutiveSummary
+        payload={payload}
+        reader={reader}
+        currency={currency}
+        locale={locale}
+        onOpenContent={onOpenContent}
+        sectionOn={(key) => sectionOn(payload, key)}
+      />
+      <Ga4ReportBlocks payload={payload} ar={locale === 'ar'} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
+    </div>
   )
 }
 
@@ -231,6 +237,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
         </section>
       )}
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
+      <Ga4ReportBlocks payload={payload} ar={ar} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
     </div>
   )
 }
@@ -348,6 +355,9 @@ export function DashboardView({
         client-facing link; `sectionOn` is what the operator's choice flows through.
       */}
       {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
+      {/* GA4-REPORT-SECTIONS-001 — the store as its GA4 property measured it: four parts, each the operator's own switch. */}
+      <Ga4ReportBlocks payload={payload} ar={ar} />
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
     </div>
   )
@@ -438,9 +448,12 @@ export function PlatformsView({
               <span className="block h-1.5" style={{ background: platformColor(p) }} aria-hidden />
               <span className="flex flex-col gap-1 p-3">
                 <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
+                {/* REPORT-FILTERS-FUNCTIONAL-001 — a row that carries no spend (not chosen) prints no line of it. */}
+                {!(row && !('spend' in row)) && (
                 <span className="tnum truncate text-lg font-extrabold text-text-primary">
                   <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
+                )}
                 <span className="tnum truncate text-xs text-text-secondary">
                   {/* RESULT-EVENTS-001 — the platform's DEFINED result under the link's own name; never its generic conversion (TikTok's 1,126 were page views). */}
                   {words.shown && (
@@ -541,6 +554,8 @@ function PlatformDetail({
           </div>
         </ChartCard>
         )}
+        {/* REPORT-FILTERS-FUNCTIONAL-001 — no share to state when the row carries no spend and the result has none: no card of a dash. */}
+        {!(wholeRow && !('spend' in wholeRow) && resultShare === null) && (
         <ChartCard title={ar ? `حصة ${name} من الإجمالي` : `${name}’s share of the total`}>
           <div data-testid="live-platform-shares" className="flex flex-wrap items-center justify-around gap-4 py-2">
             {spendShare !== null && <ProgressRing value={spendShare} sublabel={ar ? 'من الإنفاق' : 'of spend'} size={116} />}
@@ -553,6 +568,7 @@ function PlatformDetail({
             </p>
           )}
         </ChartCard>
+        )}
       </div>
 
       {sectionOn(payload, 'content_performance') && (
@@ -648,7 +664,9 @@ export function ContentView({
 
 function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 'reader'>) {
   const ar = locale === 'ar'
-  const [sort, setSort] = useState<SortKey>('spend')
+  // REPORT-FILTERS-FUNCTIONAL-001 — the orders this link can honour: by a figure it carries.
+  const sortable = (['spend', 'conversions', 'ctr'] as const).filter((k) => carries(payload.totals, k))
+  const [sort, setSort] = useState<SortKey>(sortable[0] ?? 'spend')
   const [shown, setShown] = useState(PAGE)
 
   const all = useMemo(() => {
@@ -693,7 +711,7 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
 
       <section data-testid="live-content-all">
         <SectionTitle
-          action={(
+          action={sortable.length === 0 ? undefined : (
             <label className="inline-flex items-center gap-2 text-xs text-text-secondary">
               {ar ? 'ترتيب' : 'Sort'}
               <select
@@ -702,9 +720,10 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
                 onChange={(e) => { setSort(e.target.value as SortKey); setShown(PAGE) }}
                 className="rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-primary"
               >
-                <option value="spend">{ar ? 'الإنفاق' : 'Spend'}</option>
-                <option value="conversions">{ar ? 'النتائج' : 'Results'}</option>
-                <option value="ctr">{ar ? 'نسبة النقر' : 'CTR'}</option>
+                {/* REPORT-FILTERS-FUNCTIONAL-001 — an order by a figure the link does not carry is not offered (the server refuses it too). */}
+                {carries(payload.totals, 'spend') && <option value="spend">{ar ? 'الإنفاق' : 'Spend'}</option>}
+                {carries(payload.totals, 'conversions') && <option value="conversions">{ar ? 'النتائج' : 'Results'}</option>}
+                {carries(payload.totals, 'ctr') && <option value="ctr">{ar ? 'نسبة النقر' : 'CTR'}</option>}
               </select>
             </label>
           )}

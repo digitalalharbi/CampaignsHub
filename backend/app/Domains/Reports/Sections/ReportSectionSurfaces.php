@@ -6,7 +6,11 @@ namespace App\Domains\Reports\Sections;
 
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportReadMemo;
 
 /**
  * The one call every surface makes to apply a report's sections — REPORT-SECTION-SURFACES-001.
@@ -135,6 +139,49 @@ final class ReportSectionSurfaces
     }
 
     /**
+     * REPORT-PARITY-FOUR-SURFACES-001 — the operator's PREVIEW of a report (no link), through this same resolver.
+     *
+     * The builder's section list and the page the operator reads each made their own decision: one over the unnarrowed settings
+     * and the raw internal snapshot, the other over nothing at all — so a section the client's link, PDF and file did not carry
+     * was listed (and drawn) on the preview. This asks what a link of the report as it stands would carry: the same settings
+     * (narrowed by the report's main sections), judged against the same client-facing document the link is built from.
+     */
+    public function resolveReport(Report $report): ResolvedSections
+    {
+        $data = is_array($report->data) && $report->data !== [] ? $report->data : null;
+
+        return $this->resolve($report, null, 'preview', $data === null ? null : $this->documentOf($report, $data));
+    }
+
+    /**
+     * The operator's PREVIEW body: the document the client's link is built from, with this resolver's sections applied.
+     *
+     * Hidden means absent here too — the renderer (`InteractiveReport`) decides most of what to draw from which keys are present,
+     * so listing the section set without removing the keys would still draw them. The operator's pickers (link builder) no longer
+     * read the roster out of this body; the controller serves them separately as `scope_options`.
+     *
+     * @param  array<string, mixed>  $data  the stored snapshot
+     * @return array<string, mixed>
+     */
+    public function previewPayload(Report $report, array $data): array
+    {
+        // REPORT-FILTERS-FUNCTIONAL-001 — the preview is the document a link of this report carries, so it carries the same cut; an internal report keeps everything.
+        return ChosenFigures::for($report, null)->cut($this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client')));
+    }
+
+    /**
+     * The client-facing document of a stored snapshot — the one step the link, the PDF, the file and the preview share before
+     * sections are resolved.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function documentOf(Report $report, array $data): array
+    {
+        return app(ClientReportView::class)->document($data, (string) ($report->audience ?? 'client'), $report->form);
+    }
+
+    /**
      * Resolve against the payload and apply: hidden sections' keys leave, `report_sections` arrives.
      *
      * @param  array<string, mixed>  $payload
@@ -143,7 +190,24 @@ final class ReportSectionSurfaces
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
-        $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+        $resolved = $this->resolve($report, $share, $surface, $payload, $audience, $form);
+        $payload = $resolved->apply($payload);
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — a document without its content section names no content anywhere else.
+         *
+         * An attention item carries up to three pieces of content as its evidence. The live payload attaches them from the lists
+         * that survived the switches; a stored copy has them written in, so a link (or a report) that switched the content off
+         * still named its creatives one section earlier, on the page, in the PDF document and in the files.
+         */
+        if (! $resolved->isVisible('content_performance') && is_array($payload['attention'] ?? null)) {
+            $payload['attention'] = array_map(static function ($item) {
+                if (is_array($item) && is_array($item['evidence']['content'] ?? null)) {
+                    $item['evidence']['content'] = [];
+                }
+
+                return $item;
+            }, $payload['attention']);
+        }
         // The tabs a reader is offered, named by the server like the sections are.
         $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
@@ -161,7 +225,16 @@ final class ReportSectionSurfaces
             $payload['report_columns'] = $chosen;
         }
 
-        return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+        $payload = $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+
+        // REPORT-AUTO-COMPOSE-001 — only where somebody picked automatic mode; a stored document's own record is not rewritten.
+        $picked = ReportAutoComposer::chosenMetrics($report, $share);
+        if ($picked !== null && array_key_exists('metric_set', $payload)) {
+            $payload['metric_set'] = $picked;
+        }
+
+        // REPORT-GENERIC-LABELS-001 — last, on the one call every surface makes: a hidden name leaves every key and sentence.
+        return GenericNames::for($report, $share)->apply($payload);
     }
 
     /**
@@ -221,7 +294,7 @@ final class ReportSectionSurfaces
         if ($section === null) {
             return true;
         }
-        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
 
         return $report !== null && $this->operatorAllows($section, $report, $share);
     }

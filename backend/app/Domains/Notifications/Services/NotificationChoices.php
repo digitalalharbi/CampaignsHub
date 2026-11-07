@@ -137,6 +137,22 @@ final class NotificationChoices
     }
 
     /**
+     * Has this person switched THIS type on for WhatsApp — NOTIFICATION-CHANNELS-001.
+     *
+     * Not `wants()` and not `chose()`, on purpose. WhatsApp is the one channel nobody has by default and
+     * no master switch or category choice can imply: `chose()` answers `true` for every channel of a
+     * mandatory type, which would put a security alert on a phone nobody asked it to reach. Only an
+     * explicit `types.<type>.whatsapp = true` counts, and even that does nothing until the number has
+     * an opt-in — see `WhatsAppChannel`.
+     */
+    public function whatsapp(int $userId, string $tenantId, string $type): bool
+    {
+        $types = $this->map($this->row($userId, $tenantId), 'types');
+
+        return ($types[$type]['whatsapp'] ?? false) === true;
+    }
+
+    /**
      * The same question for a whole category — what a recipient arrangement names.
      *
      * A category is wanted when ANY type inside it is, because that is what the manager asked for:
@@ -165,7 +181,7 @@ final class NotificationChoices
     }
 
     /**
-     * When this person wants `$type` — `immediate`, `daily` or `weekly`.
+     * When this person wants `$type` — `immediate`, `daily`, `weekly` or `monthly`.
      *
      * `immediate` unless they said otherwise, and only ever one of the rhythms the catalogue offers
      * for that type: a stored value that is no longer offered (a type that stopped being digestible)
@@ -183,6 +199,38 @@ final class NotificationChoices
         $chosen = $types[$type]['rhythm'] ?? null;
 
         return is_string($chosen) && in_array($chosen, $offered, true) ? $chosen : 'immediate';
+    }
+
+    /**
+     * Is a finding of this severity important enough for what this person asked — §17.4.1.
+     *
+     * Asked by the senders, not only stored: a setting read by the screen alone is a promise. No choice
+     * means everything passes, and a mandatory type has no such choice to make.
+     */
+    public function meetsImportance(int $userId, string $tenantId, string $type, string $severity): bool
+    {
+        if (MessageCatalogue::isMandatory($type)) {
+            return true;
+        }
+
+        $floor = $this->minSeverity($userId, $tenantId, $type);
+
+        if ($floor === null) {
+            return true;
+        }
+
+        $rank = array_flip(MessageCatalogue::IMPORTANCE);
+
+        return ($rank[$severity] ?? -1) >= ($rank[$floor] ?? 0);
+    }
+
+    /** The least severe finding this person wants of `$type`, or null when they have not narrowed it. */
+    public function minSeverity(int $userId, string $tenantId, string $type): ?string
+    {
+        $types = $this->map($this->row($userId, $tenantId), 'types');
+        $chosen = $types[$type]['min_severity'] ?? null;
+
+        return is_string($chosen) && in_array($chosen, MessageCatalogue::IMPORTANCE, true) ? $chosen : null;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Tests\TestCase;
 
@@ -40,6 +41,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
         'automation:evaluate',
         'commerce:sync',
+        // INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation, listed always and run only when WEBHOOK_RECONCILE_ENABLED is set.
+        'webhooks:reconcile',
         // SALLA-ONBOARD-001 — a Salla store uninstalled 30 days ago has its synced data removed (the retention promised to the merchant).
         'commerce:purge-uninstalled',
         // TIKTOK-MEDIA-002 — covers into our own storage, nightly at 03:30, after the structure sweep refreshed the links.
@@ -50,6 +53,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'delivery:remind',
         // FORMS-PDPL-001 — the evidence around a form submission is anonymised past its form's retention (02:30 daily); the consent record is kept.
         'forms:purge-evidence',
+        // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
+        'notifications:retry-failed',
         'fx:rates',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
@@ -61,7 +66,10 @@ final class ScheduledWorkInventoryTest extends TestCase
          */
         'integrations:close-abandoned-runs',
         'integrations:prune-raw',
+        // INTEG-SOURCE-REMOVAL-001 — inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED; hides, never deletes.
+        'integrations:sweep-abandoned',
         'integrations:refresh-tokens',
+        // Scheduled TWICE under one name (PERF-SYNC-ISOLATION-001): the half-hourly 3-day sweep and the 03:50 `--days=14` pass.
         'integrations:sync',
         'integrations:sync-structure',
         /*
@@ -187,5 +195,27 @@ final class ScheduledWorkInventoryTest extends TestCase
                 "«{$m[1]}» may overlap itself — a second run while the first is writing is how a row gets written twice",
             );
         }
+    }
+
+    /** PERF-SYNC-ISOLATION-001 — a 3-day half-hourly sweep plus a daily 14-day pass, neither overlapping itself. */
+    public function test_the_sync_sweep_is_half_hourly_with_a_daily_fourteen_day_pass(): void
+    {
+        $events = array_values(array_filter(
+            app(Schedule::class)->events(),
+            fn ($e) => property_exists($e, 'command') && preg_match("/artisan'?\s+'?integrations:sync'?(\s|$)/", (string) $e->command) === 1,
+        ));
+
+        $this->assertCount(2, $events);
+
+        $daily = array_values(array_filter($events, fn ($e) => str_contains((string) $e->command, '--days=14')));
+        $this->assertCount(1, $daily);
+        $this->assertSame('50 3 * * *', $daily[0]->expression);
+        $this->assertSame('Asia/Riyadh', (string) $daily[0]->timezone);
+
+        foreach ($events as $event) {
+            $this->assertNotEmpty($event->withoutOverlapping);
+        }
+
+        $this->assertSame('3', app(SyncAdPlatformsCommand::class)->getDefinition()->getOption('days')->getDefault());
     }
 }

@@ -11,6 +11,7 @@ import {
   PanelLeft,
   Sun,
   X,
+  TrendingUp,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
@@ -39,10 +40,11 @@ const influencerNav = [
   // creator from the roster, somebody answers, and only then is there anything to deliver.
   { to: '/influencers/nominations', ar: 'الترشيحات', en: 'Nominations', icon: ClipboardCheck },
   { to: '/influencers/deliverables', ar: 'المخرجات', en: 'Deliverables', icon: ListChecks },
+  { to: '/influencers/impact', ar: 'أثر المؤثرين', en: 'Creator impact', icon: TrendingUp },
 ] as const
 
 /**
- * The influencer portal has exactly four sections, so the bar IS the navigation (MOBILE-APP-001) —
+ * The influencer portal has five sections, few enough that the bar IS the navigation (MOBILE-APP-001) —
  * there is no More sheet because there is nothing left over to put in one.
  */
 const INFLUENCER_TABS: MobileTab[] = influencerNav.map((i) => ({
@@ -61,7 +63,7 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
         onClick={onNavigate}
         title={collapsed ? (ar ? label.ar : label.en) : undefined}
         className={({ isActive }) =>
-          `group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-150 ${
+          `group relative flex items-center rounded-xl text-sm font-semibold transition ${
             collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
           } ${
             isActive

@@ -53,8 +53,9 @@ export interface MeasurementProvider {
   properties: MeasurementProperty[]
 }
 
-export function listMeasurementProviders(): Promise<MeasurementProvider[]> {
-  return getData<MeasurementProvider[]>('/measurement/properties')
+/** INTEG-PROJECT-SPACE-001 — with a project, only that project's properties and the ones nobody has chosen yet. */
+export function listMeasurementProviders(projectId?: string | null): Promise<MeasurementProvider[]> {
+  return getData<MeasurementProvider[]>(typeof projectId === 'string' ? `/measurement/properties?project_id=${projectId}` : '/measurement/properties')
 }
 
 /**
@@ -67,11 +68,19 @@ export function listMeasurementProviders(): Promise<MeasurementProvider[]> {
 export async function startMeasurementOAuth(
   provider: string,
   clientWorkspaceId?: string | null,
+  /**
+   * INTEG-PROJECT-LINK-STORES-GA4-001 — the PROJECT this Google sign-in is opened for, and the portal whose
+   * project page it returns to. Both ride the server's single-use state.
+   */
+  journey?: { projectId: string; returnPortal: 'app' | 'agency' } | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(
     `/integrations/measurement/${provider}/oauth/start`,
-    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
+    {
+      ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
+      ...(journey ? { project_id: journey.projectId, return_portal: journey.returnPortal } : {}),
+    },
   )
 }
 

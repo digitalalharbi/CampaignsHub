@@ -8,6 +8,7 @@ use App\Domains\Integrations\Measurement\Ga4Metrics;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -143,13 +144,11 @@ final class SiteMeasurementService
      */
     private function selectedProperty(string $tenantId, string $projectId): ?ExternalAccount
     {
-        $accountId = ProjectIntegrationBinding::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('project_id', $projectId)
-            ->where('is_active', true)
-            ->where('provider', 'ga4')
-            ->orderBy('created_at')
-            ->value('external_account_id');
+        // PERF-RECOVERY-001 — one read per build: the site, the store reading and the traffic split all ask it.
+        $accountId = ReportReadMemo::remember('ga4-binding|'.$tenantId.'|'.$projectId, static fn (): mixed => ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->where('is_active', true)->where('provider', 'ga4')
+            ->orderBy('created_at')->value('external_account_id'));
 
         if (! is_string($accountId) || $accountId === '') {
             return null;

@@ -15,6 +15,14 @@ const r = (o: Partial<DeliveryRow> = {}): DeliveryRow => ({
 })
 
 describe('what the delivery log says at a glance', () => {
+  // EMAIL-GAPS — these were deliberately not sent, for a recorded reason. None of them is a failure to chase.
+  it('does not count an unsubscribe, the daily limit or a scope refusal as a failure', () => {
+    const s = summariseDeliveries([r({ status: 'unsubscribed' }), r({ status: 'limit_reached' }), r({ status: 'refused_scope' })])
+    expect(s.failed).toBe(0)
+    expect(s.sent).toBe(0)
+    expect(s.blocked).toBe(3)
+  })
+
   it('counts what failed, not just what was sent', () => {
     const s = summariseDeliveries([r(), r({ status: 'failed', reason: 'no_recipients' }), r()])
 

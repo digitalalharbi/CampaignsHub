@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Building2, Check, LayoutDashboard, Users } from 'lucide-react'
 import { AuthShell } from './AuthShell'
-import { apply, rememberRegistration, type BillingInterval } from '@/features/signup/api'
+import { apply, fetchRegistrationPolicy, rememberRegistration, type BillingInterval } from '@/features/signup/api'
 import { PlanChooser } from '@/features/signup/PlanChooser'
 import { Button } from '@/components/ui/Button'
 import { EmailInput, PasswordInput, TextInput } from '@/components/ui/form'
@@ -199,6 +199,15 @@ export function RegisterPage() {
     setParams(p, { replace: true })
   }
 
+  /*
+   * SIGNUP-VERIFY-POLICY-001 — the number is asked for only when a mobile gate applies.
+   *
+   * Anything but a clear «no» keeps it: an answer still loading or unavailable must not hide a field the server may
+   * require. A server refusal naming the field shows it again, because a plan may ask for what the default does not.
+   */
+  const verificationPolicy = useQuery({ queryKey: ['registration-policy'], queryFn: fetchRegistrationPolicy, retry: false })
+  const [website, setWebsite] = useState('')
+
   const mutation = useMutation({
     mutationFn: apply,
     onSuccess: (envelope) => {
@@ -217,6 +226,7 @@ export function RegisterPage() {
   })
   const error = mutation.isError ? toApiError(mutation.error) : null
   const serverFields = error?.errors ? Object.keys(error.errors) : []
+  const askForPhone = verificationPolicy.data?.requires_mobile !== false || serverFields.includes('phone')
 
   /*
    * A server refusal about the ACCOUNT sends the visitor back to the account step.
@@ -399,7 +409,7 @@ export function RegisterPage() {
          * price list, with no field on screen to correct.
          */
         if (step === 1) {
-          const problems = validateAccountStep(form, ar)
+          const problems = validateAccountStep(form, ar, askForPhone)
           setAccountErrors(problems)
 
           const firstBad = Object.keys(problems)[0]
@@ -432,7 +442,8 @@ export function RegisterPage() {
            * this control — but sending E.164 means the duplicate check, the OTP destination and what
            * the customer sees back are one value rather than three readings of one.
            */
-          phone: phoneFieldValue(form.phone, form.dial_code) ?? form.phone,
+          ...(askForPhone ? { phone: phoneFieldValue(form.phone, form.dial_code) ?? form.phone } : {}),
+          ...(website !== '' ? { website } : {}),
           ...(preset ?? {}),
           plan_code: planCode,
           billing_interval: interval,
@@ -459,9 +470,20 @@ export function RegisterPage() {
             number before activation — is said on the status page, at the moment it happens, which is
             where somebody actually needs to read it.
           */}
+          {/* No person sees this field; only a script fills it. */}
+          <input
+            aria-hidden="true"
+            tabIndex={-1}
+            autoComplete="off"
+            name="website"
+            data-testid="register-website"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            className="absolute -start-[9999px] h-px w-px opacity-0"
+          />
           <div className="grid gap-[clamp(0.5rem,1.4vh,0.75rem)] sm:grid-cols-2">
             <TextInput id="tenant_name" label={t('org_name')} value={form.tenant_name} onChange={setDraft('tenant_name')} required error={err('tenant_name')} />
-            <PhoneField
+            {askForPhone && <PhoneField
               id="phone"
               label={ar ? 'رقم الجوال' : 'Mobile number'}
               value={form.phone}
@@ -471,7 +493,7 @@ export function RegisterPage() {
               ar={ar}
               required
               error={err('phone')}
-            />
+            />}
           </div>
           <div className="grid gap-[clamp(0.5rem,1.4vh,0.75rem)] sm:grid-cols-2">
             <TextInput id="name" label={t('full_name')} value={form.name} onChange={setDraft('name')} autoComplete="name" required error={err('name')} />

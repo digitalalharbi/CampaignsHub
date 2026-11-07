@@ -12,6 +12,7 @@ use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
+use App\Domains\Commerce\Http\Controllers\StoreAnalyticsController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
@@ -36,6 +37,7 @@ use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
+use App\Domains\Reports\Http\Controllers\ReportAutoComposeController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportIdentityController;
@@ -44,6 +46,7 @@ use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
 use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
+use App\Domains\Reports\Http\Controllers\ReportVersionController;
 use App\Domains\Reports\Http\Controllers\ResultEventsController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -241,6 +244,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `daily_metrics` and has no notion of an order.
      */
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.funnel');
+    // STORE-ANALYTICS-DEPTH-001 — the store's own reading, and each order tied to its source by evidence. No customer identity.
+    Route::get('commerce/depth', [StoreAnalyticsController::class, 'depth'])->middleware('project.can:analytics.view')->name('commerce.depth');
+    Route::get('commerce/orders', [StoreAnalyticsController::class, 'orders'])->middleware('project.can:analytics.view')->name('commerce.orders');
+    Route::get('commerce/orders/export', [StoreAnalyticsController::class, 'exportOrders'])->middleware('project.can:analytics.view')->name('commerce.orders.export');
+    Route::get('commerce/orders/sources', [StoreAnalyticsController::class, 'sources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources');
+    Route::get('commerce/orders/sources/export', [StoreAnalyticsController::class, 'exportSources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources.export');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     /*
@@ -302,7 +311,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('attribution-settings', [AttributionSettingsController::class, 'show'])->middleware(['module:attribution_intelligence', 'project.can:analytics.view'])->name('attribution-settings.show');
     Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
+    // GA4-PLATFORM-COMPARE-001 — the three sources side by side, never added.
+    Route::get('measurement/compare', [SiteAnalyticsController::class, 'compare'])->middleware('project.can:analytics.view')->name('measurement.compare');
+    Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
+    Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
+    Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     /*
@@ -441,6 +455,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
     Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
     // A link's own section switches: the same registry, off-only on top of the report.
+    // REPORT-AUTO-COMPOSE-001 — propose, pick and go back; `share_id` narrows it to one link.
+    Route::get('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.auto-compose.show');
+    Route::post('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.auto-compose.store');
+    Route::delete('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.auto-compose.destroy');
     Route::get('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'showShare'])->middleware('project.can:reports.view')->name('reports.shares.sections.show');
     Route::put('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.sections.update');
     /*
@@ -451,7 +469,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
+    // REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — «تكرار» stores nothing: it hands the editor a pre-filled draft.
+    Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware('project.can:reports.manage')->name('reports.duplicate')->whereUuid('report');
+    // The editor's preview (stores nothing), a saved draft reopened and edited, and the one way a draft is published.
+    Route::post('reports/draft-preview', [ReportController::class, 'previewDraft'])->middleware(['project.can:reports.manage', 'throttle:20,1'])->name('reports.draft.preview');
+    Route::get('reports/{report}/draft', [ReportController::class, 'draft'])->middleware('project.can:reports.view')->name('reports.draft.show')->whereUuid('report');
+    Route::put('reports/{report}/draft', [ReportController::class, 'updateDraft'])->middleware('project.can:reports.manage')->name('reports.draft.update')->whereUuid('report');
+    Route::post('reports/{report}/publish', [ReportController::class, 'publish'])->middleware('project.can:reports.manage')->name('reports.publish')->whereUuid('report');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
+    // REPORT-SNAPSHOT-PROTECT-001 — the copies a rebuild replaced, and putting one back.
+    Route::get('reports/{report}/versions', [ReportVersionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.versions');
+    Route::post('reports/{report}/versions/{version}/restore', [ReportVersionController::class, 'restore'])->middleware('project.can:reports.manage')->name('reports.versions.restore');
     // REPORT-DRILLDOWN-001 — the optional drill-down sections a report's PDF carries (off by default).
     Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
@@ -473,6 +501,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
     Route::post('reports/{report}/shares/{share}/pause', [ReportShareController::class, 'pause'])->middleware('project.can:reports.manage')->name('reports.shares.pause');
     Route::post('reports/{report}/shares/{share}/resume', [ReportShareController::class, 'resume'])->middleware('project.can:reports.manage')->name('reports.shares.resume');
+    // REPORT-LIVE-SNAPSHOT-CONVERT-001 / REPORT-LIFECYCLE-MENU-001 — convert a link's mode on the same URL; copy the current link.
+    Route::post('reports/{report}/shares/{share}/convert', [ReportShareController::class, 'convert'])->middleware('project.can:reports.manage')->name('reports.shares.convert');
+    Route::get('reports/{report}/shares/{share}/link', [ReportShareController::class, 'link'])->middleware('project.can:reports.view')->name('reports.shares.link');
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::patch('reports/{report}/shares/{share}', [ReportShareController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.shares.update');
     Route::get('reports/{report}/shares/{share}/analytics', [ReportShareController::class, 'analytics'])->middleware('project.can:reports.view')->name('reports.shares.analytics');

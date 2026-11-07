@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Influencers\Http\Controllers\CollaborationController;
 use App\Domains\Influencers\Http\Controllers\CreatorController;
+use App\Domains\Influencers\Http\Controllers\ImpactController;
 use App\Domains\Influencers\Http\Controllers\InfluencerController;
 use App\Domains\Influencers\Http\Controllers\NominationController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'tenant', 'portal:influencers'])
     ->prefix('influencers')->name('influencers.')
     ->group(function (): void {
+        // INFLUENCER-IMPACT-001 — inside the portal gate, so it answers nothing while the service is withdrawn (INFL-OFF-001).
+        Route::get('/impact', [ImpactController::class, 'index'])->name('impact.index');
+        Route::get('/impact/export', [ImpactController::class, 'export'])->name('impact.export');
+
         Route::get('/roster', [InfluencerController::class, 'index'])->name('roster.index');
         Route::post('/roster', [InfluencerController::class, 'store'])->name('roster.store');
         Route::get('/roster/{influencer}', [InfluencerController::class, 'show'])->name('roster.show');

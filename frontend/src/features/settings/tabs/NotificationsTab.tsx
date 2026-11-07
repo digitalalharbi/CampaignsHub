@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type NotifPrefs, type Rhythm } from '../api'
+import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type Importance, type NotifPrefs, type Rhythm } from '../api'
 import { CATEGORY_LABELS, CATEGORY_NOTES, TYPE_LABELS, TYPE_NOTES, words } from '../messageLabels'
 import { Switch } from '@/components/ui/Switch'
 import { Select } from '@/components/ui/Select'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Checkbox } from '@/components/ui/Checkbox'
+import { ChannelChip, type ChipState } from '../ChannelChip'
+import { ChannelsPanel } from '../ChannelsPanel'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
@@ -111,7 +113,7 @@ export function NotificationsTab() {
     setTimeout(() => setSaved(false), 2500)
   }
 
-  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; rhythm: Rhythm }>) =>
+  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; whatsapp: boolean; rhythm: Rhythm; min_severity: Importance | null }>) =>
     setP({ ...p, types: { ...p.types, [key]: { ...p.types[key], ...patch } } })
 
   const chosenProjects = p.project_ids ?? []
@@ -129,6 +131,35 @@ export function NotificationsTab() {
     if (r === 'weekly' && !p.digests.weekly) return 'weekly'
     if (r === 'monthly' && !p.digests.monthly) return 'monthly'
     return null
+  }
+  const chipWords = { on: ar ? 'مفعّل' : 'On', off: ar ? 'متوقف' : 'Off', locked: ar ? 'دائم' : 'Always', soon: ar ? 'قريبًا' : 'Soon' }
+  const wa = p.whatsapp ?? { provider_configured: false, opted_in: false, opted_out: false, number_hint: null }
+
+  /** A cell that is a fact rather than a choice: a lock, or a dash where the channel does not exist. */
+  const chip = (t: CatalogueType, channel: 'in_app' | 'email' | 'whatsapp', state: 'locked' | 'na') => {
+    // A locked row still has no bell item when the policy says so: a lock on a channel that does not exist is a lie.
+    const resolved: ChipState = state === 'locked' && channel === 'in_app' && t.channels?.in_app === false ? 'na' : state
+    const name = channel === 'in_app' ? (ar ? 'داخل النظام' : 'in-app') : channel === 'email' ? (ar ? 'بريد' : 'email') : (ar ? 'واتساب' : 'WhatsApp')
+
+    return <ChannelChip state={resolved} label={`${label(TYPE_LABELS, t.key)} — ${name}`} words={chipWords} />
+  }
+
+  /** WhatsApp: never for some types, «قريبًا» until a provider exists, a switch only for a person with an opt-in. */
+  const whatsappChip = (t: CatalogueType, value: { whatsapp?: boolean }) => {
+    const name = `${label(TYPE_LABELS, t.key)} — ${ar ? 'واتساب' : 'WhatsApp'}`
+    if (t.channels?.whatsapp === 'never') return <ChannelChip state="na" label={name} words={chipWords} />
+    if (!wa.provider_configured) return <ChannelChip state="soon" label={name} words={chipWords} testId={`whatsapp-soon-${t.key}`} />
+
+    return (
+      <ChannelChip
+        state={wa.opted_in && value.whatsapp ? 'on' : 'off'}
+        label={name}
+        words={chipWords}
+        disabled={!wa.opted_in}
+        testId={`whatsapp-${t.key}`}
+        onToggle={(on) => setType(t.key, { whatsapp: on })}
+      />
+    )
   }
 
   return (
@@ -151,18 +182,13 @@ export function NotificationsTab() {
         </p>
         {saved && <div className="mt-4"><Alert severity="positive" title={ar ? 'تم حفظ التفضيلات' : 'Preferences saved'} /></div>}
 
-        <div className="mt-5 flex flex-wrap gap-6 border-t border-border pt-5">
-          <Switch
-            checked={p.channels.in_app}
-            onCheckedChange={(v) => setP({ ...p, channels: { ...p.channels, in_app: v } })}
-            label={ar ? 'إشعارات داخل النظام' : 'In-app notifications'}
-          />
-          <Switch
-            checked={p.channels.email}
-            onCheckedChange={(v) => setP({ ...p, channels: { ...p.channels, email: v } })}
-            label={ar ? 'البريد الإلكتروني' : 'Email'}
-          />
-        </div>
+        <ChannelsPanel p={p} setP={setP} ar={ar} />
+        {/* SMS is stated rather than offered: a switch for a channel with no provider is a promise the product cannot keep. */}
+        {p.available_channels?.some((c) => c.key === 'sms' && !c.available) && (
+          <p data-testid="sms-unavailable" className="mt-3 text-[13px] leading-6 text-text-muted">
+            {ar ? 'الرسائل النصية غير متاحة حاليًا: لا يوجد مزوّد مربوط.' : 'SMS is not available yet: no provider is wired.'}
+          </p>
+        )}
         {!p.channels.email && (
           <p className="mt-3 text-[13px] leading-6 text-warning">
             {ar
@@ -179,12 +205,13 @@ export function NotificationsTab() {
           <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">{label(CATEGORY_NOTES, group.key)}</p>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
-                  <th className="p-2 text-start">{ar ? 'الرسالة' : 'Message'}</th>
+                  <th className="w-[150px] p-2 text-start sm:w-auto">{ar ? 'الرسالة' : 'Message'}</th>
                   <th className="p-2 text-center">{ar ? 'داخل النظام' : 'In-app'}</th>
                   <th className="p-2 text-center">{ar ? 'بريد' : 'Email'}</th>
+                  <th className="p-2 text-center">{ar ? 'واتساب' : 'WhatsApp'}</th>
                   <th className="p-2 text-start">{ar ? 'التوقيت' : 'When'}</th>
                 </tr>
               </thead>
@@ -196,40 +223,37 @@ export function NotificationsTab() {
 
                   return (
                     <tr key={t.key} className="border-b border-border align-top last:border-0">
-                      <td className="p-2">
+                      <td className="w-[150px] p-2 sm:w-auto">
                         <div className="font-medium text-text-primary">{label(TYPE_LABELS, t.key)}</div>
+                        {/* A note wider than the phone pushes the chips off-screen; it stays narrow there and opens up from `sm`. */}
                         {TYPE_NOTES[t.key] && (
-                          <p className="mt-0.5 max-w-md text-[13px] leading-6 text-text-muted">{label(TYPE_NOTES, t.key)}</p>
+                          <p className="mt-0.5 max-w-[140px] text-[13px] leading-6 text-text-muted sm:max-w-md">{label(TYPE_NOTES, t.key)}</p>
                         )}
                       </td>
 
                       {t.mandatory ? (
-                        <td colSpan={3} className="p-2 text-[13px] leading-6 text-text-secondary">
-                          {ar ? 'تُرسل دائمًا عند الحاجة إليها.' : 'Always sent whenever it applies.'}
-                        </td>
+                        <>
+                          <td className="p-2 text-center">{chip(t, 'in_app', 'locked')}</td>
+                          <td className="p-2 text-center">{chip(t, 'email', 'locked')}</td>
+                          <td className="p-2 text-center">{whatsappChip(t, value)}</td>
+                          <td className="p-2 text-[13px] leading-6 text-text-secondary">
+                            {ar ? 'تُرسل دائمًا عند الحاجة إليها.' : 'Always sent whenever it applies.'}
+                          </td>
+                        </>
                       ) : digest !== null ? (
                         <>
-                          <td className="p-2 text-center text-[13px] text-text-muted">—</td>
+                          <td className="p-2 text-center">{chip(t, 'in_app', 'na')}</td>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`digest-${digest}`}
-                              aria-label={label(TYPE_LABELS, t.key)}
-                              checked={p.digests[digest]}
-                              onChange={(e) => setP({ ...p, digests: { ...p.digests, [digest]: e.target.checked } })}
+                            <ChannelChip
+                              state={p.digests[digest] ? 'on' : 'off'}
+                              label={label(TYPE_LABELS, t.key)}
+                              words={chipWords}
+                              testId={`digest-${digest}`}
+                              onToggle={(on) => setP({ ...p, digests: { ...p.digests, [digest]: on } })}
                             />
                           </td>
+                          <td className="p-2 text-center">{chip(t, 'whatsapp', 'na')}</td>
                           <td className="p-2 text-[13px] text-text-muted">
-                            {/*
-                              Three rhythms, not two. This was `daily ? … : weekly`, so the MONTHLY
-                              row — which the sender has dispatched since EMAIL-INTELLIGENCE-001 —
-                              announced «Weekly, Monday morning»: a false statement about when a
-                              reader's mail arrives, printed on the screen they opened to find out.
-                              Both days are now named, because both now reach this screen: the
-                              endpoint shows and accepts `digest_weekday` and `digest_monthday`,
-                              which the sender had been reading all along. The weekly line used to
-                              say «Monday morning» as a constant — true only while the column could
-                              not move off its default.
-                            */}
                             {digest === 'daily'
                               ? (ar ? `يوميًا، الساعة ${p.digest_hour}:00` : `Daily, at ${p.digest_hour}:00`)
                               : digest === 'monthly'
@@ -244,22 +268,27 @@ export function NotificationsTab() {
                       ) : (
                         <>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`in-app-${t.key}`}
-                              aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'داخل النظام' : 'in-app'}`}
-                              checked={value.in_app}
-                              onChange={(e) => setType(t.key, { in_app: e.target.checked })}
-                            />
+                            {t.channels?.in_app === false
+                              ? chip(t, 'in_app', 'na')
+                              : (
+                                <ChannelChip
+                                  state={value.in_app ? 'on' : 'off'}
+                                  label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'داخل النظام' : 'in-app'}`}
+                                  words={chipWords}
+                                  onToggle={(on) => setType(t.key, { in_app: on })}
+                                />
+                              )}
                           </td>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`email-${t.key}`}
-                              aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'بريد' : 'email'}`}
-                              checked={value.email}
+                            <ChannelChip
+                              state={value.email ? 'on' : 'off'}
+                              label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'بريد' : 'email'}`}
+                              words={chipWords}
                               disabled={!p.channels.email}
-                              onChange={(e) => setType(t.key, { email: e.target.checked })}
+                              onToggle={(on) => setType(t.key, { email: on })}
                             />
                           </td>
+                          <td className="p-2 text-center">{whatsappChip(t, value)}</td>
                           <td className="p-2">
                             {t.rhythms.length > 1 ? (
                               <>
@@ -271,6 +300,17 @@ export function NotificationsTab() {
                                   value={value.rhythm}
                                   onChange={(e) => setType(t.key, { rhythm: e.target.value as Rhythm })}
                                   options={t.rhythms.map((r) => ({ value: r, label: ar ? RHYTHM_LABELS[r].ar : RHYTHM_LABELS[r].en }))}
+                                />
+                                <Select
+                                  className="mt-1 max-w-[210px]"
+                                  aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'الأهمية' : 'importance'}`}
+                                  value={value.min_severity ?? ''}
+                                  onChange={(e) => setType(t.key, { min_severity: (e.target.value || null) as Importance | null })}
+                                  options={[
+                                    { value: '', label: ar ? 'كل المستويات' : 'Every level' },
+                                    { value: 'warning', label: ar ? 'التحذيرات فأعلى' : 'Warnings and above' },
+                                    { value: 'critical', label: ar ? 'الحرجة فقط' : 'Critical only' },
+                                  ]}
                                 />
                                 {stranded && (
                                   <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">

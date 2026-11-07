@@ -35,6 +35,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
         'Domains/Campaigns/Actions/UpsertCreativeDailyMetrics.php' => 'writer, scoped to the syncing account through its campaigns',
         'Domains/Campaigns/Actions/ImportExternalStructure.php' => 'writer',
+        // META-MEDIA-RENEWAL-001 — runs only inside a structure sync, which has already proved the assignment. Rewrites links; returns no figure, for no viewer.
+        'Domains/Campaigns/Actions/RenewExpiredCreativeMedia.php' => 'writer, scoped to the syncing account through its campaigns; reads and rewrites media links, never a figure',
         // Client-facing creative lists: every one starts a bare creative query and hands it to
         // `CreativeRows::applyFilters()`, which applies the rule — `BoundAccountVisibilityTest` proves
         // the live link and the snapshot agree with the dashboard about a deselected account.
@@ -51,6 +53,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Rates/CurrencyRateFeed.php' => 'which currencies exist, not whose figures',
         'Domains/Integrations/Console/DiagnoseSyncCommand.php' => 'read-only diagnosis of what is STORED',
         'Domains/Integrations/Console/ProbeInsightsCommand.php' => 'read-only probe',
+        // META-NO-DATA-READING-001 — the sync pipeline asks, for the account it is syncing, the last day that account holds
+        // any stored figure, to say «no delivery since …» on its own run record. A date, never a figure, for the operator's
+        // diagnosis and no project viewer; it must see every stored row of the account or «never delivered» would be a guess.
+        'Domains/Metrics/Support/NoDataReading.php' => 'the last stored day of the syncing account, for its own run record; a date, never a figure',
         'Domains/Campaigns/Console/ReconcileContentMetricsCommand.php' => 'walks one creative through the product\'s own services, which apply the rule',
         'Domains/Campaigns/Console/ContentDefectCensusCommand.php' => 'lists through CreativeRows::present(), which applies the rule',
         'Domains/Campaigns/Console/SnapchatLpvProvenanceCommand.php' => 'counts stored rows by provenance',
@@ -67,6 +73,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Services/CreativePresenter.php' => 'presents one creative it was handed',
         'Domains/Campaigns/Support/CreativeDemoPolicy.php' => 'the demo policy predicate, applied beside this one',
         'Domains/Reports/Services/ReportCreativeMedia.php' => 'resolves media for creatives a report already names',
+        // REPORT-SOURCE-ISOLATION-001 — places creatives a STORED report already names inside or outside that report's own ad accounts,
+        // to drop the ones outside. It can only remove rows, returns no figure, and deliberately does not apply today's selection: a
+        // stored copy states what ran when it was made, and an account deselected since must not empty a document already sent.
+        'Domains/Reports/Services/ReportSourceContainment.php' => 'narrows a stored report to its own ad accounts; removes rows only, reads no figure',
         // SEC-CLUSTER-4 — proves a Drive attachment target is a creative of this tenant inside the caller's client ceiling; reads the creative's project id only.
         'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];

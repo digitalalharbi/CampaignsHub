@@ -27,6 +27,8 @@ final class ProviderConnection extends Model
          * they survive a refusal by design, which is exactly why they were being offered as current.
          */
         'last_discovery_attempted_at', 'last_discovery_succeeded_at', 'discovery_blocked_reason',
+        /* INTEG-SOURCE-REMOVAL-001 — a soft hide; INTEG-PROVIDER-IDENTITY-001 — the provider login that granted access. */
+        'removed_at', 'project_id', 'provider_identity_label', 'provider_identity_email', 'provider_identity_fetched_at',
     ];
 
     protected $casts = [
@@ -38,6 +40,8 @@ final class ProviderConnection extends Model
         'last_discovery_succeeded_at' => 'datetime',
         /* META-INSIGHTS-GRANT-001 — when the provider last refused to read insights, or null. */
         'insights_denied_at' => 'datetime',
+        'removed_at' => 'datetime',
+        'provider_identity_fetched_at' => 'datetime',
     ];
 
     /** @return HasMany<ExternalAccount, $this> */

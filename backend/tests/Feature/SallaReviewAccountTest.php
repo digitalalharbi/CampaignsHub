@@ -9,6 +9,10 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Projects\Models\Project;
@@ -24,6 +28,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
@@ -43,6 +48,9 @@ final class SallaReviewAccountTest extends TestCase
     private const SPA = ['Origin' => 'http://localhost:5173'];
 
     private const PASSWORD = 'review-pass-1234567';
+
+    /** The provisioner runs on Production with no test helper behind it: its accounts must be selected by the provisioner itself. */
+    protected bool $selectsSeededAccounts = false;
 
     protected function setUp(): void
     {
@@ -93,6 +101,43 @@ final class SallaReviewAccountTest extends TestCase
         $this->assertGreaterThan(0, SpendLimit::query()->where('project_id', $project->id)->count(), 'budgets');
         $this->assertSame('completed', Report::query()->where('project_id', $project->id)->value('status'), 'a weekly report');
         app(TenantContext::class)->forget();
+    }
+
+    public function test_the_demo_figures_are_read_through_selected_accounts_that_no_sweep_will_ever_fetch(): void
+    {
+        $tenant = $this->provision();
+        $project = $this->project($tenant);
+
+        $unbound = DB::table('daily_metrics')
+            ->where('project_id', $project->id)
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('project_integration_bindings as b')
+                ->whereColumn('b.external_account_id', 'daily_metrics.external_account_id')
+                ->whereColumn('b.project_id', 'daily_metrics.project_id')
+                ->where('b.is_active', true))
+            ->count();
+        $this->assertSame(0, $unbound, 'deny by default hides every figure of a row whose account is not selected');
+        $this->assertGreaterThan(0, BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes()->where('project_id', $project->id), 'daily_metrics')->count());
+
+        $this->assertSame(0, app(AccountAssignment::class)->scopeToAssigned(ExternalAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id))->count(), 'no sweep fetches an account with nothing real behind it');
+        $this->assertSame(0, ProviderConnection::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('status', 'connected')->count(), 'discovery and token refresh walk connected connections');
+        $this->assertSame(['ad_account'], ExternalAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->distinct()->pluck('account_type')->all());
+        $this->assertTrue(ExternalAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->get()->every(fn (ExternalAccount $a) => ($a->metadata['is_demo'] ?? false) === true));
+
+        $accounts = DB::table('project_integration_bindings')->where('project_id', $project->id)->count();
+        $this->provision();
+        $this->assertSame($accounts, DB::table('project_integration_bindings')->where('project_id', $project->id)->count(), 'running it again adds nothing');
+    }
+
+    public function test_a_workspace_provisioned_before_deny_by_default_is_healed_by_running_the_command_again(): void
+    {
+        $tenant = $this->provision();
+        $project = $this->project($tenant);
+        DB::table('project_integration_bindings')->where('project_id', $project->id)->delete();
+        $this->assertSame(0, BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes()->where('project_id', $project->id), 'daily_metrics')->count());
+
+        $this->provision();
+
+        $this->assertGreaterThan(0, BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes()->where('project_id', $project->id), 'daily_metrics')->count());
     }
 
     public function test_provisioning_twice_changes_nothing_but_the_password_and_the_window(): void

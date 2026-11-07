@@ -28,23 +28,32 @@ use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
+use App\Domains\Integrations\Console\IdentityRefreshCommand;
 use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
+use App\Domains\Integrations\Console\MetaDiagnoseCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
+use App\Domains\Integrations\Console\ReconcileWebhooksCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\ScopeCleanupCommand;
 use App\Domains\Integrations\Console\SpendReconcileCommand;
+use App\Domains\Integrations\Console\SweepAbandonedConnectionsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Console\SyncCensusCommand;
+use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
+use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\ConfirmMailDelivery;
+use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
+use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Ops\Console\PerfCheckCommand;
@@ -62,6 +71,7 @@ use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Reports\Console\ReportSourceIsolationAuditCommand;
 use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
@@ -112,6 +122,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
+        ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
@@ -120,6 +131,8 @@ return Application::configure(basePath: dirname(__DIR__))
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
+        RetryFailedDigests::class,
+        ConfirmMailDelivery::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
         PrepareWeeklyPacks::class,
@@ -129,6 +142,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
+        // EMAIL-RTL-001 — one mailable, one language, one file.
+        MailPreviewCommand::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,
@@ -165,6 +180,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
         GoogleAdsAccessCommand::class,
+        MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
@@ -175,8 +191,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // A run whose worker vanished is closed here: `failed()` only fires when the QUEUE knows the
         // job died, so a SIGKILL or an OOM leaves the row «running» with no upper bound at all.
         CloseAbandonedSyncRunsCommand::class,
+        // INTEG-SOURCE-REMOVAL-001 / INTEG-PROVIDER-IDENTITY-001.
+        SweepAbandonedConnectionsCommand::class,
+        UnboundEstateReportCommand::class,
+        IdentityRefreshCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        ReconcileWebhooksCommand::class,
         PurgeUninstalledStoresCommand::class,
         // GA4-INTEGRATION-001 — the measurement sweep: a selected Analytics property's days, in the
         // property's own calendar. Only properties somebody bound to a project are read.
@@ -184,6 +205,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,
+        // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
+        // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
+        MoneyCurrencyAuditCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
         // PROD-PROVISION-001 — the reference data a production install cannot work without, and
@@ -224,6 +248,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'api/v1/payments/sandbox/*',
             'api/v1/webhooks/*',
+            // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
+            'mail/unsubscribe/*',
         ]);
 
         /*

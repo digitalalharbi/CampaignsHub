@@ -130,6 +130,59 @@ final class ReportSectionRegistry
                 clientDefault: false,
                 view: 'dashboard',
             ),
+            /*
+             * STORE-ANALYTICS-DEPTH-001 §3.1 — the store and its traffic as one category to show or hide, live and snapshot.
+             *
+             * OFF on a client-facing report until an operator switches it on: no link in existence gains a
+             * section because this shipped, and turning it on keeps the link's address and scope.
+             */
+            new ReportSection(
+                key: 'store_analytics',
+                titleAr: 'تحليلات المتجر والزيارات',
+                titleEn: 'Store & traffic analytics',
+                payloadKeys: ['store_analytics'],
+                clientDefault: false,
+                view: 'dashboard',
+            ),
+            /*
+             * GA4-REPORT-SECTIONS-001 — the store as its own GA4 property measured it, in four parts.
+             *
+             * Each part is a SHOW/HIDE of its own, and each is ON unless the operator hides it (the
+             * Owner's rule: nothing is hidden by default). That does not put a section on any link
+             * that exists today: a part is available only where the project has a selected property
+             * with figures for the window, and its data is absent from the payload otherwise.
+             *
+             * GA4's figures are GA4's, under GA4's attribution. The gap part sets them BESIDE what the
+             * platforms reported; nothing here adds the two (`GA4-NOT-BLENDED-001`).
+             */
+            new ReportSection(
+                key: 'ga4_overview',
+                titleAr: 'زيارات ومبيعات المتجر (GA4)',
+                titleEn: 'Store visits & sales (GA4)',
+                payloadKeys: ['ga4_overview'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_acquisition',
+                titleAr: 'القنوات والأجهزة والقمع (GA4)',
+                titleEn: 'Channels, devices & funnel (GA4)',
+                payloadKeys: ['ga4_acquisition'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_platform_gap',
+                titleAr: 'GA4 مقابل المنصات',
+                titleEn: 'GA4 vs platforms',
+                payloadKeys: ['ga4_platform_gap'],
+                view: 'dashboard',
+            ),
+            new ReportSection(
+                key: 'ga4_tables',
+                titleAr: 'جداول المتجر (GA4)',
+                titleEn: 'Store tables (GA4)',
+                payloadKeys: ['ga4_tables'],
+                view: 'tables',
+            ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -260,6 +313,13 @@ final class ReportSectionRegistry
          * facts that are both «no section», and neither of which is a zero.
          */
         $this->availableWhen('site_measurement', 'has_measured_days', static fn (SectionContext $c): bool => is_array($c->value('site_measurement')));
+
+        $this->availableWhen('store_analytics', 'has_store_or_site_figures', static fn (SectionContext $c): bool => is_array($c->value('store_analytics')));
+
+        // GA4-REPORT-SECTIONS-001 — a part with nothing measured for the window is not a section, and never a zero.
+        foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables'] as $ga4) {
+            $this->availableWhen($ga4, 'has_ga4_figures', static fn (SectionContext $c): bool => is_array($c->value($ga4)));
+        }
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 

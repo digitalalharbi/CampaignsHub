@@ -13,6 +13,10 @@ return [
     // Warn when the running SLA has fewer than this many hours remaining (evaluated by the scheduler).
     'sla_warning_hours' => (int) env('REQUESTS_SLA_WARNING_HOURS', 4),
 
+    // EMAIL-GAPS — request mail, to the client contact and to the team. OFF until the Owner approves it:
+    // switching it on mails real people. While off, `client_notifications` is written exactly as before.
+    'client_mail_enabled' => (bool) env('REQUEST_CLIENT_MAIL_ENABLED', false),
+
     // Public intake anti-abuse.
     'intake_throttle_per_minute' => (int) env('REQUESTS_INTAKE_THROTTLE', 6),
 
@@ -40,6 +44,13 @@ return [
     // Client-portal contact verification (OTP / magic-code). Providers are OFF until real credentials
     // are wired — delivery is recorded as "awaiting_provider_credentials" and never claimed as sent.
     'verification' => [
+        /*
+         * LOGIN-SINGLE-DOOR-001 — the email code as a way in, OFF unless an operator turns it on.
+         *
+         * Off: `/login` shows no code control and `/client/login/*` answers 404, so nothing mints a portal session from a code.
+         * Sessions opened before it was turned off keep working until they expire. A contact with no password uses recovery.
+         */
+        'portal_code_on_login' => (bool) env('PORTAL_CODE_ON_LOGIN', false),
         'code_ttl_minutes' => (int) env('REQUESTS_OTP_TTL_MINUTES', 10),
         'max_attempts' => (int) env('REQUESTS_OTP_MAX_ATTEMPTS', 5),
         'token_ttl_minutes' => (int) env('REQUESTS_VERIFIED_TTL_MINUTES', 30), // verified→submit window

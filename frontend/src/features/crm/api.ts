@@ -7,6 +7,9 @@ export interface LeadListParams {
   source?: string
   search?: string
   per_page?: number
+  page?: number
+  sort?: string
+  dir?: 'asc' | 'desc'
   /** LEAD-DEDUP-001 — narrow the LIST to canonicals. Both counts come back either way. */
   unique?: 1
 }

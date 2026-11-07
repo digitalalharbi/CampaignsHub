@@ -5,7 +5,6 @@ import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { useUi } from '@/stores/ui'
-import { Num } from '@/components/ui/Num'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
@@ -18,6 +17,7 @@ import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readM
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 import { ReportFooter } from './reportFooter'
+import { LiveDeliveryNote } from './live/LiveDeliveryNote'
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -197,7 +197,6 @@ export function LiveSharedReport({
   }
 
   const { payload, refreshing, refreshError, computedAt } = main.load
-  const stamp = computedAt.toLocaleTimeString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   const common = { reader, currency: unit, locale, onOpenContent }
 
   return (
@@ -287,14 +286,6 @@ export function LiveSharedReport({
         )}
 
         <div className="ms-auto flex items-center gap-2">
-          {/* «Live» means this system recomputed at this time — not that a platform reported just now. */}
-          <span data-testid="live-computed-at" className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-            <span className="relative flex h-2 w-2" aria-hidden>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60 motion-reduce:hidden" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-            </span>
-            <span className="tabular-nums"><Num>{stamp}</Num></span>
-          </span>
           <button
             type="button"
             data-testid="live-refresh"
@@ -307,7 +298,7 @@ export function LiveSharedReport({
         </div>
       </div>
 
-      <FreshnessStrip freshness={payload.freshness} summary={payload.freshness_summary} ar={ar} />
+      <FreshnessStrip freshness={payload.freshness} ar={ar} />
 
       {refreshError && (
         <p data-testid="live-refresh-failed" className="rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning">
@@ -363,10 +354,13 @@ export function LiveSharedReport({
         REPORT-FOOTER-001 — the same footer every report surface ends with. The objective is stated only
         where the link's campaigns share ONE; a mixed programme names none rather than guessing.
       */}
+      <LiveDeliveryNote delivery={payload.delivery} ar={ar} />
+
       <ReportFooter
         locale={ar ? 'ar' : 'en'}
         facts={{
-          updatedAt: computedAt.toISOString(),
+          // The server's own computation moment; the reader's clock only when an older payload does not carry it.
+          updatedAt: payload.freshness_summary?.generated_at ?? computedAt.toISOString(),
           period: payload.period,
           currency: unit || null,
           timezone: 'Asia/Riyadh',

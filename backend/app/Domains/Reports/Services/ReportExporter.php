@@ -9,6 +9,7 @@ use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -66,7 +67,7 @@ final class ReportExporter
         $this->gate->ensureReady($this->stored($report, $share));
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
-        $data = $this->withoutHiddenSections($report, $this->audienceData($report));
+        $data = $this->withoutHiddenSections($report, $this->audienceData($report, $share));
 
         // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF,
         // narrowed by the link's own switches when a link produced it.
@@ -85,7 +86,8 @@ final class ReportExporter
             $applied['kpi_allowlist'] = array_values($applied['metric_set']);
         }
 
-        return $applied;
+        // REPORT-FILTERS-FUNCTIONAL-001 — the file is built from the same cut document as the page and the PDF (four surfaces, one answer).
+        return ChosenFigures::for($report, $share)->cut($applied);
     }
 
     /**
@@ -355,12 +357,14 @@ final class ReportExporter
      *
      * @return array<string,mixed>
      */
-    private function audienceData(Report $report): array
+    private function audienceData(Report $report, ?ReportShare $share = null): array
     {
-        $data = $report->data ?? [];
+        // REPORT-SOURCE-ISOLATION-001 — an operator's own export of an older copy stays inside the report's accounts too.
+        $data = app(ReportSourceContainment::class)->apply($report->data ?? [], $report);
         $audience = $report->audience ?? 'client';
         if (in_array($audience, ['client', 'executive'], true)) {
-            $data = $audience === 'executive' ? $this->clientView->executive($data) : $this->clientView->filter($data);
+            // REPORT-PARITY-FOUR-SURFACES-001 — the same method the link's page and the print route use; a link's own form counts.
+            $data = $this->clientView->document($data, $audience, $share !== null ? $share->formOr($report->form) : $report->form);
             $violations = $this->contentValidator->scan($data);
             abort_if(
                 $violations !== [],
@@ -1010,7 +1014,17 @@ final class ReportExporter
 
         $fresh = Report::withoutGlobalScopes()->find($report->getKey());
 
-        return $fresh === null ? $report : app(LiveReportService::class)->materialise($fresh, $share);
+        if ($fresh === null) {
+            return $report;
+        }
+        $stored = app(LiveReportService::class)->materialise($fresh, $share);
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's file is made from the stored copy while that copy is rebuilt. The gate still
+        // validates the document; only the row's «being rebuilt» is not held against the finished copy it carries. In memory only.
+        if ($stored->status === 'processing' && $stored->hasStoredCopy()) {
+            $stored->setAttribute('status', 'completed');
+        }
+
+        return $stored;
     }
 
     private function pdf(Report $report, array $data, ?ReportShare $share = null): string

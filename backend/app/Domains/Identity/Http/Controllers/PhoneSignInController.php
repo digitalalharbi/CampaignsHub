@@ -49,7 +49,7 @@ final class PhoneSignInController extends Controller
     /** The verification purpose, kept distinct so a portal code cannot be replayed here. */
     private const PURPOSE = 'phone_sign_in';
 
-    private const RESEND_COOLDOWN = 60;
+    public const RESEND_COOLDOWN = 60;
 
     public function __construct(private readonly ContactVerificationService $verification) {}
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Commerce\Services;
 
-use App\Domains\Commerce\Providers\ApiCommerceConnector;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -24,9 +23,9 @@ final class StoreDiscovery
 
     public function discover(ProviderConnection $connection): int
     {
-        $connector = $this->registry->get($connection->provider);
+        $connector = $this->registry->forDiscovery($connection->provider);
 
-        if (! $connector instanceof ApiCommerceConnector) {
+        if ($connector === null) {
             return 0;
         }
 

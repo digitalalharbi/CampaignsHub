@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
@@ -180,6 +181,58 @@ final class ConnectionHubTest extends TestCase
 
         $this->assertSame('Owner One', $this->hub()['connections'][0]['authorised_by']['name']);
         $this->assertNull($this->hub()['connections'][1]['authorised_by'] ?? null);
+    }
+
+    /**
+     * INTEG-PROJECT-SPACE-001 — the project's card and the project's space count the same accounts.
+     *
+     * The card counts every ACTIVE binding. The space dropped a connection whose status is `disconnected`, so
+     * an account still bound through one was «1 حساب» on the card and nothing at all inside. It is listed, said
+     * to be disconnected, and never listed on the workspace-wide board, which stays as it was.
+     */
+    public function test_an_account_bound_through_a_disconnected_connection_is_listed_in_its_projects_space(): void
+    {
+        $connection = $this->connection();
+        $connection->forceFill(['status' => 'disconnected'])->save();
+        $project = $this->project('Razah');
+        $this->bind($project, $this->account($connection, 'act_a'));
+
+        $rows = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/integrations/hub?project_id='.$project->id)->assertOk()->json('data.connections');
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('disconnected', $rows[0]['status']);
+        $this->assertSame(IntegrationTruth::REVOKED, $rows[0]['connection_state']);
+        $this->assertSame(1, $rows[0]['selected_accounts']);
+        $this->assertSame(['Account act_a'], array_column($rows[0]['accounts'], 'name'));
+
+        // Another project's space, and the workspace-wide board, do not gain the row.
+        $other = $this->project('Other');
+        $this->assertSame([], $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/integrations/hub?project_id='.$other->id)->assertOk()->json('data.connections'));
+        $this->assertSame([], $this->hub()['connections']);
+    }
+
+    /** A row says how many campaigns THIS project runs through each linked account — never another project's. */
+    public function test_a_projects_row_counts_its_own_campaigns_per_account(): void
+    {
+        $connection = $this->connection();
+        $a = $this->account($connection, 'act_a');
+        $project = $this->project('Razah');
+        $other = $this->project('Other');
+        $this->bind($project, $a);
+
+        foreach ([[$project, 'c1', null], [$project, 'c2', null], [$project, 'c3', now()], [$other, 'c4', null]] as [$owner, $externalId, $unlinkedAt]) {
+            ExternalCampaign::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $owner->id, 'external_account_id' => $a->id, 'provider' => 'meta',
+                'external_id' => $externalId, 'name' => 'Campaign '.$externalId, 'status' => 'active', 'unlinked_at' => $unlinkedAt,
+            ]);
+        }
+
+        $row = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/integrations/hub?project_id='.$project->id)->assertOk()->json('data.connections.0');
+
+        $this->assertSame(2, $row['campaigns']);
+        $this->assertSame(2, $row['accounts'][0]['campaigns']);
     }
 
     /** @return array<string,mixed> */

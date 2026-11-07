@@ -27,13 +27,17 @@ final class PublicSurfaceInventoryTest extends TestCase
 
     /** @var list<string> */
     private const PUBLIC = [
+        // LOGIN-004 — linking a Google account in place: the proof is the password or the mailed link, so the routes are public.
+        'DELETE api/v1/auth/oauth/pending-link',
         'DELETE api/v1/client/team/{membership}',
         'DELETE api/v1/requests/uploads/{file}',
         // AUTH-LOGIN-UX-002 — which ways in the sign-in page may offer; booleans only.
-        'GET api/v1/auth/methods',
+        'GET api/v1/auth/oauth/pending-link',
         'GET api/v1/auth/oauth/providers',
         'GET api/v1/auth/oauth/{provider}/callback',
         'GET api/v1/auth/registration/{registration}',
+        // SIGNUP-VERIFY-POLICY-001 — which proofs the sign-up form must ask for; two booleans, no application data.
+        'GET api/v1/auth/registration-policy',
         'GET api/v1/brand',
         'GET api/v1/client/branding',
         'GET api/v1/client/branding/logo',
@@ -99,12 +103,12 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/salla/open',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         'GET api/v1/webhooks/{kind}/{provider}',
-        'POST api/v1/auth/email-code/start',
-        'POST api/v1/auth/email-code/verify',
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
         'POST api/v1/auth/login',
-        'POST api/v1/auth/method',
+        'POST api/v1/auth/oauth/pending-link/confirm-email',
+        'POST api/v1/auth/oauth/pending-link/email',
+        'POST api/v1/auth/oauth/pending-link/password',
         'POST api/v1/auth/oauth/{provider}/callback',
         'POST api/v1/auth/oauth/{provider}/start',
         'POST api/v1/auth/phone/start',

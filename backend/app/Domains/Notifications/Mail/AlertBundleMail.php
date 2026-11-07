@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -38,7 +40,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class AlertBundleMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use OffersUnsubscribe, Queueable, SerializesModels;
 
     /**
      * @param  list<array{severity: string, title: string, detail: string, context: string}>  $items
@@ -57,14 +59,14 @@ final class AlertBundleMail extends Mailable
         $n = count($this->items);
 
         if ($n === 1) {
-            return new Envelope(subject: sprintf('CampaignsHub — %s', $this->items[0]['title']));
+            return new Envelope(subject: MailSubject::of($this->items[0]['title'], $ar));
         }
 
-        return new Envelope(subject: $ar
+        return new Envelope(subject: MailSubject::of($ar
             // Arabic counts 3–10 with a plural and 11+ with a singular. Getting this wrong is two
             // mistakes in three characters, which MAIL-007 recorded the first time.
-            ? sprintf('كامبينز هب — %d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
-            : sprintf('CampaignsHub — %d alerts need a decision', $n));
+            ? sprintf('%d %s تحتاج قرارًا', $n, $n <= 10 ? 'تنبيهات' : 'تنبيهًا')
+            : sprintf('%d alerts need a decision', $n), $ar));
     }
 
     public function content(): Content
@@ -88,13 +90,14 @@ final class AlertBundleMail extends Mailable
                 ? ($this->recipientName !== '' ? "مرحبًا، {$this->recipientName}" : 'مرحبًا')
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),
             'intro' => $ar
-                ? 'هذه الملاحظات ظهرت في آخر فحص، وكل واحدة منها تستحق قرارًا اليوم.'
-                : 'These came up in the last sweep, and each is worth a decision today.',
+                ? 'ظهرت هذه التنبيهات في آخر فحص، وكل منها يحتاج قرارًا اليوم.'
+                : 'These came up in the last sweep, and each needs a decision today.',
             'actionLabel' => $ar ? 'فتح في كامبينز هب' : 'Open in CampaignsHub',
             'actionUrl' => Frontend::origin().'/app/dashboard',
         ];
 
         return new Content(view: 'mail.layout', with: $body + [
+            'unsubscribeUrl' => $this->unsubscribeUrl,
             'slot' => view('mail.alerts', $body)->render(),
         ]);
     }

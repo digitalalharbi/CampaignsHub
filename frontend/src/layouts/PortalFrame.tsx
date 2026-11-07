@@ -103,7 +103,7 @@ export function PortalFrame({
     <div data-testid={testId} style={style} className="flex min-h-[100dvh] bg-background text-text-primary">
       {rail && (
         <aside
-          className={`sticky top-0 hidden h-[100dvh] shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-200 md:flex ${railWidth}`}
+          className={`sticky top-0 hidden h-[100dvh] shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-[var(--motion-panel)] ease-[var(--motion-ease)] md:flex ${railWidth}`}
         >
           {rail}
         </aside>

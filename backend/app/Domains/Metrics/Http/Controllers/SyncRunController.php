@@ -9,6 +9,7 @@ use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\ManualSyncDebounce;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\SyncRunLog;
@@ -35,6 +36,7 @@ final class SyncRunController extends Controller
         private readonly AdvertisingConnectorRegistry $registry,
         private readonly AuditLogger $audit,
         private readonly AccountAssignment $assignment,
+        private readonly ManualSyncDebounce $debounce,
     ) {}
 
     /** GET projects/{project}/sync-runs — the sync log for this project's accounts. */
@@ -149,6 +151,24 @@ final class SyncRunController extends Controller
 
         $to = isset($data['to']) ? Carbon::parse($data['to']) : Carbon::now();
         $from = isset($data['from']) ? Carbon::parse($data['from']) : $to->copy()->subDays(6);
+
+        /*
+         * INTEGRATIONS-CENTRE-001 §4 — the same two-minute window the per-binding button has.
+         *
+         * The job is unique per (account, window), so a second press used to be dropped at dispatch
+         * while this route still answered «Sync queued» — a press that did nothing, reported as done.
+         */
+        $held = $this->debounce->claim('account', (string) $account->id);
+
+        if ($held !== null) {
+            $retryAfter = $this->debounce->retryAfter($held);
+
+            return ApiResponse::error(
+                "A sync for this account was already requested at {$held->toIso8601String()}. It can be requested again in {$retryAfter} seconds.",
+                ['last_requested_at' => $held->toIso8601String(), 'retry_after_seconds' => $retryAfter],
+                status: 429,
+            )->header('Retry-After', (string) $retryAfter);
+        }
 
         SyncAccountMetricsJob::dispatch($account->id, $from->toDateString(), $to->toDateString(), [
             'triggered_by' => $request->user()->id,

@@ -28,10 +28,21 @@ describe('MembershipDialog', () => {
     expect(screen.getByTestId('membership-submit')).toBeDisabled()
     fireEvent.change(screen.getByTestId('membership-role'), { target: { value: 'tenant-owner' } })
     fireEvent.change(screen.getByTestId('membership-reason'), { target: { value: 'Agency asked for it' } })
+    // Making someone an owner is a yes of its own, or the button stays off.
+    expect(screen.getByTestId('membership-submit')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('membership-confirm-owner'))
     fireEvent.click(screen.getByTestId('membership-submit'))
 
-    await waitFor(() => expect(actOnMembership).toHaveBeenCalledWith('t-1', 'u-7', { action: 'change_role', role: 'tenant-owner', reason: 'Agency asked for it' }))
+    await waitFor(() => expect(actOnMembership).toHaveBeenCalledWith('t-1', 'u-7', { action: 'change_role', role: 'tenant-owner', reason: 'Agency asked for it', confirm_owner: true }))
     expect(await screen.findByTestId('membership-result')).toHaveTextContent('tenant-owner')
+  })
+
+  it('asks no extra yes for an ordinary role, and offers no platform role', () => {
+    renderWithProviders(<MembershipDialog tenantId="t-1" person={person({ roles: ['tenant-owner'] })} roles={[...roles, { slug: 'platform-admin', name: 'Sneaky' }, { slug: 'super-admin', name: 'Sneakier' }]} ar={false} onClose={() => {}} />, { locale: 'en' })
+
+    expect(screen.queryByTestId('membership-confirm-owner')).not.toBeInTheDocument()
+    const options = Array.from(screen.getByTestId('membership-role').querySelectorAll('option')).map((o) => o.getAttribute('value'))
+    expect(options).toEqual(['tenant-owner', 'media-buyer'])
   })
 
   it('offers reactivate for a suspended membership, and shows the last-owner refusal', async () => {

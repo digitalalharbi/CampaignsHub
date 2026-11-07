@@ -8,6 +8,9 @@ use App\Domains\Commerce\Models\CommerceAbandonedCart;
 use App\Domains\Commerce\Models\CommerceCustomer;
 use App\Domains\Commerce\Models\CommerceOrder;
 use App\Domains\Commerce\Models\CommerceOrderItem;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Measurement\Ga4SiteAnalytics;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
@@ -71,13 +74,14 @@ final class StoreFunnelService
     ];
 
     /** Order statuses both providers use for an order that is genuinely paid for. */
-    private const PAID_STATUSES = ['completed', 'delivered', 'shipped', 'paid', 'fulfilled', 'ready'];
+    public const PAID_STATUSES = ['completed', 'delivered', 'shipped', 'paid', 'fulfilled', 'ready'];
 
     public function __construct(
         private readonly ProjectStores $projectStores,
         private readonly ProjectOrders $projectOrders,
         private readonly CommerceCurrency $currency,
         private readonly ReportingTimezone $timezones,
+        private readonly Ga4SiteAnalytics $site,
     ) {}
 
     /**
@@ -170,10 +174,17 @@ final class StoreFunnelService
         $store = $this->storeMeasurements($tenantId, $projectId, $orders, $stores, $from, $to);
         $ads = $this->adMeasurements($projectId, $window['from_date'], $window['to_date'], $ceiling);
 
+        /*
+         * STORE-ANALYTICS-DEPTH-001 — the site's own count fills a step neither the store nor a platform measured.
+         *
+         * On the operator's reading only (no ceiling): a client link's funnel keeps the figures it always had.
+         */
+        $site = $ceiling === null ? $this->site->funnelFigures($tenantId, $projectId, $window['from_date'], $window['to_date']) : null;
+
         $stages = [];
 
         foreach (self::STAGES as $stage) {
-            $stages[] = $this->stage($stage, $store, $ads, $stores);
+            $stages[] = $this->stage($stage, $store, $ads, $stores, $site);
         }
 
         $coverage = $this->coverage($stores, $pendingStores, $orders, $loaded);
@@ -263,7 +274,7 @@ final class StoreFunnelService
             'purchases' => $paid->count(),
             'add_to_cart' => $live->count() + $abandoned,
             'abandoned_carts' => $abandoned,
-            'carts_complete' => $stores->every(fn (ExternalAccount $s) => $s->provider !== 'zid'),
+            'carts_complete' => $stores->every(fn (ExternalAccount $s) => ProviderCatalogue::supports((string) $s->provider, ProviderCapability::AbandonedCarts)),
             /*
              * Every figure below is in the project's REPORTING currency (COMMERCE-FX-001).
              *
@@ -354,9 +365,10 @@ final class StoreFunnelService
      * @param  array<string,mixed>  $store
      * @param  array<string,float>  $ads
      * @param  Collection<int,ExternalAccount>  $stores
+     * @param  array{sessions: ?float, product_views: ?float, checkouts: ?float}|null  $site
      * @return array<string,mixed>
      */
-    private function stage(array $stage, array $store, array $ads, Collection $stores): array
+    private function stage(array $stage, array $store, array $ads, Collection $stores, ?array $site = null): array
     {
         // The merchant's own ledger, wherever it can answer.
         if ($stage['store'] && $store['has_store']) {
@@ -385,6 +397,19 @@ final class StoreFunnelService
             }
         }
 
+        $measuredBySite = match ($stage['key']) {
+            'visits' => $site['sessions'] ?? null,
+            'product_views' => $site['product_views'] ?? null,
+            'checkout_started' => $site['checkouts'] ?? null,
+            default => null,
+        };
+        if ($measuredBySite !== null) {
+            return $this->measured($stage, $measuredBySite, 'ga4', [
+                'ar' => 'يشمل كل زيارات الموقع وليس المدفوعة فقط، فلا يقارن مباشرة بنقرات الإعلانات.',
+                'en' => 'Covers all site traffic, not paid only, so it does not compare directly with ad clicks.',
+            ]);
+        }
+
         return [
             'key' => $stage['key'],
             'label_ar' => $stage['ar'],
@@ -410,12 +435,16 @@ final class StoreFunnelService
             'state' => $partial ? 'partial' : 'measured',
             'source' => [
                 'kind' => $kind,
-                'ar' => $kind === 'stores'
-                    ? 'من المتجر المرتبط — سجل التاجر نفسه.'
-                    : 'من تقارير المنصات الإعلانية — قياس عبر البكسل، وقد يقل عن الواقع.',
-                'en' => $kind === 'stores'
-                    ? 'From the connected store — the merchant’s own ledger.'
-                    : 'From the ad platforms’ own reporting — a pixel measurement, which can undercount.',
+                'ar' => match ($kind) {
+                    'stores' => 'من المتجر المرتبط — سجل التاجر نفسه.',
+                    'ga4' => 'ما قاسه الموقع (GA4).',
+                    default => 'من تقارير المنصات الإعلانية — قياس عبر البكسل، وقد يقل عن الواقع.',
+                },
+                'en' => match ($kind) {
+                    'stores' => 'From the connected store — the merchant’s own ledger.',
+                    'ga4' => 'Site-measured (GA4).',
+                    default => 'From the ad platforms’ own reporting — a pixel measurement, which can undercount.',
+                },
             ],
             'note_ar' => $note['ar'] ?? null,
             'note_en' => $note['en'] ?? null,
@@ -669,7 +698,7 @@ final class StoreFunnelService
                 ->values()
                 ->all(),
             'stores_without_cart_data' => $stores
-                ->filter(fn (ExternalAccount $s) => $s->provider === 'zid')
+                ->reject(fn (ExternalAccount $s) => ProviderCatalogue::supports((string) $s->provider, ProviderCapability::AbandonedCarts))
                 ->map(fn (ExternalAccount $s) => ['id' => $s->getKey(), 'name' => $s->name, 'provider' => $s->provider])
                 ->values()
                 ->all(),

@@ -9,7 +9,12 @@ const PAGES = ['/login', '/register', '/forgot-password'] as const
 for (const path of PAGES) {
   test(`${path}: wide labeled fields, no horizontal overflow`, async ({ page }) => {
     await page.goto(path)
-    const input = page.locator('input').first()
+    /*
+     * The first field a PERSON meets. Registration carries one input no person sees (the bot trap,
+     * `aria-hidden`, one pixel, off the page), and it comes first in the document; measuring it
+     * would be measuring the trap, not the form.
+     */
+    const input = page.locator('input:not([aria-hidden="true"])').first()
     await expect(input).toBeVisible()
 
     /*

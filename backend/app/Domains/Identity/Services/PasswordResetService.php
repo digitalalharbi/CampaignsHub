@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Services;
 
+use App\Domains\Identity\Actions\BackfillClientPortalIdentities;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Requests\Models\ExternalRequest;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +59,13 @@ final class PasswordResetService
      */
     private const SETUP_TTL_MINUTES = 4320;
 
-    public function __construct(private readonly TransactionalMailer $mailer) {}
+    /** A link a Super Admin took for an account whose address nobody proved. The only token `reset()` accepts for one. */
+    private const OPERATOR_PURPOSE = 'operator_reset';
+
+    public function __construct(
+        private readonly TransactionalMailer $mailer,
+        private readonly BackfillClientPortalIdentities $contacts,
+    ) {}
 
     /**
      * Issue a reset link, if there is an account to issue one for.
@@ -70,6 +78,17 @@ final class PasswordResetService
         $user = User::where('email', $email)->first();
 
         if ($user === null) {
+            return $this->requestContactSetup($email);
+        }
+
+        /*
+         * An address nobody ever proved cannot recover the account (SIGNUP-VERIFY-POLICY-001).
+         *
+         * It was typed at signup with no check, so it may belong to a stranger, and mailing that stranger a reset link
+         * would hand them the account. It answers the same way as an unknown address, so the form stays no oracle. The
+         * way out is to prove the address from inside a session, or for a platform administrator to help.
+         */
+        if ($user->emailUnprovenByPolicy()) {
             return 'ignored';
         }
 
@@ -97,11 +116,42 @@ final class PasswordResetService
     }
 
     /**
+     * LOGIN-SINGLE-DOOR-001 — a client contact named on a request, who has no account yet and asks for a way in.
+     *
+     * They are mailed a link to choose a password; NOTHING is created until that link is spent, so typing somebody's address here
+     * makes no account for them and an unproved address proves nothing. The form answers everybody identically, as it always has.
+     */
+    private function requestContactSetup(string $email): string
+    {
+        $named = ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$email])->exists();
+        if (! $named) {
+            return 'ignored';
+        }
+
+        $secret = $this->issue($email, 'contact_setup', self::TTL_MINUTES);
+
+        return $this->mailer->send(
+            recipient: $email,
+            mail: new CredentialMail(
+                purpose: CredentialMail::MEMBER_SETUP,
+                lang: 'ar',
+                url: $this->link($email, $secret),
+                expiresInMinutes: self::TTL_MINUTES,
+            ),
+            kind: 'member_setup',
+            template: 'mail.credential',
+        );
+    }
+
+    /**
      * META-SAAS-APP-001 — a set-password link for an account a platform admin just provisioned, emailed AND handed back.
      *
      * The mail is attempted as for any reset, but the link is also returned so the admin page can show it ONCE to the operator who
      * created the account: Production's mail transport can be failing (MAIL-HEALTH-001), and a test login nobody can reach blocks
      * the test. It is the same single-use, expiring token as a reset; it is never logged, stored in plain text or shown again.
+     *
+     * AUTH-CODE-SWITCHES-001 — this is the last resort for an address nobody proved, which has no self-service way back. That address
+     * may belong to a stranger, so nothing is mailed to it: the operator hands the link over after checking who is asking.
      *
      * @return array{link: string, delivery: string}|null null when no account matches
      */
@@ -111,6 +161,12 @@ final class PasswordResetService
         $user = User::where('email', $email)->first();
         if ($user === null) {
             return null;
+        }
+
+        if ($user->emailUnprovenByPolicy()) {
+            $secret = $this->issue($email, self::OPERATOR_PURPOSE, self::TTL_MINUTES);
+
+            return ['link' => $this->link($email, $secret), 'delivery' => 'withheld_unproven_address'];
         }
 
         $secret = $this->issue($email, 'password_reset', self::TTL_MINUTES);
@@ -226,8 +282,13 @@ final class PasswordResetService
         }
 
         $user = User::where('email', $email)->first();
-        if ($user === null) {
-            // The account went away between issuing and using. Same answer: the link cannot be used.
+        // LOGIN-SINGLE-DOOR-001 — the link was spent, so the address is proved: this is the moment a contact's account may exist.
+        if ($user === null && ($row->purpose ?? null) === 'contact_setup') {
+            $user = $this->contacts->forProvenAddress($email);
+        }
+        $unproven = $user?->emailUnprovenByPolicy() === true;
+        if ($user === null || ($unproven && $row->purpose !== self::OPERATOR_PURPOSE)) {
+            // The account went away between issuing and using, or was never proved. Same answer: the link cannot be used.
             throw $invalid;
         }
 
@@ -253,20 +314,22 @@ final class PasswordResetService
          *
          * If the reset was theirs this is a receipt. If it was not, it is the only message that will
          * ever reach them about it — and it arrives at the address the attacker just used, which is
-         * the one place they cannot suppress it from.
+         * the one place they cannot suppress it from. Not to an address nobody proved: that may be a stranger's inbox.
          */
-        $this->mailer->send(
-            recipient: $email,
-            mail: new SecurityAlertMail(
-                event: SecurityAlertMail::PASSWORD_CHANGED,
-                lang: 'ar',
-                recipientName: (string) $user->name,
-                at: Carbon::now()->format('Y-m-d H:i'),
-            ),
-            kind: 'security_alert',
-            template: 'mail.security',
-            userId: (int) $user->getKey(),
-        );
+        if (! $unproven) {
+            $this->mailer->send(
+                recipient: $email,
+                mail: new SecurityAlertMail(
+                    event: SecurityAlertMail::PASSWORD_CHANGED,
+                    lang: 'ar',
+                    recipientName: (string) $user->name,
+                    at: Carbon::now()->format('Y-m-d H:i'),
+                ),
+                kind: 'security_alert',
+                template: 'mail.security',
+                userId: (int) $user->getKey(),
+            );
+        }
 
         return $user;
     }

@@ -21,6 +21,7 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\DetailLevel;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -496,6 +497,9 @@ final class LiveReportBuilderController extends Controller
             // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
             // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
             'campaign_breakdown' => ['sometimes', 'boolean'],
+            // REPORT-GENERIC-LABELS-001 — names shown under generic labels from the link's first open.
+            'generic_names' => ['sometimes', 'array'],
+            'generic_names.*' => [Rule::in(GenericNames::KINDS)],
             // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»), and an explicit «no Results» that the project default cannot override.
             'results_label' => ['sometimes', 'nullable', 'string', 'max:40'],
             'results_off' => ['sometimes', 'boolean'],
@@ -653,6 +657,7 @@ final class LiveReportBuilderController extends Controller
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? []))->onlyFor($providers))->configured() ? ['result_events' => $events->toArray()] : [])
               + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
+              + (($generic = GenericNames::normalise($data['generic_names'] ?? null)) !== [] ? ['generic_names' => $generic] : [])
               + ((bool) ($data['results_off'] ?? false) ? ['results_off' => true] : [])
               + (trim((string) ($data['results_label'] ?? '')) !== '' ? ['results_label' => trim((string) $data['results_label'])] : [])
               + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])

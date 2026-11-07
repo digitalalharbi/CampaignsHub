@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Identity\Actions\SignInWithPassword;
 use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\PasswordResetService;
-use App\Domains\Identity\Services\SignInMethodResolver;
-use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
-use App\Domains\Tenancy\Enums\Portal;
-use App\Domains\Tenancy\Services\PortalResolver;
 use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -29,29 +26,8 @@ use Illuminate\Validation\ValidationException;
 final class AuthController extends Controller
 {
     public function __construct(
-        private readonly PortalResolver $portals,
-        private readonly SignInMethodResolver $methods,
+        private readonly SignInWithPassword $signIn,
     ) {}
-
-    /**
-     * LOGIN-UNIFIED-001 — which form the single sign-in page should show for this identifier.
-     *
-     * There is one door now, `/login`, and the visitor is never asked to pick a portal. They type an
-     * email or a phone; this says whether that identifier signs in with a password or with a one-time
-     * code, and the page renders the matching step. Everything after — which portal, whether the
-     * account is suspended, where to land — is still decided by {@see login()} and `PortalResolver`.
-     *
-     * Deliberately uninformative about existence: see `SignInMethodResolver` for why an unknown email
-     * answers `password` rather than `code`.
-     */
-    public function method(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'identifier' => ['required', 'string', 'max:190'],
-        ]);
-
-        return ApiResponse::success($this->methods->resolve((string) $data['identifier']));
-    }
 
     /*
      * `register` used to live here and no longer does (SIGNUP-002).
@@ -65,101 +41,19 @@ final class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $this->assertCanOpenASession($request);
-
-        /** @var User|null $user */
-        $user = User::where('email', $request->string('email'))->first();
-
-        if ($user === null || ! Hash::check((string) $request->string('password'), $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => [__('auth.failed')],
-            ]);
-        }
-        $this->assertActive($user);
-        $this->assertHoldsRequestedPortal($request, $user);
-
-        Auth::guard('web')->login($user, (bool) $request->boolean('remember'));
-        $request->session()->regenerate();
+        // LOGIN-004 — the sign-in itself lives in one place, shared with linking a Google account in place.
+        $user = $this->signIn->execute(
+            $request,
+            (string) $request->string('email'),
+            (string) $request->string('password'),
+            (bool) $request->boolean('remember'),
+            (string) $request->string('portal'),
+        );
 
         return ApiResponse::success(
             ['user' => new UserResource($user)],
             __('auth.signed_in'),
         );
-    }
-
-    /**
-     * AUTH-NONSTATEFUL-ORIGIN — an origin that cannot hold a session is REFUSED, not a 500.
-     *
-     * Sanctum treats an Origin outside `SANCTUM_STATEFUL_DOMAINS` as non-stateful, so the session
-     * middleware never runs; the `session()->regenerate()` below then threw «Session store not set
-     * on request» and the caller got a 500. Reproduced deliberately against a local server: the same
-     * credentials answered 200 from a listed origin and 500 from an unlisted one.
-     *
-     * A 500 is the wrong answer to a request that should be refused. It says the server broke rather
-     * than «not from here», it writes a stack trace for every attempt — so any client on an unlisted
-     * origin, a second front end or a staging host mid-cutover, can fill the log in a loop — and it
-     * tells an prober that something unusual happened here rather than nothing.
-     *
-     * FIRST, before the password is checked. Refusing after would do the hashing work for an origin
-     * that can never be answered, and would make this path measurably slower for a real account than
-     * for an unknown one — a timing oracle handed to exactly the caller who should have been turned
-     * away at the door. It also says nothing about the credentials, because it has not looked.
-     */
-    private function assertCanOpenASession(Request $request): void
-    {
-        abort_if(
-            ! $request->hasSession(),
-            403,
-            'This origin cannot open a session. Sign in from an address this installation serves.',
-        );
-    }
-
-    /**
-     * Refuse the sign-in itself when the chosen portal is not one this account holds (LOGIN-003).
-     *
-     * This runs BEFORE `Auth::login`, and that placement is the whole point. The check used to
-     * happen after the session existed: you were signed in, moved to a portal, and only then shown a
-     * "not available" page — a wrong-portal choice behaved nothing like a wrong password, even
-     * though it is the same kind of mistake and belongs in the same place. Now no session is created
-     * and nothing is navigated; the form answers, exactly as it does for bad credentials.
-     *
-     * A 403 rather than a validation error, because the credentials were correct and saying
-     * otherwise would be false. The payload names where this account SHOULD go, so the form can
-     * offer a way through instead of leaving the person to guess.
-     */
-    private function assertHoldsRequestedPortal(LoginRequest $request, User $user): void
-    {
-        $requested = Portal::tryFrom((string) $request->string('portal'));
-
-        if ($requested === null || $this->portals->holds($user, $requested)) {
-            return;
-        }
-
-        abort(response()->json([
-            'success' => false,
-            'message' => __('auth.portal_mismatch'),
-            'data' => null,
-            'errors' => null,
-            'meta' => [
-                // What the interface needs to say something useful: which portal was refused, and
-                // the one this account actually belongs to.
-                'portal_mismatch' => true,
-                'requested_portal' => $requested->value,
-                'destination' => $this->portals->landingPathFor($user),
-            ],
-        ], 403));
-    }
-
-    /** A suspended/disabled account (or suspended workspace) can never sign in or mint a token. Generic message. */
-    private function assertActive(User $user): void
-    {
-        // ADR 0002: suspension follows the memberships, not the legacy column — see AccountSuspension.
-        $suspended = $user->disabled_at !== null
-            || (! $user->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($user));
-        abort_if($suspended, 403, __('auth.unavailable'));
-
-        // SALLA-REVIEW-001 — a reviewer whose access has ended is told so, not that «the account is not available».
-        abort_if(! $user->is_platform_admin && ReviewAccess::endedFor($user), 403, ReviewAccess::ENDED_MESSAGE);
     }
 
     /** Current authenticated user — used by the SPA to restore its session on load. */
@@ -256,7 +150,7 @@ final class AuthController extends Controller
                 'email' => [__('auth.failed')],
             ]);
         }
-        $this->assertActive($user);
+        $this->signIn->assertActive($user);
         // SALLA-REVIEW-001 — a review account is never issued an API token (this route has no tenant context to restrict it by).
         abort_if(ReviewAccess::isReviewer($user), 403, 'API tokens are not available in the Salla review account.');
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -50,8 +51,11 @@ final class CredentialMail extends Mailable
     /** A member added to a workspace by somebody else, choosing their password for the first time. */
     public const MEMBER_SETUP = 'member_setup';
 
+    /** LOGIN-004 — proof, by mail, that a provider account belongs with this account: opened in the browser that asked. */
+    public const OAUTH_LINK = 'oauth_link';
+
     public function __construct(
-        /** One of the four constants above. */
+        /** One of the five constants above. */
         public readonly string $purpose,
         public readonly string $lang = 'ar',
         /** A code the reader types. Mutually exclusive with `$url`. */
@@ -62,11 +66,13 @@ final class CredentialMail extends Mailable
         public readonly int $expiresInMinutes = 60,
         /** Which workspace they were added to. Only `MEMBER_SETUP` has one. */
         public readonly string $workspace = '',
+        /** Which provider is being connected. Only `OAUTH_LINK` has one. */
+        public readonly string $provider = '',
     ) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'CampaignsHub — '.$this->words()['subject']);
+        return new Envelope(subject: MailSubject::of($this->words()['subject'], $this->lang === 'ar'));
     }
 
     public function content(): Content
@@ -97,12 +103,12 @@ final class CredentialMail extends Mailable
         // policy links keep their own words.
         $body['t'] = $shell['t'] + ($ar
             ? [
-                'never_share' => 'لا تشارك هذا الرمز مع أي شخص. لن يطلبه منك فريق كامبينز هب في أي مكالمة أو رسالة.',
-                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط والصقه في المتصفح:',
+                'never_share' => 'لا تشارك هذا الرمز مع أي شخص. لن يطلبه منك فريقنا أبدًا.',
+                'or_paste' => 'إذا لم يعمل الزر، انسخ هذا الرابط إلى المتصفح:',
                 'not_you_title' => 'إذا لم تطلب هذه الرسالة',
             ]
             : [
-                'never_share' => 'Do not share this code with anyone. Nobody from CampaignsHub will ever ask you for it, by phone or by message.',
+                'never_share' => 'Do not share this code with anyone. Our team will never ask for it.',
                 'or_paste' => 'If the button does not work, copy this link into your browser:',
                 'not_you_title' => 'If you did not ask for this',
             ]);
@@ -162,61 +168,75 @@ final class CredentialMail extends Mailable
             self::PASSWORD_RESET => $ar ? [
                 'subject' => 'إعادة تعيين كلمة المرور',
                 'title' => 'إعادة تعيين كلمة المرور',
-                'intro' => 'وصلنا طلب لإعادة تعيين كلمة المرور لحسابك. اضغط الزر أدناه لاختيار كلمة مرور جديدة.',
+                'intro' => 'وصلنا طلب لإعادة تعيين كلمة مرورك. اضغط الزر لاختيار كلمة مرور جديدة.',
                 'action' => 'اختيار كلمة مرور جديدة',
-                'not_you' => 'لا حاجة لفعل شيء. كلمة المرور الحالية ما زالت تعمل، وسينتهي هذا الرابط من تلقاء نفسه. إذا تكررت هذه الرسالة دون طلب منك، غيّر كلمة المرور من إعدادات الأمان.',
+                'not_you' => 'تجاهل الرسالة؛ كلمة مرورك الحالية ما زالت تعمل، وسينتهي الرابط تلقائيًا. إذا تكررت دون طلب منك، غيّرها من إعدادات الأمان.',
             ] : [
                 'subject' => 'Reset your password',
                 'title' => 'Reset your password',
-                'intro' => 'We received a request to reset the password for your account. Use the button below to choose a new one.',
+                'intro' => 'We received a request to reset your password. Use the button to choose a new one.',
                 'action' => 'Choose a new password',
-                'not_you' => 'You do not need to do anything. Your current password still works and this link will expire on its own. If these messages keep arriving without you asking, change your password from your security settings.',
+                'not_you' => 'Ignore this message. Your current password still works, and this link expires on its own. If this keeps arriving without you asking, change your password in your security settings.',
             ],
 
             self::MEMBER_SETUP => $ar ? [
                 'subject' => 'حسابك جاهز — اختر كلمة المرور',
-                'title' => 'حسابك في كامبينز هب جاهز',
+                'title' => 'حسابك جاهز',
                 'intro' => $this->workspace !== ''
-                    ? "أُضيف حسابك إلى مساحة عمل {$this->workspace} على كامبينز هب. اختر كلمة المرور لتتمكن من تسجيل الدخول."
-                    : 'أُضيف حسابك إلى كامبينز هب. اختر كلمة المرور لتتمكن من تسجيل الدخول.',
+                    ? "أُضيف حسابك إلى مساحة عمل {$this->workspace}. اختر كلمة المرور للدخول."
+                    : 'أُضيف حسابك إلى كامبينز هب. اختر كلمة المرور للدخول.',
                 'action' => 'اختيار كلمة المرور',
-                'not_you' => 'إذا لم تكن تتوقع هذه الرسالة، يمكنك تجاهلها. لن يُستخدم الحساب ما لم تختر كلمة المرور بنفسك.',
+                'not_you' => 'إذا لم تتوقع هذه الرسالة، فتجاهلها. لن يعمل الحساب قبل اختيار كلمة المرور.',
             ] : [
                 'subject' => 'Your account is ready — choose a password',
-                'title' => 'Your CampaignsHub account is ready',
+                'title' => 'Your account is ready',
                 'intro' => $this->workspace !== ''
-                    ? "Your account has been added to the {$this->workspace} workspace on CampaignsHub. Choose a password so you can sign in."
-                    : 'Your account has been added to CampaignsHub. Choose a password so you can sign in.',
+                    ? "Your account was added to the {$this->workspace} workspace. Choose a password to sign in."
+                    : 'Your account was added to CampaignsHub. Choose a password to sign in.',
                 'action' => 'Choose a password',
-                'not_you' => 'If you were not expecting this message, you can ignore it. The account cannot be used until you choose a password yourself.',
+                'not_you' => 'Not expecting this message? Ignore it. The account cannot be used until a password is chosen.',
+            ],
+
+            self::OAUTH_LINK => $ar ? [
+                'subject' => "ربط حساب {$this->provider}",
+                'title' => "ربط حساب {$this->provider}",
+                'intro' => "طلبت ربط حساب {$this->provider} بحسابك في كامبينز هب. افتح الرابط من المتصفح نفسه الذي بدأت منه لإكمال الربط والدخول.",
+                'action' => 'ربط ودخول',
+                'not_you' => 'إذا لم تطلب ذلك فتجاهل الرسالة؛ لن يُربط شيء ولن يُفتح أي حساب. إن تكررت دون طلب منك، غيّر كلمة المرور من إعدادات الأمان.',
+            ] : [
+                'subject' => "Connect your {$this->provider} account",
+                'title' => "Connect your {$this->provider} account",
+                'intro' => "You asked to connect a {$this->provider} account to your CampaignsHub account. Open the link in the same browser you started from to finish and sign in.",
+                'action' => 'Connect and sign in',
+                'not_you' => 'If you did not ask for this, ignore the message. Nothing is connected and no account is opened. If it keeps arriving, change your password in your security settings.',
             ],
 
             self::EMAIL_VERIFICATION => $ar ? [
                 'subject' => 'تأكيد بريدك الإلكتروني',
                 'title' => 'تأكيد بريدك الإلكتروني',
-                'intro' => 'خطوة أخيرة قبل أن يصبح حسابك جاهزًا: اضغط الزر أدناه لتأكيد أن هذا البريد يخصك.',
+                'intro' => 'اضغط الزر لتأكيد أن هذا البريد يخصك وإكمال حسابك.',
                 'action' => 'تأكيد البريد الإلكتروني',
-                'not_you' => 'يمكنك تجاهل هذه الرسالة. لن يُفتح أي حساب على هذا البريد ما لم يُضغط الرابط.',
+                'not_you' => 'تجاهل الرسالة. لن يُفتح حساب على هذا البريد ما لم يُضغط الرابط.',
             ] : [
                 'subject' => 'Confirm your email address',
                 'title' => 'Confirm your email address',
-                'intro' => 'One last step before your account is ready: use the button below to confirm this address is yours.',
+                'intro' => 'Use the button to confirm this address is yours and finish your account.',
                 'action' => 'Confirm my email',
-                'not_you' => 'You can ignore this message. No account will be opened on this address unless the link is used.',
+                'not_you' => 'Ignore this message. No account is opened on this address unless the link is used.',
             ],
 
             default => $ar ? [
                 'subject' => 'رمز تسجيل الدخول',
                 'title' => 'رمز تسجيل الدخول',
-                'intro' => 'استخدم هذا الرمز لإكمال تسجيل الدخول إلى حسابك.',
+                'intro' => 'أدخل هذا الرمز لإكمال تسجيل الدخول.',
                 'action' => 'تسجيل الدخول',
                 'not_you' => 'إذا لم تحاول تسجيل الدخول، فقد يعرف شخص آخر كلمة مرورك. غيّرها الآن من إعدادات الأمان، ولا تستخدم هذا الرمز.',
             ] : [
                 'subject' => 'Your sign-in code',
                 'title' => 'Your sign-in code',
-                'intro' => 'Use this code to finish signing in to your account.',
+                'intro' => 'Enter this code to finish signing in.',
                 'action' => 'Sign in',
-                'not_you' => 'If you were not signing in, somebody else may know your password. Change it now from your security settings, and do not use this code.',
+                'not_you' => 'If you were not signing in, somebody else may know your password. Change it now in your security settings, and do not use this code.',
             ],
         };
     }

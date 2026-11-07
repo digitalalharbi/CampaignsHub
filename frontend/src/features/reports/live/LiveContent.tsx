@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { ProviderName } from '@/components/ProviderMark'
 import { AdPoster } from '@/features/content/AdPoster'
 import { MetricLineChart } from '@/features/analytics/charts'
@@ -26,7 +26,15 @@ export function asContent(row: RosterRow | ReportAd): ReportAd {
   return { ...(metrics as Record<string, unknown>), ...rest } as ReportAd
 }
 
-export function ContentTile({
+/**
+ * PERF-RENDER-001 — a tile re-renders only when ITS content changes.
+ *
+ * The content grid draws up to fifty tiles at a time and sits inside a page that re-renders on every
+ * filter change, refresh tick and dialog open. Each tile's props are stable by construction — the
+ * row object comes from a memoised sort, the open handler is memoised in `LiveSharedReport` — so a
+ * shallow comparison lets the grid skip the fifty poster + figures re-renders that changed nothing.
+ */
+export const ContentTile = memo(function ContentTile({
   content,
   locale,
   currency,
@@ -113,7 +121,7 @@ export function ContentTile({
   ) : (
     <article data-testid="live-content-tile" className={shell}>{body}</article>
   )
-}
+})
 
 /**
  * The content drilldown's dialog — the card's figures, the media, and the content's own trend.

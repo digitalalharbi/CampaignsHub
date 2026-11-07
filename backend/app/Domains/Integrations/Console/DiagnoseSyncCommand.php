@@ -24,6 +24,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\InsightPayloadRows;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Support\NoDataReading;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -364,6 +365,19 @@ final class DiagnoseSyncCommand extends Command
                 if (($run->error ?? '') !== '') {
                     $this->line(sprintf('  %s → %s', $run->started_at?->toDateTimeString() ?? '?', $run->error));
                 }
+            }
+
+            /*
+             * META-NO-DATA-READING-001 — which «nothing» the latest run is, said once and in words.
+             *
+             * A column of `no_data | 0 | 0 | 0 | 0` reads the same for an account that stopped delivering
+             * last week and for one whose answer nobody could read. The latest run only: twelve identical
+             * sentences under twelve identical rows would be the table again.
+             */
+            $reading = NoDataReading::for($runs->first());
+
+            if ($reading['sentence'] !== null) {
+                $this->line('  latest run reads: '.$reading['sentence']);
             }
         }
 
@@ -764,6 +778,59 @@ final class DiagnoseSyncCommand extends Command
                     $shape['card_media_only'],
                     $shape['drawing_nothing'],
                 ));
+            }
+        }
+
+        /*
+         * CONTENT-PREVIEW-COVERAGE-001 — per provider and format: what draws, what has expired, and why the rest does not.
+         *
+         * Counts only. `expired` is a stored link past its stated expiry (the structure sweep renews those the
+         * provider still serves); `no expiry` is a link that states none, so it can never be called expired;
+         * `not https` is a link a secure page may refuse to load. The reasons are the connector's own stored
+         * words (`raw.media_reason`) and never a value from the payload.
+         */
+        $coverage = (clone $creatives)
+            ->toBase()
+            ->selectRaw('provider, COALESCE(format, \'—\') AS shape, COUNT(*) AS total')
+            ->selectRaw("COUNT(*) FILTER (WHERE {$hasHero} OR {$hasCardMedia}) AS drawable")
+            ->selectRaw('COUNT(*) FILTER (WHERE video_url IS NOT NULL) AS playable')
+            ->selectRaw('COUNT(*) FILTER (WHERE asset_expires_at < NOW()) AS expired')
+            ->selectRaw('COUNT(*) FILTER (WHERE asset_expires_at IS NULL AND (thumbnail_url IS NOT NULL OR asset_url IS NOT NULL OR video_url IS NOT NULL)) AS no_expiry')
+            ->selectRaw("COUNT(*) FILTER (WHERE (thumbnail_url IS NOT NULL AND thumbnail_url NOT LIKE 'https://%') OR (asset_url IS NOT NULL AND asset_url NOT LIKE 'https://%')) AS not_https")
+            ->selectRaw('COUNT(*) FILTER (WHERE (thumbnail_url IS NOT NULL OR asset_url IS NOT NULL OR video_url IS NOT NULL) AND (width IS NULL OR height IS NULL)) AS no_dims')
+            ->groupBy('provider', 'shape')
+            ->orderBy('provider')->orderByDesc('total')
+            ->get();
+
+        if ($coverage->isNotEmpty()) {
+            $this->line('');
+            $this->line('  PREVIEW COVERAGE — provider · format: drawable/total · playable · expired · no expiry · not https · no size');
+
+            foreach ($coverage as $row) {
+                $this->line(sprintf(
+                    '  %-10s %-20s: %d/%d · %d · %d · %d · %d · %d',
+                    (string) $row->provider,
+                    (string) $row->shape,
+                    (int) $row->drawable,
+                    (int) $row->total,
+                    (int) $row->playable,
+                    (int) $row->expired,
+                    (int) $row->no_expiry,
+                    (int) $row->not_https,
+                    (int) $row->no_dims,
+                ));
+            }
+
+            $reasons = (clone $creatives)
+                ->toBase()
+                ->whereNull('asset_url')->whereNull('video_url')->whereNull('thumbnail_url')
+                ->selectRaw("provider, COALESCE(raw->>'media_reason', '(none stored)') AS reason, COUNT(*) AS n")
+                ->groupBy('provider', 'reason')
+                ->orderBy('provider')->orderByDesc('n')
+                ->get();
+
+            foreach ($reasons as $row) {
+                $this->line(sprintf('  no link  %-10s %-26s: %d', (string) $row->provider, (string) $row->reason, (int) $row->n));
             }
         }
 
@@ -1746,7 +1813,9 @@ final class DiagnoseSyncCommand extends Command
             ->get();
 
         $this->line('');
-        $this->line(sprintf('  Structure runs (last %d):', $runs->count()));
+        // The runs are the CONNECTION's: every account under one authorisation prints the same four. Said in
+        // the heading, because «structure succeeds with 254 records» was read as a fact about this account.
+        $this->line(sprintf('  Structure runs of this CONNECTION, all of its accounts (last %d):', $runs->count()));
 
         if ($runs->isEmpty()) {
             $this->line('  none recorded.');

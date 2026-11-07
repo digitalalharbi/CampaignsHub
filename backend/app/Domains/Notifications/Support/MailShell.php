@@ -22,13 +22,35 @@ namespace App\Domains\Notifications\Support;
  * ## `$showPreferences`
  *
  * The one decision this class makes rather than passes through. An account message — a code, a reset,
- * a security alert, an invitation — must not offer «إدارة إشعاراتك», because the product will not
- * honour it: nothing in the preference centre can switch off a password reset, and pretending
- * otherwise is a promise broken the next time somebody needs one. The footnote says so in words
- * instead.
+ * a security alert, an invitation — never offers «إلغاء الاشتراك»: nothing can switch off a password
+ * reset, and pretending otherwise is a promise broken the next time somebody needs one. Its footnote
+ * says so in words. It does still link to «إعدادات الإشعارات» (EMAIL-FOOTER-001, Owner 2026-11-06),
+ * so a reader manages the optional mail there instead of blocking the sender.
  */
 final class MailShell
 {
+    /**
+     * The system logo's box in the header: `banner-{ar,en}.png` is 1200×300, shown at half that.
+     *
+     * Both are written on the `<img>` as attributes, so a client that has not fetched the image (or never
+     * will) keeps the band's room instead of collapsing it, and Outlook, which ignores `height:auto`,
+     * draws it at its own proportions. EMAIL-LOGO-GUARD-001.
+     */
+    public const LOGO_WIDTH = 600;
+
+    public const LOGO_HEIGHT = 150;
+
+    /**
+     * The system logo every message carries, absolute on the app origin.
+     *
+     * One reader: a mailable that assembles its own payload (the digest) asks here too, so no message can
+     * point at another image or at none.
+     */
+    public static function logoUrl(bool $ar): string
+    {
+        return MailLinks::to('/brand/email/banner-'.($ar ? 'ar' : 'en').'.png');
+    }
+
     /**
      * The layout payload for one message.
      *
@@ -58,16 +80,18 @@ final class MailShell
             'startSide' => $ar ? 'right' : 'left',
             'endSide' => $ar ? 'left' : 'right',
             'brand' => 'CampaignsHub',
-            'headerNote' => $ar
-                ? 'مساعدك لمتابعة كل حملاتك الإعلانية المدفوعة من مكان واحد'
-                : 'Your assistant for every paid campaign, in one place',
+            'headerNote' => $ar ? 'منصة إدارة الحملات المدفوعة' : 'Paid media in one place',
+            // Live text, never an image. The em dash is its own left-to-right island so it does not
+            // jump sides when an Arabic and a Latin name share a line. Both are constants, so unescaped is safe.
+            'wordmark' => self::wordmark($ar),
+            'wordmarkPlain' => self::wordmarkPlain($ar),
             'subject' => $subject,
             // The line an inbox shows beside the subject. Never the subject again — that is the only
             // preview a reader gets, and repeating the title wastes it.
             'preheader' => $preheader,
             'urls' => MailLinks::footer(),
-            // EMAIL-BRAND-001 — the official lockup for the reader's language, on the production origin.
-            'logoUrl' => MailLinks::to('/brand/email/lockup-'.($ar ? 'ar' : 'en').'-dark.png'),
+            // EMAIL-BRAND-002 — the transparent cream mark (112px, shown at 56), on the app origin.
+            'logoUrl' => self::logoUrl($ar),
             'showPreferences' => $preferences,
             'footerNote' => $footerNote,
             'year' => date('Y'),
@@ -76,7 +100,27 @@ final class MailShell
     }
 
     /**
-     * The footer's own words.
+     * The header's name line: one name, in the reader's language, as the official lockup writes it.
+     *
+     * Owner, 2026-11-05: «إذا عربي اكتب كامبينز هب وإذا إنجليزي اكتب بالإنجليزي», and the lockup he approved
+     * the same day. Both names side by side read as a mistake in either language. Constant text.
+     */
+    public static function wordmark(bool $ar): string
+    {
+        return $ar ? 'كامبينز هَب' : 'CampaignsHub';
+    }
+
+    /** The footer's name line. */
+    public static function wordmarkPlain(bool $ar): string
+    {
+        return self::wordmark($ar);
+    }
+
+    /**
+     * The footer's own words — EMAIL-FOOTER-001.
+     *
+     * `sender` is the fourth line and is always there, in the wording the Owner approved and asked back
+     * for on 2026-11-06 («التنسيق الجديد غير لائق أبدًا»). An agency's digest replaces it with its own.
      *
      * `why` differs by message: a digest arrives because somebody follows a project, and an account
      * message arrives because somebody asked for it or because their account changed. Callers that
@@ -88,22 +132,24 @@ final class MailShell
     {
         return $ar
             ? [
-                'manage_preferences' => 'إدارة إشعاراتك',
+                'manage_preferences' => 'إعدادات الإشعارات',
+                'unsubscribe' => 'إلغاء الاشتراك',
                 'privacy' => 'الخصوصية',
                 'terms' => 'الشروط',
                 'security' => 'الأمان',
                 'support' => 'الدعم',
                 'sender' => 'أُرسلت هذه الرسالة من كامبينز هب — منصة إدارة الحملات الإعلانية المدفوعة.',
-                'why' => 'وصلتك هذه الرسالة لأنك تتابع هذا المشروع في كامبينز هب.',
+                'why' => 'وصلتك لأنك تتابع هذا المشروع.',
             ]
             : [
-                'manage_preferences' => 'Manage your notifications',
+                'manage_preferences' => 'Notification settings',
+                'unsubscribe' => 'Unsubscribe',
                 'privacy' => 'Privacy',
                 'terms' => 'Terms',
                 'security' => 'Security',
                 'support' => 'Support',
                 'sender' => 'Sent by CampaignsHub — the paid-campaign management platform.',
-                'why' => 'You are receiving this because you follow this project in CampaignsHub.',
+                'why' => 'Sent because you follow this project.',
             ];
     }
 

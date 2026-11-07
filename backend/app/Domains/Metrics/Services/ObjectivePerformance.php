@@ -9,7 +9,11 @@ use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Support\AdPlatforms;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -703,15 +707,21 @@ final class ObjectivePerformance
         return ['paths' => $out];
     }
 
-    /** The same bounded read as {@see rows()}, one row per (day, campaign, platform). */
-    private function dailyRows(Carbon $from, Carbon $to): Collection
+    /**
+     * The bounds every read here shares — project, campaign, platform, account, and the active-binding rule.
+     *
+     * KPI-PARITY-001 — ONE statement of the bounds, so `rows()`, `dailyRows()` and the demo-policy check
+     * cannot drift from each other. No date window: the demo policy is a property of the SCOPE, exactly
+     * as {@see MetricsAggregator::excludesDemo()} reads it.
+     *
+     * @return Builder<DailyMetric>
+     */
+    private function bounded(): mixed
     {
         return DailyMetric::query()
             ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             // ACCOUNT-SCOPE-ISOLATION-001 — the same visibility rule the aggregator applies.
             ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->when($this->projectIds !== null, fn ($q) => $q->whereIn(
                 'daily_metrics.project_id',
                 $this->projectIds ?: ['00000000-0000-0000-0000-000000000000'],
@@ -720,11 +730,40 @@ final class ObjectivePerformance
                 'daily_metrics.unified_campaign_id',
                 $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
             ))
+            // Empty list → match nothing, the same fail-closed reading the other bounds use.
             ->when($this->providers !== null, fn ($q) => $q->whereIn('daily_metrics.provider', $this->providers ?: ['__none__']))
             ->when($this->accountIds !== null, fn ($q) => $q->whereIn(
                 'daily_metrics.external_account_id',
                 $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
-            ))
+            ));
+    }
+
+    /**
+     * KPI-PARITY-001 — the aggregator's demo policy, applied here too.
+     *
+     * `MetricsAggregator::base()` drops `is_demo` rows the moment the scope holds a real one, so the
+     * dashboard's spend is the customer's own money. This service read the same table WITHOUT that
+     * rule, so the objective split on the analytics tab and on the client link carried seeded rows
+     * the headline beside it had excluded — 2,999 under a total of 2,000 on the parity world. Same
+     * question, same answer: a scope with any real row excludes every demo row.
+     */
+    private function excludesDemo(): bool
+    {
+        return $this->excludesDemo ??= ReportReadMemo::remember(
+            'objective-performance-demo|'.$this->scopeKey(),
+            fn (): bool => $this->bounded()->where('daily_metrics.is_demo', false)->exists(),
+        );
+    }
+
+    private ?bool $excludesDemo = null;
+
+    /** The same bounded read as {@see rows()}, one row per (day, campaign, platform). */
+    private function dailyRows(Carbon $from, Carbon $to): Collection
+    {
+        return $this->bounded()
+            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->when($this->excludesDemo(), fn ($q) => $q->where('daily_metrics.is_demo', false))
+            ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             ->groupBy('daily_metrics.metric_date', 'unified_campaigns.objective')
             ->select('daily_metrics.metric_date', 'unified_campaigns.objective')
             ->selectRaw($this->sum('spend'))
@@ -740,26 +779,35 @@ final class ObjectivePerformance
 
     private function rows(Carbon $from, Carbon $to): Collection
     {
-        $query = DailyMetric::query()
-            ->when($this->projectIds !== null, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
+        /*
+         * PERF-RECOVERY-001 — one read per (scope, window) inside a report build.
+         *
+         * The path totals, the strongest-and-weakest, the family split and the attention findings each read these same rows, and the
+         * read is a join and a grouped scan of `daily_metrics` apiece. Everything it depends on is in the key: the constructor's four
+         * bounds, the window, and the tenant and project the global scopes read from. Callers only iterate it.
+         */
+        return ReportReadMemo::remember(
+            'objective-performance|'.$this->scopeKey()
+                .'|'.$from->toDateString().'|'.$to->toDateString(),
+            fn (): Collection => $this->readRows($from, $to),
+        );
+    }
+
+    /** Everything the bounded read depends on: the constructor's four bounds, and the tenant and project the global scopes read from. */
+    private function scopeKey(): string
+    {
+        $bound = static fn (?array $list): string => $list === null ? '*' : implode(',', array_map('strval', $list));
+
+        return app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId()
+            .'|p='.$bound($this->projectIds).'|c='.$bound($this->campaignIds).'|v='.$bound($this->providers).'|a='.$bound($this->accountIds);
+    }
+
+    private function readRows(Carbon $from, Carbon $to): Collection
+    {
+        $query = $this->bounded()
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
-            // ACCOUNT-SCOPE-ISOLATION-001 — the same visibility rule the aggregator applies.
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->when($this->excludesDemo(), fn ($q) => $q->where('daily_metrics.is_demo', false))
             ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
-            ->when($this->projectIds !== null, fn ($q) => $q->whereIn(
-                'daily_metrics.project_id',
-                $this->projectIds ?: ['00000000-0000-0000-0000-000000000000'],
-            ))
-            ->when($this->campaignIds !== null, fn ($q) => $q->whereIn(
-                'daily_metrics.unified_campaign_id',
-                $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'],
-            ))
-            // Empty list → match nothing, the same fail-closed reading the other bounds use.
-            ->when($this->providers !== null, fn ($q) => $q->whereIn('daily_metrics.provider', $this->providers ?: ['__none__']))
-            ->when($this->accountIds !== null, fn ($q) => $q->whereIn(
-                'daily_metrics.external_account_id',
-                $this->accountIds ?: ['00000000-0000-0000-0000-000000000000'],
-            ))
             // `provider` joins the key so one row per (campaign, platform) exists — the grain
             // `byPlatform()` reads. The path totals above sum these rows and are unchanged by it.
             ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')

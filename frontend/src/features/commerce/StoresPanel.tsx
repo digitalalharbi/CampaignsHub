@@ -1,179 +1,113 @@
-import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Store } from 'lucide-react'
-import { assignStore, listStoreProviders, startStoreOAuth, syncStore, type StoreProvider, type StoreRow, type StoreState } from './api'
-import { listClientWorkspaces, listProjects, type Project } from '@/features/projects/api'
+import { Loader2, RefreshCw } from 'lucide-react'
+import { listStoreProviders, syncStore, type StoreProvider, type StoreRow } from './api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderErrorNote } from '@/features/integrations/ProviderErrorNote'
-import { Card, CardDescription, CardTitle } from '@/components/ui/Card'
-import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
+import { platformLabel } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 
 /**
- * COMMERCE-001 — the merchant's own Salla and Zid stores, on the page they already use.
+ * COMMERCE-001 / INTEG-PROJECT-LINK-STORES-GA4-001 — the stores THIS project reads.
  *
- * It mirrors the ad-platform panel deliberately. The six situations a store connection can be in are
- * the same six an ad account can be in, and a merchant who has learned that «بانتظار بيانات
- * الاعتماد» means «the platform operator has not finished» should not have to learn a second phrase
- * for the same fact one section further down.
+ * ## What this used to be, and why it is not any more
  *
- * Two things are said here that the ad panel has no equivalent for, because they are true only of
- * stores:
+ * It was the place a store was CONNECTED: a «belongs to client» dropdown, a connect button per platform
+ * and, on every store, a «project» dropdown. Three places to decide what the project had already decided.
+ * A store is linked from the project now — «المنصات» → سلة / زد → «ربط» → the platform's own page → the
+ * store → «تم» — so this panel only shows what that journey produced: the project's own stores, their
+ * figures, and «زامن الآن». With no store it draws nothing; the platform row above carries «ربط».
  *
- * - **Zid publishes no abandoned carts.** The card says so instead of showing a zero, because «0 سلة
- *   متروكة» reads as a perfect checkout and would be a claim rather than a measurement.
- * - **Discovered and synced are different facts.** A store appears the moment the merchant authorises
- *   us; its orders appear after the first sync. A card that showed one date for both would report a
- *   brand-new connection as having no data «since» a time it had never been asked.
+ * It is asked for ONE project and renders only what the server returns for it. A store feeding another
+ * project is not in the answer at all.
  */
-
-const STATE_META: Record<StoreState, { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info'; ar: string; en: string }> = {
-  connected: { tone: 'success', ar: 'متصل', en: 'Connected' },
-  syncing: { tone: 'info', ar: 'جارٍ المزامنة', en: 'Syncing' },
-  error: { tone: 'danger', ar: 'خطأ', en: 'Error' },
-  awaiting_credentials: { tone: 'warning', ar: 'بانتظار بيانات الاعتماد', en: 'Awaiting credentials' },
-  unavailable: { tone: 'neutral', ar: 'غير متاح حاليًا', en: 'Currently unavailable' },
-  disconnected: { tone: 'neutral', ar: 'غير مربوط', en: 'Not connected' },
-}
-
-/** The two states a merchant cannot act on, and the same honest sentence for both. */
-const NEEDS_OPERATOR: readonly StoreState[] = ['awaiting_credentials', 'unavailable']
-
-const LABEL_AR: Record<string, string> = { salla: 'سلة', zid: 'زد' }
-
-/** Latin digits in both languages, per the product's number rule. */
 function stamp(iso: string | null, ar: boolean): string {
   if (!iso) return ar ? 'لم تصل بيانات بعد' : 'No data yet'
 
+  /*
+   * `-u-nu-latn` because bare `ar-SA` yields Arabic-Indic digits, and every figure in this product is
+   * Latin by a permanent requirement — see `lib/utils.ts`, which states the same rule.
+   */
   return new Date(iso).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   })
 }
 
-function StoreCard({ store, provider, ar, onSync, syncing, projects, onAssign, assigning }: {
+function StoreCard({ store, provider, ar, onSync, syncing }: {
   store: StoreRow
   provider: StoreProvider
   ar: boolean
   onSync: () => void
   syncing: boolean
-  projects: Project[]
-  onAssign: (projectId: string | null) => void
-  assigning: boolean
 }) {
   const run = store.last_run?.status
   const inFlight = run === 'queued' || run === 'running'
 
   return (
-    <li data-testid={`store-${store.id}`} className="rounded-xl border border-border bg-surface-secondary p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-text-primary">{store.name}</p>
-          {store.domain && <p className="truncate text-[11px] text-text-muted" dir="ltr">{store.domain}</p>}
+    <li data-testid={`store-${store.id}`} data-platform={provider.key} className="min-w-0 rounded-2xl border border-border bg-surface p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <ProviderMark provider={provider.key} size={26} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-text-primary">{store.name}</p>
+          <p className="truncate text-[11px] text-text-muted">
+            {platformLabel(provider.key, ar)}
+            {store.domain && <> · <span dir="ltr">{store.domain}</span></>}
+          </p>
         </div>
-        <Button size="sm" variant="secondary" onClick={onSync} disabled={syncing || store.project_id === null} title={store.project_id === null ? (ar ? 'اختر مشروعًا أولًا' : 'Choose a project first') : undefined}>
-          {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-          {ar ? 'زامن الآن' : 'Sync now'}
+        {/* The store's own currency, or a stated absence: its money is withheld until the platform says. */}
+        <span data-testid={`store-currency-${store.id}`} title={store.currency === null ? (ar ? 'العملة غير معروفة: المبالغ محجوبة' : 'Currency unknown: money withheld') : undefined}>
+          <Badge tone={store.currency === null ? 'warning' : 'neutral'}><span className="tnum" dir="ltr">{store.currency ?? '?'}</span></Badge>
+        </span>
+        <Button size="sm" variant="secondary" onClick={onSync} disabled={syncing || inFlight} data-testid={`store-sync-${store.id}`}>
+          {syncing || inFlight ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+          {ar ? 'زامن' : 'Sync'}
         </Button>
       </div>
 
-      {/*
-        COMMERCE-ASSIGN-001 — WHICH PROJECT this store feeds, chosen here.
-
-        A store with no project is read by nobody: «sync» answers 409 and nothing arrives. The card
-        therefore asks, in words, rather than leaving a button that can only fail.
-      */}
-      <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-        <span className="font-semibold text-text-muted">{ar ? 'المشروع' : 'Project'}:</span>
-        <select
-          data-testid={`store-project-${store.id}`}
-          aria-label={ar ? 'مشروع المتجر' : 'Store project'}
-          value={store.project_id ?? ''}
-          disabled={assigning}
-          onChange={(e) => onAssign(e.target.value === '' ? null : e.target.value)}
-          className="min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
-        >
-          <option value="">{ar ? 'اختر مشروعًا' : 'Choose a project'}</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-        {store.project_id === null && (
-          <span data-testid={`store-needs-project-${store.id}`} className="text-warning">
-            {ar ? 'لن تُقرأ بيانات المتجر قبل اختيار مشروع.' : 'No data is read until a project is chosen.'}
-          </span>
-        )}
-        {inFlight && (
-          <span data-testid={`store-reading-${store.id}`} className="inline-flex items-center gap-1 text-info">
-            <Loader2 size={12} className="animate-spin" /> {ar ? 'تجري قراءة المتجر…' : 'Reading the store…'}
-          </span>
-        )}
-      </label>
-
       <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">
-        <div><dt className="inline text-text-muted">{ar ? 'المنتجات' : 'Products'}: </dt><dd className="tnum inline font-semibold">{store.counts.products}</dd></div>
-        <div><dt className="inline text-text-muted">{ar ? 'الطلبات' : 'Orders'}: </dt><dd className="tnum inline font-semibold">{store.counts.orders}</dd></div>
+        <div><dt className="inline text-text-muted">{ar ? 'المنتجات' : 'Products'}: </dt><dd className="tnum inline font-semibold">{store.counts.products.toLocaleString('en-US')}</dd></div>
+        <div><dt className="inline text-text-muted">{ar ? 'الطلبات' : 'Orders'}: </dt><dd className="tnum inline font-semibold">{store.counts.orders.toLocaleString('en-US')}</dd></div>
         <div>
           <dt className="inline text-text-muted">{ar ? 'السلات المتروكة' : 'Abandoned carts'}: </dt>
           <dd className="inline font-semibold">
+            {/* Zid publishes no abandoned carts: a stated absence, never a zero that reads as a perfect checkout. */}
             {provider.supports_abandoned_carts
-              ? <span className="tnum">{store.counts.abandoned_carts}</span>
-              /* Never a zero: this platform does not report them at all. */
-              : <span data-testid="carts-unsupported" className="text-text-muted">{ar ? 'لا توفّرها المنصة' : 'Not offered by the platform'}</span>}
+              ? <span className="tnum">{store.counts.abandoned_carts.toLocaleString('en-US')}</span>
+              : <span data-testid="carts-unsupported" className="text-text-muted">—</span>}
           </dd>
         </div>
+        <div><dt className="inline text-text-muted">{ar ? 'آخر مزامنة' : 'Last sync'}: </dt><dd className="tnum inline">{stamp(store.last_synced_at, ar)}</dd></div>
       </dl>
 
-      <p className="mt-2 text-[11px] text-text-muted">
-        {ar ? 'آخر مزامنة' : 'Last sync'}: <span className="tnum">{stamp(store.last_synced_at, ar)}</span>
-        {store.last_run?.status === 'no_data' && (
-          /* Not an error and not amber: the shop simply had nothing in the window we asked about. */
-          <span data-testid="store-no-data" className="block text-text-muted">
-            {ar ? 'لا توجد بيانات للفترة المطلوبة.' : 'No data for the requested period.'}
-          </span>
-        )}
-        {store.last_run?.status === 'partial_mapping' && store.last_run.error && (
-          <span data-testid="store-partial" className="block text-warning">{store.last_run.error}</span>
-        )}
-        {store.last_run?.status === 'failed' && store.last_run.error && (
-          <span data-testid="store-failed" className="block text-danger">{store.last_run.error}</span>
-        )}
-      </p>
+      {store.last_run?.status === 'no_data' && (
+        <p data-testid="store-no-data" className="mt-1 text-[11px] text-text-muted">{ar ? 'لا بيانات للفترة.' : 'No data for the period.'}</p>
+      )}
+      {store.last_run?.status === 'partial_mapping' && store.last_run.error && (
+        <p data-testid="store-partial" className="mt-1 text-[11px] text-warning">{store.last_run.error}</p>
+      )}
+      {store.last_run?.status === 'failed' && store.last_run.error && (
+        <p data-testid="store-failed" className="mt-1 text-[11px] text-danger">{store.last_run.error}</p>
+      )}
     </li>
   )
 }
 
-export function StoresPanel() {
+export function StoresPanel({ projectId }: { projectId: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
-  const [clientWorkspaceId, setClientWorkspaceId] = useState('')
 
   const query = useQuery({
-    queryKey: ['commerce-stores'],
-    queryFn: listStoreProviders,
-    // A sync is a queued job, so the page that started it has no way of hearing that it finished.
+    queryKey: ['commerce-stores', projectId],
+    queryFn: () => listStoreProviders(projectId),
+    // While a store is being read the list is asked again, so the counts arrive without a reload.
     refetchInterval: (q) =>
       q.state.data?.some((p) => p.state === 'syncing' || p.stores.some((s) => s.last_run?.status === 'queued' || s.last_run?.status === 'running'))
         ? 5000
         : false,
-  })
-
-  const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
-  const projectChoices = projects.data ?? []
-  const assign = useMutation({
-    mutationFn: ({ storeId, projectId }: { storeId: string; projectId: string | null }) => assignStore(storeId, projectId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
-  })
-
-  const clients = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
-  const clientChoices = clients.data ?? []
-
-  const authorize = useMutation({
-    mutationFn: (provider: string) => startStoreOAuth(provider, clientWorkspaceId || null),
-    // A full navigation, not a router push: the destination is the platform's own consent screen.
-    onSuccess: ({ authorization_url }) => { window.location.assign(authorization_url) },
   })
 
   const sync = useMutation({
@@ -181,7 +115,7 @@ export function StoresPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
   })
 
-  if (query.isLoading) return <Skeleton className="h-40" />
+  if (query.isLoading) return <Skeleton className="h-24" />
   if (query.isError) {
     return (
       <QueryFailure error={query.error} ar={ar} testId="stores-failure" onRetry={() => void query.refetch()}
@@ -189,22 +123,15 @@ export function StoresPanel() {
     )
   }
 
-  const providers = query.data ?? []
-  const failed = authorize.isError ? authorize.error : assign.isError ? assign.error : sync.isError ? sync.error : null
-  const actionError = failed ? toApiError(failed) : null
+  const providers = (query.data ?? []).filter((p) => p.stores.length > 0)
+  // Nothing linked: nothing to show. The platform rows above carry «ربط».
+  if (providers.length === 0) return null
+
+  const actionError = sync.isError ? toApiError(sync.error) : null
 
   return (
-    <section className="space-y-4" data-testid="stores-panel">
-      <div>
-        <h2 className="font-[var(--font-heading)] text-lg font-extrabold" data-testid="stores-heading">
-          {ar ? 'المتاجر' : 'Stores'}
-        </h2>
-        <p className="mt-1 text-sm text-text-secondary">
-          {ar
-            ? 'اربط متجرك ليصل الطلبات والمنتجات والسلات المتروكة إلى الفانل والتقارير.'
-            : 'Connect your store so orders, products and abandoned carts reach the funnel and reports.'}
-        </p>
-      </div>
+    <section className="flex min-w-0 flex-col gap-2" data-testid="stores-panel">
+      <h2 className="text-sm font-bold text-text-primary" data-testid="stores-heading">{ar ? 'المتاجر' : 'Stores'}</h2>
 
       {actionError && (
         <p data-testid="store-action-error" role="alert" className="rounded-[12px] bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
@@ -212,121 +139,24 @@ export function StoresPanel() {
         </p>
       )}
 
-      {clientChoices.length > 0 && (
-        <label className="block text-sm">
-          <span className="text-text-secondary">{ar ? 'المتجر يخصّ العميل' : 'This store belongs to'}</span>
-          <select
-            data-testid="store-client-workspace"
-            value={clientWorkspaceId}
-            onChange={(e) => setClientWorkspaceId(e.target.value)}
-            className="mt-1 block w-full max-w-sm rounded-xl border border-border bg-surface px-3 py-2"
-          >
-            {/* A house store is a real answer, not a missing one. */}
-            <option value="">{ar ? 'الوكالة نفسها' : 'The agency itself'}</option>
-            {clientChoices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-      )}
+      {providers.map((provider) => provider.state === 'error' && provider.connection_error ? (
+        <div key={`error-${provider.key}`} className="text-sm">
+          <ProviderErrorNote error={provider.connection_error} locale={ar ? 'ar' : 'en'} testId={`store-error-${provider.key}`} />
+        </div>
+      ) : null)}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {providers.map((provider) => {
-          const meta = STATE_META[provider.state]
-          const needsOperator = NEEDS_OPERATOR.includes(provider.state)
-
-          return (
-            /*
-              `store-card` and `data-platform` name this as THE card for this store — the one the
-              integrations page used to draw twice. `integrations.spec.ts` counts them to hold
-              INTEG-STORES-001: the two stores complete the eight sources, in their own section.
-            */
-            <Card key={provider.key} className="space-y-3" data-testid="store-card" data-platform={provider.key}>
-              <div data-testid={`store-provider-${provider.key}`} className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Store size={16} className="shrink-0 text-text-muted" />
-                  <CardTitle>{ar ? (LABEL_AR[provider.key] ?? provider.label) : provider.label}</CardTitle>
-                </div>
-                <Badge
-                  tone={meta.tone}
-                  data-testid={`store-state-${provider.key}`}
-                  className="shrink-0 self-start whitespace-nowrap"
-                >
-                  {ar ? meta.ar : meta.en}
-                </Badge>
-              </div>
-
-              {needsOperator ? (
-                /*
-                 * One honest sentence, and no button. Which system key is missing is deliberately not
-                 * said: a merchant cannot obtain a Client Secret for our app, and the shape of our
-                 * registration is not theirs to be told.
-                 */
-                <p
-                  data-testid={`store-needs-operator-${provider.key}`}
-                  className="mt-1 text-sm leading-relaxed text-text-secondary"
-                >
-                  {ar
-                    ? 'يتولّى مدير المنصة تهيئة هذا التكامل على مستوى النظام. لا يلزمك أي إجراء الآن.'
-                    : 'The platform operator sets this integration up at system level. Nothing is needed from you yet.'}
-                </p>
-              ) : (
-                <>
-                  {provider.state === 'error' && provider.connection_error && (
-                    <div className="text-sm">
-                      <ProviderErrorNote
-                        error={provider.connection_error}
-                        locale={ar ? 'ar' : 'en'}
-                        testId={`store-error-${provider.key}`}
-                      />
-                    </div>
-                  )}
-
-                  {provider.stores.length === 0 ? (
-                    <>
-                      <CardDescription>
-                        {ar
-                          ? 'اضغط «ربط المتجر» لتفويضنا من صفحة المنصة الرسمية.'
-                          : 'Press connect to authorise us from the platform’s own consent screen.'}
-                      </CardDescription>
-                      <Button
-                        data-testid={`connect-store-${provider.key}`}
-                        onClick={() => authorize.mutate(provider.key)}
-                        disabled={authorize.isPending}
-                      >
-                        {authorize.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-                        {ar ? 'ربط المتجر' : 'Connect store'}
-                      </Button>
-                    </>
-                  ) : (
-                    <ul className="space-y-2">
-                      {provider.stores.map((store) => (
-                        <StoreCard
-                          key={store.id}
-                          store={store}
-                          provider={provider}
-                          ar={ar}
-                          syncing={sync.isPending}
-                          onSync={() => sync.mutate(store.id)}
-                          projects={projectChoices}
-                          assigning={assign.isPending}
-                          onAssign={(projectId) => assign.mutate({ storeId: store.id, projectId })}
-                        />
-                      ))}
-                    </ul>
-                  )}
-
-                  {sync.isSuccess && (
-                    <p data-testid="store-sync-queued" className="text-xs text-text-secondary">
-                      {ar
-                        ? 'أُرسل طلب المزامنة. ستتحدّث الأرقام بعد اكتمال القراءة من المتجر.'
-                        : 'Sync requested. The figures update once the store has been read.'}
-                    </p>
-                  )}
-                </>
-              )}
-            </Card>
-          )
-        })}
-      </div>
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {providers.flatMap((provider) => provider.stores.map((store) => (
+          <StoreCard
+            key={store.id}
+            store={store}
+            provider={provider}
+            ar={ar}
+            syncing={sync.isPending && sync.variables === store.id}
+            onSync={() => sync.mutate(store.id)}
+          />
+        )))}
+      </ul>
     </section>
   )
 }
