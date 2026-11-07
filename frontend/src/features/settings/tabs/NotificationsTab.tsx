@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type Importance, type NotifPrefs, type Rhythm } from '../api'
+import { useNotifPrefs, useSaveNotifPrefs, useSendDigestNow, useSendSampleAlert, type DigestKind, type CatalogueType, type Importance, type NotifPrefs, type Rhythm } from '../api'
 import { CATEGORY_LABELS, CATEGORY_NOTES, TYPE_LABELS, TYPE_NOTES, words } from '../messageLabels'
 import { Switch } from '@/components/ui/Switch'
 import { Select } from '@/components/ui/Select'
@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/Input'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { ChannelChip, type ChipState } from '../ChannelChip'
 import { ChannelsPanel } from '../ChannelsPanel'
+import { SendNowChip } from '../SendNowChip'
+import { sendNowFailure, sendNowWord } from '../sendNowWords'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
@@ -72,6 +74,8 @@ export function NotificationsTab() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, isLoading } = useNotifPrefs()
   const save = useSaveNotifPrefs()
+  const digestNow = useSendDigestNow()
+  const sampleAlert = useSendSampleAlert()
   const [p, setP] = useState<NotifPrefs | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -79,6 +83,23 @@ export function NotificationsTab() {
   if (isLoading || !p) return <div className="space-y-3"><Skeleton className="h-10" /><Skeleton className="h-72" /></div>
 
   const label = (map: Record<string, { ar: string; en: string }>, key: string) => words(map, key, ar)
+
+  // NOTIFICATION-ENROLMENT-001 — the real digest / the marked sample alert, to this person's own address only; the answer is one word.
+  const sendDigest = async (kind: DigestKind): Promise<string> => {
+    try {
+      const r = await digestNow.mutateAsync(kind)
+      return sendNowWord(ar, r.state, r.reason)
+    } catch (e) {
+      return sendNowWord(ar, sendNowFailure(e))
+    }
+  }
+  const sendSample = async (): Promise<string> => {
+    try {
+      return sendNowWord(ar, (await sampleAlert.mutateAsync()).state)
+    } catch (e) {
+      return sendNowWord(ar, sendNowFailure(e))
+    }
+  }
 
   const submit = async () => {
     /*
@@ -183,6 +204,9 @@ export function NotificationsTab() {
         {saved && <div className="mt-4"><Alert severity="positive" title={ar ? 'تم حفظ التفضيلات' : 'Preferences saved'} /></div>}
 
         <ChannelsPanel p={p} setP={setP} ar={ar} />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <SendNowChip testId="send-sample-alert" label={ar ? 'أرسل تنبيهًا تجريبيًا' : 'Send a sample alert'} run={sendSample} />
+        </div>
         {/* SMS is stated rather than offered: a switch for a channel with no provider is a promise the product cannot keep. */}
         {p.available_channels?.some((c) => c.key === 'sms' && !c.available) && (
           <p data-testid="sms-unavailable" className="mt-3 text-xs leading-6 text-text-muted">
@@ -263,6 +287,13 @@ export function NotificationsTab() {
                                 : (ar
                                   ? `أسبوعيًا، ${WEEKDAYS_AR[p.digest_weekday] ?? WEEKDAYS_AR[1]}`
                                   : `Weekly, ${WEEKDAYS_EN[p.digest_weekday] ?? WEEKDAYS_EN[1]}`)}
+                            <div className="mt-1.5">
+                              <SendNowChip
+                                testId={`send-now-${digest}`}
+                                label={ar ? 'أرسل لي الآن' : 'Send me now'}
+                                run={() => sendDigest(digest as DigestKind)}
+                              />
+                            </div>
                           </td>
                         </>
                       ) : (
