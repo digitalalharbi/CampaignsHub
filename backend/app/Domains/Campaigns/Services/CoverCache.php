@@ -30,7 +30,7 @@ use Throwable;
  *   3. A capture that failed recorded nothing, so 890 TikTok creatives could not say why they had no cover.
  *
  * So: the reading order is OUR copy → for a platform whose links are short-lived grants, nothing but an
- * honest «pending / failed» state → for anyone else, their link while it has not lapsed. A lapsed source is
+ * honest «pending / failed» state → for anyone else (Snapchat), their link exactly as before. A lapsed source is
  * renewed through the platform before it is fetched, a refusal backs off, and every outcome is recorded.
  */
 final class CoverCache
@@ -102,9 +102,9 @@ final class CoverCache
     /**
      * CREATIVE-PREVIEWS-001 — may a browser be handed this link for a still?
      *
-     * Our own root-relative paths and inline images, yes. A short-lived platform grant (known by its CDN
-     * host), never — it is copied instead. Anyone else's link, while the expiry
-     * it states (if any) has not passed: a lapsed link draws a broken frame, which reads as a broken product.
+     * Our own root-relative paths and inline images, yes. A short-lived platform grant, known by its CDN host,
+     * never — it is copied instead. Anyone else's link exactly as before: Snapchat's media link is what draws
+     * today, and judging it by the `e=` it carries would change the one platform the Owner says works.
      */
     public static function hotlinkable(?string $url): bool
     {
@@ -114,14 +114,8 @@ final class CoverCache
         if ((str_starts_with($url, '/') && ! str_starts_with($url, '//')) || str_starts_with(strtolower($url), 'data:image/')) {
             return true;
         }
-        // Known by its HOST, not by the row's provider: Meta's and TikTok's grants live on these CDNs only, and a
-        // link of theirs on any other host is not one of the short-lived grants this rule is about.
-        if (self::isCopyOnlyHost($url)) {
-            return false;
-        }
-        $expiry = AssetExpiry::fromUrl($url);
 
-        return $expiry === null || $expiry->isFuture();
+        return ! self::isCopyOnlyHost($url);
     }
 
     /** The still for a row read straight from the table (no model): our copy, else a link that may be shown. */

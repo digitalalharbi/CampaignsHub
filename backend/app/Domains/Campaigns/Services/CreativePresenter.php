@@ -290,7 +290,7 @@ final class CreativePresenter
          * already copied, so a dead link won over a good file. TikTok's were `*-sign.tiktokcdn.com` links that
          * live an hour (images) or six (video covers). The cached cover now IS the still, for every kind; where
          * there is none yet, a Meta or TikTok link is withheld and the card says the cover is on its way (or
-         * why it is not), and anyone else's link is shown only while the expiry it states has not passed.
+         * why it is not), and anyone else's link (Snapchat's) is shown exactly as before.
          * The playable film (`video_url`) is left alone: it is fetched on a click, and copying films is not
          * what a cover cache is for.
          */
@@ -343,6 +343,15 @@ final class CreativePresenter
                 'note_ar' => 'رابط المعاينة من المنصة يحمل بيانات اعتماد، فلا يُعرض.',
                 'note_en' => 'The platform’s preview link carries a credential, so it is not shown.',
             ],
+            $expired => [
+                'state' => 'expired',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null,
+                'thumbnail_url' => $thumb,
+                'expires_at' => $creative->asset_expires_at?->toIso8601String(),
+                ...$this->expiredNote($creative),
+            ],
             /*
              * CREATIVE-PREVIEWS-001 — the platform gave a still, and our copy of it is not there yet (or could
              * not be taken). Neither is «the platform exposed nothing», and neither may draw the platform's link.
@@ -360,15 +369,6 @@ final class CreativePresenter
                     'note_ar' => 'الغلاف قيد التجهيز.',
                     'note_en' => 'The cover is being prepared.',
                 ]),
-            ],
-            $expired => [
-                'state' => 'expired',
-                'kind' => $kind,
-                'aspect' => $aspect,
-                'image_url' => null, 'video_url' => null,
-                'thumbnail_url' => $thumb,
-                'expires_at' => $creative->asset_expires_at?->toIso8601String(),
-                ...$this->expiredNote($creative),
             ],
             /*
              * AD-MEDIA-RECOVERY-001 — «never fetched» is not «the platform refused».
