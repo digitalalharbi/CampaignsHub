@@ -54,7 +54,11 @@ export interface CreativePreview {
    * `unavailable` — «the platform exposed no asset» — is a false accusation of exactly the kind
    * `never_fetched` was added to stop. Five states, five sentences.
    */
-  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched'
+  /*
+   * CREATIVE-PREVIEWS-001 — `cover_pending` and `cover_failed`: the platform gave a still and our copy of it
+   * is not there yet, or could not be taken. Neither may draw the platform's short-lived link.
+   */
+  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched' | 'cover_pending' | 'cover_failed'
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
    * asset to show.
@@ -100,6 +104,8 @@ export interface CreativePreview {
    * stays `unavailable`.
    */
   text?: { headline: string | null; body: string | null } | null
+  /** CREATIVE-PREVIEWS-001 — the state of OUR copy of the cover; optional for an older server's payload. */
+  cover?: { state: 'cached' | 'pending' | 'none' | 'failed'; reason: string | null } | null
   /** Set only on a client link: whether the reader may zoom, and whether the asset may be downloaded. */
   can_zoom?: boolean
   can_download?: boolean

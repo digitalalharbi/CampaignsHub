@@ -102,8 +102,11 @@ Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverla
  */
 Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
 
-// TIKTOK-MEDIA-002 — covers into our own storage, after the night's structure sweep has refreshed the links.
-Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapping();
+// TIKTOK-MEDIA-002 — covers into our own storage.
+// CREATIVE-PREVIEWS-001 — hourly, not nightly: a TikTok image link lives an hour and a video cover six, so a
+// once-a-night pass met most of them dead. Each run queues only what is due (no copy, or a newer link, and
+// not backing off), spaced out; a lapsed link is renewed through the platform's own rate budget first.
+Schedule::command('creatives:backfill-covers', ['--execute'])->hourlyAt(40)->withoutOverlapping();
 
 /*
  * Close the runs a worker abandoned — before the next sweep reads them as work in progress.

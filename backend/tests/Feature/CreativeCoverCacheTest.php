@@ -79,7 +79,10 @@ final class CreativeCoverCacheTest extends TestCase
 
         $this->assertFalse(app(CoverCache::class)->capture($creative));
         $this->assertNull($creative->fresh()->cover_path);
-        $this->assertSame('https://p16.tiktokcdn.com/cover-v1.jpg?x-expires=1', app(CreativePresenter::class)->preview($creative->fresh())['thumbnail_url'], 'the live link is still offered');
+        // CREATIVE-PREVIEWS-001 — a TikTok signed link is never offered to the browser; the card says the copy failed.
+        $this->assertSame('not_image', $creative->fresh()->cover_error);
+        $this->assertNull(app(CreativePresenter::class)->preview($creative->fresh())['thumbnail_url']);
+        $this->assertSame('cover_failed', app(CreativePresenter::class)->preview($creative->fresh())['state']);
     }
 
     public function test_the_nightly_pass_queues_only_creatives_without_a_current_cover(): void
