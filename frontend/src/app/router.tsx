@@ -542,6 +542,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // own entry rather than a tab inside Tenants.
             { path: 'registrations', element: <RegistrationsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
+            { path: 'addons', element: <AddonsPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.

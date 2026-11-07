@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   ClipboardCheck,
   CreditCard,
+  PackagePlus,
   ShieldAlert,
   ScrollText,
   Settings,
@@ -59,6 +60,8 @@ const adminNav = [
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
+  // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
+  { to: '/admin/addons', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
   { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
