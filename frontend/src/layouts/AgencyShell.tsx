@@ -129,7 +129,7 @@ function AgencyIdentity({ collapsed }: { collapsed?: boolean }) {
       </Link>
       {!collapsed && (
         <div className="min-w-0">
-          <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
+          <span className="block truncate font-heading text-sm font-extrabold tracking-tight text-text-primary">
             {current?.tenant.name ?? productName(ar ? 'ar' : 'en')}
           </span>
           <span data-testid="agency-scope-note" className="block truncate text-[11px] text-text-muted">

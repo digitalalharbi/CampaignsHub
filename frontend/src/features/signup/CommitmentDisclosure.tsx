@@ -100,7 +100,7 @@ export function CommitmentDisclosure({
         </>
       )}
       {quote.vat && quote.vat.now.prices_include_vat && Number(quote.vat.now.tax) > 0 && (
-        <p data-testid="quote-vat-included" className="py-1 text-[12px] text-text-muted">{t.vatIncluded(quote.vat.now.tax, quote.currency)}</p>
+        <p data-testid="quote-vat-included" className="py-1 text-xs text-text-muted">{t.vatIncluded(quote.vat.now.tax, quote.currency)}</p>
       )}
       <Line label={t.regular}>{quote.regular_monthly} {quote.currency}</Line>
 

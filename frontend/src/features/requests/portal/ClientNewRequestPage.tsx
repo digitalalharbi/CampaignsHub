@@ -174,9 +174,9 @@ export function ClientNewRequestPage() {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = '' }} />
             </label>
             {attached.length > 0 && (
-              <p data-testid="new-request-attached" className="text-[12px] text-text-secondary">{ar ? 'المرفقات' : 'Attached'}: {attached.join('، ')}</p>
+              <p data-testid="new-request-attached" className="text-xs text-text-secondary">{ar ? 'المرفقات' : 'Attached'}: {attached.join('، ')}</p>
             )}
-            {uploadError && <p role="alert" data-testid="new-request-upload-error" className="text-[12px] text-danger">{uploadError}</p>}
+            {uploadError && <p role="alert" data-testid="new-request-upload-error" className="text-xs text-danger">{uploadError}</p>}
           </div>
 
           {create.isError && (

@@ -129,7 +129,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.decision === 'accepted') {
     return (
-      <p data-testid="agreement-state" className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-success">
+      <p data-testid="agreement-state" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-success">
         <CheckCircle2 size={14} aria-hidden />
         {ar ? 'قبل المؤثر الشروط' : 'The creator accepted the terms'}
       </p>
@@ -138,7 +138,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.decision === 'declined') {
     return (
-      <p data-testid="agreement-state" className="mt-3 text-[12px] font-semibold text-danger">
+      <p data-testid="agreement-state" className="mt-3 text-xs font-semibold text-danger">
         {ar ? 'اعتذر المؤثر' : 'The creator declined'}
         {/* The reason they gave, in their own words — it is the whole value of a decline. */}
         {a.decline_reason && <span dir="auto" className="ms-1.5 font-normal text-text-secondary">— {a.decline_reason}</span>}
@@ -148,7 +148,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
 
   if (a.offered_at !== null) {
     return (
-      <p data-testid="agreement-state" className="mt-3 text-[12px] font-semibold text-warning">
+      <p data-testid="agreement-state" className="mt-3 text-xs font-semibold text-warning">
         {ar ? 'أُرسلت الشروط — بانتظار رد المؤثر' : 'Terms sent — awaiting the creator'}
       </p>
     )
@@ -166,14 +166,14 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
         {ar ? 'أرسل الشروط للمؤثر' : 'Send terms to the creator'}
       </Button>
       {!a.can_send_terms && (
-        <span className="text-[12px] text-text-muted">
+        <span className="text-xs text-text-muted">
           {!a.creator_has_access
             ? ar ? 'امنح المؤثر وصولًا إلى بوابته أولًا.' : 'Give the creator portal access first.'
             : ar ? 'حدّد أجر المؤثر أولًا.' : 'Set what the creator is paid first.'}
         </span>
       )}
       {send.isError && (
-        <span role="alert" className="text-[12px] font-semibold text-danger">
+        <span role="alert" className="text-xs font-semibold text-danger">
           {ar ? 'تعذّر إرسال الشروط.' : 'The terms could not be sent.'}
         </span>
       )}
@@ -188,8 +188,8 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
     <li data-testid={`collaboration-${c.id}`} className="rounded-2xl border border-border bg-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-heading text-[16px] font-bold text-text-primary">{c.title}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-text-secondary">
+          <p className="font-heading text-base font-bold text-text-primary">{c.title}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
             <span className="inline-flex items-center gap-1.5 font-semibold">
               <Handshake size={14} aria-hidden />
               {c.influencer?.name ?? (ar ? 'مؤثر محذوف' : 'Removed creator')}
@@ -205,7 +205,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
 
       <AgreementStrip c={c} ar={ar} />
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
         <Figure label={ar ? 'قيمة العقد للعميل' : 'Billed to the client'} value={money(c.agreed_fee, c.currency)} ar={ar} />
         {/* Absent, not zeroed: a placeholder here could be mistaken for the real figure. */}
         {canSeeCosts && (
@@ -217,7 +217,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
       </div>
 
       <div className="mt-4 border-t border-border pt-3">
-        <div className="flex flex-wrap items-center gap-3 text-[13px]">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="font-semibold text-text-primary">
             {ar ? 'المخرجات' : 'Deliverables'}
           </span>
@@ -244,7 +244,7 @@ function CollaborationCard({ c, ar, canSeeCosts }: { c: Collaboration; ar: boole
         {c.deliverables.length > 0 && (
           <ul className="mt-3 grid gap-1.5">
             {c.deliverables.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[12px]">
+              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                 <span className="font-semibold text-text-primary">
                   {d.type}
                   {d.platform && <span className="ms-1.5 font-normal text-text-muted">· {d.platform}</span>}

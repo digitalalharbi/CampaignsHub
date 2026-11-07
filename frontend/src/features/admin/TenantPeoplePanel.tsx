@@ -34,7 +34,7 @@ export function AddTenantMember({ tenantId, roles, ar }: { tenantId: string; rol
 
   return (
     <section className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'إضافة شخص' : 'Add a person'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'إضافة شخص' : 'Add a person'}</h3>
       <form data-testid="add-member-form" className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); add.mutate() }}>
         <input data-testid="add-member-email" type="email" required dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder={ar ? 'البريد الإلكتروني' : 'Email'} aria-label={ar ? 'البريد الإلكتروني' : 'Email'} className={inputClass} />
@@ -67,7 +67,7 @@ export function PendingInvitations({ tenantId, invitations, ar }: { tenantId: st
 
   return (
     <section data-testid="pending-invitations" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوات لم تُقبل بعد' : 'Invitations not yet accepted'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوات لم تُقبل بعد' : 'Invitations not yet accepted'}</h3>
       <ul className="mt-2 grid gap-1.5">
         {invitations.map((i) => <InvitationRow key={i.id} tenantId={tenantId} invitation={i} ar={ar} />)}
       </ul>
@@ -86,10 +86,10 @@ function InvitationRow({ tenantId, invitation, ar }: { tenantId: string; invitat
   const expired = invitation.expires_at !== null && new Date(invitation.expires_at).getTime() < Date.now()
 
   return (
-    <li data-testid={`invitation-${invitation.id}`} className="flex min-w-0 flex-col gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+    <li data-testid={`invitation-${invitation.id}`} className="flex min-w-0 flex-col gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 break-all text-text-primary" dir="ltr"><Num>{invitation.email}</Num></span>
-        <span className="flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
+        <span className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           <span>{invitation.role}</span>
           {expired && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{ar ? 'منتهية' : 'Expired'}</span>}
           <button type="button" data-testid={`invitation-reissue-${invitation.id}`} onClick={() => setOpen(!open)}

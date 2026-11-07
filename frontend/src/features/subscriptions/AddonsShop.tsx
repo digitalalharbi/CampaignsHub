@@ -26,7 +26,7 @@ export function AddonsShop({ ar, canManage }: { ar: boolean; canManage: boolean 
       <h2 className="flex items-center gap-2 font-heading text-base font-bold text-text-primary">
         <PackagePlus size={16} className="text-brand-600" aria-hidden /> {ar ? 'الإضافات' : 'Add-ons'}
       </h2>
-      <p className="mt-1 text-[12px] text-text-muted">
+      <p className="mt-1 text-xs text-text-muted">
         {ar ? 'الأسعار شهرية ولا تشمل ضريبة القيمة المضافة. الطلب لا يخصم شيئًا ولا يفعّل الإضافة قبل تأكيدها.'
           : 'Monthly prices, VAT excluded. A request charges nothing and activates nothing until it is confirmed.'}
       </p>
@@ -49,14 +49,14 @@ function AddonCard({ a, ar, canManage, pending, onRequest }: { a: ShopAddon; ar:
           </span>
         )}
       </div>
-      <p className="text-[12px] text-text-secondary">{ar ? a.summary_ar : a.summary_en}</p>
+      <p className="text-xs text-text-secondary">{ar ? a.summary_ar : a.summary_en}</p>
       <div className="mt-auto flex items-center justify-between gap-2">
         {a.sold && a.price_monthly !== null
           ? <span className="tnum text-sm font-bold text-text-primary" dir="ltr">{a.price_monthly} {a.currency}<span className="ms-1 text-[11px] font-normal text-text-muted">{ar ? '/ شهريًا' : '/ month'}</span></span>
-          : <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-text-muted"><Clock size={12} aria-hidden /> {ar ? 'قريبًا' : 'Coming soon'}</span>}
+          : <span className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted"><Clock size={12} aria-hidden /> {ar ? 'قريبًا' : 'Coming soon'}</span>}
         {a.sold && canManage && (
           a.requested
-            ? <span data-testid={`addon-requested-${a.code}`} className="text-[12px] font-semibold text-info">{ar ? 'قيد المراجعة' : 'Requested'}</span>
+            ? <span data-testid={`addon-requested-${a.code}`} className="text-xs font-semibold text-info">{ar ? 'قيد المراجعة' : 'Requested'}</span>
             : <Button data-testid={`addon-request-${a.code}`} size="sm" variant="secondary" disabled={pending} onClick={onRequest}>{ar ? 'اطلبها' : 'Request'}</Button>
         )}
       </div>

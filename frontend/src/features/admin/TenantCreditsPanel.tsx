@@ -28,24 +28,24 @@ export function TenantCreditsPanel({ tenantId, ar }: { tenantId: string; ar: boo
 
   return (
     <section data-testid="tenant-credits" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'رصيد الاستهلاك' : 'Usage balance'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'رصيد الاستهلاك' : 'Usage balance'}</h3>
       {credits.data && (
         <>
           <p className="mt-2 text-sm text-text-primary">
             <span data-testid="tenant-credits-balance" className="font-semibold"><Num>{credits.data.balance}</Num> {credits.data.currency}</span>
           </p>
           {credits.data.seats && (
-            <p data-testid="tenant-credits-seats" className="mt-1 text-[13px] text-text-secondary">
+            <p data-testid="tenant-credits-seats" className="mt-1 text-xs text-text-secondary">
               {ar ? 'مقاعد الحسابات الإعلانية:' : 'Ad-account seats:'} <Num>{credits.data.seats.active}</Num>
               {credits.data.seats.cap !== null && <> / <Num>{credits.data.seats.cap}</Num></>}
               {credits.data.seats.replacements_allowed !== null && (
-                <span className="ms-2 text-[12px] text-text-muted">
+                <span className="ms-2 text-xs text-text-muted">
                   {ar ? 'استبدالات 30 يومًا' : 'replacements (30d)'} <Num>{credits.data.seats.replacements_used}</Num>/<Num>{credits.data.seats.replacements_allowed}</Num>
                 </span>
               )}
             </p>
           )}
-          <ul className="mt-2 grid gap-1 text-[13px]">
+          <ul className="mt-2 grid gap-1 text-xs">
             {credits.data.meters.map((m) => (
               <li key={m.code} data-testid={`tenant-credits-meter-${m.code}`} className="flex flex-wrap gap-2 rounded-lg bg-surface-secondary px-3 py-1.5">
                 <span className="text-text-primary">{ar ? m.name_ar : m.name}</span>
@@ -57,7 +57,7 @@ export function TenantCreditsPanel({ tenantId, ar }: { tenantId: string; ar: boo
             ))}
           </ul>
           {credits.data.transactions.length > 0 && (
-            <ul className="mt-2 grid gap-1 text-[12px] text-text-secondary">
+            <ul className="mt-2 grid gap-1 text-xs text-text-secondary">
               {credits.data.transactions.slice(0, 8).map((t) => (
                 <li key={t.id} data-testid={`tenant-credits-tx-${t.id}`} className="flex flex-wrap gap-2">
                   <span className="text-text-primary"><Num>{t.amount}</Num></span>

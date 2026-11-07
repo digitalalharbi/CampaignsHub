@@ -28,19 +28,19 @@ export function TenantAddonsPanel({ tenantId, ar }: { tenantId: string; ar: bool
 
   return (
     <section data-testid="tenant-addons" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الإضافات' : 'Add-ons'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الإضافات' : 'Add-ons'}</h3>
       <input data-testid="tenant-addon-reason" value={reason} onChange={(e) => setReason(e.target.value)}
         placeholder={ar ? 'السبب (مطلوب لأي إجراء)' : 'Reason (needed for any action)'}
         className="mt-2 h-9 w-full min-w-0 rounded-lg border border-border bg-surface px-2 text-sm" />
       {error && <p className="mt-1 text-xs font-semibold text-danger">{toApiError(error).message}</p>}
       <ul className="mt-2 grid gap-1.5">
         {(held.data?.addons ?? []).filter((t) => t.status === 'requested' || t.status === 'active').map((t) => (
-          <li key={t.id} data-testid={`tenant-addon-${t.id}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+          <li key={t.id} data-testid={`tenant-addon-${t.id}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
             <span className="font-semibold text-text-primary">{(ar ? t.name_ar : t.name) ?? t.code} ×{t.quantity}</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.status === 'active' ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-info/15 text-info'}`}>
               {t.status === 'active' ? (ar ? 'مفعّلة' : 'Active') : (ar ? 'طلب بانتظار' : 'Requested')}
             </span>
-            {t.unit_price && <span className="tnum text-[12px] text-text-muted" dir="ltr">{t.unit_price} {t.currency}</span>}
+            {t.unit_price && <span className="tnum text-xs text-text-muted" dir="ltr">{t.unit_price} {t.currency}</span>}
             <span className="ms-auto flex gap-1">
               {t.status === 'requested' && <>
                 <Button data-testid={`tenant-addon-approve-${t.id}`} size="sm" disabled={!ok || decide.isPending} onClick={() => decide.mutate({ id: t.id, d: 'approve' })}>{ar ? 'اعتماد' : 'Approve'}</Button>

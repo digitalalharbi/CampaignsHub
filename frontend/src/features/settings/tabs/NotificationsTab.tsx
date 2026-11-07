@@ -185,12 +185,12 @@ export function NotificationsTab() {
         <ChannelsPanel p={p} setP={setP} ar={ar} />
         {/* SMS is stated rather than offered: a switch for a channel with no provider is a promise the product cannot keep. */}
         {p.available_channels?.some((c) => c.key === 'sms' && !c.available) && (
-          <p data-testid="sms-unavailable" className="mt-3 text-[13px] leading-6 text-text-muted">
+          <p data-testid="sms-unavailable" className="mt-3 text-xs leading-6 text-text-muted">
             {ar ? 'الرسائل النصية غير متاحة حاليًا: لا يوجد مزوّد مربوط.' : 'SMS is not available yet: no provider is wired.'}
           </p>
         )}
         {!p.channels.email && (
-          <p className="mt-3 text-[13px] leading-6 text-warning">
+          <p className="mt-3 text-xs leading-6 text-warning">
             {ar
               ? 'البريد مغلق كليًا، لذلك لن تصلك أي رسالة بريد مهما كان المحدد أدناه — عدا رسائل الحساب والأمان.'
               : 'Email is off entirely, so nothing below will reach your inbox — apart from account and security messages.'}
@@ -202,7 +202,7 @@ export function NotificationsTab() {
       {p.catalogue.map((group) => (
         <div key={group.key} className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
           <h3 className="text-base font-bold text-text-primary">{label(CATEGORY_LABELS, group.key)}</h3>
-          <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">{label(CATEGORY_NOTES, group.key)}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">{label(CATEGORY_NOTES, group.key)}</p>
 
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
@@ -227,7 +227,7 @@ export function NotificationsTab() {
                         <div className="font-medium text-text-primary">{label(TYPE_LABELS, t.key)}</div>
                         {/* A note wider than the phone pushes the chips off-screen; it stays narrow there and opens up from `sm`. */}
                         {TYPE_NOTES[t.key] && (
-                          <p className="mt-0.5 max-w-[140px] text-[13px] leading-6 text-text-muted sm:max-w-md">{label(TYPE_NOTES, t.key)}</p>
+                          <p className="mt-0.5 max-w-[140px] text-xs leading-6 text-text-muted sm:max-w-md">{label(TYPE_NOTES, t.key)}</p>
                         )}
                       </td>
 
@@ -236,7 +236,7 @@ export function NotificationsTab() {
                           <td className="p-2 text-center">{chip(t, 'in_app', 'locked')}</td>
                           <td className="p-2 text-center">{chip(t, 'email', 'locked')}</td>
                           <td className="p-2 text-center">{whatsappChip(t, value)}</td>
-                          <td className="p-2 text-[13px] leading-6 text-text-secondary">
+                          <td className="p-2 text-xs leading-6 text-text-secondary">
                             {ar ? 'تُرسل دائمًا عند الحاجة إليها.' : 'Always sent whenever it applies.'}
                           </td>
                         </>
@@ -253,7 +253,7 @@ export function NotificationsTab() {
                             />
                           </td>
                           <td className="p-2 text-center">{chip(t, 'whatsapp', 'na')}</td>
-                          <td className="p-2 text-[13px] text-text-muted">
+                          <td className="p-2 text-xs text-text-muted">
                             {digest === 'daily'
                               ? (ar ? `يوميًا، الساعة ${p.digest_hour}:00` : `Daily, at ${p.digest_hour}:00`)
                               : digest === 'monthly'
@@ -313,7 +313,7 @@ export function NotificationsTab() {
                                   ]}
                                 />
                                 {stranded && (
-                                  <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">
+                                  <p className="mt-1 max-w-xs text-xs leading-6 text-warning">
                                     {ar
                                       ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : stranded === 'weekly' ? 'الملخص الأسبوعي' : 'الملخص الشهري'} غير مفعّل لديك.`
                                       : `This will not reach you: your ${stranded} summary is switched off.`}
@@ -321,7 +321,7 @@ export function NotificationsTab() {
                                 )}
                               </>
                             ) : (
-                              <span className="text-[13px] text-text-muted">{ar ? 'فور حدوثه' : 'As it happens'}</span>
+                              <span className="text-xs text-text-muted">{ar ? 'فور حدوثه' : 'As it happens'}</span>
                             )}
                           </td>
                         </>
@@ -338,7 +338,7 @@ export function NotificationsTab() {
       {/* ── الملخصات والتوقيت ─────────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المواعيد واللغة' : 'Timing and language'}</h3>
-        <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
           {ar
             ? 'الساعة التي تختارها هي ساعتك أنت. تغيير المنطقة الزمنية يغيّر وقت الوصول ولا يغيّر ما اخترته.'
             : 'The hour you choose is your own. Changing timezone changes when mail arrives, not what you asked for.'}
@@ -351,7 +351,7 @@ export function NotificationsTab() {
             label={ar ? 'أرسل لي التنبيهات فور حدوثها' : 'Send me alerts as they happen'}
           />
           {!p.digests.alerts && (
-            <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+            <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
               {ar
                 ? 'مع إيقاف هذا الخيار لن تصلك تنبيهات فورية بالبريد، وتبقى الملاحظات ظاهرة داخل النظام وفي الملخصات التي اخترتها.'
                 : 'With this off, no alert reaches your inbox as it happens. The findings still appear in the product and in whichever summaries you chose.'}
@@ -373,7 +373,7 @@ export function NotificationsTab() {
             colleague's approved judgement should arrive in their inbox, and the sentence says that
             rather than describing a feature.
           */}
-          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted" data-testid="recommendations-note">
+          <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted" data-testid="recommendations-note">
             {p.digests.recommendations
               ? (ar
                 ? 'يقتبس الملخص التوصيات المعتمدة فقط، ضمن الفترة التي يغطيها. لا يُنشئ النظام توصيات من الأرقام.'
@@ -473,7 +473,7 @@ export function NotificationsTab() {
             second because somebody who assumes their security alerts are being held has been told
             something untrue about their own account.
           */}
-          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+          <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
             {ar
               ? 'خلال هذه الساعات لا تصلك التنبيهات الفورية بالبريد، وتُرسل بعد انتهائها إن كانت الملاحظة ما زالت قائمة. الساعات محسوبة بتوقيتك أنت. أما رسائل الحساب والأمان — إعادة تعيين كلمة المرور ورموز الدخول والتنبيهات الأمنية — فتصلك فورًا دائمًا.'
               : 'During these hours no alert reaches your inbox; it is sent once they end, if the finding still stands. The hours are read in your own timezone. Account and security messages — password resets, sign-in codes and security alerts — always arrive immediately.'}
@@ -484,7 +484,7 @@ export function NotificationsTab() {
       {/* ── نطاق المشاريع ─────────────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المشاريع' : 'Projects'}</h3>
-        <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
           {ar
             ? 'حدّد المشاريع التي تريد ملخصاتها وتنبيهاتها. القائمة تعرض ما تملك صلاحية الاطلاع عليه فقط، والاختيار يضيّق ولا يوسّع.'
             : 'Choose which projects you want summaries and alerts about. The list shows only what you may already see, and choosing narrows — it never widens.'}

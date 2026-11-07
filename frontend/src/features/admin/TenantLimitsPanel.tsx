@@ -29,12 +29,12 @@ export function TenantLimitsPanel({ tenantId, ar }: { tenantId: string; ar: bool
 
   return (
     <section data-testid="tenant-limits" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'حدود الخطة' : 'Plan limits'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'حدود الخطة' : 'Plan limits'}</h3>
       {query.isError && <p className="mt-2 text-xs text-danger">{toApiError(query.error).message}</p>}
       {query.data && (
         <ul className="mt-2 grid gap-1.5">
           {query.data.limits.map((l) => (
-            <li key={l.metric} data-testid={`limit-${l.metric}`} className="rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+            <li key={l.metric} data-testid={`limit-${l.metric}`} className="rounded-lg bg-surface-secondary px-3 py-2 text-xs">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-text-primary">{ar ? LABELS[l.metric]?.ar ?? l.metric : LABELS[l.metric]?.en ?? l.metric}</span>
                 <span className="tnum text-text-secondary" dir="ltr">{l.usage.toLocaleString('en-US')} / {show(l.effective_limit, ar)}</span>
@@ -46,7 +46,7 @@ export function TenantLimitsPanel({ tenantId, ar }: { tenantId: string; ar: bool
                   : <span className="text-[11px] text-text-muted">{ar ? 'حسب الخطة' : 'From the plan'}</span>}
                 {l.lapsed && <span className="text-[11px] text-warning">{ar ? 'انتهى التخصيص' : 'Override lapsed'}</span>}
                 <button type="button" data-testid={`limit-edit-${l.metric}`} onClick={() => setEditing(editing === l.metric ? null : l.metric)}
-                  className="ms-auto rounded-lg border border-border px-2 py-0.5 text-[12px] font-semibold text-text-secondary hover:text-text-primary">
+                  className="ms-auto rounded-lg border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary hover:text-text-primary">
                   {ar ? 'تعديل' : 'Change'}
                 </button>
               </div>
@@ -76,7 +76,7 @@ function LimitForm({ tenantId, limit, ar, onDone }: { tenantId: string; limit: T
 
   return (
     <form data-testid={`limit-form-${limit.metric}`} className="mt-2 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (valid) save.mutate() }}>
-      <div className="flex flex-wrap gap-3 text-[12px]">
+      <div className="flex flex-wrap gap-3 text-xs">
         {(['cap', 'unlimited', 'inherit'] as const).map((m) => (
           <label key={m} className="flex items-center gap-1">
             <input type="radio" name={`mode-${limit.metric}`} data-testid={`limit-mode-${m}`} checked={mode === m} onChange={() => setMode(m)} />
@@ -89,7 +89,7 @@ function LimitForm({ tenantId, limit, ar, onDone }: { tenantId: string; limit: T
           aria-label={ar ? 'الحد' : 'Limit'} className="h-9 w-32 rounded-lg border border-border bg-surface px-2 text-sm" />
       )}
       {mode !== 'inherit' && (
-        <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
+        <label className="flex flex-col gap-1 text-xs text-text-secondary">
           {ar ? 'حتى تاريخ (اختياري)' : 'Until (optional)'}
           <DateField value={until} onChange={setUntil} />
         </label>

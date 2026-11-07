@@ -100,7 +100,7 @@ function PlanModules({ ar }: { ar: boolean }) {
           : (
             <div className="mt-3 overflow-x-auto rounded-xl border border-border">
               <table className="w-full min-w-[560px] text-sm">
-                <thead className="bg-surface-secondary text-[12px] text-text-muted">
+                <thead className="bg-surface-secondary text-xs text-text-muted">
                   <tr>
                     <th className="px-3 py-2 text-start font-semibold">{ar ? 'الخاصية' : 'Module'}</th>
                     {data.data.plans.map((p) => (
@@ -114,17 +114,17 @@ function PlanModules({ ar }: { ar: boolean }) {
                 <tbody>
                   {data.data.modules.map((m) => (
                     <tr key={m.module} className="border-t border-border">
-                      <td className="px-3 py-2 font-mono text-[13px] text-text-primary"><span dir="ltr">{m.module}</span></td>
+                      <td className="px-3 py-2 font-mono text-xs text-text-primary"><span dir="ltr">{m.module}</span></td>
                       {data.data!.plans.map((p) => {
                         const carried = p.modules[m.module] === true
                         return (
                           <td key={p.id} className="px-3 py-2">
                             {m.default_entitled
-                              ? <span className="text-[12px] text-text-muted">{ar ? 'متاحة للجميع' : 'Everyone has it'}</span>
+                              ? <span className="text-xs text-text-muted">{ar ? 'متاحة للجميع' : 'Everyone has it'}</span>
                               : (
                                 <button type="button" data-testid={`plan-module-${p.code}-${m.module}`} data-carried={carried}
                                   disabled={change.isPending} onClick={() => toggle(p, m.module, !carried)}
-                                  className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${carried ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
+                                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${carried ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
                                   {carried ? (ar ? 'مشمولة' : 'Included') : (ar ? 'غير مشمولة' : 'Not included')}
                                 </button>
                               )}

@@ -80,7 +80,7 @@ export function ChannelsPanel({ p, setP, ar }: Props) {
       >
         {ar ? 'اختبار' : 'Test'}
       </Button>
-      <span data-testid={`test-result-${channel}`} aria-live="polite" className="min-h-5 truncate text-[13px] text-text-secondary">{result[channel] ?? ''}</span>
+      <span data-testid={`test-result-${channel}`} aria-live="polite" className="min-h-5 truncate text-xs text-text-secondary">{result[channel] ?? ''}</span>
     </div>
   )
 
@@ -118,7 +118,7 @@ export function ChannelsPanel({ p, setP, ar }: Props) {
 
         {wa.provider_configured && wa.opted_in ? (
           <div className="flex items-center justify-between gap-2 text-sm text-text-primary">
-            <span dir="ltr" className="font-mono text-[13px]" data-testid="whatsapp-number">{wa.number_hint}</span>
+            <span dir="ltr" className="font-mono text-xs" data-testid="whatsapp-number">{wa.number_hint}</span>
             <Button type="button" size="sm" variant="ghost" onClick={() => optIn.withdraw.mutate()} data-testid="whatsapp-withdraw">
               {ar ? 'إيقاف' : 'Turn off'}
             </Button>
@@ -145,7 +145,7 @@ export function ChannelsPanel({ p, setP, ar }: Props) {
             </Button>
           </div>
         ) : (
-          <span className="text-[13px] text-text-muted">{ar ? 'بعد ربط المزوّد' : 'After the provider is linked'}</span>
+          <span className="text-xs text-text-muted">{ar ? 'بعد ربط المزوّد' : 'After the provider is linked'}</span>
         )}
 
         {testButton('whatsapp', !wa.provider_configured || !wa.opted_in)}

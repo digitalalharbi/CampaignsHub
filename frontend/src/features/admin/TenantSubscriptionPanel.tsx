@@ -75,19 +75,19 @@ export function TenantSubscriptionPanel({ tenantId, ar }: { tenantId: string; ar
 
   return (
     <section data-testid="tenant-subscription" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الاشتراك' : 'Subscription'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الاشتراك' : 'Subscription'}</h3>
       {query.isError && <p className="mt-2 text-xs text-danger">{toApiError(query.error).message}</p>}
       {query.data && (
-        <div className="mt-2 flex flex-col gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+        <div className="mt-2 flex flex-col gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
           <div data-testid="tenant-subscription-state" data-status={sub?.status ?? 'none'} className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-semibold text-text-primary">{sub ? subscriptionStateLabel(sub.status, ar) : (ar ? 'لا يوجد اشتراك' : 'No subscription')}</span>
             {sub?.plan_name && <span className="text-text-secondary">{sub.plan_name}</span>}
             {sub?.unit_amount && !sub.open_ended && <span className="tnum text-text-secondary" dir="ltr"><Num>{money(sub.unit_amount, sub.currency)}</Num></span>}
             {sub?.open_ended && <span data-testid="tenant-subscription-open-ended" className="rounded-full bg-info/15 px-2 py-0.5 text-[11px] font-semibold text-info">{ar ? 'دخول مباشر دون دفع · بلا تاريخ انتهاء' : 'Direct entry with no payment · no end date'}</span>}
-            {sub?.commercial_basis === 'admin_grant' && <span className="text-[12px] text-text-muted">{ar ? 'مفعّل بقرار إداري دون دفع' : 'Activated by an administrator with no payment'}</span>}
+            {sub?.commercial_basis === 'admin_grant' && <span className="text-xs text-text-muted">{ar ? 'مفعّل بقرار إداري دون دفع' : 'Activated by an administrator with no payment'}</span>}
             {sub?.current_period_end && <span className="tnum text-text-secondary" dir="ltr"><Num>{sub.current_period_end.slice(0, 10)}</Num></span>}
             {sub?.next_charge && (
-              <span data-testid="tenant-subscription-next-charge" className="text-[12px] text-text-secondary">
+              <span data-testid="tenant-subscription-next-charge" className="text-xs text-text-secondary">
                 {ar ? 'الدفعة القادمة' : 'Next charge'}: <Num>{money(sub.next_charge.amount, sub.next_charge.currency)}</Num> ({sub.next_charge.discount_percent}%)
               </span>
             )}
@@ -97,7 +97,7 @@ export function TenantSubscriptionPanel({ tenantId, ar }: { tenantId: string; ar
             {offered(sub).map((key) => (
               <button key={key} type="button" data-testid={`subscription-action-${key}`} aria-pressed={action === key}
                 onClick={() => { setAction(action === key ? null : key); setConfirmed(false); act.reset() }}
-                className={`rounded-lg border px-2 py-0.5 text-[12px] font-semibold ${action === key ? 'border-brand-500 text-brand-700' : 'border-border text-text-secondary hover:text-text-primary'}`}>
+                className={`rounded-lg border px-2 py-0.5 text-xs font-semibold ${action === key ? 'border-brand-500 text-brand-700' : 'border-border text-text-secondary hover:text-text-primary'}`}>
                 {ar ? COPY[key].ar : COPY[key].en}
               </button>
             ))}
@@ -151,7 +151,7 @@ export function TenantSubscriptionPanel({ tenantId, ar }: { tenantId: string; ar
           )}
 
           {query.data.history.length > 0 && (
-            <ol data-testid="subscription-history" className="flex flex-col gap-0.5 text-[12px] text-text-muted">
+            <ol data-testid="subscription-history" className="flex flex-col gap-0.5 text-xs text-text-muted">
               {query.data.history.map((h, i) => (
                 <li key={`${h.action}-${i}`} className="min-w-0 break-words">
                   <span className="font-semibold text-text-secondary">{ar ? COPY[h.action as TenantSubscriptionAction]?.ar ?? h.action : COPY[h.action as TenantSubscriptionAction]?.en ?? h.action}</span>

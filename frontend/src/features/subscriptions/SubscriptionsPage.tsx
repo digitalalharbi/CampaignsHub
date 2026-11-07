@@ -536,7 +536,7 @@ function PendingChangeBanner({
           : <CalendarClock size={17} className="mt-0.5 shrink-0 text-info" />}
         <div>
           <p className="text-sm font-bold text-text-primary">{c.pending_title} — {change.plan_name}</p>
-          <p className="mt-0.5 text-[13px] text-text-secondary">
+          <p className="mt-0.5 text-xs text-text-secondary">
             {change.awaiting_payment
               ? c.pending_awaiting_payment
               : `${c.pending_at} ${fmtDate(change.effective_at)}`}
@@ -618,7 +618,7 @@ function ProrationReview({
           </dl>
 
           {/* The honest sentence, and it differs by direction. */}
-          <p data-testid="proration-note" className="text-[13px] leading-relaxed text-text-secondary">
+          <p data-testid="proration-note" className="text-xs leading-relaxed text-text-secondary">
             {isDowngrade ? c.downgrade_note : c.upgrade_note}
           </p>
 

@@ -50,7 +50,7 @@ export function TaxPage() {
         </ul>
       )}
       {(tax.data?.needs_customer_eligibility ?? []).length > 0 && (
-        <p data-testid="tax-eligibility-note" className="mt-3 max-w-2xl text-[12px] text-text-muted">
+        <p data-testid="tax-eligibility-note" className="mt-3 max-w-2xl text-xs text-text-muted">
           {ar ? 'غير متاحة على مستوى الإصدار: ' : 'Not available for a whole edition: '}
           {(tax.data?.needs_customer_eligibility ?? []).map((t) => (ar ? TREATMENT[t]?.ar : TREATMENT[t]?.en) ?? t).join('، ')}
           {ar ? ' — تعتمد على أهلية العميل (إقامته وإثباتها) ولا تُطبَّق على كتالوج كامل.'
@@ -60,7 +60,7 @@ export function TaxPage() {
 
       <section data-testid="tax-review" className="mt-8">
         <h2 className="font-heading text-lg font-bold text-text-primary">{ar ? 'فواتير تحتاج مراجعة محاسبية' : 'Invoices for accounting review'}</h2>
-        <p className="mt-1 max-w-2xl text-[13px] text-text-secondary">
+        <p className="mt-1 max-w-2xl text-xs text-text-secondary">
           {ar ? 'قراءة فقط: لا تُعدَّل أي فاتورة تاريخية تلقائيًا. التصحيح، إن لزم، بإشعار دائن يقرره المحاسب.'
             : 'Read-only: no historical invoice is changed automatically. A correction, if any, is a credit note an accountant decides on.'}
         </p>
@@ -71,7 +71,7 @@ export function TaxPage() {
             </p>
             {review.data.rows.length > 0 && (
               <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-                <table className="w-full min-w-[640px] text-[13px]">
+                <table className="w-full min-w-[640px] text-xs">
                   <thead className="bg-surface-secondary text-start text-text-muted">
                     <tr>
                       <th className="px-3 py-2 text-start">{ar ? 'الفاتورة' : 'Invoice'}</th>
@@ -117,7 +117,7 @@ function EditionRow({ e, ar, treatments }: { e: TaxEdition; ar: boolean; treatme
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-text-primary">{e.label}</span>
         <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">{e.currency} · {e.status}</span>
-        <span className="text-[12px] text-text-muted">
+        <span className="text-xs text-text-muted">
           {ar ? `${e.subscriptions_keeping_their_terms} اشتراك قائم يحتفظ بشروطه` : `${e.subscriptions_keeping_their_terms} existing subscriptions keep their terms`}
         </span>
       </div>

@@ -59,7 +59,7 @@ function AccountRow({ account, ar }: { account: MetaDiagnosisAccount; ar: boolea
   const renewal = account.structure.media_renewal
 
   return (
-    <li data-testid={`meta-diagnosis-account-${account.external_id}`} className="space-y-1 border-t border-border pt-2 text-[12px]">
+    <li data-testid={`meta-diagnosis-account-${account.external_id}`} className="space-y-1 border-t border-border pt-2 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-semibold text-text-primary">{account.name}</span>
         <span className="text-text-muted" dir="ltr">{account.external_id}</span>
@@ -99,19 +99,19 @@ function ConnectionCard({ connection, ar }: { connection: MetaDiagnosisConnectio
   return (
     <li data-testid={`meta-diagnosis-${connection.id}`} data-state={connection.state} className="space-y-3 rounded-2xl border border-border bg-surface p-5">
       <header className="flex flex-wrap items-center gap-2">
-        <p className="font-heading text-[15px] font-bold text-text-primary">{connection.tenant}</p>
-        <span className="text-[12px] text-text-muted" dir="ltr">{connection.name} · {connection.app}</span>
+        <p className="font-heading text-sm font-bold text-text-primary">{connection.tenant}</p>
+        <span className="text-xs text-text-muted" dir="ltr">{connection.name} · {connection.app}</span>
         <Badge tone={state.tone}>{ar ? state.ar : state.en}</Badge>
       </header>
 
       {connection.refusal !== null && (
         <div className="space-y-1 text-sm">
           <p data-testid="meta-diagnosis-action" className="text-text-primary">{ar ? connection.refusal.action_ar : connection.refusal.action_en}</p>
-          <p data-testid="meta-diagnosis-code" className="text-[12px] text-text-muted" dir="ltr">{codeOf(connection.refusal)}</p>
+          <p data-testid="meta-diagnosis-code" className="text-xs text-text-muted" dir="ltr">{codeOf(connection.refusal)}</p>
         </div>
       )}
 
-      <dl className="grid gap-x-4 gap-y-1 text-[12px] sm:grid-cols-2">
+      <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
         <div><dt className="inline text-text-muted">{ar ? 'الرمز: ' : 'Token: '}</dt><dd className="inline text-text-secondary">{ar ? token.ar : token.en} · <Num>{fmtDateTime(connection.token.expires_at)}</Num></dd></div>
         <div><dt className="inline text-text-muted">{ar ? 'آخر مزامنة فعلية: ' : 'Last real sync: '}</dt><dd className="inline text-text-secondary"><Num>{fmtDateTime(connection.last_sync_at)}</Num></dd></div>
         <div>
@@ -160,8 +160,8 @@ export function MetaDiagnosisPanel() {
   return (
     <section data-testid="meta-diagnosis" className="mt-6 space-y-3">
       <div>
-        <h3 className="font-heading text-[15px] font-bold text-text-primary">{ar ? 'تشخيص اتصالات Meta' : 'Meta connection diagnosis'}</h3>
-        <p className="text-[12px] text-text-muted">
+        <h3 className="font-heading text-sm font-bold text-text-primary">{ar ? 'تشخيص اتصالات Meta' : 'Meta connection diagnosis'}</h3>
+        <p className="text-xs text-text-muted">
           {ar ? 'من سجل المزامنة فقط: لا يتصل هذا العرض بـ Meta ولا يغيّر أي اتصال.' : 'From the sync record only: this view does not call Meta and changes no connection.'}
         </p>
       </div>

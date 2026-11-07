@@ -43,7 +43,7 @@ export function OptionSwatch({ option }: { option: Option }) {
 
   // Not an icon name — render at most one character (an emoji or a single glyph).
   const glyph = (
-    <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden text-[13px] leading-none">
+    <span aria-hidden className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden text-xs leading-none">
       {[...option.icon][0] ?? ''}
     </span>
   )

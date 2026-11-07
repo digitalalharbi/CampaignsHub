@@ -22,12 +22,12 @@ export function TenantCapabilitiesPanel({ tenantId, ar }: { tenantId: string; ar
 
   return (
     <section className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الخصائص' : 'Features'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الخصائص' : 'Features'}</h3>
       {change.isError && <p className="mt-1 text-xs font-semibold text-danger">{toApiError(change.error).message}</p>}
       <ul className="mt-2 grid gap-1.5">
         {(list.data?.capabilities ?? []).map((c) => (
           <li key={c.module} data-testid={`tenant-feature-${c.module}`} data-enabled={c.enabled}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px]">
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-xs">
             <span className="min-w-0">
               <span className="font-mono text-text-primary" dir="ltr">{c.module}</span>
               <span className={`ms-2 text-[11px] ${c.enabled ? 'text-[var(--positive-foreground)]' : 'text-text-muted'}`}>

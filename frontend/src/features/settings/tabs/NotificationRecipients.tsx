@@ -107,7 +107,7 @@ export function NotificationRecipients() {
         is a mailing list, and being added to one by a colleague is exactly how a useful digest turns
         into a spam report.
       */}
-      <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+      <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
         {ar
           ? 'يشمل هذا الترتيب التنبيهات الفورية. أما الملخص اليومي والأسبوعي فيبقى اختيار كل عضو من إعداداته أعلاه.'
           : 'This covers immediate alerts. The daily and weekly summaries stay each person’s own choice, in their settings above.'}
@@ -179,17 +179,17 @@ export function NotificationRecipients() {
                 <tr key={r.id} className="border-b border-border last:border-0 align-top">
                   <td className="p-2">
                     <div className="font-medium text-text-primary">{r.name}</div>
-                    <div className="text-[13px] text-text-muted" dir="ltr">{r.email}</div>
+                    <div className="text-xs text-text-muted" dir="ltr">{r.email}</div>
                   </td>
                   <td className="p-2 text-text-primary">{r.project_name ?? (ar ? 'كل ما يصل إليه' : 'Everything they can see')}</td>
                   <td className="p-2 text-text-primary">{r.category === null ? (ar ? 'كل الأنواع' : 'Every kind') : label(r.category)}</td>
                   <td className="p-2">
                     {r.status.eligible ? (
-                      <span className="text-[13px] font-semibold text-success">{ar ? 'يستقبل' : 'Receiving'}</span>
+                      <span className="text-xs font-semibold text-success">{ar ? 'يستقبل' : 'Receiving'}</span>
                     ) : (
                       <div className="max-w-sm">
-                        <span className="text-[13px] font-semibold text-warning">{ar ? 'لا يستقبل' : 'Not receiving'}</span>
-                        <p className="text-[13px] leading-6 text-text-secondary">
+                        <span className="text-xs font-semibold text-warning">{ar ? 'لا يستقبل' : 'Not receiving'}</span>
+                        <p className="text-xs leading-6 text-text-secondary">
                           {r.status.reason && REASONS[r.status.reason]
                             ? (ar ? REASONS[r.status.reason].ar : REASONS[r.status.reason].en)
                             : r.status.reason}

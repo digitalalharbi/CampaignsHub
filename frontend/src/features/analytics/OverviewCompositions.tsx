@@ -192,7 +192,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold text-text-primary">{ar ? 'المتجر المرتبط' : 'Connected store'}</h2>
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-xs text-text-secondary">
             {ar ? 'من سجل التاجر نفسه — لا من بكسل المنصات.' : 'From the merchant’s own ledger — not the platforms’ pixel.'}
           </p>
         </div>
@@ -210,7 +210,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
           { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
         ].map((k) => (
           <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
-            <p className="text-[13px] text-text-secondary">{k.label}</p>
+            <p className="text-xs text-text-secondary">{k.label}</p>
             <p className="tnum mt-0.5 text-xl font-bold text-text-primary">{k.value}</p>
           </div>
         ))}
@@ -222,13 +222,13 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
         so these figures cover the whole shop whatever the filter above says.
       */}
       {commerce.filtered_view && (
-        <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+        <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
           {ar ? commerce.unfiltered_note_ar : commerce.unfiltered_note_en}
         </p>
       )}
 
       {commerce.unattributed_orders > 0 && (
-        <p data-testid="dashboard-store-unattributed" className="mt-3 text-[13px] text-text-secondary">
+        <p data-testid="dashboard-store-unattributed" className="mt-3 text-xs text-text-secondary">
           {ar
             ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
             : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
@@ -238,7 +238,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
       {/* COMMERCE-TZ-001 — an order whose store states no timezone may belong to the day either
           side of where it is counted, and the reader is told rather than left to assume. */}
       {(commerce.orders_with_assumed_timezone ?? 0) > 0 && (
-        <p data-testid="dashboard-store-assumed-tz" className="mt-2 text-[13px] text-warning">
+        <p data-testid="dashboard-store-assumed-tz" className="mt-2 text-xs text-warning">
           {ar
             ? `${num(commerce.orders_with_assumed_timezone ?? 0)} طلبًا لم يذكر متجرها المنطقة الزمنية، فاعتُبرت UTC.`
             : `${num(commerce.orders_with_assumed_timezone ?? 0)} order(s) come from a store that states no timezone, so UTC was assumed.`}
@@ -247,7 +247,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
 
       {/* The revenue above is SHORT by these orders, and a short total must never look whole. */}
       {(commerce.orders_with_money_withheld ?? 0) > 0 && (
-        <p data-testid="dashboard-store-withheld" className="mt-2 text-[13px] text-warning">
+        <p data-testid="dashboard-store-withheld" className="mt-2 text-xs text-warning">
           {ar
             ? `${num(commerce.orders_with_money_withheld ?? 0)} طلبًا بعملة (${(commerce.money_withheld_currencies ?? []).join('، ')}) لا يوجد لها سعر صرف مؤرّخ، فلم تُحتسب ضمن الإيرادات.`
             : `${num(commerce.orders_with_money_withheld ?? 0)} order(s) in ${(commerce.money_withheld_currencies ?? []).join(', ')} have no dated exchange rate and are not included in the revenue.`}

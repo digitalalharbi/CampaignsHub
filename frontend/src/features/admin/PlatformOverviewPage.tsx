@@ -140,7 +140,7 @@ export function PlatformOverviewPage() {
 
       {/* The one honesty note that has to sit beside the figure it qualifies, not in a tooltip. */}
       {d.subscriptions.collection_status === 'not_implemented' && (
-        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-[12px] leading-relaxed text-text-secondary">
+        <p data-testid="collection-note" className="mb-4 flex items-start gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-xs leading-relaxed text-text-secondary">
           <Info size={15} className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
           {ar
             ? 'القيمة أعلاه هي ما التزم به المشتركون شهريًا، وليست مبالغ محصّلة: تحصيل اشتراكات المنصة غير مفعّل بعد. الفواتير في النظام هي فوترة الوكالة لعملائها وتخص الوكالة وحدها.'
@@ -285,7 +285,7 @@ export function PlatformOverviewPage() {
       </div>
 
       {d.workload.unpaid_invoices > 0 && (
-        <p className="mt-4 flex items-center gap-2 text-[12px] text-text-muted">
+        <p className="mt-4 flex items-center gap-2 text-xs text-text-muted">
           <Receipt size={14} aria-hidden />
           {ar
             ? `${num(d.workload.unpaid_invoices)} فاتورة غير مسددة عبر المنصة — وهي فوترة الوكالات لعملائها، لا فواتير المنصة.`
@@ -407,13 +407,13 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
                       {c.reason === 'refused' ? (ar ? 'رفضته المنصة' : 'Refused') : (ar ? 'انتهت صلاحيته' : 'Expired')}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-[12px] text-text-muted">
+                  <p className="mt-0.5 truncate text-xs text-text-muted">
                     {(ar ? PROVIDERS[c.provider]?.ar : PROVIDERS[c.provider]?.en) ?? c.provider} · {c.tenant_name ?? (ar ? 'مساحة محذوفة' : 'Deleted workspace')} · {fmtDateTime(c.since)}
                   </p>
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[12px] text-text-muted">
+            <p className="mt-3 text-xs text-text-muted">
               {ar ? 'إعادة الربط يقوم بها مالك مساحة العمل من صفحة التكاملات؛ لا تتم من لوحة المنصة.'
                 : 'The workspace owner reconnects from their integrations page; it is not done from the console.'}
             </p>
@@ -441,12 +441,12 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
                 ['info', ar ? 'معلومة' : 'Info', 'text-info'],
               ] as const).map(([key, label, tone]) => (
                 <div key={key} data-testid={`console-alerts-${key}`} className="rounded-xl border border-border px-3 py-2 text-center">
-                  <dt className="text-[12px] text-text-muted">{label}</dt>
+                  <dt className="text-xs text-text-muted">{label}</dt>
                   <dd className={`tnum text-xl font-extrabold ${tone}`}><span dir="ltr">{num(alerts.by_severity[key])}</span></dd>
                 </div>
               ))}
             </dl>
-            <p className="mt-3 text-[12px] text-text-muted">
+            <p className="mt-3 text-xs text-text-muted">
               {ar ? `في ${num(alerts.tenants)} مساحة عمل. كل تنبيه يُعالَج داخل مساحته.` : `Across ${num(alerts.tenants)} workspaces. Each alert is handled inside its workspace.`}
             </p>
           </>
@@ -466,9 +466,9 @@ function Operations({ ops, ar }: { ops: PlatformOverview['operations']; ar: bool
         ) : (
           <ul className="mt-3 grid gap-1.5">
             {recent.map((r) => (
-              <li key={r.id} className="min-w-0 text-[13px]">
+              <li key={r.id} className="min-w-0 text-xs">
                 <code className="block truncate text-text-primary" dir="ltr">{r.action}</code>
-                <span className="block truncate text-[12px] text-text-muted">
+                <span className="block truncate text-xs text-text-muted">
                   {r.user_name ?? '—'} · {r.tenant_name ?? (ar ? 'المنصة' : 'Platform')} · {fmtDateTime(r.created_at)}
                 </span>
               </li>

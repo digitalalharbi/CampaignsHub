@@ -90,7 +90,7 @@ export function PlanMigrationPage() {
 function Tally({ label, value, tone = 'text-text-primary' }: { label: string; value: number; tone?: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-3 py-2">
-      <dt className="text-[12px] text-text-muted">{label}</dt>
+      <dt className="text-xs text-text-muted">{label}</dt>
       <dd className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></dd>
     </div>
   )
@@ -129,7 +129,7 @@ function MigrationRow({ row, plans, ar, selected, onSelect }: {
         />
         <span className="min-w-[12rem] flex-1">
           <span className="block truncate font-semibold text-text-primary">{row.tenant_name}</span>
-          <span className="block text-[12px] text-text-muted">
+          <span className="block text-xs text-text-muted">
             <bdi dir="ltr">{row.tenant_slug}</bdi> · {ar ? 'تنتهي الفترة' : 'period ends'} <Num>{fmtDate(row.current_period_end)}</Num>
           </span>
         </span>
@@ -151,7 +151,7 @@ function MigrationRow({ row, plans, ar, selected, onSelect }: {
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={ar ? 'الاستخدام مقابل الحدود الجديدة' : 'Usage against the new limits'}>
           {s.metrics.map((m) => (
             <li key={m.metric} data-testid={`migration-metric-${row.tenant_slug}-${m.metric}`}
-              className={`rounded-full border px-2 py-0.5 text-[12px] ${m.fits ? 'border-border text-text-secondary' : 'border-danger/40 bg-danger/5 font-semibold text-danger'}`}>
+              className={`rounded-full border px-2 py-0.5 text-xs ${m.fits ? 'border-border text-text-secondary' : 'border-danger/40 bg-danger/5 font-semibold text-danger'}`}>
               {ar ? METRIC_LABELS[m.metric].ar : METRIC_LABELS[m.metric].en}{' '}
               <Num>{m.usage} / {m.new_limit ?? '∞'}</Num>
             </li>
@@ -174,21 +174,21 @@ function MigrationRow({ row, plans, ar, selected, onSelect }: {
 function StatusPill({ row, ar }: { row: MigrationWorkspace; ar: boolean }) {
   if (row.scheduled) {
     return (
-      <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-brand-600/10 px-2 py-0.5 text-[12px] font-semibold text-brand-600">
+      <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-brand-600/10 px-2 py-0.5 text-xs font-semibold text-brand-600">
         <CalendarClock size={13} aria-hidden /> {ar ? 'مجدول إلى' : 'Moving to'} {row.scheduled.plan_name} · <Num>{fmtDate(row.scheduled.effective_at)}</Num>
       </span>
     )
   }
   if (row.suggested?.fits) {
     return (
-      <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[12px] font-semibold text-success">
+      <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
         <CheckCircle2 size={13} aria-hidden /> {ar ? 'جاهزة' : 'Ready'}
       </span>
     )
   }
 
   return (
-    <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[12px] font-semibold text-warning">
+    <span data-testid={`migration-status-${row.tenant_slug}`} className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning">
       <MessageCircle size={13} aria-hidden /> {ar ? 'تحتاج محادثة' : 'Needs a conversation'}
     </span>
   )
@@ -207,19 +207,19 @@ function ScheduleForm({ row, plans, ar, onDone }: { row: MigrationWorkspace; pla
 
   return (
     <div data-testid={`migration-form-${row.tenant_slug}`} className="mt-3 grid gap-2 rounded-lg border border-border bg-surface-2 p-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
-      <label className="grid gap-1 text-[12px] text-text-muted">
+      <label className="grid gap-1 text-xs text-text-muted">
         {ar ? 'الباقة' : 'Plan'}
         <select data-testid={`migration-plan-${row.tenant_slug}`} value={plan} onChange={(e) => setPlan(e.target.value)}
           className="h-9 rounded-lg border border-border bg-surface px-2 text-sm text-text-primary">
           {plans.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
         </select>
       </label>
-      <label className="grid gap-1 text-[12px] text-text-muted">
+      <label className="grid gap-1 text-xs text-text-muted">
         {ar ? 'السبب' : 'Reason'}
         <input data-testid={`migration-reason-${row.tenant_slug}`} value={reason} onChange={(e) => setReason(e.target.value)}
           className="h-9 min-w-0 rounded-lg border border-border bg-surface px-2 text-sm text-text-primary" />
       </label>
-      <label className="grid gap-1 text-[12px] text-text-muted">
+      <label className="grid gap-1 text-xs text-text-muted">
         {ar ? <>اكتب <bdi dir="ltr" className="font-mono">{row.tenant_slug}</bdi> للتأكيد</> : <>Type <span className="font-mono">{row.tenant_slug}</span> to confirm</>}
         <input data-testid={`migration-confirm-${row.tenant_slug}`} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off"
           className="h-9 min-w-0 rounded-lg border border-border bg-surface px-2 font-mono text-sm text-text-primary" />

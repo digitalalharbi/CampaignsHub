@@ -72,15 +72,15 @@ function MeterRow({ m, ar }: { m: AdminUsageMeter; ar: boolean }) {
             <input data-testid={`admin-meter-cost-${m.code}`} inputMode="decimal" dir="ltr" value={cost} onChange={(e) => setCost(e.target.value.replace(/[^\d.]/g, ''))}
               aria-label={ar ? 'التكلفة الفعلية للوحدة' : 'Actual cost per unit'} placeholder={ar ? 'بلا تكلفة' : 'No cost'}
               className="h-9 w-24 rounded-lg border border-border bg-surface px-2 text-sm" />
-            <span className="text-[12px] text-text-muted">{m.currency} / {m.unit}</span>
-            <label className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+            <span className="text-xs text-text-muted">{m.currency} / {m.unit}</span>
+            <label className="flex items-center gap-1.5 text-xs text-text-secondary">
               <input data-testid={`admin-meter-charges-${m.code}`} type="checkbox" checked={charges} onChange={(e) => setCharges(e.target.checked)} />
               {ar ? 'خصم من الرصيد' : 'Charge credits'}
             </label>
           </>
         )}
         {PLANS.map((p) => (
-          <label key={p} className="flex items-center gap-1 text-[12px] text-text-muted">
+          <label key={p} className="flex items-center gap-1 text-xs text-text-muted">
             {p.replace('_2026', '')}
             <input data-testid={`admin-meter-included-${m.code}-${p}`} inputMode="numeric" dir="ltr" value={included[p]}
               onChange={(e) => setIncluded({ ...included, [p]: e.target.value.replace(/\D/g, '') })}

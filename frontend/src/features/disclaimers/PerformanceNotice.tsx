@@ -101,13 +101,13 @@ export function PerformanceNotice({
           <p
             data-testid="performance-notice-short"
             data-clamped={open ? 'false' : 'true'}
-            className={`text-[13px] leading-relaxed text-text-secondary ${open ? '' : 'line-clamp-1'}`}
+            className={`text-xs leading-relaxed text-text-secondary ${open ? '' : 'line-clamp-1'}`}
           >
             {short}
           </p>
           {open && hasMore && (
             <div className="mt-2 space-y-2 border-t border-border pt-2">
-              {full && <p className="text-[13px] leading-relaxed text-text-secondary">{full}</p>}
+              {full && <p className="text-xs leading-relaxed text-text-secondary">{full}</p>}
               {freshness && <p className="text-xs leading-relaxed text-text-muted">{freshness}</p>}
             </div>
           )}

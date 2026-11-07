@@ -51,14 +51,14 @@ function AddonRow({ a, ar }: { a: AdminAddon; ar: boolean }) {
     <li data-testid={`admin-addon-${a.code}`} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
       <span className="min-w-0 flex-1">
         <span className="font-semibold text-text-primary">{ar ? a.name_ar : a.name}</span>
-        <span className="ms-2 text-[12px] text-text-muted">
+        <span className="ms-2 text-xs text-text-muted">
           {ar ? `${a.active_workspaces} مساحة · ${a.requests_waiting} طلب بانتظار` : `${a.active_workspaces} workspaces · ${a.requests_waiting} waiting`}
         </span>
       </span>
       <input data-testid={`admin-addon-price-${a.code}`} inputMode="decimal" dir="ltr" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ''))}
         aria-label={ar ? 'السعر الشهري' : 'Monthly price'} placeholder={ar ? 'بلا سعر' : 'No price'}
         className="h-9 w-24 rounded-lg border border-border bg-surface px-2 text-sm" />
-      <span className="text-[12px] text-text-muted">{a.currency}</span>
+      <span className="text-xs text-text-muted">{a.currency}</span>
       <select data-testid={`admin-addon-readiness-${a.code}`} value={readiness} onChange={(e) => setReadiness(e.target.value as AdminAddon['readiness'])}
         className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
         <option value="coming_soon">{ar ? 'قريبًا' : 'Coming soon'}</option>

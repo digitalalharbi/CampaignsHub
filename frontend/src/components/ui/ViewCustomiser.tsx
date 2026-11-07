@@ -77,7 +77,7 @@ export function ViewCustomiser({
           no way to tell that rows are missing on purpose. Rendered even when nothing is narrowed, so
           its absence never has to be interpreted.
         */}
-        <span data-testid={`${id}-applied`} className="min-w-0 text-[13px] text-text-secondary">
+        <span data-testid={`${id}-applied`} className="min-w-0 text-xs text-text-secondary">
           {summary}
         </span>
 
@@ -86,7 +86,7 @@ export function ViewCustomiser({
             type="button"
             data-testid={`${id}-clear`}
             onClick={onClear}
-            className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-text-muted underline underline-offset-2 hover:text-text-primary"
           >
             <X size={13} aria-hidden /> {ar ? 'إزالة الفلاتر' : 'Clear'}
           </button>
