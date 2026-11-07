@@ -112,6 +112,48 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * MONEY-USD-001 (Owner: «العملة») — a project with no figure in the window is not a project that spent nothing.
+     *
+     * The seeded agency printed «الإنفاق 0 USD» beside SAR rows for projects with no rows at all: the sums
+     * coalesce to 0 and the unit falls back to the reporting default. A withheld figure never prints as zero,
+     * and the row says «no data» in the product's own words — in both languages, with and without money.
+     */
+    public function test_a_project_with_no_figures_says_no_data_and_never_prints_zero_in_a_currency(): void
+    {
+        $empty = [
+            'project_id' => 'p2', 'project_name' => 'Quiet Project', 'currency' => 'USD',
+            'totals' => ['spend' => 0.0, 'conversions' => 0.0, 'impressions' => 0.0, 'revenue' => 0.0],
+            'reported' => ['spend' => false, 'conversions' => false, 'impressions' => false, 'revenue' => false],
+            'change' => [], 'budget' => [],
+            'freshness' => ['state' => 'fresh', 'sync_failed' => false, 'failing' => []],
+        ];
+        $withData = array_merge($this->digest()['projects'][0], ['currency' => 'SAR']);
+        $digest = $this->digest(['currency' => 'SAR', 'projects' => [$withData, $empty]]);
+
+        foreach (['ar' => ['لا بيانات', 'لا أرقام مسجّلة'], 'en' => ['No data', 'No figures recorded']] as $locale => [$chip, $line]) {
+            $html = $this->renderOf($digest, $locale);
+            $quiet = (string) substr($html, (int) strrpos($html, 'data-block="portfolio-row"'));
+            $quiet = (string) substr($quiet, 0, (int) strpos($quiet, '</table>') + 8);
+            $this->assertStringContainsString('Quiet Project', $quiet);
+            $this->assertStringContainsString($chip, $quiet, "[$locale] the row says it has no data");
+            $this->assertStringContainsString($line, $quiet);
+            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR)\b/u', $quiet, "[$locale] a withheld figure is never «0 USD»");
+            $this->assertStringNotContainsString('USD', $quiet, "[$locale] no currency is stated beside a figure nobody has");
+            $this->assertStringNotContainsString('within the range', $quiet, "[$locale] no verdict is offered on nothing");
+            $this->assertStringContainsString('9,400', $html, "[$locale] the project with data keeps its spend");
+        }
+
+        // The member without money.view gets the same honest row, and no spend either way.
+        $restricted = (string) (new DailyDigestMail($digest, 'en', 'Mohammed', 'daily', null, 'restricted'))->render();
+        $this->assertStringContainsString('No data', $restricted);
+        $this->assertStringNotContainsString('0 USD', $restricted);
+
+        // The presenter itself: a coalesced spend/revenue is no card; a measured zero still is one.
+        $this->assertNull((new DigestPresenter('ar', 1, 'SAR'))->card('spend', ['spend' => 0.0], ['spend' => false], []));
+        $this->assertNotNull((new DigestPresenter('ar', 1, 'SAR'))->card('spend', ['spend' => 0.0], ['spend' => true], []));
+    }
+
+    /**
      * The account line carries no blended cost per result — and no sentence saying so.
      *
      * Across projects it would divide one client's money by another client's orders, so it is not
