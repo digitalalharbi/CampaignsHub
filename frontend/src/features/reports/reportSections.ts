@@ -103,14 +103,9 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
   /*
    * REPORT-WEBSITE-TAB-001 — the website pages follow the live link's «الموقع» tab, in its order: key figures and trend,
    * channels / devices / website funnel, the attribution match, the website against the platforms, why the gap, the
-   * classification, the tables, the products. The one headline strip of the summary is NOT a website page: it sits with the
-   * summary, straight after the executive summary (or the cover).
+   * classification, the tables, the products. The one headline strip of the summary lives on the live link only.
    */
-  if (named('ga4_pulse', data.ga4_pulse)) {
-    const at = slides.findIndex((x) => x.type === 'executive_summary')
-    const cover = slides.findIndex((x) => x.type === 'cover')
-    slides.splice(at !== -1 ? at + 1 : cover !== -1 ? cover + 1 : 0, 0, { id: '__ga4_pulse', type: '__ga4_pulse', order: 0, visible: true } as S)
-  }
+  // The headline strip (`ga4_pulse`) is a live-link element: a page of four figures on paper measured empty (util 0.01) and failed the layout gate, and the same figures are the first tiles of the overview page.
   if (named('ga4_overview', data.ga4_overview)) slides.push({ id: '__ga4_overview', type: '__ga4_overview', order: 9990, visible: true } as S)
   if (named('ga4_acquisition', data.ga4_acquisition)) slides.push({ id: '__ga4_acquisition', type: '__ga4_acquisition', order: 9991, visible: true } as S)
   if (named('ga4_attribution', data.ga4_attribution)) {

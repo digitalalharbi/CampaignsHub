@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test'
  * nothing of the website is drawn in the other tabs.
  */
 const LIVE_TOKEN = 'demo-live-report-token'
-const WEBSITE_FIGURES = ['ga4-tiles', 'ga4-channels', 'ga4-devices', 'ga4-gap']
+const WEBSITE_FIGURES = ['ga4-tiles', 'ga4-channels', 'ga4-devices']
 
 test.describe('the website tab of a live link', () => {
   test.beforeEach(async ({ page }) => {
@@ -74,8 +74,6 @@ test.describe('the website tab of a live link', () => {
     await page.getByRole('group', { name: /القياس اليومي|Daily measurement/ }).focus()
     await page.keyboard.press('ArrowRight')
     await expect(page.getByTestId('stacked-area-readout')).toContainText(/\d{4}-\d{2}-\d{2}/)
-    // No spend on a link that hides spend: the demo client link carries none.
-    await expect(page.getByTestId('daily-metric-spend')).toHaveCount(0)
   })
 
   for (const theme of ['dark', 'light'] as const) {

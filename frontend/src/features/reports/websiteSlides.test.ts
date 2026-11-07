@@ -16,11 +16,11 @@ const base: Page[] = [
 ]
 
 describe('the saved report and the PDF follow the website tab', () => {
-  it('places the website pages in the live tab order and the headline strip right after the executive summary', () => {
+  it('places the website pages in the live tab order and prints no page for the headline strip', () => {
     const slides = withGa4Slides<Page>([...base], data)
 
     expect(slides.map((s) => s.type)).toEqual([
-      'cover', 'executive_summary', '__ga4_pulse', 'platform_comparison',
+      'cover', 'executive_summary', 'platform_comparison',
       '__ga4_overview', '__ga4_acquisition', '__ga4_attribution', '__ga4_reasons', '__ga4_classification', '__ga4_tables', '__ga4_products',
     ])
   })
