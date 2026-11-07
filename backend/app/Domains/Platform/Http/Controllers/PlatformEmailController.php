@@ -6,6 +6,7 @@ namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailAddress;
 use App\Domains\Notifications\Support\MailDeliveryState;
@@ -102,7 +103,51 @@ final class PlatformEmailController extends Controller
             'test_sends' => $rows->filter(fn (array $row): bool => $row['is_test'] ?? false)->count(),
             'transport' => $this->transport(),
             'available_states' => MailDeliveryState::ALL,
+            // NOTIFICATION-ENROLMENT-001 — «is it effective?» answered from the product, not from a query nobody remembers.
+            'reach' => $this->reach(),
         ], 'Email delivery ledger retrieved.');
+    }
+
+    /**
+     * Who the notification system can reach at all, and when each digest last actually went out.
+     *
+     * Staff members only (the same population enrolment uses), counted per workspace they belong to. `enrolled` is a person
+     * with a preferences row — the thing every sender is driven from — and `digest_on` is the part of them with at least one
+     * periodic digest switched on. `last_digest` is the newest SCHEDULED send per rhythm: an on-demand «send me this now»
+     * is ledgered under another kind and must never make the scheduler look like it ran.
+     *
+     * @return array{members: int, verified: int, enrolled: int, digest_on: int, last_digest: array<string, ?string>}
+     */
+    private function reach(): array
+    {
+        $rows = DB::table('memberships as m')
+            ->join('users as u', 'u.id', '=', 'm.user_id')
+            ->leftJoin('notification_preferences as p', fn ($j) => $j->on('p.tenant_id', '=', 'm.tenant_id')->on('p.user_id', '=', 'm.user_id'))
+            ->where('m.status', 'active')->whereIn('m.portal', EnrolMemberNotifications::STAFF_PORTALS)
+            ->where('u.is_platform_admin', false)->whereNull('u.disabled_at')
+            ->get(['m.tenant_id', 'm.user_id', 'u.email_verified_at', 'p.id as pref_id', 'p.digests'])
+            ->unique(fn (object $r): string => $r->tenant_id.':'.$r->user_id);
+
+        $enrolled = $rows->filter(fn (object $r): bool => $r->pref_id !== null);
+        $digestOn = $enrolled->filter(function (object $r): bool {
+            $chosen = (array) json_decode((string) ($r->digests ?? '[]'), true);
+
+            return ($chosen['daily'] ?? false) === true || ($chosen['weekly'] ?? false) === true || ($chosen['monthly'] ?? false) === true;
+        });
+
+        $last = [];
+        foreach (['daily', 'weekly', 'monthly'] as $kind) {
+            $at = DB::table('digest_sends')->where('kind', $kind)->where('status', 'sent')->max('sent_at');
+            $last[$kind] = $at === null ? null : Carbon::parse((string) $at)->toIso8601String();
+        }
+
+        return [
+            'members' => $rows->count(),
+            'verified' => $rows->filter(fn (object $r): bool => $r->email_verified_at !== null)->count(),
+            'enrolled' => $enrolled->count(),
+            'digest_on' => $digestOn->count(),
+            'last_digest' => $last,
+        ];
     }
 
     /**
