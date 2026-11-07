@@ -39,7 +39,7 @@ final class SyncMeasurementCommand extends Command
         {--days= : How many days back to re-ask for; defaults to the restatement window}
         {--property= : Limit the sweep to one property id}';
 
-    protected $description = 'Queue a GA4 sync for every property selected for a project.';
+    protected $description = 'Queue a website sync for every property selected for a project.';
 
     public function handle(): int
     {

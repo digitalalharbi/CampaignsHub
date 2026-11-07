@@ -99,7 +99,7 @@ final class SectionSettings
     /** @param list<string>|null $views */
     public function withViews(?array $views): self
     {
-        return new self($this->chosen, $this->streams, ReportViews::normalise($views), $this->ga4Hidden);
+        return new self($this->chosen, $this->streams, ReportViews::normalise(ReportViews::explicit($views)), $this->ga4Hidden);
     }
 
     /**

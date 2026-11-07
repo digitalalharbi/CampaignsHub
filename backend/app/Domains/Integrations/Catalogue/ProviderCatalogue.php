@@ -429,8 +429,8 @@ final class ProviderCatalogue
         return new ProviderDefinition(
             key: 'ga4',
             kind: ProviderKind::Measurement,
-            label: 'Google Analytics 4',
-            labelAr: 'جوجل أناليتكس 4',
+            label: 'Google Analytics',
+            labelAr: 'جوجل أناليتكس',
             fields: [
                 ProviderField::plain('client_id', 'OAuth client ID', 'معرّف عميل OAuth',
                     'Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs (type: Web application)',

@@ -93,7 +93,7 @@ final class Ga4ReportSections
             ],
             'ga4_acquisition' => $reading['channels'] === null && $reading['devices'] === null && $this->funnelIsEmpty($reading['funnel'])
                 ? null
-                : ['currency' => $reading['currency'], 'channels' => $reading['channels'], 'devices' => $reading['devices'], 'funnel' => $reading['funnel']],
+                : ['currency' => $reading['currency'], 'channels' => $reading['channels'], 'devices' => $reading['devices'], 'channels_meta' => $reading['channels_meta'] ?? null, 'devices_meta' => $reading['devices_meta'] ?? null, 'funnel' => $reading['funnel']],
             'ga4_platform_gap' => $gap['rows'] === [] && $gap['unpaid'] === [] && $gap['other_paid'] === null
                 ? null
                 : $gap + ['currency' => $reading['currency']],

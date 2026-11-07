@@ -67,7 +67,7 @@ final class StoreAnalyticsController extends Controller
         [$from, $to] = $this->window($request);
         $data = $this->sources->sources($this->tenantId(), $this->projectId(), $from, $to, $this->sourceOptions($request), all: true);
         $keys = ['dimension_1', 'dimension_2', 'orders', 'confirmed', 'net_revenue', 'ga4_sessions', 'ga4_add_to_carts', 'ga4_purchases', 'ga4_revenue', 'confirmed_per_session'];
-        $head = ['Source', 'Detail', 'Store orders', 'Store confirmed', 'Store net ('.($data['currency'] ?? '').')', 'GA4 sessions', 'GA4 add to carts', 'GA4 purchases', 'GA4 revenue', 'Store confirmed per GA4 session', 'Methods'];
+        $head = ['Source', 'Detail', 'Store orders', 'Store confirmed', 'Store net ('.($data['currency'] ?? '').')', 'Website sessions', 'Website add to carts', 'Website purchases', 'Website revenue', 'Store confirmed per website session', 'Methods'];
         $lines = array_map(static function (array $row) use ($keys): array {
             $line = array_map(static fn (string $k): mixed => $row[$k] ?? null, $keys);
             $line[] = implode('; ', array_map(static fn (string $m, int $n): string => "$m: $n", array_keys($row['methods']), $row['methods']));

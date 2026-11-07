@@ -281,12 +281,12 @@ final class StoreDepth
             'visits' => $visits,
             'visits_source' => $source,
             'label_ar' => match ($source) {
-                'ga4' => 'طلبات المتجر المؤكدة ÷ جلسات GA4',
+                'ga4' => 'طلبات المتجر المؤكدة ÷ جلسات الموقع',
                 'ad_platforms' => 'طلبات المتجر المؤكدة ÷ زيارات صفحة الهبوط كما أبلغت المنصات (مدفوعة فقط)',
                 default => null,
             },
             'label_en' => match ($source) {
-                'ga4' => 'Store-confirmed orders ÷ GA4 sessions',
+                'ga4' => 'Store-confirmed orders ÷ website sessions',
                 'ad_platforms' => 'Store-confirmed orders ÷ landing-page views the platforms reported (paid only)',
                 default => null,
             },

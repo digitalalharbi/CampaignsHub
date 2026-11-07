@@ -177,11 +177,11 @@ final class AttributionTransparency
             'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms, $creditConfig),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
             'measurement' => [
-                'label_ar' => 'ما قاسه الموقع (GA4)',
-                'label_en' => 'Site-Measured (GA4)',
+                'label_ar' => 'ما قاسه الموقع',
+                'label_en' => 'Site-Measured',
                 'available' => $ga4 !== null,
-                'basis_ar' => 'زيارات مدفوعة كما سجّلها GA4: الوسيط مدفوع والمصدر هو المنصة. لا يُجمع مع ما أبلغت به المنصات ولا مع ما أكده المتجر.',
-                'basis_en' => 'Paid visits as GA4 recorded them: a paid medium with the platform as source. Never added to what the platforms reported or to what the store confirmed.',
+                'basis_ar' => 'زيارات مدفوعة كما سجّلها الموقع: الوسيط مدفوع والمصدر هو المنصة. لا يُجمع مع ما أبلغت به المنصات ولا مع ما أكده المتجر.',
+                'basis_en' => 'Paid visits as the website recorded them: a paid medium with the platform as source. Never added to what the platforms reported or to what the store confirmed.',
                 'other_paid' => $ga4['other_paid'] ?? null,
             ],
         ];
@@ -544,7 +544,7 @@ final class AttributionTransparency
         $measurement = $this->measurement($tenantId, $projectId, $fromDate, $toDate);
         $labels = [
             'platform_reported' => ['ar' => 'ما أبلغت به المنصات', 'en' => 'Platform-reported'],
-            'measurement' => ['ar' => 'القياس (GA4)', 'en' => 'Measurement (GA4)'],
+            'measurement' => ['ar' => 'القياس', 'en' => 'Measurement'],
             'commerce' => ['ar' => 'ما أكّده المتجر', 'en' => 'Commerce truth'],
             'reconciled' => ['ar' => 'المُسوّى', 'en' => 'Reconciled'],
         ];
@@ -783,8 +783,8 @@ final class AttributionTransparency
                 'available' => false,
                 'basis' => 'measurement',
                 'unavailable_reason' => 'no_measurement_rows',
-                'note_ar' => 'لم تُقرأ أي أرقام قياس لهذه الفترة — لا خاصية GA4 مربوطة أو لم تُزامَن بعد.',
-                'note_en' => 'No measurement figures were read for this period — no GA4 property is connected, or none has synced yet.',
+                'note_ar' => 'لم تُقرأ أي أرقام قياس لهذه الفترة — لا قياس للموقع مربوط أو لم تُزامَن بعد.',
+                'note_en' => 'No measurement figures were read for this period — no website property is connected, or none has synced yet.',
                 'transactions' => null,
                 'revenue' => null,
                 'currency' => null,
@@ -795,8 +795,8 @@ final class AttributionTransparency
             'available' => true,
             'basis' => 'measurement',
             'unavailable_reason' => null,
-            'note_ar' => 'ما عدّته خاصية GA4 على الموقع نفسه. طبقة قائمة بذاتها، لا تُصحّح المنصات ولا الدفتر ولا تُخلط بهما.',
-            'note_en' => 'What the GA4 property counted on the site itself. A layer of its own — it corrects neither the platforms nor the ledger and is blended into neither.',
+            'note_ar' => 'ما سجّله قياس الموقع على الموقع نفسه. طبقة قائمة بذاتها، لا تُصحّح المنصات ولا الدفتر ولا تُخلط بهما.',
+            'note_en' => 'What the website property counted on the site itself. A layer of its own — it corrects neither the platforms nor the ledger and is blended into neither.',
             'transactions' => isset($rows['transactions']) ? (float) $rows['transactions']->total : null,
             'revenue' => isset($rows['revenue']) ? round((float) $rows['revenue']->total, 2) : null,
             'currency' => $rows['revenue']->currency ?? null,
@@ -903,7 +903,7 @@ final class AttributionTransparency
             'sources' => [
                 ['key' => 'platform_reported', 'label_ar' => 'ما أبلغت به المنصات', 'label_en' => 'Platform-reported', 'orders' => $reported === [] ? null : round(array_sum(array_column($reported, 'orders')), 2), 'note_ar' => 'كل منصة تعدّ ما تنسبه لنفسها، فقد تعدّ البيعة نفسها أكثر من منصة.', 'note_en' => 'Each platform counts what it credits itself with, so one sale can be counted by several.'],
                 ['key' => 'store_confirmed', 'label_ar' => 'ما أكّده المتجر', 'label_en' => 'Store-confirmed', 'orders' => $hasStore ? $live->count() : null, 'note_ar' => 'سجل التاجر نفسه: صف واحد لكل بيعة.', 'note_en' => 'The merchant’s own ledger: one row per sale.'],
-                ['key' => 'ga4_measured', 'label_ar' => 'ما قاسه الموقع (GA4)', 'label_en' => 'GA4-measured', 'orders' => $ga4 === null ? null : round(array_sum(array_column($ga4, 'purchases')), 2), 'note_ar' => 'مشتريات الزيارات المدفوعة كما سجّلها GA4 بنموذجه هو.', 'note_en' => 'Purchases in paid visits as GA4 recorded them, under its own model.'],
+                ['key' => 'ga4_measured', 'label_ar' => 'ما قاسه الموقع', 'label_en' => 'Website-measured', 'orders' => $ga4 === null ? null : round(array_sum(array_column($ga4, 'purchases')), 2), 'note_ar' => 'مشتريات الزيارات المدفوعة كما سجّلها الموقع بنموذجه هو.', 'note_en' => 'Purchases in paid visits as the website recorded them, under its own model.'],
             ],
             'rows' => AdPlatforms::sortRows($rows, 'platform'),
             'store_unattributed' => $hasStore ? ['orders' => $unattributed->count(), 'revenue' => round((float) $unattributed->sum(static fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2)] : null,
@@ -941,8 +941,8 @@ final class AttributionTransparency
         }
 
         return $measured === null
-            ? ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة، ولا خاصية GA4 للمقارنة.', 'en' => 'The platform and the store agree for this period; no GA4 property to compare.']
-            : ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة. نموذج GA4 مختلف، فلا يُفترض تطابقه معهما.', 'en' => 'The platform and the store agree for this period. GA4 uses another model, so it is not assumed to match.'];
+            ? ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة، ولا قياس للموقع للمقارنة.', 'en' => 'The platform and the store agree for this period; no website property to compare.']
+            : ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة. نموذج الموقع مختلف، فلا يُفترض تطابقه معهما.', 'en' => 'The platform and the store agree for this period. The website uses another model, so it is not assumed to match.'];
     }
 
     /**

@@ -17,6 +17,7 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Sections\SectionSettings;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ShareService;
@@ -127,6 +128,66 @@ final class Ga4ReportSectionsTest extends TestCase
 
         $this->assertSame(['sources', 'landing_pages', 'countries', 'products'], array_keys($live['ga4_tables']['tables']));
         $this->assertSame('عباية سوداء', $live['ga4_tables']['tables']['products']['rows'][0]['name']);
+    }
+
+    public function test_the_website_view_is_the_only_view_that_draws_a_website_component(): void
+    {
+        $website = [...Ga4ReportSections::KEYS, 'site_measurement', 'store_analytics'];
+        $this->assertContains('website', ReportViews::VIEWS);
+        $this->assertSame(['ar' => 'الموقع', 'en' => 'Website'], ReportViews::LABELS['website']);
+        foreach ($website as $key) {
+            $drawnBy = array_keys(array_filter(ReportViews::DRAWS, static fn (array $keys): bool => in_array($key, $keys, true)));
+            $this->assertCount(1, $drawnBy, "$key must appear in exactly one view, found: ".implode(',', $drawnBy));
+            $this->assertSame($drawnBy[0], app(ReportSectionRegistry::class)->get($key)->view, "$key is grouped under the view that draws it");
+        }
+        $this->assertSame(['summary'], array_keys(array_filter(ReportViews::DRAWS, static fn (array $keys): bool => in_array('ga4_pulse', $keys, true))), 'the summary carries the one headline strip');
+        foreach (array_diff($website, ['ga4_pulse']) as $key) {
+            $this->assertSame(['website'], array_keys(array_filter(ReportViews::DRAWS, static fn (array $keys): bool => in_array($key, $keys, true))));
+        }
+    }
+
+    public function test_a_link_without_the_website_view_carries_no_website_data_and_a_legacy_dashboard_list_gains_it(): void
+    {
+        $with = $this->read($this->link(['settings' => ['views' => ['summary', 'website']]]));
+        $this->assertIsArray($with['ga4_overview']);
+        $this->assertContains('website', $with['report_views']);
+
+        $without = $this->read($this->link(['settings' => ['views' => ['summary', 'platforms']]]));
+        foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $key) {
+            $this->assertNull($without[$key] ?? null, "$key stayed in the JSON of a link that has no website view");
+        }
+        $this->assertNotContains('website', $without['report_views']);
+
+        $legacy = $this->read($this->link(['settings' => ['views' => ['summary', 'dashboard']]]));
+        $this->assertContains('website', $legacy['report_views'], 'a list stored before the website view existed drew the store parts on the dashboard');
+        $this->assertIsArray($legacy['ga4_overview']);
+
+        $chosen = $this->read($this->link(['settings' => ['views' => ['summary', 'dashboard', ReportViews::WEBSITE_OFF]]]));
+        $this->assertNotContains('website', $chosen['report_views'], 'a dashboard without the website, chosen now, stays without it');
+        $this->assertNotContains(ReportViews::WEBSITE_OFF, $chosen['report_views'], 'the storage marker is never shown');
+        $this->assertNull($chosen['ga4_overview'] ?? null);
+    }
+
+    public function test_the_platform_chips_and_the_not_included_banner_never_carry_the_website(): void
+    {
+        $live = $this->read($this->link([], ['providers' => ['snapchat', 'ga4']]));
+
+        $this->assertSame(['snapchat'], $live['available']['providers'], 'the chip row is ad platforms only');
+        $this->assertNotContains('ga4', array_column($live['freshness'], 'provider'), 'the website is not a platform these figures leave out');
+    }
+
+    public function test_the_marketing_preset_cuts_sales_figures_not_the_website_tab_and_a_hidden_chart_takes_its_closing_figures(): void
+    {
+        $live = $this->read($this->link(['settings' => ['ga4_hidden' => Ga4Visibility::forPreset('marketing')]]));
+        $this->assertContains('website', $live['report_views'], 'a preset never hides the tab wholesale');
+        $this->assertIsArray($live['ga4_overview']);
+        $this->assertNotContains('revenue', array_column($live['ga4_overview']['kpis'], 'key'));
+        $this->assertContains('sessions', array_column($live['ga4_overview']['kpis'], 'key'));
+
+        $live = $this->read($this->link(['settings' => ['ga4_hidden' => ['chart.channels']]]));
+        $this->assertNull($live['ga4_acquisition']['channels']);
+        $this->assertNull($live['ga4_acquisition']['channels_meta'], 'the closing figures of a hidden chart are gone from the JSON');
+        $this->assertIsArray($live['ga4_acquisition']['devices_meta']);
     }
 
     public function test_a_client_report_never_carries_campaign_names_or_spend(): void

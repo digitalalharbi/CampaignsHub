@@ -40,10 +40,10 @@ final class Ga4GapExplainer
 {
     /** key => [ar, en] */
     private const LABELS = [
-        'no_trace' => ['حملات بلا أثر', 'No GA4 trace'],
+        'no_trace' => ['حملات بلا أثر', 'No website trace'],
         'attribution_rule' => ['قاعدة الإسناد', 'Attribution rule'],
         'untagged_channel' => ['زيارات بلا حملة', 'Untagged visits'],
-        'no_platform_trace' => ['مبيعات بلا منصة', 'No platform trace'],
+        'no_platform_trace' => ['من خارج الحملات', 'Outside campaigns'],
         'unexplained' => ['غير مفسَّر', 'Unexplained'],
     ];
 

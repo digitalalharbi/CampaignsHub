@@ -58,7 +58,7 @@ final class Ga4AttributionMatch
             'last_synced_at' => $property->last_synced_at?->toIso8601String(),
             'evidence' => $match['evidence'],
             'filters' => ['platform' => $o['platform'] ?? null, 'channel' => $o['channel'] ?? null, 'campaign' => $o['campaign'] ?? null],
-            'model_note' => ['en' => 'GA4 session-scoped source / medium and campaign. No model switch: the Data API reports one.', 'ar' => 'مصدر الجلسة ووسطها وحملتها كما يسجّلها GA4. لا تبديل للنموذج لأن الواجهة تعيد نموذجًا واحدًا.'],
+            'model_note' => ['en' => 'Website session-scoped source / medium and campaign. No model switch: the Data API reports one.', 'ar' => 'مصدر الجلسة ووسطها وحملتها كما يسجّلها الموقع. لا تبديل للنموذج لأن الواجهة تعيد نموذجًا واحدًا.'],
         ];
 
         if (! empty($o['compare'])) {

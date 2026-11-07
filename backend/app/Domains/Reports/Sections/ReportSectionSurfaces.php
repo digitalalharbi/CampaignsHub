@@ -209,7 +209,7 @@ final class ReportSectionSurfaces
             }, $payload['attention']);
         }
         // The tabs a reader is offered, named by the server like the sections are.
-        $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
+        $payload['report_views'] = ReportViews::visible($this->viewsFor($report, $share)) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
         // built from a link (page, print, file). Absent means every column.
         // IP-TRACE-001 — the link's opaque reference travels with every file built from it (CSV, XLSX manifest, print).
