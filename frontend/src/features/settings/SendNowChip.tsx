@@ -40,7 +40,7 @@ export function SendNowChip({ label, run, testId }: Props) {
       >
         {label}
       </button>
-      <span data-testid={`${testId}-result`} aria-live="polite" className="min-h-5 text-[13px] text-text-secondary">{result}</span>
+      <span data-testid={`${testId}-result`} aria-live="polite" className="min-h-5 text-xs text-text-secondary">{result}</span>
     </span>
   )
 }

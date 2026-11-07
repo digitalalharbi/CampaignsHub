@@ -25,7 +25,7 @@ export function ReachStrip({ reach, ar }: { reach: Reach; ar: boolean }) {
   const tile = (testId: string, n: number, label: string, tone: string) => (
     <div key={testId} data-testid={testId} className="rounded-xl border border-border bg-surface px-4 py-3">
       <div dir="ltr" className={`text-start text-lg font-bold ${tone}`}>{n}</div>
-      <div className="text-[13px] text-text-secondary">{label}</div>
+      <div className="text-xs text-text-secondary">{label}</div>
     </div>
   )
 
