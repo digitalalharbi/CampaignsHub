@@ -53,3 +53,22 @@ describe('the website is never called GA4 in the interface', () => {
     expect(isAdPlatform('snapchat')).toBe(true)
   })
 })
+
+/**
+ * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — «بشكل صارم لا تُظهر المصدر للبيانات». No report surface (the live link, the saved
+ * report and its print, the Analytics website views) names the measurement tool or shows a property name / URL. The connection screens
+ * (integrations, settings, measurement properties, forms' conversion destinations) are where an account is linked and may name it.
+ */
+describe('a report surface names no measurement source', () => {
+  const REPORT_SURFACES = ['/src/features/reports/', '/src/features/analytics/', '/src/components/']
+
+  it('says neither «Google Analytics» nor «جوجل أناليتكس», nor prints a property name, id or URL', () => {
+    const offenders = Object.entries(TREE)
+      .filter(([path]) => REPORT_SURFACES.some((d) => path.startsWith(d)) && !/\.test\.(ts|tsx)$/.test(path))
+      .flatMap(([path, source]) => code(source).split('\n').map((line, i) => [path, i + 1, line] as const))
+      .filter(([, , line]) => /Google Analytics|جوجل أناليتكس|analytics\.google\.com|property\??\.(name|id|url|uri)\b|default_?uri|website_?url/i.test(line))
+      .map(([path, n]) => `${path}:${n}`)
+
+    expect(offenders, 'a report surface names the source: say «الموقع» / «Website»').toEqual([])
+  })
+})

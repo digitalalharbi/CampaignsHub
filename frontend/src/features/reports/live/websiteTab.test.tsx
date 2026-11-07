@@ -127,13 +127,16 @@ describe('the «الموقع» tab', () => {
     for (const k of ['sessions', 'users_daily_sum', 'new_users', 'bounce_rate', 'engagement_rate', 'avg_session_seconds', 'transactions', 'revenue', 'aov', 'conversion_rate', 'add_to_carts', 'checkouts']) expect(ids).toContain(`ga4-tile-${k}`)
   })
 
-  it('names the non-campaign sales clearly: «outside campaigns» with its sub-chips', async () => {
+  it('names the paths without a tracked ad click «Indirect path», with its sub-chips, and shows no property URL', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
 
-    const outside = within(website).getByTestId('outside-campaigns')
-    expect(outside).toHaveTextContent('Outside campaigns')
-    expect(within(outside).getByTestId('outside-organic')).toHaveTextContent('Free')
+    const outside = within(website).getByTestId('indirect-path')
+    expect(outside).toHaveTextContent('Indirect path')
+    expect(within(outside).getByTestId('indirect-organic')).toHaveTextContent('Free')
+    expect(website).not.toHaveTextContent(/Outside campaigns/i)
+    // The property's name and URL never reach a report.
+    expect(website).not.toHaveTextContent('example.com')
     expect(website).not.toHaveTextContent(/No platform trace/i)
   })
 
@@ -213,7 +216,7 @@ describe('the «الموقع» tab', () => {
     expect(within(website).getByTestId('ga4-table-tab-sources')).toBeInTheDocument()
     expect(within(website).queryByTestId('ga4-table-tab-products')).toBeNull()
     // The umbrella is drawn once.
-    expect(within(website).getAllByTestId('outside-campaigns')).toHaveLength(1)
+    expect(within(website).getAllByTestId('indirect-path')).toHaveLength(1)
   })
 
   it('leads with big headline cards and their small sub-cards: visits over users, new, bounce, engagement, duration; sales over orders, basket, conversion', async () => {

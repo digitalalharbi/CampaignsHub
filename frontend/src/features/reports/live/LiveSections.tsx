@@ -317,8 +317,8 @@ export function SiteMeasurementSection({ payload, ar }: { payload: LivePayload; 
           */}
           <p data-testid="site-measurement-not-blended" className="mt-1 text-xs leading-relaxed text-text-secondary">
             {ar
-              ? 'هذه أرقام موقعك كما قاسها جوجل أناليتكس، ولا تُجمع مع أرقام المنصات الإعلانية أعلاه — نموذج الإحالة مختلف.'
-              : 'These are your site’s own figures as Google Analytics measured them. They are not added to the ad platforms’ figures above — the attribution model is different.'}
+              ? 'أرقام القياس الرقمي لموقعك لا تُجمع مع أرقام المنصات الإعلانية — لكلٍّ نموذج إسناده.'
+              : 'Your website’s digital measurement, never added to the platforms’ figures — each has its own attribution.'}
           </p>
         </div>
         {measured.property.timezone && (

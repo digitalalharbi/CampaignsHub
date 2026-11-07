@@ -58,10 +58,18 @@ final class Ga4Visibility
     /** Element keys that are not a fixed list: `platform:<key>` hides one platform's row everywhere. */
     private const PLATFORM = '/^platform:[a-z0-9_]{1,40}$/';
 
+    /**
+     * REPORT-WEBSITE-GAP-READING-001 — the «غير مقاس» chips of the gap reading, a SHOW/HIDE of their own so an operator can keep
+     * them off a client link. In no preset: «تسويق» and «مبيعات» cut figures, and these are not figures. Shown unless hidden.
+     *
+     * @var list<string>
+     */
+    public const NOTES = ['gap.unmeasured'];
+
     /** @return list<string> */
     public static function catalogue(): array
     {
-        return [...self::MARKETING, ...self::SALES];
+        return [...self::MARKETING, ...self::SALES, ...self::NOTES];
     }
 
     /**
@@ -479,6 +487,11 @@ final class Ga4Visibility
             }
         }
         $r['reasons'] = array_values(array_filter((array) ($r['reasons'] ?? []), static fn ($x): bool => is_array($x) && ! isset($h['gap.reason.'.($x['key'] ?? '')])));
+        if (isset($h['gap.unmeasured'])) {
+            // Absent from the data, not only the page: the unmeasured causes and every context chip that was not measured.
+            $r['unmeasured'] = [];
+            $r['context'] = array_values(array_filter((array) ($r['context'] ?? []), static fn ($x): bool => is_array($x) && ($x['measured'] ?? false) === true));
+        }
         $r['hidden_reasons'] = true;
 
         return $r['reasons'] === [] && ($r['headline']['gap'] ?? null) === null ? null : $r;

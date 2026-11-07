@@ -4,9 +4,10 @@
  */
 export type Ga4Preset = 'all' | 'marketing' | 'sales' | 'custom'
 type L = { ar: string; en: string }
-export interface ElementGroup { key: string; label: L; items: Array<{ key: string; label: L; sales: boolean }> }
+/** `sales: null` — a note, not a figure (`gap.unmeasured`): in no preset, shown unless hidden by hand. */
+export interface ElementGroup { key: string; label: L; items: Array<{ key: string; label: L; sales: boolean | null }> }
 
-const e = (key: string, ar: string, en: string, sales: boolean) => ({ key, label: { ar, en }, sales })
+const e = (key: string, ar: string, en: string, sales: boolean | null) => ({ key, label: { ar, en }, sales })
 
 export const ELEMENT_GROUPS: ElementGroup[] = [
   { key: 'tiles', label: { ar: 'البطاقات', en: 'Tiles' }, items: [
@@ -28,19 +29,22 @@ export const ELEMENT_GROUPS: ElementGroup[] = [
     e('col.purchases', 'الشراء', 'Orders', true), e('col.revenue', 'المبيعات', 'Sales', true), e('col.aov', 'السلة', 'Basket', true), e('col.conversion_rate', 'التحويل', 'CVR', true),
   ] },
   { key: 'match', label: { ar: 'المطابقة', en: 'Match' }, items: [
-    e('attr.claimed', 'ما ادّعته المنصة', 'Claimed', false), e('attr.confidence', 'الثقة', 'Confidence', false), e('attr.unattributed', 'من خارج الحملات', 'Outside campaigns', false), e('attr.unmatched', 'حملات بلا أثر', 'Campaigns, no trace', false),
+    e('attr.claimed', 'ما ادّعته المنصة', 'Claimed', false), e('attr.confidence', 'الثقة', 'Confidence', false), e('attr.unattributed', 'مسار غير مباشر', 'Indirect path', false), e('attr.unmatched', 'نقرات خارج التتبع', 'Clicks outside tracking', false),
     e('attr.sales', 'مبيعات الموقع', 'Website sales', true), e('attr.gap', 'الفرق', 'Gap', true),
     e('dim.channel', 'تصنيف: قناة', 'By channel', false), e('dim.platform', 'تصنيف: منصة', 'By platform', false), e('dim.landing_page', 'تصنيف: صفحة', 'By page', false),
   ] },
-  { key: 'reasons', label: { ar: 'سبب الفرق', en: 'Why' }, items: [
-    e('gap.headline', 'الرقم الرئيسي', 'Headline', true), e('gap.reason.no_trace', 'حملات بلا أثر', 'No trace', true), e('gap.reason.attribution_rule', 'قاعدة الإسناد', 'Rule', true),
-    e('gap.reason.untagged_channel', 'زيارات بلا حملة', 'Untagged', true), e('gap.reason.no_platform_trace', 'من خارج الحملات', 'Outside campaigns', true),
+  { key: 'reasons', label: { ar: 'قراءة الفرق', en: 'Reading' }, items: [
+    e('gap.headline', 'الرقم الرئيسي', 'Headline', true), e('gap.reason.no_trace', 'نقرات خارج التتبع', 'Outside tracking', true), e('gap.reason.attribution_rule', 'قاعدة الإسناد', 'Rule', true),
+    e('gap.reason.untagged_channel', 'زيارات المنصة دون وسم', 'Untagged', true), e('gap.reason.no_platform_trace', 'مسار غير مباشر', 'Indirect path', true),
+  ] },
+  { key: 'notes', label: { ar: 'غير مقاس', en: 'Not measured' }, items: [
+    e('gap.unmeasured', 'غير مقاس', 'Not measured', null),
   ] },
 ]
 
 export const ALL_KEYS = ELEMENT_GROUPS.flatMap((g) => g.items.map((i) => i.key))
-export const SALES_KEYS = ELEMENT_GROUPS.flatMap((g) => g.items.filter((i) => i.sales).map((i) => i.key))
-export const MARKETING_KEYS = ELEMENT_GROUPS.flatMap((g) => g.items.filter((i) => !i.sales).map((i) => i.key))
+export const SALES_KEYS = ELEMENT_GROUPS.flatMap((g) => g.items.filter((i) => i.sales === true).map((i) => i.key))
+export const MARKETING_KEYS = ELEMENT_GROUPS.flatMap((g) => g.items.filter((i) => i.sales === false).map((i) => i.key))
 
 export function forPreset(p: Ga4Preset): string[] {
   return p === 'marketing' ? [...SALES_KEYS] : p === 'sales' ? [...MARKETING_KEYS] : []

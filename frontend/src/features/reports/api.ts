@@ -812,7 +812,8 @@ export interface LivePayload {
    * this link. Those are different, and merging them would tell a reader the site has no ecommerce.
    */
   site_measurement?: {
-    property: { id: string; name: string; timezone: string | null }
+    /** REPORT-WEBSITE-GAP-READING-001 — no property name or id on a report: only the calendar the days were measured on. */
+    property: { timezone: string | null }
     currency: string | null
     from: string
     to: string

@@ -368,6 +368,39 @@ final class Ga4ReportSectionsTest extends TestCase
         $this->assertSame(['channel', 'platform', 'landing_page'], array_keys($live['ga4_classification']['groups']));
     }
 
+    /**
+     * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — «بشكل صارم لا تُظهر المصدر للبيانات»: a report carries no property name, id or
+     * URL, and the gap reading speaks of tracking paths («مسار غير مباشر», «نقرات خارج التتبع»), never of sales «not from» the campaigns.
+     */
+    public function test_a_report_names_no_measurement_source_and_reads_the_gap_as_tracking_paths(): void
+    {
+        $this->choose(['site_measurement' => true]);
+        foreach (['live' => $this->live(), 'snapshot' => $this->snapshot()] as $surface => $data) {
+            $flat = (string) json_encode($data, JSON_UNESCAPED_UNICODE);
+            foreach (['Store 111', '"111"', 'Google Analytics', 'جوجل أناليتكس', 'بلا منصة', 'بلا أثر', 'بلا حملة', 'من خارج الحملات'] as $needle) {
+                $this->assertStringNotContainsString($needle, $flat, "{$surface}: {$needle}");
+            }
+            $labels = array_column($data['ga4_gap_reasons']['reasons'], 'label_ar', 'key');
+            $this->assertSame('مسار غير مباشر', $labels['no_platform_trace'], $surface);
+            $this->assertSame('نقرات خارج التتبع', $labels['no_trace'], $surface);
+            $this->assertSame('Indirect path', array_column($data['ga4_gap_reasons']['reasons'], 'label_en', 'key')['no_platform_trace']);
+        }
+    }
+
+    public function test_the_unmeasured_chips_are_a_switch_of_their_own_shown_unless_hidden(): void
+    {
+        $this->assertNotSame([], $this->live()['ga4_gap_reasons']['unmeasured'], 'nothing is hidden by default');
+        $this->assertNotContains('gap.unmeasured', Ga4Visibility::forPreset('marketing'));
+        $this->assertNotContains('gap.unmeasured', Ga4Visibility::forPreset('sales'));
+
+        $live = $this->read($this->link(['settings' => ['ga4_hidden' => ['gap.unmeasured']]]));
+        $this->assertSame([], $live['ga4_gap_reasons']['unmeasured']);
+        foreach ($live['ga4_gap_reasons']['context'] as $c) {
+            $this->assertTrue($c['measured'], $c['key'].' is an unmeasured chip and was hidden');
+        }
+        $this->assertNotSame([], $live['ga4_gap_reasons']['reasons'], 'the figures stay');
+    }
+
     public function test_a_client_reading_of_the_new_parts_has_no_spend_and_no_campaign_names(): void
     {
         $parts = array_intersect_key($this->live(), array_flip(['ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons']));

@@ -72,23 +72,27 @@ export const UNPAID: Record<string, L> = {
   organic: { ar: 'مجاني', en: 'Free' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
   other_paid: { ar: 'مدفوع آخر', en: 'Other paid' }, unassigned: { ar: 'غير محدد', en: 'Unassigned' },
 }
-/** REPORT-WEBSITE-TAB-001 — the one umbrella a client reads without explanation: visits and sales the campaigns did not bring. */
-export const OUTSIDE_CAMPAIGNS: L = { ar: 'من خارج الحملات', en: 'Outside campaigns' }
+/**
+ * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — «مسار غير مباشر»: visits and sales that reached the site without a tracked ad
+ * click (direct, free search and social, referral, another device, after a view). A tracking path, never a verdict that the campaigns
+ * did not bring them, and never a claim that they did.
+ */
+export const INDIRECT_PATH: L = { ar: 'مسار غير مباشر', en: 'Indirect path' }
 
 /**
- * The umbrella and its sub-chips: free, direct, referral, other, other paid. The website's own attribution, never added to
+ * The indirect path and its sub-chips: free, direct, referral, other, other paid. The website's own attribution, never added to
  * a platform's figure and never an order-level match, which the «not summed» chip beside it states.
  */
-export function OutsideCampaigns({ items, ar, total }: { items: Array<{ key: string; sessions: number; share?: number | null; tone?: 'neutral' | 'warning' }>; ar: boolean; total?: number | null }) {
+export function IndirectPath({ items, ar, total }: { items: Array<{ key: string; sessions: number; share?: number | null; tone?: 'neutral' | 'warning' }>; ar: boolean; total?: number | null }) {
   const sum = total ?? items.reduce((a, b) => a + b.sessions, 0)
   if (items.length === 0 && !(sum > 0)) return null
 
   return (
-    <div data-testid="outside-campaigns" className="flex min-w-0 flex-col gap-1.5">
-      <Badge tone="info" data-testid="outside-campaigns-total">{t(OUTSIDE_CAMPAIGNS, ar)} <Num>{num(sum)}</Num></Badge>
-      <div className="flex flex-wrap gap-1.5" data-testid="outside-campaigns-chips">
+    <div data-testid="indirect-path" className="flex min-w-0 flex-col gap-1.5">
+      <Badge tone="info" data-testid="indirect-path-total">{t(INDIRECT_PATH, ar)} <Num>{num(sum)}</Num></Badge>
+      <div className="flex flex-wrap gap-1.5" data-testid="indirect-path-chips">
         {items.map((u) => (
-          <Badge key={u.key} tone={u.tone ?? 'neutral'} data-testid={`outside-${u.key}`}>
+          <Badge key={u.key} tone={u.tone ?? 'neutral'} data-testid={`indirect-${u.key}`}>
             {t(UNPAID[u.key] ?? { ar: u.key, en: u.key }, ar)} <Num>{num(u.sessions)}{u.share !== null && u.share !== undefined ? ` · ${percent(u.share, 0)}` : ''}</Num>
           </Badge>
         ))}
@@ -345,7 +349,7 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
           })}
           {(gap.unpaid.length > 0 || gap.other_paid) && (
             <li className="pt-1" data-testid="ga4-gap-unpaid">
-              <OutsideCampaigns
+              <IndirectPath
                 items={[
                   ...gap.unpaid.map((u) => ({ key: u.class, sessions: u.sessions, share: u.session_share })),
                   ...(gap.other_paid ? [{ key: 'other_paid', sessions: gap.other_paid.sessions }] : []),

@@ -178,8 +178,8 @@ final class Ga4AlertSignals
         }
         $share = round($unmatched / $total, 4);
 
-        return $this->breach($project, 'ga4:unmatched', 'Ad spend with no website trace · '.(int) round($share * 100).'%', 'إنفاق بلا أثر في الموقع · '.(int) round($share * 100).'%',
-            (int) round($share * 100).'% of ad spend sits in campaigns the website saw no visit from.', (int) round($share * 100).'% من الإنفاق في حملات لم يرصد الموقع أي زيارة منها.',
+        return $this->breach($project, 'ga4:unmatched', 'Clicks outside tracking · '.(int) round($share * 100).'%', 'نقرات خارج التتبع · '.(int) round($share * 100).'%',
+            (int) round($share * 100).'% of ad spend is in campaigns whose clicks reached no measured visit (consent, blockers, untagged links).', (int) round($share * 100).'% من الإنفاق في حملات لم تصل نقراتها إلى زيارة مقاسة (الموافقة، مانعات الإعلانات، روابط دون وسم).',
             ['share' => $share, 'campaigns' => $m['unmatched']['campaigns'] ?? 0]);
     }
 

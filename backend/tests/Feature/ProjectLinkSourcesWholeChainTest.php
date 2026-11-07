@@ -160,7 +160,8 @@ final class ProjectLinkSourcesWholeChainTest extends TestCase
 
         $section = $this->reportSection($this->a);
         $this->assertNotNull($section);
-        $this->assertSame('111', $section['property']['id']);
+        // REPORT-WEBSITE-GAP-READING-001 — the report carries the reading, never the property's id or name.
+        $this->assertArrayNotHasKey('id', $section['property']);
         $this->assertSame(8200.0, (float) $section['totals']['sessions']);
 
         // ── B shows nothing ─────────────────────────────────────────────────────────────────────

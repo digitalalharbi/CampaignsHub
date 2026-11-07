@@ -214,8 +214,8 @@ final class ReportSectionRegistry
             ),
             new ReportSection(
                 key: 'ga4_gap_reasons',
-                titleAr: 'سبب الفرق',
-                titleEn: 'Why the gap',
+                titleAr: 'قراءة الفرق',
+                titleEn: 'Reading the gap',
                 payloadKeys: ['ga4_gap_reasons'],
                 view: 'website',
             ),

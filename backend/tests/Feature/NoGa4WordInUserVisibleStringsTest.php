@@ -64,4 +64,35 @@ final class NoGa4WordInUserVisibleStringsTest extends TestCase
             }
         }
     }
+
+    /**
+     * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — «بشكل صارم لا تُظهر المصدر للبيانات». A report surface (the live link, the saved
+     * report and its files, the digest, the alerts, the measurement readings they draw) names no measurement tool. The connection
+     * screens (integrations, settings, forms' conversion destinations) are where an account is linked and may say «Google Analytics».
+     */
+    public function test_no_report_surface_names_the_measurement_tool(): void
+    {
+        $offences = [];
+        foreach (['app/Domains/Reports', 'app/Domains/Notifications', 'app/Domains/Alerts', 'app/Domains/Integrations/Measurement', 'resources/views/mail'] as $dir) {
+            $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path($dir), RecursiveDirectoryIterator::SKIP_DOTS));
+            foreach ($it as $file) {
+                $path = (string) $file;
+                if (! str_ends_with($path, '.php')) {
+                    continue;
+                }
+                $code = (string) preg_replace(['~/\*.*?\*/~s', '~\{\{--.*?--\}\}~s'], '', (string) file_get_contents($path));
+                foreach (explode("\n", $code) as $n => $line) {
+                    $trim = ltrim($line);
+                    if (str_starts_with($trim, '//') || str_starts_with($trim, '#')) {
+                        continue;
+                    }
+                    if (preg_match('/Google Analytics|جوجل أناليتكس|analytics\.google\.com/u', $line) === 1) {
+                        $offences[] = substr($path, strlen(base_path()) + 1).':'.($n + 1);
+                    }
+                }
+            }
+        }
+
+        $this->assertSame([], $offences, 'a report surface names the measurement tool: say «الموقع» / «Website»');
+    }
 }

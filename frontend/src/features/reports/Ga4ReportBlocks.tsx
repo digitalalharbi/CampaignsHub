@@ -64,7 +64,7 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
   const attribution = shown.includes('ga4_attribution') ? payload.ga4_attribution : null
   /*
    * One comparison and one product table, never two. The attribution match IS the website set beside each ad platform (claimed,
-   * measured, the gap, the outside-campaigns chips), so the older website-vs-platforms card stands only where the match is not
+   * measured, the gap, the indirect-path chips), so the older website-vs-platforms card stands only where the match is not
    * drawn; the products have their own part, so the sources table drops its products tab when that part is drawn.
    */
   const gap = shown.includes('ga4_platform_gap') && !attribution ? payload.ga4_platform_gap : null
@@ -79,8 +79,7 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       {!bare && (
         <header className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-extrabold tracking-tight text-text-primary">{ar ? 'الموقع' : 'Website'}</h2>
-          {overview?.property?.name && <Badge tone="neutral" data-testid="website-property"><span dir="ltr">{overview.property.name.replace(/\bga4\b/gi, '').replace(/\s{2,}/g, ' ').replace(/\(\s*\)/g, '').trim()}</span></Badge>}
-          <Badge tone="info" data-testid="website-not-summed">{ar ? 'بلا جمع مع المنصات' : 'Not added to platforms'}</Badge>
+          <Badge tone="info" data-testid="website-not-summed">{ar ? 'القياس الرقمي · لا يُجمع مع المنصات' : 'Digital measurement · never added to platforms'}</Badge>
         </header>
       )}
       {overview && (
@@ -174,7 +173,7 @@ export function ClassificationBlock({ data, ar, pageSize = 8, paged = false, gro
 const SLIDE_TITLE: Record<string, { ar: string; en: string }> = {
   __ga4_pulse: { ar: 'ملخص الموقع', en: 'Website summary' },
   __ga4_attribution: { ar: 'مطابقة الإسناد', en: 'Attribution match' },
-  __ga4_reasons: { ar: 'سبب الفرق', en: 'Why the gap' },
+  __ga4_reasons: { ar: 'قراءة الفرق', en: 'Reading the gap' },
   __ga4_classification: { ar: 'تصنيف', en: 'Classify' },
   __ga4_products: { ar: 'المنتجات', en: 'Products' },
   __ga4_overview: { ar: 'الموقع: الأرقام', en: 'Website: key figures' },
@@ -206,7 +205,7 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
   switch (slide.type) {
     case '__ga4_overview':
       return data.ga4_overview ? (
-        <div data-testid="slide-ga4-overview">{head('__ga4_overview', data.ga4_overview.property?.name ?? undefined)}
+        <div data-testid="slide-ga4-overview">{head('__ga4_overview')}
           <div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_overview.kpis} ar={ar} /><Ga4Series series={data.ga4_overview.series} currency={data.ga4_overview.currency} ar={ar} height={paged ? 190 : 260} /></div>
         </div>
       ) : null

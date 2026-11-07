@@ -175,6 +175,11 @@ test.describe('GA4 store analytics', () => {
     const unmeasured = page.getByTestId('gap-unmeasured-view_through')
     await expect(unmeasured).toBeVisible()
     expect(((await unmeasured.textContent()) ?? '').replace(/[^0-9]/g, '')).toBe('')
+    // REPORT-WEBSITE-GAP-READING-001 — tracking paths, no source named, a visible sum, windows in words.
+    const panel = page.getByTestId('gap-reasons')
+    await expect(panel.getByTestId('gap-sum')).toBeVisible()
+    await expect(panel.getByTestId('gap-reason-no_platform_trace')).toBeVisible()
+    expect(await panel.innerText()).not.toMatch(/GA4|Google|بلا منصة|بلا أثر|بلا حملة|من خارج الحملات|\d+d_(click|view)|سجل المتجر/i)
     await page.getByTestId('gap-reason-no_trace').click()
     await expect(page.getByTestId('gap-reason-drill')).toBeVisible()
   })

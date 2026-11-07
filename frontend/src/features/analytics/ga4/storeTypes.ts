@@ -75,7 +75,7 @@ export interface StorePayload {
 }
 
 /** The four report sections, each present only when the server resolved it as shown. */
-export interface Ga4OverviewSection { currency: string | null; usd: StoreUsd; period: { from: string; to: string }; previous_period: { from: string; to: string }; property: { name: string | null }; last_synced_at: string | null; kpis: StoreKpi[]; series: StoreSeriesDay[] }
+export interface Ga4OverviewSection { currency: string | null; usd: StoreUsd; period: { from: string; to: string }; previous_period: { from: string; to: string }; property?: { name?: string | null }; last_synced_at: string | null; kpis: StoreKpi[]; series: StoreSeriesDay[] }
 export interface Ga4AcquisitionSection { currency: string | null; channels: StoreSlice[] | null; devices: StoreSlice[] | null; channels_meta?: StoreBreakdownMeta | null; devices_meta?: StoreBreakdownMeta | null; funnel: StoreFunnelStep[] }
 export interface Ga4GapSection extends StoreGap { currency: string | null }
 export interface Ga4TablesSection { currency: string | null; tables: StoreTables }
