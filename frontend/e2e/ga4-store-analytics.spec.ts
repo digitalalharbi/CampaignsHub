@@ -37,8 +37,9 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('ga4-tile-revenue')).toContainText('SAR')
     await expect(page.getByTestId('ga4-channels')).toBeVisible()
     await expect(page.getByTestId('ga4-devices')).toBeVisible()
-    await expect(page.getByTestId('ga4-gap')).toBeVisible()
-    await expect(page.getByTestId('ga4-gap-not-summed')).toBeVisible()
+    // The match section below replaces the older comparison card on this tab.
+    await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('ga4-gap')).toHaveCount(0)
 
     const table = page.getByTestId('ga4-table-box')
     await table.scrollIntoViewIfNeeded()
@@ -59,13 +60,16 @@ test.describe('GA4 store analytics', () => {
   test('the client link shows the store parts, without a campaign name or a spend figure', async ({ page }) => {
     test.setTimeout(120_000)
     await page.context().clearCookies()
-    await page.goto(`/r/${LIVE_TOKEN}?view=dashboard`)
-    await expect(page.getByTestId('live-mode-dashboard')).toBeVisible({ timeout: 30000 })
+    // REPORT-WEBSITE-TAB-001 — everything about the website is one tab, «الموقع».
+    await page.goto(`/r/${LIVE_TOKEN}?view=website`)
+    await expect(page.getByTestId('live-mode-website')).toBeVisible({ timeout: 30000 })
 
     const ga4 = page.getByTestId('report-ga4')
     await expect(ga4).toBeVisible({ timeout: 30000 })
     await expect(ga4.getByTestId('report-ga4-overview')).toBeVisible()
-    await expect(ga4.getByTestId('report-ga4-gap')).toBeVisible()
+    // The attribution match is the website set beside each platform; the older comparison card is not drawn beside it.
+    await expect(ga4.getByTestId('report-ga4-attribution')).toBeVisible()
+    await expect(ga4.getByTestId('report-ga4-gap')).toHaveCount(0)
     await expect(ga4.getByTestId('ga4-table-tab-campaigns')).toHaveCount(0)
     for (const campaign of ['eid_collection', 'retargeting_30d', 'abaya_search', 'new_arrivals']) {
       await expect(ga4).not.toContainText(campaign)
@@ -96,7 +100,9 @@ test.describe('GA4 store analytics', () => {
     // The scroll mode lays every page out at once.
     await page.getByRole('button', { name: 'صفحة', exact: true }).click()
     await expect(page.getByTestId('slide-ga4-overview')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByTestId('slide-ga4-gap')).toBeVisible()
+    // One comparison: the attribution match page replaces the older website-vs-platforms page.
+    await expect(page.getByTestId('slide-ga4-attribution')).toBeVisible()
+    await expect(page.getByTestId('slide-ga4-gap')).toHaveCount(0)
     await expect(page.getByTestId('slide-ga4-tables')).toBeVisible()
     await expect(page.getByTestId('slide-ga4-tables').getByTestId('ga4-table-tab-campaigns')).toHaveCount(0)
   })
@@ -108,7 +114,7 @@ test.describe('GA4 store analytics', () => {
     await page.goto('/agency/analytics?tab=site')
 
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByTestId('match-basis')).toHaveText(/GA4/)
+    await expect(page.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
     const table = page.getByTestId('match-table-box')
     await table.scrollIntoViewIfNeeded()
     const level1 = await box(table)
@@ -194,7 +200,7 @@ test.describe('GA4 store analytics', () => {
   test('the live link carries the attribution part for a client, scoped to what it names, without a campaign name or a spend figure', async ({ page }) => {
     test.setTimeout(120_000)
     await page.context().clearCookies()
-    await page.goto(`/r/${LIVE_TOKEN}?view=dashboard`)
+    await page.goto(`/r/${LIVE_TOKEN}?view=website`)
     const ga4 = page.getByTestId('report-ga4')
     await expect(ga4).toBeVisible({ timeout: 30000 })
 

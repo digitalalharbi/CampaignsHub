@@ -71,7 +71,8 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
 
       <FilterBar ar={ar} range={range} f={f} setF={(n) => { setF(n); setDrill(null) }} platforms={platformChips} />
 
-      <Ga4StoreSection projectId={projectId} range={range} ar={ar} hide={hidden} />
+      {/* REPORT-WEBSITE-TAB-001 — the match below sets the website beside each platform; the older comparison card stands only without it. */}
+      <Ga4StoreSection projectId={projectId} range={range} ar={ar} hide={hidden} showGap={match.data?.state !== 'ready'} />
 
       <MatchSection q={match} ar={ar} drill={drill} setDrill={setDrill} projectId={projectId} range={range} hidden={hidden} compare={f.compare} />
 

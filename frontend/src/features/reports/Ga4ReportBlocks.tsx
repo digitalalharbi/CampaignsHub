@@ -61,9 +61,15 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
   if (shown.length === 0) return null
   const overview = shown.includes('ga4_overview') ? payload.ga4_overview : null
   const acquisition = shown.includes('ga4_acquisition') ? payload.ga4_acquisition : null
-  const gap = shown.includes('ga4_platform_gap') ? payload.ga4_platform_gap : null
-  const tables = shown.includes('ga4_tables') ? payload.ga4_tables : null
   const attribution = shown.includes('ga4_attribution') ? payload.ga4_attribution : null
+  /*
+   * One comparison and one product table, never two. The attribution match IS the website set beside each ad platform (claimed,
+   * measured, the gap, the outside-campaigns chips), so the older website-vs-platforms card stands only where the match is not
+   * drawn; the products have their own part, so the sources table drops its products tab when that part is drawn.
+   */
+  const gap = shown.includes('ga4_platform_gap') && !attribution ? payload.ga4_platform_gap : null
+  const productsDrawn = shown.includes('ga4_products')
+  const tables = shown.includes('ga4_tables') ? withoutProducts(payload.ga4_tables, productsDrawn) : null
   const classification = shown.includes('ga4_classification') ? payload.ga4_classification : null
   const products = shown.includes('ga4_products') ? payload.ga4_products : null
   const reasons = shown.includes('ga4_gap_reasons') ? payload.ga4_gap_reasons : null
@@ -92,6 +98,14 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       {products && <div data-testid="report-ga4-products" className="min-w-0"><ChartCard title={ar ? 'المنتجات' : 'Products'}><FixedPageTable testId="ga4-products-table" ar={ar} pageSize={pageSize} rows={products.table.rows} rowKey={(r) => r.name} columns={productColumns(ar, products.currency)} initialSort={{ key: 'revenue', dir: 'desc' }} /></ChartCard></div>}
     </section>
   )
+}
+
+/** The tables part without its products table where the products part is drawn too. */
+export function withoutProducts(part: WithGa4Sections['ga4_tables'], drop: boolean): WithGa4Sections['ga4_tables'] {
+  if (!part || !drop || !part.tables?.products) return part
+  const { products: _products, ...rest } = part.tables
+
+  return { ...part, tables: rest }
 }
 
 /**
@@ -200,7 +214,7 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_gap':
       return data.ga4_platform_gap ? <div data-testid="slide-ga4-gap">{head('__ga4_gap')}<Ga4Gap gap={data.ga4_platform_gap} ar={ar} /></div> : null
     case '__ga4_tables':
-      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={data.ga4_tables.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
+      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={withoutProducts(data.ga4_tables, (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
     case '__ga4_pulse':
       return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<WebsiteStrip payload={data} ar={ar} /></div> : null
     case '__ga4_attribution':

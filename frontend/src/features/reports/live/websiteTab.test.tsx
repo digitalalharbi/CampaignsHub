@@ -192,4 +192,27 @@ describe('the «الموقع» tab', () => {
     expect(within(website).queryByTestId('ga4-tiles')).toBeNull()
     expect(within(website).getByTestId('ga4-channels')).toBeInTheDocument()
   })
+
+  it('draws one comparison and one products table: the match replaces the older website-vs-platforms card, the products part owns products', async () => {
+    serve({
+      report_sections: ['kpis', 'funnel', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_attribution', 'ga4_tables', 'ga4_products', 'ga4_pulse'],
+      ga4_attribution: {
+        state: 'ready', basis: 'ga4', order_level: false, summed: false,
+        platforms: [{ platform: 'meta', claimed: { conversions: 20, revenue_usd: 100 }, ga4: { sessions: 100, purchases: 8, revenue_usd: 50, aov_usd: 6 }, confidence: 'utm', matched_share: 0.5 }],
+        unattributed: { sessions: 300, classes: [{ class: 'organic', sessions: 300 }] },
+      },
+      ga4_tables: { currency: 'SAR', tables: { sources, products: { rows: [{ name: 'Tee', views: 1, carts: 1, purchased: 1, revenue: 10, revenue_usd: 2.5 }], total: 1 } } },
+      ga4_products: { currency: 'SAR', table: { rows: [{ name: 'Tee', views: 1, carts: 1, purchased: 1, revenue: 10, revenue_usd: 2.5 }], total: 1 } },
+    } as never)
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
+    const website = await open('website')
+
+    expect(within(website).getByTestId('report-ga4-attribution')).toBeInTheDocument()
+    expect(within(website).queryByTestId('report-ga4-gap')).toBeNull()
+    expect(within(website).getByTestId('report-ga4-products')).toBeInTheDocument()
+    expect(within(website).getByTestId('ga4-table-tab-sources')).toBeInTheDocument()
+    expect(within(website).queryByTestId('ga4-table-tab-products')).toBeNull()
+    // The umbrella is drawn once.
+    expect(within(website).getAllByTestId('outside-campaigns')).toHaveLength(1)
+  })
 })

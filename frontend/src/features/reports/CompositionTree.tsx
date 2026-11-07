@@ -13,7 +13,7 @@ import { MODE_LABELS } from './live/modes'
  * A main section switched off keeps its components listed and dimmed: the choice inside it is kept
  * for when it is switched back on, and the server already withholds whatever no open view draws.
  */
-export const VIEW_KEYS = ['summary', 'dashboard', 'platforms', 'content', 'tables'] as const
+export const VIEW_KEYS = ['summary', 'dashboard', 'platforms', 'content', 'website', 'tables'] as const
 export type ViewKey = (typeof VIEW_KEYS)[number]
 
 export interface TreeRow {

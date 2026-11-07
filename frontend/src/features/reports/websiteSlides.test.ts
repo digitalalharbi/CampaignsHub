@@ -25,6 +25,19 @@ describe('the saved report and the PDF follow the website tab', () => {
     ])
   })
 
+  it('prints one comparison page and one products table: the match replaces the older comparison, the products part owns products', () => {
+    const withProducts = { ...data, ga4_tables: { tables: { sources: { rows: [{}] }, products: { rows: [{}] } } } }
+    const paper = withGa4Slides<Page>([...base], withProducts, true)
+
+    expect(paper.some((s) => s.type === '__ga4_gap')).toBe(false)
+    expect(paper.filter((s) => s.id.startsWith('__ga4_table:products'))).toEqual([])
+    expect(paper.filter((s) => s.type === '__ga4_products')).toHaveLength(1)
+    // Without the attribution part the older comparison stands, and without the products part the sources table keeps its products.
+    const noMatch = withGa4Slides<Page>([...base], { ...withProducts, report_sections: (data.report_sections ?? []).filter((k) => k !== 'ga4_attribution' && k !== 'ga4_products') }, true)
+    expect(noMatch.some((s) => s.type === '__ga4_gap')).toBe(true)
+    expect(noMatch.some((s) => s.id.startsWith('__ga4_table:products'))).toBe(true)
+  })
+
   it('never prints a page twice', () => {
     for (const paged of [false, true]) {
       const ids = withGa4Slides<Page>([...base], data, paged).map((s) => s.id)

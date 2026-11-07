@@ -119,7 +119,8 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
     if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9992, visible: true } as S)
     else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9992, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
   }
-  if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9993, visible: true } as S)
+  // The attribution match already sets the website beside each platform: the older comparison page stands only without it.
+  if (named('ga4_platform_gap', data.ga4_platform_gap) && !named('ga4_attribution', data.ga4_attribution)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9993, visible: true } as S)
   if (named('ga4_gap_reasons', data.ga4_gap_reasons)) slides.push({ id: '__ga4_reasons', type: '__ga4_reasons', order: 9994, visible: true } as S)
   if (named('ga4_classification', data.ga4_classification)) {
     const groups = (data.ga4_classification as { groups?: Record<string, { rows?: unknown[] }> }).groups ?? {}
@@ -136,7 +137,8 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
     if (!paged) {
       slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9996, visible: true } as S)
     } else {
-      for (const table of GA4_TABLE_ORDER) {
+      // The products have their own pages when that part is named: one product table, never two.
+      for (const table of GA4_TABLE_ORDER.filter((t) => t !== 'products' || !named('ga4_products', data.ga4_products))) {
         const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
         for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) {
           slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
