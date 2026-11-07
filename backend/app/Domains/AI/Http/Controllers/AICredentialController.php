@@ -14,7 +14,9 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * BYOK key management. Keys are encrypted on write and NEVER returned — responses are masked.
@@ -37,7 +39,8 @@ final class AICredentialController extends Controller
 
         $validated = $request->validate([
             'provider' => ['required', Rule::in(AIProvider::values())],
-            'credential_scope' => ['required', Rule::in(['platform', 'tenant', 'client', 'project'])],
+            // A workspace stores its own keys; a platform key is not something a customer can create.
+            'credential_scope' => ['required', Rule::in(['tenant', 'client', 'project'])],
             'secret' => ['required', 'string', 'min:8'],
             'client_workspace_id' => ['nullable', 'uuid', Rule::exists('client_workspaces', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
             'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())],
@@ -48,11 +51,18 @@ final class AICredentialController extends Controller
             'allowed_features' => ['nullable', 'array'],
         ]);
 
+        /*
+         * The scope and the ids agree (TENANCY-UNIFY-001). ModelClientFactory picks a key by which ids are set, so a «client» key
+         * saved without its client would silently become the whole workspace's key. A project key is bound to the project's own
+         * client, never to a different one named alongside it.
+         */
+        [$clientId, $projectId] = $this->scopeIds($validated);
+
         $credential = new AIProviderCredential([
             'provider' => $validated['provider'],
             'credential_scope' => $validated['credential_scope'],
-            'client_workspace_id' => $validated['client_workspace_id'] ?? null,
-            'project_id' => $validated['project_id'] ?? null,
+            'client_workspace_id' => $clientId,
+            'project_id' => $projectId,
             'organization_id' => $validated['organization_id'] ?? null,
             'monthly_budget' => $validated['monthly_budget'] ?? null,
             'monthly_token_limit' => $validated['monthly_token_limit'] ?? null,
@@ -87,5 +97,38 @@ final class AICredentialController extends Controller
             ['healthy' => $healthy, 'provider' => $credential->provider, 'masked_key' => $credential->maskedKey()],
             $healthy ? 'Credential looks valid.' : 'Credential is inactive or missing.',
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $v
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function scopeIds(array $v): array
+    {
+        $client = $v['client_workspace_id'] ?? null;
+        $project = $v['project_id'] ?? null;
+
+        return match ($v['credential_scope']) {
+            'tenant' => ($client === null && $project === null) ? [null, null]
+                : throw ValidationException::withMessages(['credential_scope' => __('validation.ai_scope_tenant_ids')]),
+            'client' => ($client !== null && $project === null) ? [$client, null]
+                : throw ValidationException::withMessages(['client_workspace_id' => __('validation.ai_scope_client_ids')]),
+            'project' => $this->projectScope($client, $project),
+            default => throw ValidationException::withMessages(['credential_scope' => __('validation.ai_scope_tenant_ids')]),
+        };
+    }
+
+    /** @return array{0: string|null, 1: string} */
+    private function projectScope(?string $client, ?string $project): array
+    {
+        if ($project === null) {
+            throw ValidationException::withMessages(['project_id' => __('validation.ai_scope_project_ids')]);
+        }
+        $owner = DB::table('projects')->where('id', $project)->value('client_workspace_id');
+        if ($client !== null && $client !== $owner) {
+            throw ValidationException::withMessages(['client_workspace_id' => __('validation.ai_scope_project_client')]);
+        }
+
+        return [$owner === null ? null : (string) $owner, $project];
     }
 }

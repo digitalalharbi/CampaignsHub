@@ -98,7 +98,7 @@ export function GeneralTab() {
       {saved && <div className="mb-4"><Alert severity="positive" title={ar ? 'تم حفظ الإعدادات' : 'Settings saved'} /></div>}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={ar ? 'اسم المؤسسة / الوكالة' : 'Organisation / agency name'} htmlFor="org-name" required error={errors['name']}>
+        <Field label={ar ? 'اسم مساحة العمل' : 'Workspace name'} htmlFor="org-name" required error={errors['name']}>
           <Input id="org-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label={ar ? 'نوع الحساب' : 'Account type'} htmlFor="acct">

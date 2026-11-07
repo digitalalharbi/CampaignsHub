@@ -10,6 +10,7 @@ use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\RecurringBilling;
 use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Subscriptions\Services\SubscriptionTax;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -25,7 +26,7 @@ use Illuminate\Http\Request;
 final class SubscriptionController extends Controller
 {
     /** The metrics surfaced in the usage summary — mirror the plan `limits` keys. */
-    private const METERED = ['projects', 'clients', 'team_members', 'connections', 'reports_per_month'];
+    private const METERED = ['projects', 'clients', 'team_members', 'ad_accounts', 'connections', 'reports_per_month'];
 
     public function __construct(
         private readonly SubscriptionService $subscriptions,
@@ -88,6 +89,9 @@ final class SubscriptionController extends Controller
                 'seats' => $subscription->seats,
                 'billing_interval' => $subscription->billing_interval,
                 'unit_amount' => $subscription->unit_amount === null ? null : (string) $subscription->unit_amount,
+                // PRICING-VAT-001/002 — what each renewal is charged, on this subscription's own VAT terms.
+                'vat' => $subscription->unit_amount === null ? null
+                    : app(SubscriptionTax::class)->split($subscription->plan?->code, (string) $subscription->unit_amount, $subscription),
                 'currency' => $subscription->currency,
                 // The period's START, so the interface can show how much of it is left rather than
                 // only when it ends (PAY-002).

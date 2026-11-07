@@ -11,8 +11,8 @@ use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Models\ClientAgentRule;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
@@ -28,6 +28,7 @@ final class AgentConversation
     public function __construct(
         private readonly ModelClientFactory $models,
         private readonly AgentToolbox $toolbox,
+        private readonly UsageLedger $usage,
     ) {}
 
     /** Run the reply to the latest user message in the thread. Returns the final assistant text. */
@@ -40,24 +41,33 @@ final class AgentConversation
             return $this->say($thread, 'This agent is not available yet: '.($role['why_disabled'] ?? 'unknown_agent').'.', 'system');
         }
 
-        ['client' => $client, 'model' => $model, 'token_limit' => $limit] = $this->models->for($project, $thread->agent_key);
+        ['client' => $client, 'model' => $model, 'token_limit' => $limit, 'credential_id' => $credentialId] = $this->models->for($project, $thread->agent_key);
         $system = AgentRoles::systemPrompt($thread->agent_key, (string) $project->name, $this->rulesSummary($project));
         $tools = $this->toolbox->specs($role['tools']);
 
         $rounds = (int) config('agents.max_tool_rounds', 8);
         for ($i = 0; $i <= $rounds; $i++) {
             // The workspace's own monthly ceiling on its key, checked before EVERY call, not once per turn.
-            if ($limit !== null && $this->tokensThisMonth((string) $thread->tenant_id) >= $limit) {
+            // Measured on THIS key, from the usage ledger — another project's key never spends this one's allowance.
+            if ($limit !== null && $this->usage->usedThisMonth((string) $thread->tenant_id, 'ai_tokens_own_key', $credentialId) >= $limit) {
                 throw new RuntimeException('ai_token_limit_reached');
             }
             $turn = $client->respond($model, $system, $this->history($thread), $tools);
 
-            AgentMessage::withoutGlobalScopes()->create([
+            $message = AgentMessage::withoutGlobalScopes()->create([
                 'tenant_id' => $thread->tenant_id, 'thread_id' => $thread->getKey(), 'role' => 'assistant',
                 'content' => $turn->blocks, 'text' => $turn->text === '' ? null : $turn->text,
                 'tool_calls' => $turn->toolCalls === [] ? null : array_map(static fn (array $c): array => ['name' => $c['name'], 'input' => $c['input']], $turn->toolCalls),
                 'usage' => $turn->usage, 'model' => $turn->model,
             ]);
+            // PRICING-USAGE-CREDITS-001 — the customer's own key: recorded so they see it and their cap alerts at 75/90/100%,
+            // never charged against credits.
+            $this->usage->record(
+                (string) $thread->tenant_id, 'ai_tokens_own_key',
+                (int) ($turn->usage['input_tokens'] ?? 0) + (int) ($turn->usage['output_tokens'] ?? 0),
+                'agent_message:'.$message->getKey(), scope: $credentialId, cap: $limit,
+                referenceType: 'agent_message', referenceId: (string) $message->getKey(),
+            );
 
             if ($turn->stop === 'refusal') {
                 return $turn->text !== '' ? $turn->text : 'The model declined to answer this request.';
@@ -133,15 +143,6 @@ final class AgentConversation
         }
 
         return $out;
-    }
-
-    /** Input plus output tokens the workspace's agents used since the first of this month (UTC). */
-    private function tokensThisMonth(string $tenantId): int
-    {
-        return (int) AgentMessage::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('role', 'assistant')
-            ->where('created_at', '>=', Carbon::now()->startOfMonth())
-            ->selectRaw("coalesce(sum(coalesce((usage->>'input_tokens')::bigint, 0) + coalesce((usage->>'output_tokens')::bigint, 0)), 0) as used")
-            ->value('used');
     }
 
     private function rulesSummary(Project $project): string

@@ -93,11 +93,11 @@ function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
   return (
     <li className="rounded-xl border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-[13px] font-bold text-text-primary">
+        <span className="flex items-center gap-2 text-xs font-bold text-text-primary">
           <ScrollText size={14} className="shrink-0 text-text-muted" aria-hidden />
           <span dir="ltr">{entry.action}</span>
         </span>
-        <span className="tnum text-[12px] text-text-muted" dir="ltr">
+        <span className="tnum text-xs text-text-muted" dir="ltr">
           {entry.created_at ? entry.created_at.slice(0, 19).replace('T', ' ') : '—'}
         </span>
       </div>
@@ -107,13 +107,13 @@ function Entry({ entry, ar }: { entry: AuditEntry; ar: boolean }) {
         actor or workspace has since been deleted, rather than filled with «Unknown» — which reads as
         a name and is not one. Unattended lifecycle work has no actor at all, and «النظام» says so.
       */}
-      <p className="mt-1 text-[12px] text-text-muted">
+      <p className="mt-1 text-xs text-text-muted">
         <span className="font-semibold text-text-secondary">{entry.user_name ?? (ar ? 'النظام' : 'The system')}</span>
         {entry.tenant_name && <span> · {entry.tenant_name}</span>}
       </p>
-      {change && <p className="mt-1 text-[13px] text-text-secondary" dir="ltr">{change}</p>}
+      {change && <p className="mt-1 text-xs text-text-secondary" dir="ltr">{change}</p>}
       {entry.reason && (
-        <p className="mt-1.5 rounded-lg bg-surface-secondary px-3 py-2 text-[13px] text-text-primary">
+        <p className="mt-1.5 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-text-primary">
           {ar ? 'السبب: ' : 'Reason: '}{entry.reason}
         </p>
       )}

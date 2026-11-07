@@ -240,7 +240,7 @@ export function PhoneCredentialCard() {
                 waiting for a message that is not coming.
               */}
               {delivery !== null && !DELIVERED.has(delivery) && (
-                <p data-testid="phone-code-undelivered" role="status" className="rounded-xl bg-surface-secondary px-4 py-3 text-[13px] leading-relaxed text-text-secondary">
+                <p data-testid="phone-code-undelivered" role="status" className="rounded-xl bg-surface-secondary px-4 py-3 text-xs leading-relaxed text-text-secondary">
                   {ar
                     ? 'لم يُرسل الرمز فعلياً: لا يوجد مزوّد رسائل مُهيّأ بعد على هذه البيئة. أضف بيانات اعتماد المزوّد لتفعيل الإرسال.'
                     : 'The code was not actually sent: no messaging provider is configured on this environment yet. Add the provider credentials to enable delivery.'}
@@ -303,7 +303,7 @@ function CurrentState({ data, ar }: { data: PhoneCredentialData; ar: boolean }) 
         )}
       </div>
 
-      <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
+      <p className="mt-2 text-xs leading-relaxed text-text-secondary">
         {data.confirmed
           ? ar
             ? 'هذا الرقم يصلح لتسجيل الدخول برمز ولاستعادة الحساب.'
@@ -338,7 +338,7 @@ function ChannelState({
 }: { ar: boolean; name: string; icon: React.ReactNode; configured: boolean; testId: string }) {
   return (
     <div data-testid={testId} className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
-      <span className="flex items-center gap-2 text-[13px] font-semibold text-text-primary">{icon} {name}</span>
+      <span className="flex items-center gap-2 text-xs font-semibold text-text-primary">{icon} {name}</span>
       {configured ? (
         <Badge tone="success">{ar ? 'مفعّلة' : 'Enabled'}</Badge>
       ) : (
@@ -403,7 +403,7 @@ function ChannelChoice({
         })}
       </div>
       {!channels.whatsapp && (
-        <p data-testid="phone-whatsapp-unavailable" className="mt-2 text-[13px] text-text-muted">
+        <p data-testid="phone-whatsapp-unavailable" className="mt-2 text-xs text-text-muted">
           {ar
             ? 'واتساب غير متاح كوسيلة تحقق أو تسجيل دخول على هذه البيئة حتى تُضاف بيانات اعتماد المزوّد.'
             : 'WhatsApp is not available as a verification or sign-in channel on this environment until the provider credentials are added.'}

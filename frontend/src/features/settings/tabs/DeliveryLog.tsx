@@ -121,7 +121,7 @@ export function DeliveryLog() {
               ['blocked', ar ? 'بانتظار المزوّد' : 'Awaiting provider', summary.blocked, summary.blocked > 0 ? 'text-warning' : 'text-text-muted'],
             ] as const).map(([key, label, value, tone]) => (
               <li key={key} data-testid={`delivery-count-${key}`} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
-                <div className="text-[12px] text-text-secondary">{label}</div>
+                <div className="text-xs text-text-secondary">{label}</div>
                 <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
               </li>
             ))}
@@ -141,11 +141,11 @@ export function DeliveryLog() {
                   className="rounded-xl border border-border px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-text-primary">{r.kind}</span>
-                    <span className={`text-[12px] font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
+                    <span className="text-xs font-semibold text-text-primary">{r.kind}</span>
+                    <span className={`text-xs font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
                   </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
                     {/* A digest row has no single recipient: it is one send per person, summarised. */}
                     <span dir="ltr">{r.recipient ?? (ar ? 'ملخّص' : 'digest')}</span>
                     <span dir="ltr">{when(r.at)}</span>
@@ -157,7 +157,7 @@ export function DeliveryLog() {
                   </div>
 
                   {r.reason !== null && (
-                    <p data-testid={`delivery-reason-${i}`} className="mt-1.5 text-[12px] text-text-secondary">
+                    <p data-testid={`delivery-reason-${i}`} className="mt-1.5 text-xs text-text-secondary">
                       {reason === null ? null : <span>{ar ? reason.ar : reason.en} </span>}
                       <span className="font-mono text-text-muted" dir="ltr">{r.reason}</span>
                     </p>

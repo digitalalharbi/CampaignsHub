@@ -1517,3 +1517,181 @@ export function startSupportSession(tenantId: string, reason: string, currentPas
 export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
   return deleteData('/admin/support-session')
 }
+
+/** PRICING-ADDONS-001 — the add-ons catalogue and each workspace's add-ons, from the console. Every change carries a reason. */
+export interface AdminAddon {
+  id: string
+  code: string
+  kind: 'capacity' | 'feature'
+  name: string
+  name_ar: string
+  price_monthly: string | null
+  currency: string
+  readiness: 'available' | 'coming_soon'
+  is_active: boolean
+  sold: boolean
+  grants: { limits?: Record<string, number> } | null
+  active_workspaces: number
+  requests_waiting: number
+}
+
+export interface WorkspaceAddon {
+  id: string
+  code: string | null
+  name: string | null
+  name_ar: string | null
+  quantity: number
+  status: 'requested' | 'active' | 'declined' | 'cancelled'
+  source: string
+  unit_price: string | null
+  currency: string | null
+  reason: string | null
+}
+
+export function fetchAddons(): Promise<{ addons: AdminAddon[] }> {
+  return getData('/admin/addons')
+}
+
+export function updateAddon(id: string, body: { price_monthly?: number | null; readiness?: 'available' | 'coming_soon'; is_active?: boolean; reason: string }): Promise<{ addon: AdminAddon }> {
+  return patchData(`/admin/addons/${id}`, body)
+}
+
+export function fetchWorkspaceAddons(tenantId: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return getData(`/admin/tenants/${tenantId}/addons`)
+}
+
+export function grantWorkspaceAddon(tenantId: string, code: string, quantity: number, reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return postData(`/admin/tenants/${tenantId}/addons`, { code, quantity, reason })
+}
+
+export function decideWorkspaceAddon(id: string, decision: 'approve' | 'decline' | 'cancel', reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return patchData(`/admin/tenant-addons/${id}`, { decision, reason })
+}
+
+// ── PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue ─────────────────────────────
+
+export interface MigrationMetric {
+  metric: 'projects' | 'clients' | 'team_members' | 'ad_accounts'
+  usage: number
+  current_limit: number | null
+  new_limit: number | null
+  fits: boolean
+}
+
+export interface MigrationTarget {
+  plan: string
+  plan_name: string
+  amount: string | null
+  currency: string
+  interval: string
+  fits: boolean
+  metrics: MigrationMetric[]
+}
+
+export interface MigrationWorkspace {
+  tenant_id: string
+  tenant_name: string
+  tenant_slug: string
+  status: string
+  current_period_end: string | null
+  from: { plan: string | null; plan_name: string | null; amount: string | null; currency: string | null; interval: string | null }
+  suggested: MigrationTarget | null
+  scheduled: { plan: string; plan_name: string; amount: string | null; currency: string; effective_at: string | null } | null
+}
+
+export function fetchPlanMigration(): Promise<{ workspaces: MigrationWorkspace[]; catalogue: { currency: string; plans: { code: string; name: string }[] } }> {
+  return getData('/admin/plan-migration')
+}
+
+export function schedulePlanMigration(tenantId: string, body: { plan_code: string; reason: string; confirm: string }): Promise<{ workspace: MigrationWorkspace }> {
+  return postData(`/admin/tenants/${tenantId}/plan-migration`, body)
+}
+
+export function withdrawPlanMigration(tenantId: string, reason: string): Promise<{ workspace: MigrationWorkspace }> {
+  return deleteData(`/admin/tenants/${tenantId}/plan-migration`, { reason })
+}
+
+export function bulkPlanMigration(body: { tenant_ids: string[]; reason: string; confirm: string }): Promise<{ scheduled: string[]; skipped: { tenant_id: string; reason: string }[] }> {
+  return postData('/admin/plan-migration/bulk', body)
+}
+
+// PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+export interface AdminUsageMeter {
+  code: string
+  name: string
+  name_ar: string
+  unit: string
+  funded_by: 'platform' | 'customer'
+  unit_cost: string | null
+  currency: string
+  charges_credits: boolean
+  charges: boolean
+  included_per_plan: Record<string, number>
+  is_active: boolean
+}
+
+export interface WorkspaceCredits {
+  seats?: { active: number; holding: number; replacements_used: number; replacements_allowed: number | null; next_replacement_at: string | null; cap: number | null }
+  balance: string
+  currency: string
+  meters: { code: string; name: string; name_ar: string; used: number; included: number | null; cost: string; credits_charged: string; uncovered: string; funded_by: 'platform' | 'customer' }[]
+  transactions: { id: number; kind: 'grant' | 'consume' | 'adjust'; amount: string; balance_after: string; reason: string | null; actor_id: number | null; at: string | null }[]
+}
+
+export function fetchUsageMeters(): Promise<{ meters: AdminUsageMeter[] }> {
+  return getData('/admin/usage/meters')
+}
+
+export function updateUsageMeter(code: string, body: { unit_cost?: number | null; charges_credits?: boolean; included_per_plan?: Record<string, number | null>; reason: string }): Promise<{ meter: AdminUsageMeter }> {
+  return patchData(`/admin/usage/meters/${code}`, body)
+}
+
+export function fetchWorkspaceCredits(tenantId: string): Promise<WorkspaceCredits> {
+  return getData(`/admin/tenants/${tenantId}/credits`)
+}
+
+export function adjustWorkspaceCredits(tenantId: string, amount: number, reason: string, idempotencyKey: string): Promise<{ balance: string; transaction_id: number }> {
+  return postData(`/admin/tenants/${tenantId}/credits`, { amount, reason, idempotency_key: idempotencyKey })
+}
+
+// PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+export interface TaxEdition {
+  id: string
+  number: number
+  label: string
+  currency: string
+  status: string
+  tax_treatment: string
+  rate: number
+  prices_include_vat: boolean
+  subscriptions_keeping_their_terms: number
+}
+
+export interface InvoiceReviewRow {
+  invoice_id: string
+  number: string
+  tenant: string | null
+  status: string
+  currency: string
+  subtotal: string
+  tax_total: string
+  total: string
+  amount_paid: string
+  charged: string | null
+  charge_status: string | null
+  tax_treatment: string | null
+  issued_at: string | null
+  issues: string[]
+}
+
+export function fetchTax(): Promise<{ treatments: { key: string; rate: number }[]; needs_customer_eligibility?: string[]; editions: TaxEdition[] }> {
+  return getData('/admin/tax')
+}
+
+export function updateTaxEdition(id: string, body: { tax_treatment: string; prices_include_vat: boolean; reason: string }): Promise<{ edition: TaxEdition }> {
+  return patchData(`/admin/tax/editions/${id}`, body)
+}
+
+export function fetchInvoiceReview(): Promise<{ checked: number; flagged: number; by_issue: Record<string, number>; rows: InvoiceReviewRow[] }> {
+  return getData('/admin/tax/invoice-review')
+}

@@ -28,6 +28,7 @@ use App\Domains\Tenancy\Models\Membership;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use App\Support\DailyInflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -149,6 +150,7 @@ final class LeadController extends Controller
          * applied — two figures on one screen that cannot both be about what the reader is looking
          * at.
          */
+        $inflow = DailyInflow::series($query, 'leads.created_at');
         $received = (clone $query)->toBase()->getCountForPagination();
         $unique = (clone $query)->whereNull('canonical_lead_id')->toBase()->getCountForPagination();
 
@@ -182,6 +184,7 @@ final class LeadController extends Controller
                  * audience, with nothing on screen to say which.
                  */
                 'counts' => ['received' => $received, 'unique' => $unique],
+                'inflow' => $inflow,
                 'stages' => $stages,
                 /*
                  * The one disagreement, stated. Without it, a reader filtered to «new» sees a list

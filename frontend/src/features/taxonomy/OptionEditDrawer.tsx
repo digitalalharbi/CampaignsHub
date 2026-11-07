@@ -111,7 +111,7 @@ export function OptionEditDrawer({ open, option, onClose, onSubmit, onSaved }: O
         </div>
 
         {option.is_system && (
-          <p className="mb-3 flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2 text-[12px] text-text-secondary">
+          <p className="mb-3 flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2 text-xs text-text-secondary">
             <Lock size={13} className="shrink-0 text-warning" aria-hidden /> {c.systemNotice}
           </p>
         )}
@@ -151,7 +151,7 @@ export function OptionEditDrawer({ open, option, onClose, onSubmit, onSaved }: O
           </div>
 
           {error && (
-            <span className="text-[13px] text-danger" role="alert">
+            <span className="text-xs text-danger" role="alert">
               {error}
             </span>
           )}

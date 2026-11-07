@@ -153,7 +153,7 @@ async function openAccount(
   await page.goto('/register')
   await switchToEnglish(page)
 
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(workspace)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(workspace)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Phone Owner')
   await page.getByLabel(/Email|البريد/).fill(email)
   await page.getByTestId('phone').fill(phone)

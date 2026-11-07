@@ -51,7 +51,7 @@ export function CreatorShell() {
               {(profile.data?.creator.name ?? 'C').slice(0, 1)}
             </div>
             <div className="min-w-0">
-              <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight">
+              <span className="block truncate font-heading text-sm font-extrabold tracking-tight">
                 {profile.data?.creator.name ?? (ar ? 'مساحتك' : 'Your space')}
               </span>
               {/* Silent for someone who is not a creator here: "your work with the agency" over a

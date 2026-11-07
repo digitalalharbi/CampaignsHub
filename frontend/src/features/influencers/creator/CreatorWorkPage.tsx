@@ -55,13 +55,13 @@ function OfferCard({ c, ar }: { c: CreatorCollaboration; ar: boolean }) {
             <FileSignature size={13} aria-hidden />
             {ar ? 'بانتظار ردّك' : 'Awaiting your answer'}
           </span>
-          <h3 dir="auto" className="mt-2 truncate font-heading text-[15px] font-bold text-text-primary">{c.title}</h3>
-          {c.client_name && <p dir="auto" className="truncate text-[12px] text-text-muted">{c.client_name}</p>}
+          <h3 dir="auto" className="mt-2 truncate font-heading text-sm font-bold text-text-primary">{c.title}</h3>
+          {c.client_name && <p dir="auto" className="truncate text-xs text-text-muted">{c.client_name}</p>}
         </div>
         {c.fee && (
           <div className="text-end">
             <span className="block text-[11px] text-text-muted">{ar ? 'أجرك' : 'Your fee'}</span>
-            <Ltr className="font-heading text-[15px] font-extrabold text-text-primary">{money(c.fee, c.currency)}</Ltr>
+            <Ltr className="font-heading text-sm font-extrabold text-text-primary">{money(c.fee, c.currency)}</Ltr>
           </div>
         )}
       </div>
@@ -80,15 +80,15 @@ function WorkCard({ c, ar }: { c: CreatorCollaboration; ar: boolean }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 dir="auto" className="truncate font-heading text-[15px] font-bold text-text-primary">{c.title}</h3>
-          {c.client_name && <p dir="auto" className="truncate text-[12px] text-text-muted">{c.client_name}</p>}
+          <h3 dir="auto" className="truncate font-heading text-sm font-bold text-text-primary">{c.title}</h3>
+          {c.client_name && <p dir="auto" className="truncate text-xs text-text-muted">{c.client_name}</p>}
         </div>
         {c.fee && (
           <Ltr className="font-heading text-sm font-extrabold text-text-primary">{money(c.fee, c.currency)}</Ltr>
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {waiting > 0 ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 font-bold text-warning">
             <CalendarClock size={13} aria-hidden />
@@ -162,7 +162,7 @@ export function CreatorWorkPage() {
 
       {offers.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-heading text-[15px] font-bold text-text-primary">
+          <h2 className="font-heading text-sm font-bold text-text-primary">
             {ar ? 'عروض بانتظار ردّك' : 'Offers awaiting your answer'}
           </h2>
           {offers.map((c) => <OfferCard key={c.id} c={c} ar={ar} />)}
@@ -170,7 +170,7 @@ export function CreatorWorkPage() {
       )}
 
       <section className="space-y-3">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">
+        <h2 className="font-heading text-sm font-bold text-text-primary">
           {ar ? 'أعمالك الجارية' : 'Your active work'}
         </h2>
         {active.length === 0 ? (
@@ -192,13 +192,13 @@ export function CreatorWorkPage() {
 
       {closed.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-heading text-[15px] font-bold text-text-primary">
+          <h2 className="font-heading text-sm font-bold text-text-primary">
             {ar ? 'عروض اعتذرت عنها' : 'Offers you declined'}
           </h2>
           {closed.map((c) => (
             <div key={c.id} className="rounded-2xl border border-border bg-surface-secondary p-4">
               <span dir="auto" className="font-heading text-sm font-bold text-text-secondary">{c.title}</span>
-              {c.client_name && <span dir="auto" className="ms-2 text-[12px] text-text-muted">{c.client_name}</span>}
+              {c.client_name && <span dir="auto" className="ms-2 text-xs text-text-muted">{c.client_name}</span>}
             </div>
           ))}
         </section>

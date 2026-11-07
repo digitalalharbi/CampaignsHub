@@ -126,7 +126,7 @@ export function EmailOperationsPage() {
             {Object.entries(ledger.data.by_state).map(([state, n]) => (
               <div key={state} className="rounded-xl border border-border bg-surface px-4 py-3">
                 <div className={`text-lg font-bold ${word(state).tone}`}>{n}</div>
-                <div className="text-[13px] text-text-secondary">{ar ? word(state).ar : word(state).en}</div>
+                <div className="text-xs text-text-secondary">{ar ? word(state).ar : word(state).en}</div>
               </div>
             ))}
             {Object.keys(ledger.data.by_state).length === 0 && (
@@ -138,7 +138,7 @@ export function EmailOperationsPage() {
             {(ledger.data.test_sends ?? 0) > 0 && (
               <div data-testid="mail-test-count" className="rounded-xl border border-dashed border-border bg-surface px-4 py-3">
                 <div className="text-lg font-bold text-text-muted">{ledger.data.test_sends}</div>
-                <div className="text-[13px] text-text-secondary">{ar ? 'رسائل اختبار، لا تُحسب' : 'Test messages, not counted'}</div>
+                <div className="text-xs text-text-secondary">{ar ? 'رسائل اختبار، لا تُحسب' : 'Test messages, not counted'}</div>
               </div>
             )}
           </div>
@@ -201,22 +201,22 @@ export function EmailOperationsPage() {
               <tbody>
                 {ledger.data.deliveries.map((row: EmailDelivery) => (
                   <tr key={`${row.source}-${row.id}`} className="border-b border-border align-top last:border-0">
-                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
+                    <td className="p-3 text-xs text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
                     <td className="p-3">
                       <div className="text-text-primary">
                         {row.is_test ? (ar ? 'رسالة اختبار' : 'Test message') : row.kind}
                       </div>
-                      <div className="text-[13px] text-text-muted">
+                      <div className="text-xs text-text-muted">
                         {row.source === 'digest' ? (ar ? 'ملخص' : 'digest') : row.template}
                         {row.locale ? ` · ${row.locale}` : ''}
                         {row.transport ? ` · ${row.transport}` : ''}
                       </div>
                     </td>
-                    <td className="p-3 text-[13px] text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
-                    <td className="p-3 text-[13px] text-text-primary">{row.tenant_name ?? '—'}</td>
+                    <td className="p-3 text-xs text-text-primary"><span dir="ltr">{row.recipient ?? '—'}</span></td>
+                    <td className="p-3 text-xs text-text-primary">{row.tenant_name ?? '—'}</td>
                     <td className="p-3"><Badge tone={stageTone(row.state)}>{ar ? word(row.state).ar : word(row.state).en}</Badge></td>
-                    <td className="p-3 text-[13px] text-text-primary">{row.attempts}</td>
-                    <td className="max-w-[320px] p-3 text-[13px] leading-6 text-text-secondary"><RowReason row={row} ar={ar} /></td>
+                    <td className="p-3 text-xs text-text-primary">{row.attempts}</td>
+                    <td className="max-w-[320px] p-3 text-xs leading-6 text-text-secondary"><RowReason row={row} ar={ar} /></td>
                   </tr>
                 ))}
                 {ledger.data.deliveries.length === 0 && (
@@ -232,7 +232,7 @@ export function EmailOperationsPage() {
 
           {ledger.data.total > ledger.data.per_page && (
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-text-secondary">
+              <span className="text-xs text-text-secondary">
                 {ar
                   ? `صفحة ${ledger.data.page} من ${Math.ceil(ledger.data.total / ledger.data.per_page)}`
                   : `Page ${ledger.data.page} of ${Math.ceil(ledger.data.total / ledger.data.per_page)}`}
@@ -386,7 +386,7 @@ function TestTargetPicker({ test, ar, testId }: { test: TestTarget; ar: boolean;
           <button
             key={o.value} type="button" role="radio" aria-checked={on} disabled={o.blocked !== null}
             data-testid={`${testId}-${o.value}`} onClick={() => test.choose(o.value)}
-            className={`flex min-h-11 min-w-0 max-w-full flex-col items-start rounded-xl border px-3 py-1.5 text-start text-[13px] disabled:cursor-not-allowed disabled:opacity-60 ${on ? 'border-brand-primary bg-brand-primary-soft text-text-primary' : 'border-border text-text-secondary'}`}
+            className={`flex min-h-11 min-w-0 max-w-full flex-col items-start rounded-xl border px-3 py-1.5 text-start text-xs disabled:cursor-not-allowed disabled:opacity-60 ${on ? 'border-brand-primary bg-brand-primary-soft text-text-primary' : 'border-border text-text-secondary'}`}
           >
             <span className="flex items-center gap-2 font-semibold">
               <span className={`h-2 w-2 rounded-full ${on ? 'bg-brand-primary' : 'border border-border'}`} aria-hidden />
@@ -438,7 +438,7 @@ function TestSendOutcome({ result, error, ar, testId }: { result?: TestSendResul
         <span dir="ltr" data-testid={`${testId}-recipient`} className="break-all font-semibold text-text-primary">{result.recipient}</span>
         {result.state === 'already_sent' && <Badge>{ar ? 'محاولة سابقة' : 'Earlier attempt'}</Badge>}
       </p>
-      {why && <p className="mt-1 text-[13px] leading-6 text-text-secondary">{why}</p>}
+      {why && <p className="mt-1 text-xs leading-6 text-text-secondary">{why}</p>}
       {result.provider_message_id && (
         <p className="mt-1 text-xs text-text-muted">Message-ID: <span dir="ltr" className="break-all">{result.provider_message_id}</span></p>
       )}
@@ -512,7 +512,7 @@ function PreviewGallery({ ar, test }: { ar: boolean; test: TestTarget }) {
       </div>
 
       {preview.data?.subject && (
-        <dl data-testid="gallery-review" className="mt-4 grid gap-2 rounded-xl border border-border p-3 text-[13px]">
+        <dl data-testid="gallery-review" className="mt-4 grid gap-2 rounded-xl border border-border p-3 text-xs">
           <div className="flex flex-wrap gap-x-3">
             <dt className="text-text-muted">{ar ? 'عنوان الرسالة' : 'Subject'}</dt>
             <dd className="min-w-0 font-semibold text-text-primary" dir="auto">{preview.data.subject}</dd>
@@ -555,8 +555,8 @@ function PreviewGallery({ ar, test }: { ar: boolean; test: TestTarget }) {
           />
           {preview.data.text && (
             <details data-testid="gallery-text-part" className="mt-3 rounded-xl border border-border p-3">
-              <summary className="cursor-pointer text-[13px] font-semibold text-text-primary">{ar ? 'النسخة النصية' : 'Plain-text version'}</summary>
-              <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-[13px] leading-6 text-text-secondary" dir={locale === 'ar' ? 'rtl' : 'ltr'}>{preview.data.text}</pre>
+              <summary className="cursor-pointer text-xs font-semibold text-text-primary">{ar ? 'النسخة النصية' : 'Plain-text version'}</summary>
+              <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-text-secondary" dir={locale === 'ar' ? 'rtl' : 'ltr'}>{preview.data.text}</pre>
             </details>
           )}
         </>

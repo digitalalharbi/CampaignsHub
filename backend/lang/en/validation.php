@@ -21,6 +21,10 @@ return [
 
     // PROJECT-CREATE-WORKSPACE-001 — an agency names the client; the product never picks one for them.
     'client_workspace_required' => 'Choose the client this project belongs to.',
+    'ai_scope_tenant_ids' => 'A workspace-wide key cannot name a client or a project.',
+    'ai_scope_client_ids' => 'A client key needs its client, and no project.',
+    'ai_scope_project_ids' => 'A project key needs its project.',
+    'ai_scope_project_client' => 'That project belongs to a different client.',
 
     // RUNTIME-100 §10 — a wizard left open can outlive what it is showing; say so, and say what to do.
     'selection_empty' => 'Choose at least one account before confirming.',

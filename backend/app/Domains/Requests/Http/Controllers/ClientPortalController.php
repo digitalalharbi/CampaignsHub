@@ -438,10 +438,13 @@ final class ClientPortalController
             'related' => ['nullable', 'array'],
             'related.kind' => ['required_with:related', Rule::in(['campaign', 'report', 'invoice'])],
             'related.id' => ['required_with:related', 'string', 'max:64'],
+            // CP-REQ-ONE-001 — files uploaded first into a temporary session (the same private, size- and type-checked
+            // uploads the public form and the reply use), claimed by the request once it exists.
+            'upload_token' => ['nullable', 'string', 'max:128'],
         ]);
 
         try {
-            $created = $creator->create($space, $token, $data, $this->restrictedProjectIds($token));
+            $created = $creator->create($space, $token, collect($data)->except('upload_token')->all(), $this->restrictedProjectIds($token));
         } catch (InvalidArgumentException) {
             // The same answer for «not yours» and «does not exist».
             abort(404);
@@ -450,9 +453,14 @@ final class ClientPortalController
         // EMAIL-GAPS — the team is told. Off by default, and it cannot change this answer.
         app(RequestMailer::class)->newRequestToTeam($created);
 
+        if (! empty($data['upload_token'])) {
+            $this->uploads->attach($created, $data['upload_token']);
+        }
+
         return response()->json(['data' => [
             'reference' => $created->reference,
             'status' => 'new',
+            'files' => $created->files()->count(),
             'submitted_at' => optional($created->submitted_at)->toIso8601String(),
         ]], 201);
     }

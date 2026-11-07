@@ -291,6 +291,9 @@ jobs:
           REDIS_CLIENT: phpredis
           # The default is all three; a job that runs one names it.
           GATE_BROWSERS: ${{ matrix.browser }}
+          # GATE-WK-ENGINE-FAULT-001 — the preview server's connection lifecycle (src/build/connectionLog.ts), kept
+          # outside test-results/ because Playwright empties that directory when it starts.
+          E2E_CONN_LOG: ${{ github.workspace }}/frontend/preview-connections.log
         # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
         # saw, and that code is the gate's verdict.
         run: npm run gate
@@ -311,12 +314,22 @@ jobs:
           tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
           echo "::endgroup::"
 
+      # GATE-WK-ENGINE-FAULT-001 — which connection carried the entry script that never loaded, and who closed it.
+      - name: Preview server connections (who closed what)
+        if: failure()
+        run: |
+          echo "::group::preview connections — last 200, server-closed and errors first"
+          grep -E "server-timeout|ended=error" frontend/preview-connections.log 2>/dev/null | tail -n 100 || true
+          tail -n 200 frontend/preview-connections.log 2>/dev/null || echo "(no connection log was written)"
+          echo "::endgroup::"
+
       - name: Failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: gate-artifacts
           path: |
+            frontend/preview-connections.log
             frontend/test-results/
             frontend/playwright-report/
             backend/storage/logs/

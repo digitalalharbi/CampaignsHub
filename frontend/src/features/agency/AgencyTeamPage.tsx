@@ -227,8 +227,8 @@ function MemberRow({
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 sm:flex-col sm:justify-start">
         <div className="min-w-0">
-          <p className="font-heading text-[15px] font-bold text-text-primary">{member.user.name ?? '—'}</p>
-          <p className="mt-0.5 truncate text-[13px] text-text-muted" dir="ltr">{member.user.email}</p>
+          <p className="font-heading text-sm font-bold text-text-primary">{member.user.name ?? '—'}</p>
+          <p className="mt-0.5 truncate text-xs text-text-muted" dir="ltr">{member.user.email}</p>
         </div>
         {/*
           The role as a name, not as the column's value.
@@ -252,17 +252,17 @@ function MemberRow({
       </div>
 
       <div className="mt-3 min-w-0 sm:mt-0">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           {ar ? 'الوصول إلى العملاء' : 'Client access'}
         </p>
 
         {member.has_unrestricted_permission ? (
-          <p data-testid="scope-unrestricted" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-3 py-1.5 text-[13px] font-semibold text-brand-700">
+          <p data-testid="scope-unrestricted" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-3 py-1.5 text-xs font-semibold text-brand-700">
             <ShieldCheck size={14} aria-hidden />
             {ar ? 'وصول غير مقيّد (صلاحية صريحة)' : 'Unrestricted (explicit permission)'}
           </p>
         ) : member.clients.length === 0 ? (
-          <p data-testid="scope-none" className="mt-2 text-[13px] text-text-muted">
+          <p data-testid="scope-none" className="mt-2 text-xs text-text-muted">
             {ar
               ? 'لا يصل إلى أي عميل. أضف عميلًا ليبدأ العمل.'
               : 'Reaches no clients. Add one to give them work.'}
@@ -271,7 +271,7 @@ function MemberRow({
           <ul className="mt-2 flex flex-wrap gap-2">
             {member.clients.map((c) => (
               <li key={c.id}>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary py-1.5 ps-3 pe-1.5 text-[13px] font-semibold text-text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary py-1.5 ps-3 pe-1.5 text-xs font-semibold text-text-primary">
                   {/* A client outside the reader's own access is counted but not named. */}
                   {c.name ?? (ar ? 'عميل خارج نطاقك' : 'A client outside your access')}
                   {canManage && !member.is_self && c.name !== null && (
@@ -292,7 +292,7 @@ function MemberRow({
         )}
 
         {member.is_self && !member.has_unrestricted_permission && (
-          <p data-testid="scope-self" className="mt-3 text-[12px] text-text-muted">
+          <p data-testid="scope-self" className="mt-3 text-xs text-text-muted">
             {ar
               ? 'هذه عضويتك. لا يمكنك توسيع وصولك بنفسك — اطلب ذلك من زميل يملك صلاحية أوسع.'
               : 'This is your own membership. You cannot widen your own access — ask a colleague with wider access.'}

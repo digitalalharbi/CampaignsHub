@@ -13,6 +13,7 @@ use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAddonController;
 use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
@@ -22,13 +23,16 @@ use App\Domains\Platform\Http\Controllers\PlatformLimitController;
 use App\Domains\Platform\Http\Controllers\PlatformMembershipController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
+use App\Domains\Platform\Http\Controllers\PlatformPlanMigrationController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
+use App\Domains\Platform\Http\Controllers\PlatformTaxController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
+use App\Domains\Platform\Http\Controllers\PlatformUsageController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
@@ -125,6 +129,30 @@ Route::middleware(['auth:sanctum', 'platform'])
         // SUPERADMIN-LIMITS-001 — one workspace's own plan-limit caps.
         Route::get('/tenants/{tenant}/limits', [PlatformLimitController::class, 'index'])->name('tenants.limits');
         Route::put('/tenants/{tenant}/limits/{metric}', [PlatformLimitController::class, 'set'])->middleware('throttle:30,1')->name('tenants.limits.set');
+        // PRICING-ADDONS-001 — the add-ons catalogue, and each workspace's add-ons (grant, approve, decline, cancel).
+        Route::get('/addons', [PlatformAddonController::class, 'index'])->name('addons.index');
+        Route::patch('/addons/{addon}', [PlatformAddonController::class, 'update'])->middleware('throttle:30,1')->name('addons.update');
+        Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
+        Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
+        Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
+
+        // PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+        Route::get('/tax', [PlatformTaxController::class, 'index'])->name('tax.index');
+        Route::patch('/tax/editions/{edition}', [PlatformTaxController::class, 'update'])->middleware('throttle:30,1')->name('tax.editions.update');
+        Route::get('/tax/invoice-review', [PlatformTaxController::class, 'review'])->name('tax.review');
+
+        // PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+        Route::get('/usage/meters', [PlatformUsageController::class, 'meters'])->name('usage.meters');
+        Route::patch('/usage/meters/{code}', [PlatformUsageController::class, 'update'])->middleware('throttle:30,1')->name('usage.meters.update');
+        Route::get('/tenants/{tenant}/credits', [PlatformUsageController::class, 'tenant'])->name('tenants.credits');
+        Route::post('/tenants/{tenant}/credits', [PlatformUsageController::class, 'adjust'])->middleware('throttle:30,1')->name('tenants.credits.adjust');
+
+        // PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue: previewed, typed, audited, at period end.
+        Route::get('/plan-migration', [PlatformPlanMigrationController::class, 'index'])->name('plan-migration.index');
+        Route::post('/plan-migration/bulk', [PlatformPlanMigrationController::class, 'bulk'])->middleware('throttle:10,1')->name('plan-migration.bulk');
+        Route::get('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'show'])->name('tenants.plan-migration.show');
+        Route::post('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'store'])->middleware('throttle:30,1')->name('tenants.plan-migration.store');
+        Route::delete('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'destroy'])->middleware('throttle:30,1')->name('tenants.plan-migration.destroy');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');
