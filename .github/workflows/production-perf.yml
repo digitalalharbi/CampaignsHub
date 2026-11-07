@@ -54,14 +54,17 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "== FACTS-DIGEST2"
+            echo "== FACTS-NOTIF"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
-            BEGIN READ ONLY; select 'cfg' as q, frequency, channels::text, digests::text, quiet_hours::text from notification_preferences; ROLLBACK;
-            BEGIN READ ONLY; select 'digest_any' as q, kind, status, count(*), min(created_at), max(created_at) from digest_sends group by 2,3 order by 2,3; ROLLBACK;
-            BEGIN READ ONLY; select 'users' as q, count(*) filter (where email_verified_at is not null), count(*) from users; ROLLBACK;
+            BEGIN READ ONLY; select 'cols_pib' as q, string_agg(column_name, ',') from information_schema.columns where table_name='project_integration_bindings'; ROLLBACK;
+            BEGIN READ ONLY; select 'ga4_tables' as q, string_agg(table_name, ',') from information_schema.tables where table_schema='public' and table_name like '%ga4%'; ROLLBACK;
+            BEGIN READ ONLY; select 'notif_24h' as q, type, count(*) from app_notifications where created_at > now() - interval '24 hours' group by 2 order by 3 desc limit 12; ROLLBACK;
+            BEGIN READ ONLY; select 'deliv_24h' as q, channel, status, count(*) from notification_deliveries where created_at > now() - interval '24 hours' group by 2,3 order by 4 desc limit 12; ROLLBACK;
+            BEGIN READ ONLY; select 'mail_24h' as q, kind, status, count(*) from mail_deliveries where created_at > now() - interval '24 hours' group by 2,3 order by 4 desc limit 12; ROLLBACK;
+            BEGIN READ ONLY; select 'staff' as q, count(*) from tenant_memberships m join users u on u.id=m.user_id where u.email_verified_at is not null; ROLLBACK;
             SQL
-            echo "== END FACTS-DIGEST2"
+            echo "== END FACTS-NOTIF"
             exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
