@@ -46,7 +46,7 @@ function Tick(): ReactNode {
 
 export function ChannelChip({ state, label, onToggle, disabled, words, testId }: Props) {
   if (state === 'na') {
-    return <span data-testid={testId} className="text-[13px] text-text-muted" aria-label={label}>—</span>
+    return <span data-testid={testId} className="text-xs text-text-muted" aria-label={label}>—</span>
   }
 
   if (state === 'locked') {

@@ -21,7 +21,7 @@ const lead = (i: number): Lead => ({
   notes: null, tags: [], company_id: null, is_converted: false, converted_opportunity_id: null, converted_at: null, created_at: null,
 })
 const page = (rows: Lead[], total: number, current = 1, perPage = 10) => ({
-  leads: rows, counts: { received: total, unique: total }, stages: null, stagesIgnoreStatusFilter: false,
+  leads: rows, counts: { received: total, unique: total }, stages: null, stagesIgnoreStatusFilter: false, inflow: null,
   pagination: { total, per_page: perPage, current_page: current, last_page: Math.ceil(total / perPage) },
 })
 

@@ -85,7 +85,7 @@ const METRIC: Record<string, { ar: string; en: string }> = {
 }
 
 /** The name of a figure: one step above caption text, because it names rather than annotates. */
-const METRIC_LABEL = 'text-[13px] font-semibold leading-tight'
+const METRIC_LABEL = 'text-xs font-semibold leading-tight'
 
 const t = (key: keyof typeof T, ar: boolean) => (ar ? T[key].ar : T[key].en)
 

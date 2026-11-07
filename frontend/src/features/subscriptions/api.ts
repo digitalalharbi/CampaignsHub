@@ -1,4 +1,5 @@
 import { deleteData, getData, postData } from '@/lib/api/client'
+import type { VatSplit } from '@/features/signup/api'
 
 /**
  * Subscriptions API layer (Operations Console, internal). Mirrors the backend
@@ -61,6 +62,8 @@ export interface SubscriptionSummary {
   seats: number
   billing_interval?: string | null
   unit_amount?: string | null
+  /** PRICING-VAT-001/002 — each renewal on this subscription's own VAT terms. */
+  vat?: VatSplit | null
   currency?: string | null
   current_period_start?: string | null
   current_period_end: string | null
@@ -121,6 +124,8 @@ export interface ProrationQuote {
   prorated_new: string
   /** What is owed right now. `0.00` on a downgrade — nothing is taken and nothing is refunded. */
   due_now: string
+  /** PRICING-VAT-001 — `due_now` with its VAT, as it will be charged. */
+  vat?: VatSplit
   currency: string
   effective: 'immediate' | 'period_end'
   effective_at: string | null
@@ -213,3 +218,74 @@ export const revokeSubscriptionInvoiceShare = (id: string) =>
 /** The download is a real endpoint, so the link is a real link rather than a rendered blob. */
 export const subscriptionInvoiceDownloadUrl = (id: string) =>
   `/api/v1/subscriptions/invoices/${id}/download`
+
+/** PRICING-ADDONS-001 — the add-ons shop: readiness is real; a request grants and charges nothing until it is confirmed. */
+export interface ShopAddon {
+  code: string
+  kind: 'capacity' | 'feature'
+  name: string
+  name_ar: string
+  summary_en: string | null
+  summary_ar: string | null
+  /** Null until the add-on is ready and priced — never shown as available before then. */
+  price_monthly: string | null
+  currency: string
+  readiness: 'available' | 'coming_soon'
+  sold: boolean
+  grants: { limits?: Record<string, number> } | null
+  active_quantity: number
+  requested: boolean
+}
+
+export const getAddons = () => getData<{ addons: ShopAddon[]; prices_exclude_vat: boolean }>('/subscriptions/addons')
+
+export const requestAddon = (code: string, quantity = 1) =>
+  postData<{ request_id: string; status: string }>(`/subscriptions/addons/${code}/request`, { quantity })
+
+// PRICING-USAGE-CREDITS-001 — this month's usage, own-key caps and the credit balance.
+export interface UsageMeterRow {
+  code: string
+  name: string
+  name_ar: string
+  unit: string
+  funded_by: 'platform' | 'customer'
+  charges_credits: boolean
+  unit_cost: string | null
+  currency: string
+  used: number
+  included: number | null
+  cost: string
+  credits_charged: string
+  uncovered: string
+}
+
+export interface OwnKeyUsage {
+  id: string
+  provider: string
+  key: string
+  /** Which level the key serves — the whole workspace, one client or one project. */
+  scope?: 'tenant' | 'client' | 'project'
+  scope_name?: string | null
+  monthly_token_limit: number | null
+  used: number
+}
+
+export interface SeatSummary {
+  active: number
+  holding: number
+  replacements_used: number
+  replacements_allowed: number | null
+  next_replacement_at: string | null
+  cap: number | null
+}
+
+export interface UsageSummary {
+  period: string
+  meters: UsageMeterRow[]
+  own_keys: OwnKeyUsage[]
+  seats?: SeatSummary
+  credits: { balance: string; currency: string; recent: { kind: string; amount: string; balance_after: string; reason: string | null; at: string | null }[] }
+  prices_exclude_vat: boolean
+}
+
+export const getUsage = () => getData<UsageSummary>('/subscriptions/usage')

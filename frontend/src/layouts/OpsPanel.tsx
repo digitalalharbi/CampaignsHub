@@ -85,7 +85,7 @@ function Section({
         className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-start outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand-600"
       >
         <Icon size={15} className="shrink-0 text-text-muted" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-primary">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-text-primary">{title}</span>
         {status}
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>

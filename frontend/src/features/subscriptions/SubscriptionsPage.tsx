@@ -1,3 +1,5 @@
+import { AddonsShop } from './AddonsShop'
+import { UsageCard } from './UsageCard'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
@@ -15,11 +17,13 @@ import { Num } from '@/components/ui/Num'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 export const COPY = {
   ar: {
-    title: 'الاشتراكات', subtitle: 'اطّلع على خطة المستأجر الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
+    title: 'الاشتراكات', subtitle: 'اطّلع على خطة مساحة العمل الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل بيانات الاشتراك.',
     current_plan: 'الخطة الحالية', default_plan: 'الخطة الافتراضية (بدون اشتراك مُسجَّل)',
-    per_month: '/ شهرياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
+    per_month: '/ شهرياً', per_year: '/ سنوياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
+    vat_plus: (tax: string, total: string, cur: string) => `+ ضريبة القيمة المضافة ${tax} = ${total} ${cur} لكل تجديد`,
+    vat_in: (tax: string, cur: string) => `يشمل ضريبة القيمة المضافة ${tax} ${cur}`,
     usage_title: 'الاستهلاك والحدود', metric: 'المقياس', used: 'المُستهلك', remaining: 'المتبقّي', limit: 'الحد',
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
     current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
@@ -40,6 +44,8 @@ export const COPY = {
     new_price: 'سعر الباقة الجديدة للدورة',
     prorated: 'قيمة الباقة الجديدة للمدة المتبقية',
     due_now: 'المستحق الآن',
+    vat_added: 'ضريبة القيمة المضافة 15%',
+    total_now: 'الإجمالي المدفوع الآن',
     upgrade_note: 'لن تُفعَّل الباقة الجديدة إلا بعد تأكيد الدفع من بوابة الدفع.',
     downgrade_note: 'لن يُخصم أو يُسترد أي مبلغ. تحتفظ بباقتك الحالية حتى نهاية الدورة المدفوعة، ثم يبدأ التغيير.',
     confirm_upgrade: 'المتابعة إلى الدفع',
@@ -61,11 +67,13 @@ export const COPY = {
     remove_card_note: 'إزالة البطاقة لا تُلغي الاشتراك؛ ستصلك فاتورة التجديد لتسديدها بنفسك.',
   },
   en: {
-    title: 'Subscriptions', subtitle: 'See the tenant’s current plan and usage against limits, and change plan.',
+    title: 'Subscriptions', subtitle: 'See your workspace’s current plan and usage against limits, and change plan.',
     no_permission: 'You do not have permission to view subscriptions.',
     loading: 'Loading…', error: 'Could not load subscription data.',
     current_plan: 'Current plan', default_plan: 'Default plan (no explicit subscription)',
-    per_month: '/ month', seats: 'Seats', period_end: 'Period ends',
+    per_month: '/ month', per_year: '/ year', seats: 'Seats', period_end: 'Period ends',
+    vat_plus: (tax: string, total: string, cur: string) => `+ VAT ${tax} = ${total} ${cur} per renewal`,
+    vat_in: (tax: string, cur: string) => `Includes VAT of ${tax} ${cur}`,
     usage_title: 'Usage & limits', metric: 'Metric', used: 'Used', remaining: 'Remaining', limit: 'Limit',
     unlimited: 'Unlimited', catalogue: 'Available plans', change: 'Switch to this plan',
     current_badge: 'Your current plan', grandfathered: 'Earlier plan — kept for you at your price and limits', changing: 'Switching…', changed: 'Subscription updated',
@@ -86,6 +94,8 @@ export const COPY = {
     new_price: 'New plan, per period',
     prorated: 'New plan for the days that remain',
     due_now: 'Due now',
+    vat_added: 'VAT 15%',
+    total_now: 'Total charged now',
     upgrade_note: 'The new plan starts only once the gateway confirms the payment.',
     downgrade_note: 'Nothing is charged and nothing is refunded. You keep your current plan until the period you paid for ends.',
     confirm_upgrade: 'Continue to payment',
@@ -284,6 +294,12 @@ export function SubscriptionsPage() {
           )}
 
           <UsageTable usage={current.usage} c={c} />
+
+          {/* PRICING-USAGE-CREDITS-001 — metered usage, own-key caps and the usage balance. */}
+          <UsageCard ar={locale === 'ar'} />
+
+          {/* PRICING-ADDONS-001 — capacity and feature packs, beside the usage they extend. */}
+          <AddonsShop ar={locale === 'ar'} canManage={canManage} />
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
@@ -387,7 +403,17 @@ function CurrentPlanCard({ current, c }: { current: CurrentSubscription; c: Copy
         {sub && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[sub.status] ?? 'bg-surface-secondary text-text-muted'}`}>{statusLabel(sub.status, c)}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-text-secondary">
-        {plan && sub?.commercial_basis !== 'complimentary' && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
+        {/* What THIS subscriber pays (their captured price and term), not the catalogue's current monthly price. */}
+        {sub?.commercial_basis !== 'complimentary' && (sub?.unit_amount ? (
+          <span data-testid="current-price" className="tnum font-bold text-text-primary">
+            <Num>{sub.unit_amount} {sub.currency ?? plan?.currency}</Num> <span className="text-xs font-normal text-text-muted">{sub.billing_interval === 'annual' ? c.per_year : c.per_month}</span>
+          </span>
+        ) : plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>)}
+        {sub?.commercial_basis !== 'complimentary' && sub?.vat && Number(sub.vat.tax) > 0 && (
+          <span data-testid="current-vat" className="text-xs text-text-muted">
+            {sub.vat.prices_include_vat ? c.vat_in(sub.vat.tax, sub.currency ?? '') : c.vat_plus(sub.vat.tax, sub.vat.gross, sub.currency ?? '')}
+          </span>
+        )}
         {sub && <span>{c.seats}: <span className="tnum font-semibold text-text-primary">{num(sub.seats, c.unlimited)}</span></span>}
         {sub?.commercial_basis && <span data-testid="subscription-commercial-basis" className="font-semibold text-text-primary">{c[`basis_${sub.commercial_basis}`]}</span>}
         {sub?.current_period_end && <span>{c.period_end}: <span className="tnum font-semibold text-text-primary">{fmtDate(sub.current_period_end)}</span></span>}
@@ -510,7 +536,7 @@ function PendingChangeBanner({
           : <CalendarClock size={17} className="mt-0.5 shrink-0 text-info" />}
         <div>
           <p className="text-sm font-bold text-text-primary">{c.pending_title} — {change.plan_name}</p>
-          <p className="mt-0.5 text-[13px] text-text-secondary">
+          <p className="mt-0.5 text-xs text-text-secondary">
             {change.awaiting_payment
               ? c.pending_awaiting_payment
               : `${c.pending_at} ${fmtDate(change.effective_at)}`}
@@ -577,10 +603,22 @@ function ProrationReview({
                 <Num>{money(quote.due_now, quote.currency)}</Num>
               </dd>
             </div>
+            {/* PRICING-VAT-001 — on a VAT-exclusive plan the card is asked for the difference plus VAT; say so first. */}
+            {owes && quote.vat && !quote.vat.prices_include_vat && (
+              <>
+                <Row label={c.vat_added} value={money(quote.vat.tax, quote.currency)} />
+                <div className="flex items-center justify-between">
+                  <dt className="text-sm font-bold text-text-primary">{c.total_now}</dt>
+                  <dd data-testid="due-now-total" className="tnum text-base font-extrabold text-text-primary">
+                    <Num>{money(quote.vat.gross, quote.currency)}</Num>
+                  </dd>
+                </div>
+              </>
+            )}
           </dl>
 
           {/* The honest sentence, and it differs by direction. */}
-          <p data-testid="proration-note" className="text-[13px] leading-relaxed text-text-secondary">
+          <p data-testid="proration-note" className="text-xs leading-relaxed text-text-secondary">
             {isDowngrade ? c.downgrade_note : c.upgrade_note}
           </p>
 

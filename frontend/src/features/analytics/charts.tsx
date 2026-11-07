@@ -259,7 +259,7 @@ export function PlatformDonutChart({
           <Tooltip {...tooltipProps} formatter={(v: number) => `${money(v, currency)} · ${percent(v / (total || 1), 1)}`} />
           {/* REPORT-PLATFORM-LOGOS-001 — a platform slice is named with the platform's own logo, not a bare word. */}
           {legend && <Legend wrapperStyle={{ fontSize: 13 }} content={() => (
-            <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-text-secondary" data-testid="donut-legend">
+            <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-secondary" data-testid="donut-legend">
               {rows.map((r, i) => (
                 <li key={r.name} className="inline-flex items-center gap-1.5">
                   {colorBy === 'platform' && keyOf(r.name) !== r.name ? <ProviderMark provider={keyOf(r.name)} size={16} /> : <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color(r.name, i) }} aria-hidden />}

@@ -86,7 +86,7 @@ export function TeamTab() {
               <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <div className="font-medium text-text-primary" dir="ltr">{i.email}</div>
-                  <div className="text-[13px] text-text-muted">
+                  <div className="text-xs text-text-muted">
                     {/* A pending invite showed the raw slug — «tenant-owner» — beside a translated row. */}
                     {roleLabel({ slug: i.role_slug, name: i.role_slug, is_system: true }, ar)}
                     {i.expired

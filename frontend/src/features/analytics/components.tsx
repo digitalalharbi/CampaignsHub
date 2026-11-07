@@ -44,7 +44,7 @@ export function TrendPill({ delta, invertGood = false, calm = false }: { delta: 
  * This was the third implementation of a labelled figure, and the widest-travelled: Analytics, the
  * dashboard strip and the client's own shared link all render it. It agreed with `StatCard` on the
  * idea and on nothing else — `p-4` against `p-4 sm:p-5`, a `text-sm` label against the product's
- * `text-[13px] font-semibold`, its own value class against `METRIC_VALUE_DENSE` — so a reader moving
+ * `text-xs font-semibold`, its own value class against `METRIC_VALUE_DENSE` — so a reader moving
  * from a client link to the campaign command centre met two designs of one object, and a row drawn by
  * both did not line up.
  *

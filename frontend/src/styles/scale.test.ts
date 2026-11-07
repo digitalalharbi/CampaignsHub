@@ -67,7 +67,7 @@ describe('the KPI surfaces share one scale', () => {
     expect(METRIC_VALUE).toContain('sm:text-[32px]')
     expect(METRIC_VALUE_DENSE).toContain('text-2xl')
     expect(METRIC_VALUE_DENSE).toContain('sm:text-[26px]')
-    expect(METRIC_LABEL).toContain('text-[13px]')
+    expect(METRIC_LABEL).toContain('text-xs')
     expect(PAGE_TITLE).toContain('sm:text-[28px]')
     expect(CARD_PAD).toBe('p-4 sm:p-5')
     expect(CARD_PAD_DENSE).toBe('p-3.5 sm:p-4')

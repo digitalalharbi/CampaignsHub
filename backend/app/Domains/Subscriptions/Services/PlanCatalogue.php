@@ -134,6 +134,11 @@ final class PlanCatalogue
              */
             'due_now' => $intro ? (string) $plan->trial_fee : $recurring,
             'due_later' => $intro ? $recurring : null,
+            // PRICING-VAT-001 — what is taken today and later, with its VAT, before anybody is asked for a card.
+            'vat' => [
+                'now' => app(SubscriptionTax::class)->split($plan->code, $intro ? (string) $plan->trial_fee : (string) $recurring),
+                'later' => $intro ? app(SubscriptionTax::class)->split($plan->code, (string) $recurring) : null,
+            ],
             'renews_in_days' => $intro ? $plan->trial_days : ($interval === 'annual' ? 365 : 30),
             'trial_days' => $intro ? $plan->trial_days : 0,
             'trial_fee' => $intro ? (string) $plan->trial_fee : null,

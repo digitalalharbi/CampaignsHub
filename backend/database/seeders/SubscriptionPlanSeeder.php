@@ -51,7 +51,9 @@ final class SubscriptionPlanSeeder extends Seeder
     {
         return PlanCatalogueVersion::query()->firstOrCreate(
             ['number' => $number],
-            ['label' => $label, 'currency' => $currency, 'status' => $status, 'published_at' => $status === 'published' ? now() : null],
+            // PRICING-VAT-001 — the launch catalogue was sold all-in; the 2026-11 catalogue is priced VAT-exclusive.
+            ['label' => $label, 'currency' => $currency, 'status' => $status, 'published_at' => $status === 'published' ? now() : null,
+                'prices_include_vat' => $number === self::LEGACY_VERSION],
         );
     }
 

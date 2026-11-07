@@ -17,8 +17,8 @@ export function FormField({
         {label}{required && <span className="text-danger"> *</span>}
       </label>
       {children}
-      {error ? <span className="mt-1.5 block text-[13px] text-danger" role="alert">{error}</span>
-        : hint ? <span className="mt-1.5 block text-[13px] text-text-muted">{hint}</span> : null}
+      {error ? <span className="mt-1.5 block text-xs text-danger" role="alert">{error}</span>
+        : hint ? <span className="mt-1.5 block text-xs text-text-muted">{hint}</span> : null}
     </div>
   )
 }
@@ -75,7 +75,7 @@ export const TextareaField = forwardRef<HTMLTextAreaElement, TextareaProps>(func
         ref={ref} id={fid} value={value} maxLength={maxLength} aria-invalid={error ? true : undefined}
         className={`${controlClass} min-h-[140px] resize-y ${className ?? ''}`} {...props}
       />
-      {maxLength ? <div className="mt-1 text-end text-[12px] tabular-nums text-text-muted">{count}/{maxLength}</div> : null}
+      {maxLength ? <div className="mt-1 text-end text-xs tabular-nums text-text-muted">{count}/{maxLength}</div> : null}
     </FormField>
   )
 })

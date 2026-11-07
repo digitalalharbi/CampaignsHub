@@ -65,7 +65,7 @@ export function DashboardContextStrip() {
           <li
             key={key}
             data-testid={`dashboard-context-platform-${key}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-[12px] font-semibold text-text-secondary"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-semibold text-text-secondary"
           >
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: platformColor(key) }} aria-hidden />
             {PLATFORM_LABELS[key as AdPlatform]?.[ar ? 'ar' : 'en'] ?? key}
@@ -81,7 +81,7 @@ export function DashboardContextStrip() {
         <Link
           to="/app/integrations"
           data-testid="dashboard-context-attention"
-          className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-[var(--warning-background)] px-2.5 py-0.5 text-[12px] font-bold text-text-primary hover:border-warning"
+          className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-[var(--warning-background)] px-2.5 py-0.5 text-xs font-bold text-text-primary hover:border-warning"
         >
           <AlertTriangle size={12} aria-hidden />
           {ar ? 'يحتاج انتباه' : 'Needs attention'} <Num>{attention}</Num>

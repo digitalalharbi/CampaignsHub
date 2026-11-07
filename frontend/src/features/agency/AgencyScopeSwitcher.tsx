@@ -218,7 +218,7 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
             onChange={(e) => setTerm(e.target.value)}
             aria-label={ar ? `تصفية ${label}` : `Filter ${label}`}
             placeholder={ar ? 'تصفية…' : 'Filter…'}
-            className="w-full rounded-xl border border-border bg-surface-secondary py-1.5 pe-2 ps-7 text-[12px] text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-xl border border-border bg-surface-secondary py-1.5 pe-2 ps-7 text-xs text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none"
           />
         </div>
       )}
@@ -236,7 +236,7 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
           disabled={disabled}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full cursor-pointer appearance-none overflow-hidden text-ellipsis whitespace-nowrap rounded-xl border border-border bg-surface-secondary py-2 pe-8 ps-3 text-[13px] font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full cursor-pointer appearance-none overflow-hidden text-ellipsis whitespace-nowrap rounded-xl border border-border bg-surface-secondary py-2 pe-8 ps-3 text-xs font-semibold text-text-primary transition-colors hover:border-border-strong focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="">{placeholder}</option>
           {shown.map((o) => (

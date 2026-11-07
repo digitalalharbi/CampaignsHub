@@ -77,8 +77,8 @@ export function ClientSpacePickerPage() {
                     <Building2 size={19} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-bold text-text-primary">{space.name}</span>
-                    <span className="text-start mt-0.5 block truncate text-[12px] text-text-muted"><Num>{space.slug}</Num></span>
+                    <span className="block text-sm font-bold text-text-primary">{space.name}</span>
+                    <span className="text-start mt-0.5 block truncate text-xs text-text-muted"><Num>{space.slug}</Num></span>
                   </span>
                   <Arrow size={16} className="shrink-0 text-text-muted" />
                 </Link>

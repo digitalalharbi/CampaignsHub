@@ -20,7 +20,7 @@ final class ModelClientFactory
     /** Providers whose client exists in this product. The others are configurable and say so. */
     public const SUPPORTED = ['anthropic', 'openai', 'gemini'];
 
-    /** @return array{client: ModelClient, provider: string, model: string, token_limit: int|null} */
+    /** @return array{client: ModelClient, provider: string, model: string, token_limit: int|null, credential_id: string} */
     public function for(Project $project, string $role): array
     {
         $credential = AIProviderCredential::query()
@@ -60,6 +60,7 @@ final class ModelClientFactory
         $credential->forceFill(['last_used_at' => now()])->save();
 
         return ['client' => $client, 'provider' => $credential->provider, 'model' => $model,
-            'token_limit' => $credential->monthly_token_limit !== null ? (int) $credential->monthly_token_limit : null];
+            'token_limit' => $credential->monthly_token_limit !== null ? (int) $credential->monthly_token_limit : null,
+            'credential_id' => (string) $credential->getKey()];
     }
 }

@@ -47,7 +47,7 @@ export function Ga4VisibilityControl({ hidden, onChange, ar, testId = 'ga4-visib
                   const shown = !set.has(i.key)
 
                   return (
-                    <label key={i.key} className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${shown ? 'border-border text-text-primary' : 'border-dashed border-border text-text-muted line-through'}`}>
+                    <label key={i.key} className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${shown ? 'border-border text-text-primary' : 'border-dashed border-border text-text-muted line-through'}`}>
                       <input type="checkbox" className="sr-only" data-testid={`${testId}-el-${i.key}`} checked={shown} onChange={() => toggle(i.key)} />
                       <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${i.sales ? 'bg-success' : 'bg-info'}`} />
                       {ar ? i.label.ar : i.label.en}
@@ -57,7 +57,7 @@ export function Ga4VisibilityControl({ hidden, onChange, ar, testId = 'ga4-visib
               </div>
             </fieldset>
           ))}
-          <div className="col-span-full flex items-center gap-3 text-[11px] text-text-muted">
+          <div className="col-span-full flex items-center gap-3 text-xs text-text-muted">
             <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-info" />{ar ? 'تسويق' : 'Marketing'}</span>
             <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />{ar ? 'مبيعات' : 'Sales'}</span>
           </div>

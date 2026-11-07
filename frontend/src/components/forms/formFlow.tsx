@@ -37,7 +37,7 @@ export function FormStepper({
         const badge = (
           <span
             className={
-              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ' +
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ' +
               (state === 'current'
                 ? 'bg-primary text-white'
                 : state === 'complete'
@@ -100,7 +100,7 @@ export function ErrorSummary({ errors, title, className = '' }: { errors: FieldE
         <AlertCircle className="h-4 w-4" aria-hidden />
         {title}
       </div>
-      <ul className="list-disc space-y-0.5 ps-6 text-[13px] text-danger">
+      <ul className="list-disc space-y-0.5 ps-6 text-xs text-danger">
         {errors.map((e) => (
           <li key={e.field}>
             <button

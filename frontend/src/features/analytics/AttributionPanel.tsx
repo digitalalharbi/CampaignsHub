@@ -305,7 +305,7 @@ export function AttributionPanel({
               {data?.models?.map((m) => (
                 <li key={m.model}>
                   {m.is_set ? (
-                    <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-[12px]">{m.model}</code>
+                    <code className="rounded bg-surface-secondary px-1.5 py-0.5 text-xs">{m.model}</code>
                   ) : (
                     /* Never defaulted. «Nobody set one» is a different sentence from «last click». */
                     <span className="font-semibold text-warning">{ar ? 'غير محدَّد' : 'Not set'}</span>

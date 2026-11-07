@@ -217,7 +217,12 @@ final class RegistrationDecisionTest extends TestCase
     {
         $result = app(SubscriptionCheckout::class)->startRegistrationPayment($request);
 
-        $this->assertSame($expected, number_format((float) $result['payment']->amount, 2, '.', ''));
+        // PRICING-VAT-001: the remainder is the PRICE; a VAT-exclusive catalogue charges it with VAT added, the split kept on the payment.
+        $this->assertSame($expected, number_format((float) $result['payment']->net_amount, 2, '.', ''));
+        $this->assertSame(
+            number_format((float) $result['payment']->net_amount + (float) $result['payment']->tax_amount, 2, '.', ''),
+            number_format((float) $result['payment']->amount, 2, '.', ''),
+        );
         $this->assertSame($currency, $result['payment']->currency);
         $this->assertNotSame('paid', $result['payment']->status);
     }

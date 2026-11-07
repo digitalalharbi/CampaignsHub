@@ -8,6 +8,7 @@ use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\TwilioVerifyException;
 use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Requests\Models\ContactVerification;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -129,6 +130,11 @@ final class ContactVerificationService
             try {
                 $state = $this->twilio->send($destination);
                 $v->forceFill(['delivery_status' => $state === 'pending' ? 'sent' : $state])->save();
+                // PRICING-USAGE-CREDITS-001 — a code the platform paid Twilio to send for a workspace is that workspace's usage.
+                if ($state === 'pending' && $tenantId !== null) {
+                    app(UsageLedger::class)->record($tenantId, 'sms_verifications', 1, 'contact_verification:'.$v->id,
+                        referenceType: 'contact_verification', referenceId: (string) $v->id);
+                }
             } catch (TwilioVerifyException) {
                 $v->forceFill(['delivery_status' => 'failed'])->save();
             }

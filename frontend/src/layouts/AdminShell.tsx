@@ -2,6 +2,10 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   ClipboardCheck,
   CreditCard,
+  PackagePlus,
+  ArrowRightLeft,
+  Gauge,
+  Receipt,
   ShieldAlert,
   ScrollText,
   Settings,
@@ -59,6 +63,12 @@ const adminNav = [
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
+  // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
+  { to: '/admin/addons', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
+  // PRICING-MIGRATION-001 — launch-plan subscribers onto the current catalogue: previewed, typed, at period end.
+  { to: '/admin/plan-migration', ar: 'الانتقال للباقات الجديدة', en: 'Plan migration', icon: ArrowRightLeft },
+  { to: '/admin/usage', ar: 'الاستهلاك والرصيد', en: 'Usage and credits', icon: Gauge },
+  { to: '/admin/tax', ar: 'ضريبة القيمة المضافة', en: 'VAT', icon: Receipt },
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
   { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
@@ -198,7 +208,7 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
       </span>
       {!collapsed && (
         <div className="min-w-0">
-          <span className="block truncate font-heading text-[15px] font-extrabold tracking-tight text-text-primary">
+          <span className="block truncate font-heading text-sm font-extrabold tracking-tight text-text-primary">
             {productName(ar ? 'ar' : 'en')}
           </span>
           <span data-testid="admin-scope-note" className="block truncate text-[11px] text-text-muted">

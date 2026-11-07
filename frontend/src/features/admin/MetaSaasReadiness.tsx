@@ -109,7 +109,7 @@ export function MetaSaasReadiness({ items, ar }: { items: MetaSaasReadinessItem[
 
   return (
     <section data-testid="meta-saas-readiness" className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.title}</h2>
+      <h2 className="font-heading text-sm font-bold text-text-primary">{c.title}</h2>
       <p className="mt-1 max-w-3xl text-xs text-text-secondary">{c.note}</p>
 
       <ul className="mt-4 flex flex-col divide-y divide-border">

@@ -356,7 +356,12 @@ final class AdminFullControlTest extends TestCase
         $this->assertSame(number_format($full, 2, '.', ''), number_format((float) $sub->unit_amount, 2, '.', ''), 'the agreed price is untouched');
 
         $charge = app(SubscriptionCheckout::class)->chargeSubscription($sub);
-        $this->assertSame($half, number_format((float) $charge['payment']->amount, 2, '.', ''));
+        // PRICING-VAT-001: the discounted PRICE is what is agreed; VAT is added on it where the catalogue is VAT-exclusive.
+        $this->assertSame($half, number_format((float) $charge['payment']->net_amount, 2, '.', ''));
+        $this->assertSame(
+            number_format((float) $charge['payment']->net_amount + (float) $charge['payment']->tax_amount, 2, '.', ''),
+            number_format((float) $charge['payment']->amount, 2, '.', ''),
+        );
         $this->assertSame($plan->currency, $charge['payment']->currency);
 
         // Confirmed once: the next renewal is back at the full price.

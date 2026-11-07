@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { brandStyle } from './useClientBranding'
+import { agencyAccentFor, brandStyle, contrastWithWhite, MIN_ACCENT_CONTRAST } from './useClientBranding'
 import type { ClientBranding } from './clientSpace'
 
 function branding(colors: Record<string, string>): ClientBranding {
@@ -37,7 +37,25 @@ describe('brandStyle', () => {
     expect(brandStyle(branding({ primary: value }))).toEqual({})
   })
 
-  it.each(['#abc', '#AABBCC', '#AABBCCDD'])('accepts the hex form %s', (value) => {
+  /** BRANDING-HIERARCHY-001 — white text sits on the accent, so an accent it cannot be read on is not applied. */
+  it.each(['#FFEB3B', '#AABBCC', '#ffffff', '#abc'])('refuses %s: white text on it would be unreadable', (value) => {
+    expect(contrastWithWhite(value)).toBeLessThan(MIN_ACCENT_CONTRAST)
+    expect(brandStyle(branding({ primary: value }))).toEqual({})
+  })
+
+  it('applies an agency accent only when the agency chose one that white text can be read on', () => {
+    expect(agencyAccentFor(undefined)).toBeUndefined()
+    expect(agencyAccentFor('#0D8A6F')).toBeUndefined() // the product's own: nothing changes
+    expect(agencyAccentFor('#FFEB3B')).toBeUndefined() // too pale
+    expect(agencyAccentFor('#7A1FA2')?.['--brand-600']).toBe('#7A1FA2')
+  })
+
+  it('states contrast the WCAG way', () => {
+    expect(contrastWithWhite('#000000')).toBeCloseTo(21, 0)
+    expect(contrastWithWhite('#ffffff')).toBeCloseTo(1, 1)
+  })
+
+  it.each(['#234', '#223344', '#223344FF'])('accepts the hex form %s', (value) => {
     expect(brandStyle(branding({ primary: value }))['--brand-600']).toBe(value)
   })
 

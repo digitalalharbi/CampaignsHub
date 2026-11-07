@@ -102,7 +102,7 @@ export function CutoverPage() {
           ? <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-success" aria-hidden />
           : <ShieldAlert size={20} className="mt-0.5 shrink-0 text-warning" aria-hidden />}
         <div>
-          <p className="font-heading text-[15px] font-bold text-text-primary">
+          <p className="font-heading text-sm font-bold text-text-primary">
             {d.ready
               ? (ar ? 'الشروط مستوفاة — الإلغاء آمن' : 'Conditions met — retiring is safe')
               : (ar ? 'الإلغاء غير آمن بعد' : 'Not safe to retire yet')}
@@ -190,7 +190,7 @@ export function CutoverPage() {
           </p>
           <ul data-testid="parity-mismatches" className="mt-3 grid gap-2">
             {d.parity.mismatches.map((m) => (
-              <li key={m.contact} className="rounded-xl bg-surface-secondary px-3.5 py-2.5 text-[13px]">
+              <li key={m.contact} className="rounded-xl bg-surface-secondary px-3.5 py-2.5 text-xs">
                 <span className="font-semibold text-text-primary" dir="ltr">{m.contact}</span>
                 <span className="text-start tnum mt-1 block text-text-secondary">
                   <Num>{ar ? 'العضوية' : 'membership'}: {m.membership.length} · {ar ? 'التوكن' : 'token'}: {m.token.length}</Num>
@@ -208,9 +208,9 @@ export function CutoverPage() {
           </h2>
           <ul data-testid="legacy-holders" className="mt-3 grid gap-1.5">
             {d.legacy_holders.map((h) => (
-              <li key={h.contact + h.expires_at} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+              <li key={h.contact + h.expires_at} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                 <span className="font-semibold text-text-primary" dir="ltr">{h.contact}</span>
-                <span className="flex items-center gap-2.5 text-[12px]">
+                <span className="flex items-center gap-2.5 text-xs">
                   {/* Two different problems: one upgrades itself, the other needs a decision. */}
                   <span className={h.has_membership ? 'text-text-muted' : 'font-semibold text-warning'}>
                     {h.has_membership
@@ -250,8 +250,8 @@ export function CutoverPage() {
             {conflicts.data.conflicts.map((c) => (
               <li key={c.id} data-testid={`conflict-${c.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-[14px] font-bold text-text-primary" dir="ltr">{c.contact_email ?? c.contact_phone}</p>
-                  <p className="mt-0.5 text-[12px] text-text-muted">
+                  <p className="text-sm font-bold text-text-primary" dir="ltr">{c.contact_email ?? c.contact_phone}</p>
+                  <p className="mt-0.5 text-xs text-text-muted">
                     {REASON_LABELS[c.reason] ? (ar ? REASON_LABELS[c.reason].ar : REASON_LABELS[c.reason].en) : c.reason}
                     {c.tenant_name && ` · ${c.tenant_name}`}
                     {/* The consequence, before the choice. */}

@@ -188,7 +188,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
       )}
 
       <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.credentials}</h2>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{c.credentials}</h2>
         <p className="mt-1 text-xs text-text-muted">{c.writeOnly}</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -294,7 +294,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
 
   return (
     <section data-testid="meta-candidate-promotion" className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.promotion}</h2>
+      <h2 className="font-heading text-sm font-bold text-text-primary">{c.promotion}</h2>
       <p className="mt-1 max-w-3xl text-xs text-text-secondary">{c.promotionNote}</p>
       {!promotion.eligible && promotion.reason && (
         <p data-testid="meta-candidate-promotion-reason" className="mt-2 text-xs text-text-muted">
@@ -368,7 +368,7 @@ function RunChecklist({ run, copy: c }: { run: MetaCandidateRun | null; copy: Co
   return (
     <section data-testid="meta-candidate-checklist" className="rounded-2xl border border-border bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.checklist}</h2>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{c.checklist}</h2>
         <span data-testid="meta-candidate-status" className="text-sm font-semibold text-text-primary">{c[run.status]}</span>
       </div>
       <p className="mt-1 text-xs text-text-muted">
@@ -399,7 +399,7 @@ function StepRow({ step, copy: c }: { step: MetaCandidateStep; copy: Copy }) {
   const e = step.error
 
   return (
-    <li data-testid={`meta-candidate-step-${step.key}`} data-status={step.status} className="rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+    <li data-testid={`meta-candidate-step-${step.key}`} data-status={step.status} className="rounded-lg bg-surface-secondary px-3 py-2 text-xs">
       <div className="flex items-center gap-2">
         {icon}
         <span className="font-semibold text-text-primary">{c.steps[step.key]}</span>

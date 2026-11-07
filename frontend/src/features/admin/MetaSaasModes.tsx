@@ -77,7 +77,7 @@ export function MetaSaasModes({ modes, ar }: { modes: MetaSaasModesState; ar: bo
 
   return (
     <section data-testid="meta-saas-modes" className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.title}</h2>
+      <h2 className="font-heading text-sm font-bold text-text-primary">{c.title}</h2>
       <div className="mt-3 flex flex-wrap gap-2" role="list">
         {(['live', 'saas_test', 'saas_primary'] as const).map((m) => (
           <span

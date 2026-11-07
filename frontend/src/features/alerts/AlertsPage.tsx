@@ -28,7 +28,7 @@ const COPY = {
     title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، التوكنات، ومتابعة العملاء المحتملين.',
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
-    no_rules: 'لا توجد قاعدة مراقبة في هذا الحساب — لن يصل أي تنبيه حتى تُضاف واحدة.',
+    no_rules: 'لا توجد قاعدة مراقبة في مساحة العمل هذه — لن يصل أي تنبيه حتى تُضاف واحدة.',
     suggest_anomaly: 'ابدأ بـ«يوم غير معتاد»',
     suggest_anomaly_why: 'يقارن كل رقم بسلوكه في الأيام السابقة، فلا يحتاج منك حدًّا رقميًّا — ويشمل الحملات التي لم تكتب لها قاعدة.',
     suggest_anomaly_name: 'يوم غير معتاد',
@@ -49,15 +49,15 @@ const COPY = {
     st_awaiting: 'بانتظار اعتماد المزوّد', st_sent: 'مُرسلة', st_suppressed: 'مكبوتة', st_failed: 'فشلت',
     st_quiet: 'مؤجّلة (ساعات الهدوء)', st_pref: 'مكبوتة (تفضيل)',
     minutes_60: 'ساعة', minutes_240: '4 ساعات', minutes_1440: 'يوم',
-    account_wide: 'على مستوى الحساب',
+    account_wide: 'على مستوى مساحة العمل',
     project: 'المشروع', all_projects: 'كل المشاريع',
-    none_clear_all: 'لا تنبيهات مفتوحة — لم تُطلق أي قاعدة مفعّلة في هذا الحساب.',
+    none_clear_all: 'لا تنبيهات مفتوحة — لم تُطلق أي قاعدة مفعّلة في مساحة العمل هذه.',
   },
   en: {
     title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, tokens, and lead follow-up.',
     tab_alerts: 'Alerts', tab_rules: 'Rules', tab_prefs: 'Preferences', tab_deliveries: 'Delivery log',
     all: 'All', active: 'Active', snoozed: 'Snoozed', resolved: 'Resolved', none: 'Nothing here.',
-    no_rules: 'No rule is watching this account — no alert can arrive until one exists.',
+    no_rules: 'No rule is watching this workspace — no alert can arrive until one exists.',
     suggest_anomaly: 'Start with “Unusual day”',
     suggest_anomaly_why: 'It compares each figure against its own recent behaviour, so there is no threshold to choose — and it covers the campaigns nobody wrote a rule for.',
     suggest_anomaly_name: 'Unusual day',
@@ -78,9 +78,9 @@ const COPY = {
     st_awaiting: 'Awaiting provider credentials', st_sent: 'Sent', st_suppressed: 'Suppressed', st_failed: 'Failed',
     st_quiet: 'Held (quiet hours)', st_pref: 'Suppressed (preference)',
     minutes_60: '1 hour', minutes_240: '4 hours', minutes_1440: '1 day',
-    account_wide: 'Account-wide',
+    account_wide: 'Workspace-wide',
     project: 'Project', all_projects: 'All projects',
-    none_clear_all: 'No open alerts — no active rule has fired in this account.',
+    none_clear_all: 'No open alerts — no active rule has fired in this workspace.',
   },
 }
 
@@ -418,7 +418,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
       </FilterBar>
 
       {capped && (
-        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
+        <p data-testid="alert-events-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-xs text-text-secondary">
           {/*
             The queue is ordered open → snoozed → resolved, so what a cap drops is the oldest resolved
             events. Saying which end was cut is the difference between a bounded list and a list that
@@ -508,7 +508,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     event and would crowd out the evidence.
                   */}
                   {alertNextAction(e.type, locale) !== null && (
-                    <p data-testid={`alert-action-${e.id}`} className="flex items-center gap-1.5 text-[12px] font-semibold text-brand-700">
+                    <p data-testid={`alert-action-${e.id}`} className="flex items-center gap-1.5 text-xs font-semibold text-brand-700">
                       <ArrowRight size={12} className="shrink-0 rtl:rotate-180" aria-hidden />
                       {alertNextAction(e.type, locale)}
                     </p>
@@ -716,7 +716,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     <div className="grid gap-4 md:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-2">
         {capped && (
-          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-[12px] text-text-secondary">
+          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-xs text-text-secondary">
             {locale === 'ar'
               ? `تُعرض أحدث ${rules.length} قاعدة من ${total}.`
               : `Showing the most recent ${rules.length} of ${total} rules.`}

@@ -74,17 +74,17 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
 
   return (
     <section data-testid="account-grants" className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
         {ar ? 'منح واستثناءات' : 'Grants and exceptions'}
       </h3>
-      <p className="mt-1 text-[12px] text-text-muted">
+      <p className="mt-1 text-xs text-text-muted">
         {ar
           ? 'تُضاف المنحة فوق ما تتيحه الباقة ولا تنقص منه أبدًا، وتسري داخل بوابات هذا الحساب فقط. كل منحة وإلغاء يُسجَّل بالمنفّذ والسبب والتاريخ.'
           : 'A grant is added on top of what the plan already allows and never subtracts from it, and applies only inside this account’s own portals. Every grant and revocation is recorded with the actor, the reason and the date.'}
       </p>
 
       {error && (
-        <p role="alert" className="mt-2 rounded-xl bg-[var(--negative-background)] px-3.5 py-2.5 text-[13px] text-danger">
+        <p role="alert" className="mt-2 rounded-xl bg-[var(--negative-background)] px-3.5 py-2.5 text-xs text-danger">
           {error.message}
         </p>
       )}
@@ -106,7 +106,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
         <label className="text-[11px] font-semibold text-text-muted">
           <span className="mb-1 block">{ar ? 'ماذا' : 'What'}</span>
           {kind === 'full_access' ? (
-            <p className="flex h-9 items-center text-[13px] font-normal text-text-secondary">
+            <p className="flex h-9 items-center text-xs font-normal text-text-secondary">
               {ar
                 ? 'كل ما تتيحه بوابات هذا الحساب — ولا شيء من بوابة أخرى.'
                 : 'Everything this account’s own portals offer — and nothing from any other.'}
@@ -141,7 +141,7 @@ export function AccountGrantsPanel({ tenantId, ar }: { tenantId: string; ar: boo
       </div>
 
       {grants.data.grants.length === 0 ? (
-        <p className="mt-3 text-[13px] text-text-muted">
+        <p className="mt-3 text-xs text-text-muted">
           {ar ? 'لا منح على هذا الحساب.' : 'This account has no grants.'}
         </p>
       ) : (
@@ -171,7 +171,7 @@ function GrantRow({ grant, ar, busy, onRevoke }: {
     <li
       data-testid={`grant-${grant.id}`}
       data-in-force={grant.in_force}
-      className={`rounded-lg border px-3 py-2 text-[13px] ${grant.in_force ? 'border-border bg-surface' : 'border-dashed border-border bg-surface-secondary opacity-70'}`}
+      className={`rounded-lg border px-3 py-2 text-xs ${grant.in_force ? 'border-border bg-surface' : 'border-dashed border-border bg-surface-secondary opacity-70'}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0">
@@ -192,9 +192,9 @@ function GrantRow({ grant, ar, busy, onRevoke }: {
         )}
       </div>
 
-      <p className="mt-1 text-[12px] text-text-muted">{grant.reason}</p>
+      <p className="mt-1 text-xs text-text-muted">{grant.reason}</p>
       {grant.revoked_reason && (
-        <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-text-muted">
+        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-text-muted">
           <ShieldCheck size={12} aria-hidden /> {grant.revoked_reason}
         </p>
       )}

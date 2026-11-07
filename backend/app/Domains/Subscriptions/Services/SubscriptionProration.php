@@ -98,6 +98,8 @@ final class SubscriptionProration
             // Never negative: money owed BACK is not taken here, it is honoured by letting the
             // customer keep the period they paid for.
             'due_now' => $this->money(max(0.0, $difference)),
+            // PRICING-VAT-001 — the difference with its VAT, as it will be charged.
+            'vat' => app(SubscriptionTax::class)->split($newPlan->code, $this->money(max(0.0, $difference))),
             'currency' => $currency,
             'effective' => $effective,
             'effective_at' => $effective === 'period_end' ? $periodEnd?->toIso8601String() : null,

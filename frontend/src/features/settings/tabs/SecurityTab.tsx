@@ -73,7 +73,7 @@ export function SecurityTab() {
       {/* Org policy */}
       {policy && (
         <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
-          <h2 className="mb-3 text-lg font-bold text-text-primary">{ar ? 'سياسة الأمان للمؤسسة' : 'Organisation security policy'}</h2>
+          <h2 className="mb-3 text-lg font-bold text-text-primary">{ar ? 'سياسة الأمان لمساحة العمل' : 'Workspace security policy'}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={ar ? 'مهلة الجلسة (دقائق)' : 'Session timeout (minutes)'} htmlFor="sto"><Input id="sto" type="number" min={5} value={policy.session_timeout_minutes} onChange={(e) => setPolicy({ ...policy, session_timeout_minutes: Number(e.target.value) })} /></Field>
             <div className="flex flex-col justify-end gap-2">

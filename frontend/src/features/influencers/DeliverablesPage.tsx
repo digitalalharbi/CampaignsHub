@@ -134,12 +134,12 @@ export function DeliverablesPage() {
               }`}
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-[14px] font-bold text-text-primary">
+                <p className="flex items-center gap-2 text-sm font-bold text-text-primary">
                   {row.is_overdue && <AlertTriangle size={14} className="shrink-0 text-warning" aria-hidden />}
                   {row.type}
                   {row.platform && <span className="font-normal text-text-muted">· {row.platform}</span>}
                 </p>
-                <p className="mt-0.5 truncate text-[12px] text-text-muted">
+                <p className="mt-0.5 truncate text-xs text-text-muted">
                   {row.collaboration.title}
                   {row.collaboration.influencer && ` · ${row.collaboration.influencer.name}`}
                   {row.collaboration.client && ` · ${row.collaboration.client.name}`}
@@ -148,7 +148,7 @@ export function DeliverablesPage() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 {row.due_on && (
-                  <span className={`tnum text-[12px] ${row.is_overdue ? 'font-semibold text-warning' : 'text-text-muted'}`} dir="ltr">
+                  <span className={`tnum text-xs ${row.is_overdue ? 'font-semibold text-warning' : 'text-text-muted'}`} dir="ltr">
                     {row.due_on}
                   </span>
                 )}
@@ -160,7 +160,7 @@ export function DeliverablesPage() {
                     href={row.submitted_url}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
                   >
                     <ExternalLink size={12} aria-hidden /> {ar ? 'المحتوى' : 'View'}
                   </a>
