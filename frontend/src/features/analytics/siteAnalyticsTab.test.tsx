@@ -43,7 +43,8 @@ describe('the site analytics tab', () => {
     // Money reads in USD; the property's own currency stays beside it.
     expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('1.38K USD')
     expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('5.5K SAR')
-    expect(screen.getByTestId('ga4-gap-chip-meta')).toHaveTextContent('+11 · 55%')
+    // REPORT-WEBSITE-TAB-001 — the match below replaces the older comparison card.
+    expect(screen.queryByTestId('ga4-gap-chip-meta')).toBeNull()
     expect(screen.getByTestId('site-not-summed')).toBeInTheDocument()
     expect(screen.getByTestId('site-user-type-absent')).toBeInTheDocument()
     expect(screen.getByTestId('site-events')).toHaveTextContent('purchase')

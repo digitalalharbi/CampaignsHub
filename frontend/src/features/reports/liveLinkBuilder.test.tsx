@@ -173,7 +173,7 @@ describe('building a live client link', () => {
     fireEvent.click(screen.getByTestId('live-link-create'))
 
     await waitFor(() => expect(createLiveLink).toHaveBeenCalled())
-    expect(sent().views).toEqual(['summary', 'dashboard', 'tables'])
+    expect(sent().views).toEqual(['summary', 'dashboard', 'website', 'tables'])
   })
 
   it('sends no main sections for a link that has none to choose', async () => {

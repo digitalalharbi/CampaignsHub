@@ -97,7 +97,7 @@ describe('ProjectsPage — the GA4 health chip', () => {
 
     const chip = await screen.findByTestId('project-ga4-p1')
     expect(chip).toHaveAttribute('data-state', 'stale')
-    expect(chip).toHaveTextContent('GA4')
+    expect(chip).toHaveTextContent('Website')
     expect(chip).toHaveTextContent('Gap +39%')
     expect(screen.queryByTestId('project-ga4-p2')).toBeNull()
   })
