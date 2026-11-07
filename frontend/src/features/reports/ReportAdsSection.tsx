@@ -1,4 +1,5 @@
 import { AdPoster } from '@/features/content/AdPoster'
+import { numberFormatter } from '@/lib/numerals'
 import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -594,8 +595,9 @@ function AdCard({
  */
 export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = []
+  // `numberFormatter`, not `toLocaleString`: the same text, through one formatter per shape rather than one per figure (PERF-RENDER-001).
   const n = (v: number | null | undefined, digits = 0) =>
-    v === null || v === undefined ? null : v.toLocaleString('en-US', { maximumFractionDigits: digits })
+    v === null || v === undefined ? null : numberFormatter('en-US', { maximumFractionDigits: digits }).format(v)
   /*
    * MONEY-USD-001 — money carries its currency here too.
    *

@@ -26,6 +26,14 @@ final class Ga4Breakdowns
         // The path a paid visit takes: which campaign brought the session to which landing page, and
         // what those sessions went on to do (engagement, key events, cart, checkout, purchase, revenue).
         'campaign_landing' => ['sessionCampaignName', 'landingPage'],
+        // TRAFFIC-DRILLDOWN-001 — all documented Data API dimensions (api-schema).
+        'first_user_source_medium' => ['firstUserSource', 'firstUserMedium'],
+        'default_channel_group' => ['sessionDefaultChannelGroup'],
+        'channel_source' => ['sessionDefaultChannelGroup', 'sessionSourceMedium'],
+        'utm_content' => ['sessionManualAdContent', 'sessionCampaignName'],
+        'utm_term' => ['sessionManualTerm', 'sessionCampaignName'],
+        // GA4-STORE-ANALYTICS-001 — the products the store sold, by GA4's item-scoped `itemName`.
+        'product' => ['itemName'],
     ];
 
     /** GA4 metric → stored key, for every session breakdown */
@@ -46,11 +54,31 @@ final class Ga4Breakdowns
         'keyEvents' => 'key_events',
     ];
 
+    /**
+     * GA4 metric → stored key, for the product breakdown.
+     *
+     * Item-scoped metrics only: the Data API refuses an item dimension asked with a session metric,
+     * so a product row carries units and item revenue and never a session count.
+     */
+    public const ITEM_METRICS = [
+        'itemsViewed' => 'items_viewed',
+        'itemsAddedToCart' => 'items_added_to_cart',
+        'itemsPurchased' => 'items_purchased',
+        'itemRevenue' => 'item_revenue',
+    ];
+
     /** @return array<string, string> */
     public static function metricsFor(string $breakdown): array
     {
-        return $breakdown === 'event' ? self::EVENT_METRICS : self::SESSION_METRICS;
+        return match ($breakdown) {
+            'event' => self::EVENT_METRICS,
+            'product' => self::ITEM_METRICS,
+            default => self::SESSION_METRICS,
+        };
     }
+
+    /** Stored keys that are money, and so carry the property's currency on their row. */
+    public const MONEY = ['revenue', 'item_revenue'];
 
     /** Session breakdowns whose counts may be summed across their rows to a total. */
     public const ADDITIVE = ['sessions', 'engaged_sessions', 'key_events', 'add_to_carts', 'checkouts', 'purchases', 'revenue'];

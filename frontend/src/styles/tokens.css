@@ -79,6 +79,27 @@
 
 
 :root {
+  /*
+   * UX-MOTION-TOKENS-001 — the product's motion, as three durations and two curves.
+   *
+   * Calm, not slow. A control answers in `--motion-control` and a panel (drawer, popover, tab body)
+   * in `--motion-panel`; both are compositor-cheap (opacity, transform, and the colour of a hover),
+   * and NEITHER sits in front of the action: the click's effect is immediate, only its visual
+   * settles. The pointer is never touched, and scrolling is never smoothed.
+   *
+   * `--motion-ease` decelerates into rest (the standard for things arriving or changing state);
+   * `--motion-ease-exit` accelerates away (the standard for things leaving), so an exit is shorter
+   * to the eye than an entrance of the same length.
+   *
+   * `prefers-reduced-motion: reduce` collapses every duration (index.css), so these are the whole
+   * vocabulary and a component that writes its own number is the exception to be argued.
+   */
+  --motion-fast: 120ms;
+  --motion-control: 160ms;
+  --motion-panel: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
   /* ---- Brand + semantic color ---- */
   --brand-50: #ecfdf5;
   --brand-100: #d1fae5;

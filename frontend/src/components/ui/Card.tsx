@@ -34,7 +34,7 @@ export function Card({
        * the content that genuinely needs width already carries its own scroll container.
        */
       className={`min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${
-        interactive ? 'transition-all duration-150 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[var(--shadow-medium)]' : ''
+        interactive ? 'transition hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[var(--shadow-medium)]' : ''
       } ${className}`}
     >
       {children}

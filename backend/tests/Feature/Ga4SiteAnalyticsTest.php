@@ -86,14 +86,14 @@ final class Ga4SiteAnalyticsTest extends TestCase
         // GA4-CAMPAIGN-LANDING-PATH-001 — the campaign → landing page path is asked in GA4's own names.
         Http::assertSent(fn (Request $r) => str_contains($r->url(), ':runReport') && array_column($r['dimensions'], 'name') === ['date', 'sessionCampaignName', 'landingPage']
             && in_array('ecommercePurchases', array_column($r['metrics'], 'name'), true));
-        $this->assertSame(8, DB::table('measurement_dimension_rows')->count());
+        $this->assertSame(14, DB::table('measurement_dimension_rows')->count(), 'eight breakdowns, five added by TRAFFIC-DRILLDOWN-001, and the product breakdown (GA4-STORE-ANALYTICS-001)');
         $row = DB::table('measurement_dimension_rows')->where('breakdown', 'source_medium')->first();
         $this->assertSame('sessionSource-value', $row->dimension_1);
         $this->assertSame('sessionMedium-value', $row->dimension_2);
         $this->assertSame(3.0, (float) json_decode($row->metrics, true)['purchases']);
         $run = IntegrationSyncRun::withoutGlobalScopes()->where('type', 'measurement')->sole();
         $this->assertSame(1, (int) $run->records, 'records stay the daily figures');
-        $this->assertSame(8, $run->meta['breakdown_rows']);
+        $this->assertSame(14, $run->meta['breakdown_rows']);
     }
 
     public function test_a_failing_breakdown_is_named_and_the_daily_figures_still_land(): void

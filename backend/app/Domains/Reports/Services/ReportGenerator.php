@@ -15,6 +15,8 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -487,6 +489,16 @@ final class ReportGenerator
             'business_streams' => $this->businessStreams($report, $agg, $scope, $from, $to, $totals),
             'business_streams_cover_total' => $report->sectionSettings()->streams() !== []
                 && app(BusinessStreams::class)->coversTotal($agg, $report->sectionSettings()->streams(), $from, $to),
+            // STORE-ANALYTICS-DEPTH-001 §3.1 — frozen with the snapshot, and only when the operator switched the category on.
+            'store_analytics' => $report->sectionSettings()->enabled(app(ReportSectionRegistry::class)->get('store_analytics'), (string) ($report->audience ?? 'client'))
+                ? app(StoreAnalyticsSection::class)->build((string) $report->tenant_id, (string) $report->project_id, $from, $to, false, $scope->accountIds === [] && $scope->resolvedCampaignIds() === [])
+                : null,
+            /*
+             * GA4-REPORT-SECTIONS-001 — the four GA4 parts, FROZEN with the snapshot: the saved report keeps the figures
+             * it was saved with, and the section system removes a part the operator hid. Read against this report's own
+             * platform rows; a client-facing report never receives the campaigns table.
+             */
+            ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.
@@ -1153,5 +1165,24 @@ final class ReportGenerator
 
         return ($results->configured() ? $results->over($campaigns, $destinations) : $none)
             + ['leads' => $leads->configured() ? $leads->leadBreakdown($campaigns, $destinations) : $none + ['landing' => null, 'native' => null]];
+    }
+
+    /**
+     * @param  array<int, mixed>  $platforms
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function ga4Sections(Report $report, Carbon $from, Carbon $to, array $platforms, ?string $currency): array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        $settings = $report->sectionSettings();
+        if (array_filter(Ga4ReportSections::KEYS, static fn (string $key): bool => $settings->enabled($registry->get($key), $audience)) === []) {
+            return array_fill_keys(Ga4ReportSections::KEYS, null);
+        }
+
+        return app(Ga4ReportSections::class)->build(
+            (string) $report->tenant_id, (string) $report->project_id, $from, $to,
+            array_values(array_filter($platforms, 'is_array')), $currency, false, $audience !== 'internal',
+        );
     }
 }

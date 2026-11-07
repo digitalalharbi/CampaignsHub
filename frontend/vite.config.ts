@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { preloadCriticalFonts } from './src/build/preloadCriticalFonts.js'
+import { bundleBudget } from './src/build/bundleBudget.js'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -48,7 +49,7 @@ const CACHE_DIR = process.env.VITE_CACHE_DIR
 // https://vite.dev/config/
 export default defineConfig({
   ...(CACHE_DIR === undefined ? {} : { cacheDir: CACHE_DIR }),
-  plugins: [react(), tailwindcss(), preloadCriticalFonts()],
+  plugins: [react(), tailwindcss(), preloadCriticalFonts(), bundleBudget()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -99,6 +100,16 @@ export default defineConfig({
    */
   preview: {
     proxy: HOPS,
+  },
+  /*
+   * PERF-RECOVERY-001 — the import graph, written out, so a route's real weight can be measured.
+   *
+   * `scripts/route-bytes.mjs` follows it from the entry and from a route's chunk and sums every
+   * static import either pulls; that figure, not the route chunk's own size, is what a visitor
+   * downloads. The plugin below holds the same figure to a ceiling on every build.
+   */
+  build: {
+    manifest: true,
   },
 
   test: {

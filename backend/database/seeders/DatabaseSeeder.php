@@ -87,6 +87,9 @@ class DatabaseSeeder extends Seeder
                 // BEFORE the reports: this is what selects the accounts, and a report generated while
                 // nothing is selected is a report of nothing under deny by default.
                 DemoIntegrationsSeeder::class,
+                // GA4-STORE-ANALYTICS-001 — the demo store's GA4 property (demo-labelled). BEFORE the reports, so the
+                // seeded saved report freezes its GA4 sections like a real one generated after a sync would.
+                DemoGa4Seeder::class,
                 DemoReportsSeeder::class,
             ]);
         }

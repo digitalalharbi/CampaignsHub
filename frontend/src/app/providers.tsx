@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { probeSession } from '@/features/auth/api'
+import { fetchMemberships } from '@/features/auth/memberships'
 import { listenForWorkspaceSwitch } from '@/features/auth/workspaceSwitch'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
@@ -8,8 +9,22 @@ import { applyDocument, useUi } from '@/stores/ui'
 import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
 import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
 import { OverlayBoundary } from '@/components/OverlayBoundary'
+import { QUERY_GC_TIME_MS, QUERY_STALE_TIME_MS } from '@/lib/query/swr'
 
-const queryClient = new QueryClient({
+/**
+ * How long an answer is reused by a second asker — PERF-REFETCH-001.
+ *
+ * React Query dedupes requests that are IN FLIGHT; it does not dedupe a request that has just
+ * landed. With the default `staleTime: 0`, a component mounting a moment after its sibling resolved
+ * the same key asks again — and the dashboard asks the same freshness, drivers and summary keys from
+ * the header, the KPI strip and a tab. Measured on the analytics page: three `/freshness` requests
+ * for one screen, identical in every byte. Thirty seconds is shorter than any figure on these screens
+ * changes, long enough to cover a page's mount, and every mutation still invalidates its keys on
+ * success, which refetches regardless of this.
+ */
+export { QUERY_STALE_TIME_MS, QUERY_GC_TIME_MS }
+
+export const queryClient = new QueryClient({
   /*
    * Every commercial refusal, caught in one place — PAY-AUDIT-004.
    *
@@ -43,6 +58,9 @@ const queryClient = new QueryClient({
         return failureCount < 1
       },
       refetchOnWindowFocus: false,
+      staleTime: QUERY_STALE_TIME_MS,
+      /* PERF-INSTANT-DATA-001 — an answer outlives its reader, so a revisit paints on the first frame. */
+      gcTime: QUERY_GC_TIME_MS,
     },
   },
 })
@@ -65,6 +83,18 @@ const queryClient = new QueryClient({
  * list is the surfaces where the answer is not merely unnecessary but meaningless.
  */
 const SESSIONLESS_PREFIXES = ['/r/', '/reports/share/', '/reports/print/', '/data-deletion']
+
+/**
+ * PERF-INSTANT-DATA-001 — the surfaces whose guards read the membership list.
+ * `/portal/login` is a sign-in form, not a portal page, and has no session to list.
+ */
+const MEMBERSHIP_PREFIXES = ['/app', '/agency', '/influencers', '/portal']
+
+export function readsMemberships(pathname: string): boolean {
+  if (pathname === '/portal/login') return false
+
+  return MEMBERSHIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
 
 export function isSessionlessSurface(pathname: string): boolean {
   return SESSIONLESS_PREFIXES.some((prefix) => pathname.startsWith(prefix))
@@ -110,6 +140,15 @@ export function Providers({ children }: { children: ReactNode }) {
       if (useAuth.getState().status === 'loading') setUser(null)
 
       return
+    }
+
+    /*
+     * Asked beside the probe, not after it: both read the same session, so the second round trip was
+     * pure waiting. Same key and function as every portal guard, so they find it already in flight.
+     * A failure is swallowed here and left for the guard's own query to report.
+     */
+    if (readsMemberships(window.location.pathname)) {
+      void queryClient.prefetchQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
     }
 
     void probeSession().then(({ user, unreachable }) => {

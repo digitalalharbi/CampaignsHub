@@ -42,6 +42,9 @@ final class Ga4Reporting
     /** GA4's own cap on a single `runReport` response. */
     private const ROW_LIMIT = 100000;
 
+    /** The Data API's cap on metrics in one report; the daily set is asked in batches of this size. */
+    private const MAX_METRICS_PER_REPORT = 10;
+
     public function __construct(private readonly TokenVault $vault) {}
 
     /**
@@ -94,63 +97,76 @@ final class Ga4Reporting
     {
         $tokens = $this->vault->fresh($connection);
 
-        $response = PlatformHttp::client('ga4')
-            ->withToken($tokens->accessToken)
-            ->post(self::DATA_API.'/properties/'.$propertyId.':runReport', [
-                'dateRanges' => [['startDate' => $from->toDateString(), 'endDate' => $to->toDateString()]],
-                'dimensions' => [['name' => 'date']],
-                'metrics' => array_map(static fn (string $m): array => ['name' => $m], Ga4Metrics::requested()),
-                'limit' => self::ROW_LIMIT,
-                /*
-                 * Ask for the sampling and quota state rather than assume there is none. A sampled
-                 * report is an ESTIMATE, and a figure the product cannot tell apart from a counted
-                 * one would be presented to a client as measured fact.
-                 */
-                'returnPropertyQuota' => true,
-            ]);
-
-        if ($response->failed()) {
-            throw new Ga4ReportFailed(PlatformHttp::reason($response));
-        }
-
         /*
-         * The headers name the metrics in the ORDER Google returned them, which is not promised to be
-         * the order they were requested in. Reading `metricValues[3]` as revenue because revenue was
-         * fourth in the request is a bug that produces plausible numbers in the wrong rows.
+         * A report takes at most ten metrics, and the daily set is wider than that: asked in one
+         * request the whole day's figures would fail, not just the extra ones. So the set is asked in
+         * batches and merged by day. A failed batch fails the read, as one request did: half a day's
+         * figures stored as if they were the day's is the worse outcome.
          */
-        $headers = array_map(
-            static fn (array $h): ?string => Ga4Metrics::keyFor((string) ($h['name'] ?? '')),
-            $response->json('metricHeaders') ?? [],
-        );
+        $byDay = [];
+
+        foreach (array_chunk(Ga4Metrics::requested(), self::MAX_METRICS_PER_REPORT) as $metrics) {
+            $response = PlatformHttp::client('ga4')
+                ->withToken($tokens->accessToken)
+                ->post(self::DATA_API.'/properties/'.$propertyId.':runReport', [
+                    'dateRanges' => [['startDate' => $from->toDateString(), 'endDate' => $to->toDateString()]],
+                    'dimensions' => [['name' => 'date']],
+                    'metrics' => array_map(static fn (string $m): array => ['name' => $m], $metrics),
+                    'limit' => self::ROW_LIMIT,
+                    /*
+                     * Ask for the sampling and quota state rather than assume there is none. A sampled
+                     * report is an ESTIMATE, and a figure the product cannot tell apart from a counted
+                     * one would be presented to a client as measured fact.
+                     */
+                    'returnPropertyQuota' => true,
+                ]);
+
+            if ($response->failed()) {
+                throw new Ga4ReportFailed(PlatformHttp::reason($response));
+            }
+
+            /*
+             * The headers name the metrics in the ORDER Google returned them, which is not promised to be
+             * the order they were requested in. Reading `metricValues[3]` as revenue because revenue was
+             * fourth in the request is a bug that produces plausible numbers in the wrong rows.
+             */
+            $headers = array_map(
+                static fn (array $h): ?string => Ga4Metrics::keyFor((string) ($h['name'] ?? '')),
+                $response->json('metricHeaders') ?? [],
+            );
+
+            foreach ($response->json('rows') ?? [] as $row) {
+                $date = (string) ($row['dimensionValues'][0]['value'] ?? '');
+
+                if ($date === '') {
+                    continue;
+                }
+
+                $day = $this->isoDate($date);
+                $byDay[$day] ??= [];
+
+                foreach ($row['metricValues'] ?? [] as $i => $cell) {
+                    $key = $headers[$i] ?? null;
+
+                    if ($key === null) {
+                        continue; // a metric we did not ask for, or no longer recognise
+                    }
+
+                    $raw = $cell['value'] ?? null;
+
+                    if ($raw === null || $raw === '') {
+                        continue; // absent stays absent — never written down as a zero
+                    }
+
+                    $byDay[$day][$key] = (float) $raw;
+                }
+            }
+        }
 
         $out = [];
 
-        foreach ($response->json('rows') ?? [] as $row) {
-            $date = (string) ($row['dimensionValues'][0]['value'] ?? '');
-
-            if ($date === '') {
-                continue;
-            }
-
-            $values = [];
-
-            foreach ($row['metricValues'] ?? [] as $i => $cell) {
-                $key = $headers[$i] ?? null;
-
-                if ($key === null) {
-                    continue; // a metric we did not ask for, or no longer recognise
-                }
-
-                $raw = $cell['value'] ?? null;
-
-                if ($raw === null || $raw === '') {
-                    continue; // absent stays absent — never written down as a zero
-                }
-
-                $values[$key] = (float) $raw;
-            }
-
-            $out[] = ['date' => $this->isoDate($date), 'values' => $values];
+        foreach ($byDay as $date => $values) {
+            $out[] = ['date' => $date, 'values' => $values];
         }
 
         return $out;

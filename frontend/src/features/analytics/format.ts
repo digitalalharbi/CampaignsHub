@@ -1,5 +1,5 @@
 import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
-import { formatFixed, formatNumber } from '@/lib/numerals'
+import { formatFixed, formatNumber, numberFormatter } from '@/lib/numerals'
 
 /**
  * The display formatters — NUMERAL-PREFERENCE-001.
@@ -199,8 +199,8 @@ export function wholeMoney(n: number | null | undefined, currency?: string): str
   if (n === null || n === undefined) return '\u2014'
 
   const figure = Number.isInteger(n)
-    ? n.toLocaleString('en-US')
-    : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? numberFormatter('en-US').format(n)
+    : numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
   return currency ? `${figure} ${currency}` : figure
 }

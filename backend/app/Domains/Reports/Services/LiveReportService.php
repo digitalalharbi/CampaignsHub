@@ -20,7 +20,9 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\BusinessStreams;
@@ -1184,6 +1186,7 @@ final class LiveReportService
              */
             // REPORT-FILTERS-FUNCTIONAL-001 — a link whose ceiling names nothing vouches for no source of the project, this one included.
             'site_measurement' => $this->namesNothing($share, $scope) ? null : $this->siteMeasurement($share, $scope['project_id'], $from, $to),
+            'store_analytics' => $this->storeAnalytics($share, $scope['project_id'], $from, $to),
             'freshness' => $freshness = $this->freshness((string) $share->tenant_id, $scope['project_id'], $scope['providers'], $accountCeiling),
             // REPORT-FRESHNESS-STAMP-001 — the page-level stamp: oldest confirmed sync, worst platform status, Riyadh clock.
             'freshness_summary' => app(ReportDataFreshness::class)->summary($freshness),
@@ -1221,6 +1224,9 @@ final class LiveReportService
             ],
             'applied' => $applied,
         ];
+
+        // GA4-REPORT-SECTIONS-001 — read against this link's OWN platform rows, so the link's source ceiling is the gap's too.
+        $payload = array_merge($payload, $this->ga4Sections($share, $scope, $from, $to, (array) $payload['platforms'], $currency));
 
         /*
          * REPORT-ANALYTICAL-DEPTH-001 — the client's link says what it contains, and why anything is
@@ -2093,6 +2099,47 @@ final class LiveReportService
         }
 
         return $measured;
+    }
+
+    /**
+     * GA4-REPORT-SECTIONS-001 — the four GA4 parts of a link, or nulls.
+     *
+     * Nothing is read for a link whose ceiling names nothing (it vouches for no source of the project), nor when the
+     * operator hid all four. `hide_revenue` empties GA4's money as it empties the campaigns', and a client-facing
+     * report never receives the campaigns table.
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>}  $scope
+     * @param  array<int, mixed>  $platforms
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function ga4Sections(ReportShare $share, array $scope, Carbon $from, Carbon $to, array $platforms, ?string $currency): array
+    {
+        $none = array_fill_keys(Ga4ReportSections::KEYS, null);
+        if ($this->namesNothing($share, $scope)) {
+            return $none;
+        }
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
+        $surfaces = app(ReportSectionSurfaces::class);
+        if ($report === null || array_filter(Ga4ReportSections::KEYS, static fn (string $key): bool => $surfaces->operatorAllows($key, $report, $share)) === []) {
+            return $none;
+        }
+
+        return app(Ga4ReportSections::class)->build(
+            (string) $share->tenant_id, $scope['project_id'], $from, $to,
+            array_values(array_filter($platforms, 'is_array')), $currency,
+            (bool) $share->hide_revenue, (string) ($report->audience ?? 'client') !== 'internal',
+        );
+    }
+
+    /** STORE-ANALYTICS-DEPTH-001 §3.1 — only for a report whose operator switched the category on; nothing is read otherwise. */
+    private function storeAnalytics(ReportShare $share, string $projectId, Carbon $from, Carbon $to): ?array
+    {
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
+        if ($report === null || ! app(ReportSectionSurfaces::class)->operatorAllows('store_analytics', $report, $share)) {
+            return null;
+        }
+
+        return app(StoreAnalyticsSection::class)->build((string) $share->tenant_id, $projectId, $from, $to, (bool) $share->hide_revenue, ! $share->narrowerThanItsProject());
     }
 
     /** @param array{project_id: string, campaign_ids: list<string>} $scope */

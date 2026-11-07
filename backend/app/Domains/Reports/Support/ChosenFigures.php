@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportAutoComposer;
@@ -80,6 +81,8 @@ final class ChosenFigures
         'preview', 'disclaimer', 'freshness', 'freshness_summary', 'report_sections', 'report_views', 'sections', 'available', 'applied', 'settings',
         'links', 'outline', 'slides', 'columns', 'report_columns', 'breakdowns', 'reported', 'reported_by_platform', 'kpi_labels',
         'store_funnel', 'site_measurement', 'objective_analytics', 'results', 'verified_result',
+        // GA4-REPORT-SECTIONS-001 — GA4's own vocabulary (sessions, purchases); only its money follows the KPI list, below.
+        'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */
@@ -440,6 +443,9 @@ final class ChosenFigures
             if (is_array($payload[$block] ?? null)) {
                 $payload[$block] = HiddenMoney::redact($payload[$block], $hideSpend, $hideRevenue);
             }
+        }
+        if ($hideRevenue) {
+            $payload = Ga4ReportSections::withoutMoney($payload);
         }
         if (is_array($payload['store_funnel']['stages'] ?? null)) {
             // A stage of an unchosen amount leaves the funnel: «not measured» would be untrue of a figure the store did measure.
