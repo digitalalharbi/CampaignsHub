@@ -133,7 +133,7 @@ final class ProjectListSummary
 
     private function gapShare(string $tenantId, string $projectId): ?float
     {
-        return Cache::remember('ga4-gap-share|'.$tenantId.'|'.$projectId.'|'.Carbon::today()->toDateString(), 900, static function () use ($tenantId, $projectId): ?float {
+        $cached = Cache::remember('ga4-gap-share|'.$tenantId.'|'.$projectId.'|'.Carbon::today()->toDateString(), 900, static function () use ($tenantId, $projectId): ?float {
             try {
                 $g = app(Ga4GapExplain::class)->build($tenantId, $projectId, Carbon::today()->subDays(30), Carbon::today()->subDay(), internal: false);
 
@@ -142,6 +142,10 @@ final class ProjectListSummary
                 return null;
             }
         });
+
+        // The Redis cache store keeps a number as its bare text and hands it back as a string on the next read
+        // (Laravel leaves numeric values unserialised), so the declared type is restored here, not trusted from the store.
+        return is_numeric($cached) ? (float) $cached : null;
     }
 
     /**
