@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Console;
 use App\Domains\Campaigns\Jobs\CacheCreativeCoverJob;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CoverCache;
+use App\Domains\Campaigns\Services\CoverSourceRefresher;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +20,8 @@ use Illuminate\Support\Facades\DB;
  * The one entry point for covers, by hand and on the schedule. Without `--execute` it changes nothing and
  * prints, per platform, how many creatives there are, how many have a provider still, how many we already
  * hold a copy of, how many would be queued now, how many are backing off after a failure (and why), and
- * how many the platform gives no still for. With `--execute` it queues one capture per creative that is
+ * how many hold no link yet but can be asked for one (`recoverable`, CREATIVE-COVERS-COVERAGE-001), and how
+ * many the platform gives no still for. With `--execute` it queues one capture per creative that is
  * due, spaced `--per-minute` apart so a backfill of thousands is a steady trickle, not a burst.
  *
  * The CDN fetch itself is not an API call. When a stored link has lapsed, the capture asks the platform for
@@ -76,10 +78,24 @@ final class BackfillCreativeCoversCommand extends Command
     {
         return ExternalCreative::withoutGlobalScopes()
             ->when($provider !== null, fn (Builder $q) => $q->where('provider', $provider))
-            ->where(fn (Builder $q) => $q->where('thumbnail_url', 'like', 'https://%')->orWhere('asset_url', 'like', 'https://%'))
-            ->where(fn (Builder $q) => $q->whereNull('cover_path')->orWhereNull('cover_cached_at')->orWhereColumn('source_updated_at', '>', 'cover_cached_at'))
+            ->where(fn (Builder $q) => $q
+                ->where(fn (Builder $w) => $w
+                    ->where(fn (Builder $l) => $l->where('thumbnail_url', 'like', 'https://%')->orWhere('asset_url', 'like', 'https://%'))
+                    ->where(fn (Builder $l) => $l->whereNull('cover_path')->orWhereNull('cover_cached_at')->orWhereColumn('source_updated_at', '>', 'cover_cached_at')))
+                // CREATIVE-COVERS-COVERAGE-001 — no link at all, and a platform that can name one (CoverSourceRefresher::recoverable).
+                ->orWhere(fn (Builder $w) => $w->whereRaw(self::RECOVERABLE)))
             ->where(fn (Builder $q) => $q->whereNull('cover_next_attempt_at')->orWhere('cover_next_attempt_at', '<=', Carbon::now()));
     }
+
+    /**
+     * The SQL face of {@see CoverSourceRefresher::recoverable()} — narrows only; the model's rule decides per row.
+     * COALESCE: a NULL link makes LIKE answer NULL, and NOT NULL is still NULL.
+     */
+    private const RECOVERABLE = "(cover_path IS NULL AND is_demo = false AND external_campaign_id IS NOT NULL
+        AND COALESCE(thumbnail_url, '') NOT LIKE 'https://%' AND COALESCE(asset_url, '') NOT LIKE 'https://%'
+        AND ((provider = 'tiktok' AND COALESCE(raw->>'media', '') IN ('video', 'image', 'spark'))
+          OR (provider = 'meta' AND (raw->'media_refs'->>'image_hash' IS NOT NULL OR raw->'media_refs'->>'video_id' IS NOT NULL))
+          OR (provider = 'snapchat' AND COALESCE(format, '') NOT LIKE '%dynamic%' AND COALESCE(format, '') <> 'catalog')))";
 
     private function report(?string $provider): void
     {
@@ -87,22 +103,24 @@ final class BackfillCreativeCoversCommand extends Command
         // COALESCE: a NULL link makes LIKE answer NULL, and NOT NULL is still NULL — «no source» would count as nothing.
         $source = "(COALESCE(thumbnail_url, '') LIKE 'https://%' OR COALESCE(asset_url, '') LIKE 'https://%')";
         $stale = '(cover_path IS NULL OR cover_cached_at IS NULL OR source_updated_at > cover_cached_at)';
+        $wanted = "(({$source} AND {$stale}) OR ".self::RECOVERABLE.')';
 
         $rows = DB::table('external_creatives')
             ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
             ->selectRaw('provider, COUNT(*) AS creatives')
             ->selectRaw("SUM(CASE WHEN {$source} THEN 1 ELSE 0 END) AS with_source")
             ->selectRaw('SUM(CASE WHEN cover_path IS NOT NULL THEN 1 ELSE 0 END) AS cached')
-            ->selectRaw("SUM(CASE WHEN {$source} AND {$stale} AND (cover_next_attempt_at IS NULL OR cover_next_attempt_at <= ?) THEN 1 ELSE 0 END) AS due", [$now])
-            ->selectRaw("SUM(CASE WHEN {$source} AND {$stale} AND cover_next_attempt_at > ? THEN 1 ELSE 0 END) AS backing_off", [$now])
-            ->selectRaw("SUM(CASE WHEN NOT {$source} AND cover_path IS NULL THEN 1 ELSE 0 END) AS provider_gives_none")
+            ->selectRaw("SUM(CASE WHEN {$wanted} AND (cover_next_attempt_at IS NULL OR cover_next_attempt_at <= ?) THEN 1 ELSE 0 END) AS due", [$now])
+            ->selectRaw("SUM(CASE WHEN {$wanted} AND cover_next_attempt_at > ? THEN 1 ELSE 0 END) AS backing_off", [$now])
+            ->selectRaw('SUM(CASE WHEN '.self::RECOVERABLE.' THEN 1 ELSE 0 END) AS recoverable')
+            ->selectRaw("SUM(CASE WHEN NOT {$source} AND cover_path IS NULL AND NOT ".self::RECOVERABLE.' THEN 1 ELSE 0 END) AS provider_gives_none')
             ->groupBy('provider')
             ->orderBy('provider')
             ->get();
 
         $this->table(
-            ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'provider_gives_none'],
-            $rows->map(fn ($r): array => [$r->provider, (int) $r->creatives, (int) $r->with_source, (int) $r->cached, (int) $r->due, (int) $r->backing_off, (int) $r->provider_gives_none])->all(),
+            ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'provider_gives_none'],
+            $rows->map(fn ($r): array => [$r->provider, (int) $r->creatives, (int) $r->with_source, (int) $r->cached, (int) $r->due, (int) $r->backing_off, (int) $r->recoverable, (int) $r->provider_gives_none])->all(),
         );
 
         $reasons = DB::table('external_creatives')

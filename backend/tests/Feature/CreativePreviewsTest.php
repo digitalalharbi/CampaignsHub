@@ -315,8 +315,8 @@ final class CreativePreviewsTest extends TestCase
 
         $this->artisan('creatives:backfill-covers')
             ->expectsTable(
-                ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'provider_gives_none'],
-                [['meta', 1, 1, 0, 0, 1, 0], ['tiktok', 2, 2, 1, 1, 0, 0], ['x', 1, 0, 0, 0, 0, 1]],
+                ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'provider_gives_none'],
+                [['meta', 1, 1, 0, 0, 1, 0, 0], ['tiktok', 2, 2, 1, 1, 0, 0, 0], ['x', 1, 0, 0, 0, 0, 0, 1]],
             )
             ->expectsTable(['provider', 'last_failure', 'creatives'], [['meta', 'http_403', 1]])
             ->expectsOutputToContain('Dry run: 1 cover capture(s) would be queued')
