@@ -61,7 +61,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Campaigns/Console/ContentDefectCensusCommand.php' => 'lists through CreativeRows::present(), which applies the rule',
         'Domains/Campaigns/Console/SnapchatLpvProvenanceCommand.php' => 'counts stored rows by provenance',
         // TIKTOK-MEDIA-002 — the cover cache reads a creative's stored media URL to fetch a file; no figure, no viewer.
-        'Domains/Campaigns/Console/RefreshCreativeCoversCommand.php' => 'caches media files for every creative that lacks one; reads media URLs, never a figure, for no viewer',
+        // CREATIVE-PREVIEWS-001 — the pass moved to `creatives:backfill-covers`; the old name only calls it.
+        'Domains/Campaigns/Console/BackfillCreativeCoversCommand.php' => 'caches media files for every creative that lacks one and counts cover states per platform; reads media URLs and cover columns, never a figure, for no viewer',
         'Domains/Campaigns/Jobs/CacheCreativeCoverJob.php' => 'fetches one creative\'s media file off the request path; reads its media URL, never a figure, for no viewer',
         'Console/Commands/DemoRemoveCommand.php' => 'removes seeded rows',
         // META-SAAS-APP-001 — the admin's evidence that the SaaS test workspace's OWN accounts received a metric row; an existence

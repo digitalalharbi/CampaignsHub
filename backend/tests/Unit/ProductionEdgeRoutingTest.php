@@ -81,6 +81,26 @@ final class ProductionEdgeRoutingTest extends TestCase
         );
     }
 
+    /**
+     * CREATIVE-PREVIEWS-001 — the cached covers reach Laravel too, on the edge AND on the dev/gate proxy.
+     *
+     * `CoverCache::urlFor()` links a creative's copied cover root-relative, `/media/covers/ab/….jpg`, and only the
+     * API serves it. The SPA's nginx had a block for `/demo/` and none for this, so every cached cover — all 246
+     * Meta covers, 342 TikTok, 1,293 Snapchat posters on Production — was answered with `index.html` and drew as
+     * a broken image: the Owner's 2026-11-07 «no preview or cover for TikTok and Meta».
+     */
+    public function test_cached_creative_covers_are_routed_to_the_backend(): void
+    {
+        $this->assertMatchesRegularExpression('~location\s+/media/covers/\s*\{~', $this->conf, 'without a /media/covers/ block the SPA fallback answers a cover with index.html');
+
+        $block = (string) preg_replace('~^.*location\s+/media/covers/\s*\{~s', '', $this->conf);
+        $block = (string) preg_replace('~\}.*$~s', '', $block);
+        $this->assertStringContainsString('proxy_pass http://backend:8000', $block);
+
+        $vite = (string) file_get_contents(dirname(__DIR__, 3).'/frontend/vite.config.ts');
+        $this->assertMatchesRegularExpression("~'/media/covers':\s*\{\s*target:\s*API_TARGET~", $vite, 'the dev server and the gate\'s `vite preview` must forward covers as well');
+    }
+
     public function test_the_short_link_hop_is_routed_to_the_backend(): void
     {
         $this->assertMatchesRegularExpression(

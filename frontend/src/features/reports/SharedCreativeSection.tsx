@@ -32,6 +32,7 @@ import { useUi } from '@/stores/ui'
 import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
 import { Num } from '@/components/ui/Num'
+import { localStill } from '@/features/content/providerMedia'
 
 /** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
 type SharedWinner = SharedObjectiveWinner | SharedKindWinner
@@ -851,9 +852,9 @@ function SharedCreativeDetail({
               aspect={preview.aspect ?? null}
               className="w-full max-w-2xl"
             />
-          ) : showing === 'image' && preview.image_url ? (
+          ) : showing === 'image' && localStill(preview.image_url) ? (
             <img
-              src={preview.image_url}
+              src={localStill(preview.image_url) ?? undefined}
               alt={creative.name}
               loading={imageLoading(preview.image_url)}
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}

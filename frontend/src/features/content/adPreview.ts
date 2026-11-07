@@ -1,4 +1,5 @@
 import type { CreativePreview } from './api'
+import { localStill } from './providerMedia'
 
 /**
  * AD-PREVIEW-001 — the one place that decides what an ad can show, and what it says when it cannot.
@@ -39,7 +40,7 @@ export type PreviewReading =
    * exposing the asset at all; `no_media` is the state the presenter calls «available» while every
    * URL on it is null, which happens when a creative carries only a carousel breakdown.
    */
-  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched' | 'no_media'; note: string | null }
+  | { kind: 'none'; reason: 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched' | 'cover_pending' | 'cover_failed' | 'no_media'; note: string | null }
   /**
    * CONTENT-PREVIEW-SHAPES-001 — two shapes whose media is not one asset.
    *
@@ -268,8 +269,12 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
     return { kind: 'catalog', note: null }
   }
 
+  // CREATIVE-PREVIEWS-001 — a provider's short-lived signed still is never read; our copy (or nothing) is.
+  const image = localStill(preview.image_url)
+  const thumbnail = localStill(preview.thumbnail_url)
+
   if (preview.kind === 'collection') {
-    const still = preview.image_url ?? preview.thumbnail_url ?? null
+    const still = image ?? thumbnail ?? null
 
     /*
      * A COLLECTION'S HERO MAY BE A FILM, and this module used to assume it never was.
@@ -300,10 +305,10 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
   }
 
   if (preview.kind === 'video' && preview.video_url) {
-    return { kind: 'video', src: preview.video_url, poster: preview.thumbnail_url ?? preview.image_url, note: null }
+    return { kind: 'video', src: preview.video_url, poster: thumbnail ?? image, note: null }
   }
 
-  const src = preview.image_url ?? preview.thumbnail_url
+  const src = image ?? thumbnail
 
   return src ? { kind: 'image', src, note: null } : { kind: 'none', reason: 'no_media', note: note(preview) }
 }
@@ -319,7 +324,7 @@ export function readPreview(preview: CreativePreview | null | undefined, ar: boo
  * a film has no still at all, and says so by returning null rather than by borrowing the ad's.
  */
 export function cardPoster(card: { image_url?: string | null; thumbnail_url?: string | null }): string | null {
-  return card.image_url ?? card.thumbnail_url ?? null
+  return localStill(card.image_url) ?? localStill(card.thumbnail_url) ?? null
 }
 
 /** The still to draw for a reading — a video's poster, an image's file, or nothing. */
@@ -440,6 +445,9 @@ export function absenceLabel(reading: PreviewReading, ar: boolean): string {
       'إعلان تشكيلة: لم تصل بطاقاته في آخر مزامنة — تُقرأ من منطقة التفاعل، وهذه لم تُقرأ.',
       'A collection ad — its tiles did not arrive in the last sync. They are read through the ad’s interaction zone, and this one did not answer.',
     ],
+    // CREATIVE-PREVIEWS-001 — our copy of the cover, not the platform's file, is what is missing here.
+    cover_pending: ['الغلاف قيد التجهيز.', 'The cover is being prepared.'],
+    cover_failed: ['تعذّر جلب الغلاف من المنصة — سيُعاد المحاولة تلقائيًا.', 'The cover could not be fetched from the platform — it will be retried automatically.'],
     no_media: ['لم تُرسل المنصة ملفًا لهذا الإعلان.', 'The platform sent no file for this ad.'],
   }
 
@@ -514,6 +522,8 @@ export function absenceShort(reading: PreviewReading, ar: boolean): string {
     unavailable: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
     never_fetched: ['لم يُطلب من المنصة', 'Never requested'],
     shape_not_fetched: ['البطاقات لم تُطلب', 'Tiles never requested'],
+    cover_pending: ['الغلاف قيد التجهيز', 'Cover pending'],
+    cover_failed: ['تعذّر جلب الغلاف', 'Cover failed'],
     no_media: ['لم ترسل المنصة ملفًا', 'Platform sent no file'],
   }
 

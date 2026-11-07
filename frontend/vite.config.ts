@@ -22,6 +22,8 @@ const HOPS = {
   '/sanctum': { target: API_TARGET, changeOrigin: true },
   '/l/': { target: API_TARGET, changeOrigin: true },
   '/demo': { target: API_TARGET, changeOrigin: true },
+  // CREATIVE-PREVIEWS-001 — cached creative covers, served by Laravel from the storage volume.
+  '/media/covers': { target: API_TARGET, changeOrigin: true },
 } as const
 
 /**
