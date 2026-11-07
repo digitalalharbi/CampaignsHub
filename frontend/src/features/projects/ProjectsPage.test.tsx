@@ -78,3 +78,27 @@ describe('ProjectsPage — the links out of a card', () => {
       .toHaveAttribute('href', `${base}/projects/p1/team`)
   })
 })
+
+/** GA4-HEALTH-001 — the card says whether the store measurement is live, when it was read, and the platforms' gap. */
+describe('ProjectsPage — the GA4 health chip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInWith(['projects.view'])
+    vi.mocked(listClientWorkspaces).mockResolvedValue([{ id: 'w1', name: 'Acme WS' } as never])
+  })
+  afterEach(() => signOut())
+
+  it('shows state, last read and the gap for a project with a property, and nothing for one without', async () => {
+    vi.mocked(listProjects).mockResolvedValue([
+      { id: 'p1', name: 'With store', status: 'active', client_workspace_id: 'w1', summary: { accounts: 1, providers: ['meta'], data_last_synced_at: null, team_members: 1, campaigns: 2, attention: null, ga4: { state: 'stale', last_read_at: '2026-10-01T10:00:00Z', gap_share: 0.39 } } } as never,
+      { id: 'p2', name: 'No store', status: 'active', client_workspace_id: 'w1', summary: { accounts: 1, providers: ['meta'], data_last_synced_at: null, team_members: 1, campaigns: 2, attention: null, ga4: null } } as never,
+    ])
+    renderWithProviders(<ProjectsPage />, { locale: 'en' })
+
+    const chip = await screen.findByTestId('project-ga4-p1')
+    expect(chip).toHaveAttribute('data-state', 'stale')
+    expect(chip).toHaveTextContent('GA4')
+    expect(chip).toHaveTextContent('Gap +39%')
+    expect(screen.queryByTestId('project-ga4-p2')).toBeNull()
+  })
+})

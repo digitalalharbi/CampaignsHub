@@ -51,6 +51,11 @@ final class ReportSectionResolverTest extends TestCase
             'ga4_acquisition' => ['channels' => null, 'devices' => null, 'funnel' => []],
             'ga4_platform_gap' => ['summed' => false, 'rows' => []],
             'ga4_tables' => ['tables' => []],
+            'ga4_attribution' => ['platforms' => []],
+            'ga4_pulse' => ['kpis' => [], 'funnel' => []],
+            'ga4_classification' => ['groups' => []],
+            'ga4_products' => ['table' => ['rows' => []]],
+            'ga4_gap_reasons' => ['reasons' => []],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -74,7 +79,7 @@ final class ReportSectionResolverTest extends TestCase
     {
         $this->assertSame([
             'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
+            'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

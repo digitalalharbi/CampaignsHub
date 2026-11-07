@@ -564,6 +564,8 @@ final class MailGallery
                     ],
                 ],
                 'follow_up' => ['received' => 138, 'contacted' => 96, 'overdue' => 11, 'converted' => 24],
+                // GA4-DIGEST-001 — the one GA4 line: counts and USD, never spend and never a campaign name.
+                'ga4' => ['sessions' => 12480.0, 'purchases' => 214.0, 'revenue_usd' => 31800.0, 'claimed' => 262.0, 'gap' => 48.0],
                 'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
             ], [
                 /*

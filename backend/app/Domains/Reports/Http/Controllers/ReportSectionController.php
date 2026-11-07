@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Access\ProjectAbilities;
@@ -90,7 +91,10 @@ final class ReportSectionController extends Controller
 
         $views = $this->validatedViews($request, ($base ?? $before)['views'] ?? null);
 
-        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views], $this->registry)->toArray();
+        $ga4Hidden = $request->exists('ga4_hidden')
+            ? Ga4Visibility::normalise($request->validate(['ga4_hidden' => ['present', 'nullable', 'array', 'max:200'], 'ga4_hidden.*' => ['string', 'max:60']])['ga4_hidden'])
+            : ($base ?? $before)['ga4_hidden'] ?? [];
+        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views, 'ga4_hidden' => $ga4Hidden], $this->registry)->toArray();
         // REPORT-GENERIC-LABELS-001 — which names this report replaces with generic labels, on every surface and every link of it.
         $namesBefore = GenericNames::ofReport($model);
         if ($request->exists('generic_names')) {
@@ -175,6 +179,11 @@ final class ReportSectionController extends Controller
         if ($request->exists('generic_names')) {
             $settings = self::withGenericNames($settings, $this->validatedGenericNames($request));
         }
+        // GA4-VISIBILITY-001 — the link's own element switches; what the report hides stays hidden whatever these say.
+        if ($request->exists('ga4_hidden')) {
+            $ga4 = Ga4Visibility::normalise($request->validate(['ga4_hidden' => ['present', 'nullable', 'array', 'max:200'], 'ga4_hidden.*' => ['string', 'max:60']])['ga4_hidden']);
+            $ga4 === [] ? $settings = array_diff_key($settings, ['ga4_hidden' => 1]) : $settings['ga4_hidden'] = $ga4;
+        }
         $link->settings = $settings;
 
         /*
@@ -244,6 +253,9 @@ final class ReportSectionController extends Controller
             'offers_views' => $surfaces->offersViews($report, $link),
             'generic_names' => GenericNames::ofShare($link),
             'generic_names_of_report' => GenericNames::ofReport($report),
+            // GA4-VISIBILITY-001 — the link's own element list, and the report's, which it can only add to.
+            'ga4_hidden' => Ga4Visibility::normalise(((array) ($link->settings ?? []))['ga4_hidden'] ?? null),
+            'ga4_hidden_of_report' => $report->sectionSettings()->ga4Hidden(),
         ];
     }
 
@@ -486,6 +498,7 @@ final class ReportSectionController extends Controller
             'audience' => $audience,
             'chosen' => $settings->toArray()['sections'],
             'streams' => $settings->streams(),
+            'ga4_hidden' => $settings->ga4Hidden(),
             // REPORT-COMPOSITION-CONTROL-001 — null is «every main section», which is what an untouched report offers.
             'views' => $settings->views(),
             'offers_views' => app(ReportSectionSurfaces::class)->offersViews($report),

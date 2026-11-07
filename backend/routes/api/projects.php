@@ -315,6 +315,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('measurement/compare', [SiteAnalyticsController::class, 'compare'])->middleware('project.can:analytics.view')->name('measurement.compare');
     Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
+    Route::get('measurement/attribution', [SiteAnalyticsController::class, 'attribution'])->middleware('project.can:analytics.view')->name('measurement.attribution');
+    Route::get('measurement/gap', [SiteAnalyticsController::class, 'gap'])->middleware('project.can:analytics.view')->name('measurement.gap');
+    Route::get('measurement/classification', [SiteAnalyticsController::class, 'classification'])->middleware('project.can:analytics.view')->name('measurement.classification');
     Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
     Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');
 
