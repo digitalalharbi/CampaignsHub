@@ -79,7 +79,7 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       {!bare && (
         <header className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-extrabold tracking-tight text-text-primary">{ar ? 'الموقع' : 'Website'}</h2>
-          {overview?.property?.name && <Badge tone="neutral" data-testid="website-property"><span dir="ltr">{overview.property.name}</span></Badge>}
+          {overview?.property?.name && <Badge tone="neutral" data-testid="website-property"><span dir="ltr">{overview.property.name.replace(/\bGA4\b/gi, '').replace(/\s{2,}/g, ' ').replace(/\(\s*\)/g, '').trim()}</span></Badge>}
           <Badge tone="info" data-testid="website-not-summed">{ar ? 'بلا جمع مع المنصات' : 'Not added to platforms'}</Badge>
         </header>
       )}

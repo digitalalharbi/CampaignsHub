@@ -41,6 +41,9 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('ga4-gap')).toHaveCount(0)
 
+    // The match section replaces the comparison card once it has loaded; measure the page after that.
+    await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
+    await page.waitForLoadState('networkidle')
     const table = page.getByTestId('ga4-table-box')
     await table.scrollIntoViewIfNeeded()
     const first = await box(table)

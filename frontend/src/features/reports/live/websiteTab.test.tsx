@@ -201,7 +201,7 @@ describe('the «الموقع» tab', () => {
         platforms: [{ platform: 'meta', claimed: { conversions: 20, revenue_usd: 100 }, ga4: { sessions: 100, purchases: 8, revenue_usd: 50, aov_usd: 6 }, confidence: 'utm', matched_share: 0.5 }],
         unattributed: { sessions: 300, classes: [{ class: 'organic', sessions: 300 }] },
       },
-      ga4_tables: { currency: 'SAR', tables: { sources, products: { rows: [{ name: 'Tee', views: 1, carts: 1, purchased: 1, revenue: 10, revenue_usd: 2.5 }], total: 1 } } },
+      ga4_tables: { currency: 'SAR', tables: { sources: { rows: sources, total: 12 }, products: { rows: [{ name: 'Tee', views: 1, carts: 1, purchased: 1, revenue: 10, revenue_usd: 2.5 }], total: 1 } } },
       ga4_products: { currency: 'SAR', table: { rows: [{ name: 'Tee', views: 1, carts: 1, purchased: 1, revenue: 10, revenue_usd: 2.5 }], total: 1 } },
     } as never)
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })

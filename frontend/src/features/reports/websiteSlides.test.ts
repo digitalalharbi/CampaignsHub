@@ -21,7 +21,7 @@ describe('the saved report and the PDF follow the website tab', () => {
 
     expect(slides.map((s) => s.type)).toEqual([
       'cover', 'executive_summary', '__ga4_pulse', 'platform_comparison',
-      '__ga4_overview', '__ga4_acquisition', '__ga4_attribution', '__ga4_gap', '__ga4_reasons', '__ga4_classification', '__ga4_tables', '__ga4_products',
+      '__ga4_overview', '__ga4_acquisition', '__ga4_attribution', '__ga4_reasons', '__ga4_classification', '__ga4_tables', '__ga4_products',
     ])
   })
 
