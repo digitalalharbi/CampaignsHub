@@ -252,7 +252,7 @@ final class ReportSectionRegistry
                 key: 'daily_records',
                 titleAr: 'السجل اليومي',
                 titleEn: 'Daily records',
-                payloadKeys: ['timeseries', 'platform_series'],
+                payloadKeys: ['timeseries'],
                 view: 'tables',
             ),
             /*
