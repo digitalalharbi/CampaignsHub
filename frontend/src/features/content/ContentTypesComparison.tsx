@@ -316,44 +316,40 @@ export function ObjectiveFormats({
         const isWinner = objective.winner?.format === f.format
         const subs: Array<{ key: string; label: string; value: string }> = [
           { key: 'ctr', label: ar ? 'النقر' : 'CTR', value: metricText('ctr', f.ctr, currency) },
-          ...(client ? [] : [{ key: 'cpm', label: 'CPM', value: metricText('cpm', f.cpm, currency) }]),
           { key: 'conversion_rate', label: ar ? 'التحويل' : 'CVR', value: metricText('conversion_rate', f.conversion_rate, currency) },
           { key: 'creatives', label: ar ? 'المحتوى' : 'Ads', value: num(f.creatives) },
         ]
 
+        /*
+          The DOM order is a reader's order too (a screen reader, a copied block, the page text): every RATE comes before
+          the cost figures, so a percentage never trails a cost label — «CPM 450 SAR التحويل 12%» reads as the cost of a
+          conversion rate. The grid lines below put the cost back beside the results on screen.
+        */
         return (
-          <article key={f.format} data-testid={`format-card-${f.format}`} className={`flex min-w-0 flex-col gap-3 rounded-2xl border bg-surface p-4 shadow-[var(--shadow-small)] ${isWinner ? 'border-success/60' : 'border-border'}`}>
-            <header className="flex min-w-0 flex-wrap items-center gap-2">
+          <article key={f.format} data-testid={`format-card-${f.format}`} className={`grid min-w-0 grid-cols-1 content-start gap-3 rounded-2xl border bg-surface p-4 shadow-[var(--shadow-small)] sm:grid-cols-2 ${isWinner ? 'border-success/60' : 'border-border'}`}>
+            <header className="col-span-full row-start-1 flex min-w-0 flex-wrap items-center gap-2">
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: colour(f.format) }} aria-hidden />
               <h3 className="truncate text-lg font-extrabold text-text-primary">{kindName(f.format, ar)}</h3>
               {isWinner && <Badge tone="success">{client ? (ar ? 'الأنسب' : 'Best fit') : (ar ? 'الأقل تكلفة' : 'Lowest cost')}</Badge>}
               {f.small_sample && <SmallSample ar={ar} />}
             </header>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="row-start-2 min-w-0 sm:col-start-1">
               <StatCard
                 testid={`format-card-results-${f.format}`}
                 label={ar ? resultWord.ar : resultWord.en}
                 value={metricText('results', f.results, currency)}
                 delta={objective.result_metric ? { metric: objective.result_metric, current: f.results, previous: f.previous?.results } : undefined}
               />
-              {!client && (
-                <StatCard
-                  testid={`format-card-cost-${f.format}`}
-                  label={ar ? 'تكلفة النتيجة' : 'Cost/result'}
-                  value={metricText('cost_per_result', f.cost_per_result, currency)}
-                  delta={objective.cost_metric ? { metric: objective.cost_metric, current: f.cost_per_result, previous: f.previous?.cost_per_result } : undefined}
-                />
-              )}
             </div>
-            <dl className="grid grid-cols-2 gap-2">
+            <dl className={`col-span-full ${client ? 'row-start-3' : 'row-start-4 sm:row-start-3'} grid grid-cols-3 gap-2`}>
               {subs.map((sub) => (
-                <div key={sub.key} className="rounded-xl bg-surface-secondary px-3 py-2">
-                  <dt className="text-xs text-text-muted">{sub.label}</dt>
+                <div key={sub.key} className="min-w-0 rounded-xl bg-surface-secondary px-3 py-2">
+                  <dt className="truncate text-xs text-text-muted">{sub.label}</dt>
                   <dd className="tnum text-sm font-bold text-text-primary"><Num>{sub.value}</Num></dd>
                 </div>
               ))}
             </dl>
-            <div className="flex flex-col gap-1" data-testid={`format-card-shares-${f.format}`}>
+            <div className={`col-span-full flex flex-col gap-1 ${client ? 'row-start-4' : 'row-start-5 sm:row-start-4'}`} data-testid={`format-card-shares-${f.format}`}>
               {!client && (
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="w-14 shrink-0">{ar ? 'الإنفاق' : 'Spend'}</span>
@@ -367,6 +363,20 @@ export function ObjectiveFormats({
                 <Num>{metricText('share', f.share_of_results, currency)}</Num>
               </div>
             </div>
+            {!client && (
+              <div className="row-start-3 flex min-w-0 flex-col gap-2 sm:col-start-2 sm:row-start-2">
+                <StatCard
+                  testid={`format-card-cost-${f.format}`}
+                  label={ar ? 'تكلفة النتيجة' : 'Cost/result'}
+                  value={metricText('cost_per_result', f.cost_per_result, currency)}
+                  delta={objective.cost_metric ? { metric: objective.cost_metric, current: f.cost_per_result, previous: f.previous?.cost_per_result } : undefined}
+                />
+                <dl className="rounded-xl bg-surface-secondary px-3 py-2">
+                  <dt className="text-xs text-text-muted">CPM</dt>
+                  <dd className="tnum text-sm font-bold text-text-primary"><Num>{metricText('cpm', f.cpm, currency)}</Num></dd>
+                </dl>
+              </div>
+            )}
           </article>
         )
       })}

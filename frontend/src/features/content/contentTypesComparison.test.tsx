@@ -93,6 +93,19 @@ describe('the content type comparison', () => {
     expect(screen.getByTestId('format-top-creatives')).toBeInTheDocument()
   })
 
+  it('never lets a percentage trail a cost label in the page text (the Analytics unit guard)', () => {
+    // The e2e guard flattens the page to text and refuses «CPM|CPA|ROAS|تكلفة النتيجة … 12%» within 24 characters.
+    const MONEY_AS_PERCENT = /\b(CPC|CPM|CPA|ROAS|تكلفة النقرة|تكلفة الألف ظهور|تكلفة النتيجة|العائد على الإنفاق)\b[^%\n]{0,24}\d[\d,.]*\s*%/
+    for (const ar of [true, false]) {
+      const { container, unmount } = renderWithProviders(<ContentTypesComparison data={payload([sales(formats)])} ar={ar} />, { locale: ar ? 'ar' : 'en' })
+      const text = (container.textContent ?? '')
+      const flat = Array.from(container.querySelectorAll('article')).map((a) => (a as HTMLElement).innerText ?? a.textContent ?? '').join(' ').replace(/\s+/g, ' ')
+      expect(flat).not.toMatch(MONEY_AS_PERCENT)
+      expect(text).toContain('SAR')
+      unmount()
+    }
+  })
+
   it('opens a format’s creatives and closes them again, by keyboard-reachable buttons', () => {
     renderWithProviders(<ContentTypesComparison data={payload([sales(formats)])} ar={false} />, { locale: 'en' })
 
