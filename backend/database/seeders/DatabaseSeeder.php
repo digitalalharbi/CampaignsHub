@@ -148,6 +148,8 @@ class DatabaseSeeder extends Seeder
              * open from.
              */
             $this->call(DemoAdCreativeLinkSeeder::class);
+            // CREATIVE-PREVIEWS-001 — one demo creative per platform with a cover in our own store, as a synced one has.
+            $this->call(DemoCreativeCoversSeeder::class);
             // DEMO-COMMERCE — the merchant's ledger. AFTER `DemoIntegrationsSeeder`, because an order
             // can only carry a `utm_campaign` that names a real campaign once those exist; without
             // them every order would seed as unattributed and the store half of the funnel, and
