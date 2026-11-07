@@ -1,11 +1,11 @@
 import { ProviderMark, ProviderName } from '@/components/ProviderMark'
 import { useMemo, useState } from 'react'
-import { CheckCircle2, CircleDashed, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Clock, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { KpiCard, TrendPill, platformColor } from '@/features/analytics/components'
 import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyExact, num } from '@/features/analytics/format'
-import { canonicalPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import type { Locale } from '@/stores/ui'
@@ -134,7 +134,7 @@ export function ExecutiveSummary({
   const manyPlatforms = platformRows.length > 1
   // One platform: its card, its donut (a single 100% slice) and its table all say the same thing.
   // The compact page states it once — in the KPI row — and spends the room on the trend and the funnel.
-  const coverageNeeded = (payload.freshness ?? []).some((f) => f.state === 'awaiting_credentials')
+  const coverageNeeded = (payload.freshness ?? []).some((f) => f.state === 'awaiting_credentials' && isAdPlatform(f.provider))
   const improveShown = sectionOn('content_performance') && (payload.ads_weakest ?? []).length > 0
 
   return (
@@ -564,7 +564,7 @@ function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: L
      * dashboard's «قمع الأداء»; it used to keep a seven-column width with nothing beside it.
      */
     <div className={narrow ? 'lg:col-span-4' : wide ? 'lg:col-span-12' : 'lg:col-span-7'} data-testid="exec-funnel" data-wide={wide ? 'true' : undefined}>
-      <ChartCard title={ar ? 'من الظهور إلى النتيجة' : 'From impression to result'}>
+      <ChartCard title={ar ? 'قمع المنصات: من الظهور إلى النتيجة' : 'Platforms funnel: impression to result'}>
         <ConversionFunnelChart stages={stages} ar={ar} />
       </ChartCard>
     </div>
@@ -657,27 +657,37 @@ function lastDataDay(payload: LivePayload): string {
   return days[days.length - 1] ?? payload.period.to
 }
 
+/**
+ * REPORT-WEBSITE-TAB-001 — the measurement sources as ONE compact row of status chips, not a half-empty card:
+ * each ad platform is ok, delayed or not included, and the last day with data closes the row. The website is not an ad
+ * platform and is never listed here; it is named in its own tab only.
+ */
 function CoverageStrip({ payload, ar, wide }: { payload: LivePayload; ar: boolean; wide: boolean }) {
-  const missing = (payload.freshness ?? []).filter((f) => f.state === 'awaiting_credentials')
-  const covered = (payload.freshness ?? []).filter((f) => f.state === 'synced')
+  const sources = (payload.freshness ?? []).filter((f) => (f.state === 'awaiting_credentials' || f.state === 'synced') && isAdPlatform(f.provider))
+  const stateOf = (f: (typeof sources)[number]): 'ok' | 'delayed' | 'none' =>
+    f.state === 'awaiting_credentials' ? 'none' : f.data_status === 'delayed' || f.data_status === 'stale' ? 'delayed' : 'ok'
 
   return (
-    <div className={`min-w-0 rounded-2xl border border-border bg-surface p-4 ${wide ? 'lg:col-span-12' : 'lg:col-span-5'}`} data-testid="exec-health">
-      <div data-testid="exec-health-sources">
-        <p className="text-sm font-bold text-text-primary">{ar ? 'مصادر القياس' : 'Measurement sources'}</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {covered.map((f) => (
-            <span key={`ok-${f.provider}-${f.name ?? ''}`} className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">
-              <CheckCircle2 size={11} className="text-success" />{sourceName(f.provider, ar)}
+    <div className={`min-w-0 ${wide ? 'lg:col-span-12' : 'lg:col-span-5'}`} data-testid="exec-health">
+      <div data-testid="exec-health-sources" role="group" aria-label={ar ? 'مصادر القياس' : 'Measurement sources'} className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-surface px-3 py-2">
+        {sources.map((f) => {
+          const state = stateOf(f)
+
+          return (
+            <span
+              key={`${state}-${f.provider}-${f.name ?? ''}`}
+              data-testid={state === 'none' ? `exec-source-missing-${f.provider}` : `exec-source-${state}-${f.provider}`}
+              data-state={state}
+              className={`inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] ${state === 'ok' ? 'text-text-secondary' : state === 'delayed' ? 'text-warning' : 'text-text-muted'}`}
+            >
+              {state === 'ok' ? <CheckCircle2 size={11} className="text-success" aria-hidden /> : state === 'delayed' ? <Clock size={11} aria-hidden /> : <CircleDashed size={11} aria-hidden />}
+              {sourceName(f.provider, ar)}
+              {state === 'delayed' && <span>{ar ? 'متأخرة' : 'delayed'}</span>}
+              {state === 'none' && <span>{ar ? 'غير مشمولة' : 'not included'}</span>}
             </span>
-          ))}
-          {missing.map((f) => (
-            <span key={`miss-${f.provider}-${f.name ?? ''}`} data-testid={`exec-source-missing-${f.provider}`} className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-muted">
-              <CircleDashed size={11} />{sourceName(f.provider, ar)} — {ar ? 'غير مشمولة' : 'not included'}
-            </span>
-          ))}
-        </div>
-        <p className="mt-2 text-[11px] text-text-muted" data-testid="exec-data-through">{ar ? 'آخر يوم ببيانات' : 'Last day with data'} <Num>{lastDataDay(payload)}</Num></p>
+          )
+        })}
+        <span className="ms-auto text-[11px] text-text-muted" data-testid="exec-data-through">{ar ? 'آخر يوم ببيانات' : 'Last day with data'} <Num>{lastDataDay(payload)}</Num></span>
       </div>
     </div>
   )

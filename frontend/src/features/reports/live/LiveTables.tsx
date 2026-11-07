@@ -6,7 +6,7 @@ import type { LivePayload } from '../api'
 import type { ReportAd } from '../ReportAdsSection'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
-import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
+import { DailyMeasureChart } from './DailyMeasureChart'
 import { asContent } from './LiveContent'
 import { resultWords } from './leadResults'
 
@@ -62,7 +62,6 @@ export function TablesView({
   const cost = words.cost
   const dash = '—'
 
-  const days = (payload.timeseries ?? []) as Row[]
   const platforms = (payload.platforms ?? []) as Row[]
   const accounts = ((payload as { accounts?: Row[] }).accounts ?? []) as Row[]
   // The roster nests each creative's figures under `metrics`; the ranked lists carry them at the top level.
@@ -114,14 +113,6 @@ export function TablesView({
   // RESULT-EVENTS-001 — Results columns exist only where an event is defined, and then read the resolver; nothing else stands in for them.
   const configuredResults = <T,>(_field: (item: T) => Row, verified: (item: T) => number | null | undefined): Col<T> | null =>
     configured ? resultsCol<T>(verified) : null
-
-  const dayTable = build<Row>('days', [
-    { key: 'day', head: ar ? 'اليوم' : 'Day', cell: (d) => String(d.date ?? ''), value: (d) => String(d.date ?? '') },
-    metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (d) => d),
-    metricCol('clicks', ar ? 'النقرات' : 'Clicks', 'clicks', (d) => d),
-    configuredResults<Row>((d) => d, () => null),
-    spendCol<Row>((d) => d),
-  ], days)
 
   const platTable = build<Row>('platforms', [
     { key: 'name', head: ar ? 'المنصة' : 'Platform', cell: (p) => <ProviderName provider={String(p.provider ?? '')} locale={locale} size={16} />, value: (p) => String(p.provider ?? '') },
@@ -181,12 +172,8 @@ export function TablesView({
         </Block>
       )}
 
-      {/* REPORT-COMPOSITION-CONTROL-001 — the ledger is its own component, off for a new client report. */}
-      {sectionShown(payload, 'daily_records') && (
-        <Block ar={ar} title={ar ? 'السجل اليومي' : 'Day-by-day record'} testid="tables-days" empty={days.length === 0}>
-          <MetricTable head={dayTable.head} rows={dayTable.rows} values={dayTable.values} initialSort={{ column: 0, dir: 'desc' }} />
-        </Block>
-      )}
+      {/* REPORT-COMPOSITION-CONTROL-001 — the daily record is its own component, off for a new client report. REPORT-WEBSITE-TAB-001 — drawn as the interactive chart; the rows stay in the CSV / XLSX download. */}
+      {sectionShown(payload, 'daily_records') && <DailyMeasureChart payload={payload} reader={reader} ar={ar} />}
 
       {sectionShown(payload, 'content_performance') && (
         <Block ar={ar} title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
@@ -194,7 +181,6 @@ export function TablesView({
         </Block>
       )}
 
-      <Ga4ReportBlocks payload={payload} ar={ar} parts={['ga4_tables']} />
     </div>
   )
 }

@@ -643,6 +643,8 @@ export interface LivePayload {
   /** REPORT-EXECUTIVE-SUMMARY-001 — campaigns that spent, as a COUNT; `previous` null where the windows do not compare. */
   delivering_campaigns?: { current: number; previous: number | null }
   timeseries: Array<Record<string, unknown>>
+  /** REPORT-WEBSITE-TAB-001 — the same days per platform, for the interactive daily chart; money keys redacted exactly as `timeseries`'s are. */
+  platform_series?: Record<string, Array<Record<string, unknown>>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty on a client payload, and typed that way.

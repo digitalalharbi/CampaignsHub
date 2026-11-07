@@ -130,7 +130,7 @@ interface FunnelPayload {
 const SOURCE_LABEL: Record<Stage['source']['kind'], { ar: string; en: string; tone: 'success' | 'info' | 'neutral' }> = {
   stores: { ar: 'المتجر', en: 'Store', tone: 'success' },
   ad_platforms: { ar: 'بكسل المنصات', en: 'Platform pixel', tone: 'info' },
-  ga4: { ar: 'ما قاسه الموقع (GA4)', en: 'Site-measured (GA4)', tone: 'info' },
+  ga4: { ar: 'ما قاسه الموقع (الموقع)', en: 'Site-measured (Website)', tone: 'info' },
   none: { ar: 'لا يوجد مصدر', en: 'No source', tone: 'neutral' },
 }
 

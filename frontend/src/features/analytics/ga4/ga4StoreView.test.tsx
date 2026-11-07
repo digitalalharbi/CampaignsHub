@@ -106,7 +106,7 @@ describe('the GA4 store view', () => {
     expect(screen.getByTestId('ga4-gap-chip-meta')).toHaveTextContent('+12 · 60%')
     expect(screen.getByTestId('ga4-gap-chip-snapchat')).toHaveTextContent('−2 · 20%')
     expect(screen.getByTestId('ga4-gap-chip-tiktok')).toHaveTextContent('—')
-    expect(screen.getByTestId('ga4-unpaid-organic')).toHaveTextContent('Organic 250 · 25%')
+    expect(screen.getByTestId('outside-organic')).toHaveTextContent('Free 250 · 25%')
     // 28 = 20 + 8 and 22 = 10 + 12: no figure on the card is a platform number plus a GA4 number.
     expect(screen.getByTestId('ga4-gap').textContent).not.toMatch(/\b(28|22)\b/)
   })

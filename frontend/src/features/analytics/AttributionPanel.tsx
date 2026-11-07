@@ -164,7 +164,7 @@ export function AttributionPanel({
                   ar ? 'الفرق' : 'Difference',
                   ar ? 'نافذة الإسناد' : 'Attribution window',
                   // GA4-ANALYTICS-PRODUCT-001 — the third layer, beside the other two and never merged into them.
-                  ar ? 'قاسه الموقع (GA4)' : 'Site-Measured (GA4)',
+                  ar ? 'قاسه الموقع (الموقع)' : 'Site-Measured (Website)',
                 ]}
                 rows={platforms.map((p) => [...claimCells(p, ar, locale), ga4Cell(p, ar)])}
                 values={platforms.map((p): SortValues => [
@@ -336,7 +336,7 @@ export function AttributionPanel({
 /** GA4's purchases in this platform's paid visits — «no GA4 property», never a zero, when nobody measured. */
 function ga4Cell(claim: PlatformClaim, ar: boolean): ReactNode {
   if (claim.ga4_purchases == null) {
-    return <span key="ga4" className="text-text-muted">{ar ? 'لا خاصية GA4' : 'No GA4 property'}</span>
+    return <span key="ga4" className="text-text-muted">{ar ? 'لا خاصية الموقع' : 'No Website property'}</span>
   }
 
   return (

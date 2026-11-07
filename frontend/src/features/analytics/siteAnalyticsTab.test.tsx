@@ -13,10 +13,10 @@ describe('the site analytics tab', () => {
   beforeEach(() => { vi.clearAllMocks(); signInWith(['campaigns.view']) })
   afterEach(() => signOut())
 
-  it('says GA4 is not connected rather than drawing an empty dashboard', async () => {
+  it('says the website is not connected rather than drawing an empty dashboard', async () => {
     vi.mocked(getData).mockResolvedValue({ state: 'not_connected', period: range })
     renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
-    expect(await screen.findByTestId('site-state-not_connected')).toHaveTextContent('GA4 not connected')
+    expect(await screen.findByTestId('site-state-not_connected')).toHaveTextContent('Website not connected')
   })
 
   it('draws the store reading first, then the events, and says an absent breakdown is absent', async () => {
@@ -63,7 +63,7 @@ describe('the site analytics tab', () => {
     freshness: { last_synced_at: null, newest_day: '2026-10-09', days_with_data: 8, days_in_window: 10 },
   })
 
-  it('shows the new GA4 KPIs with previous period, change, definition and source, and an absent KPI as a dash, not zero', async () => {
+  it('shows the new website KPIs with previous period, change, definition and source, and an absent KPI as a dash, not zero', async () => {
     vi.mocked(getData).mockImplementation(async (url: string) => (url.includes('/table?')
       ? { state: 'ready', rows: [], total: 0, page: 1, per_page: 10, currency: 'SAR' }
       : {
@@ -87,7 +87,7 @@ describe('the site analytics tab', () => {
     expect(absent).toHaveTextContent('—')
     expect(absent).not.toHaveTextContent('0.00')
     expect(absent).toHaveTextContent('The property did not report this')
-    expect(screen.getByTestId('site-kpi-def-bounce_rate')).toHaveTextContent('[GA4: bounceRate, sessions]')
+    expect(screen.getByTestId('site-kpi-def-bounce_rate')).toHaveTextContent('[bounceRate, sessions]')
     expect(screen.getByTestId('site-kpi-def-bounce_rate')).toHaveTextContent('8/10 days')
   })
 

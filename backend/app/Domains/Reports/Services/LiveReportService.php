@@ -987,6 +987,14 @@ final class LiveReportService
             'timeseries' => $window['kind'] === 'daily'
                 ? $engine->timeseries($to->copy()->subDays(6), $to)
                 : ReportPeriod::bucket($engine->timeseries($from, $to), $window['grain']),
+            /*
+             * REPORT-WEBSITE-TAB-001 — the daily figures per platform, for the interactive measurement chart that replaced the
+             * daily table. Same scope, same grain as `timeseries`; money keys are redacted by `HiddenMoney` like every other series.
+             */
+            'platform_series' => array_map(
+                static fn (array $rows): array => $window['kind'] === 'daily' ? $rows : ReportPeriod::bucket($rows, $window['grain']),
+                $engine->timeseriesByProvider($window['kind'] === 'daily' ? $to->copy()->subDays(6) : $from, $to),
+            ),
             'platforms' => $this->platformsWithMovement($engine, $from, $to, $comparison['comparable']),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign

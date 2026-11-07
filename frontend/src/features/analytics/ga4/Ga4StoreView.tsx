@@ -8,7 +8,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, RankingBarChart } from '../charts'
 import { money, num, percent } from '../format'
-import type { StoreFunnelStep, StoreGap, StoreKpi, StoreProductRow, StoreSeriesDay, StoreSessionRow, StoreSlice, StoreTableKey, StoreTables } from './storeTypes'
+import type { StoreBreakdownMeta, StoreFunnelStep, StoreGap, StoreKpi, StoreProductRow, StoreSeriesDay, StoreSessionRow, StoreSlice, StoreTableKey, StoreTables } from './storeTypes'
 
 /**
  * GA4-STORE-ANALYTICS-001 — the drawn parts of the store reading.
@@ -62,13 +62,39 @@ const CHANNEL: Record<string, L> = {
   Display: { ar: 'عرض', en: 'Display' },
   Affiliates: { ar: 'شركاء', en: 'Affiliates' },
   'Cross-network': { ar: 'متعدد', en: 'Cross-network' },
-  Unassigned: { ar: 'غير مصنف', en: 'Unassigned' },
+  Unassigned: { ar: 'غير محدد القناة', en: 'No channel' },
+  unclassified: { ar: 'غير مصنّف', en: 'Unclassified' },
 }
 const DEVICE: Record<string, L> = {
-  mobile: { ar: 'جوال', en: 'Mobile' }, desktop: { ar: 'حاسوب', en: 'Desktop' }, tablet: { ar: 'لوحي', en: 'Tablet' }, 'smart tv': { ar: 'تلفاز', en: 'TV' },
+  unclassified: { ar: 'غير مصنّف', en: 'Unclassified' }, mobile: { ar: 'جوال', en: 'Mobile' }, desktop: { ar: 'حاسوب', en: 'Desktop' }, tablet: { ar: 'لوحي', en: 'Tablet' }, 'smart tv': { ar: 'تلفاز', en: 'TV' },
 }
-const UNPAID: Record<string, L> = {
-  organic: { ar: 'مجاني', en: 'Organic' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
+export const UNPAID: Record<string, L> = {
+  organic: { ar: 'مجاني', en: 'Free' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
+  other_paid: { ar: 'مدفوع آخر', en: 'Other paid' }, unassigned: { ar: 'غير محدد', en: 'Unassigned' },
+}
+/** REPORT-WEBSITE-TAB-001 — the one umbrella a client reads without explanation: visits and sales the campaigns did not bring. */
+export const OUTSIDE_CAMPAIGNS: L = { ar: 'من خارج الحملات', en: 'Outside campaigns' }
+
+/**
+ * The umbrella and its sub-chips: free, direct, referral, other, other paid. The website's own attribution, never added to
+ * a platform's figure and never an order-level match, which the «not summed» chip beside it states.
+ */
+export function OutsideCampaigns({ items, ar, total }: { items: Array<{ key: string; sessions: number; share?: number | null; tone?: 'neutral' | 'warning' }>; ar: boolean; total?: number | null }) {
+  const sum = total ?? items.reduce((a, b) => a + b.sessions, 0)
+  if (items.length === 0 && !(sum > 0)) return null
+
+  return (
+    <div data-testid="outside-campaigns" className="flex min-w-0 flex-col gap-1.5">
+      <Badge tone="info" data-testid="outside-campaigns-total">{t(OUTSIDE_CAMPAIGNS, ar)} <Num>{num(sum)}</Num></Badge>
+      <div className="flex flex-wrap gap-1.5" data-testid="outside-campaigns-chips">
+        {items.map((u) => (
+          <Badge key={u.key} tone={u.tone ?? 'neutral'} data-testid={`outside-${u.key}`}>
+            {t(UNPAID[u.key] ?? { ar: u.key, en: u.key }, ar)} <Num>{num(u.sessions)}{u.share !== null && u.share !== undefined ? ` · ${percent(u.share, 0)}` : ''}</Num>
+          </Badge>
+        ))}
+      </div>
+    </div>
+  )
 }
 const FUNNEL: Record<string, L> = {
   sessions: { ar: 'الزيارات', en: 'Sessions' }, add_to_carts: { ar: 'السلة', en: 'Cart' }, checkouts: { ar: 'الدفع', en: 'Checkout' }, purchases: { ar: 'الشراء', en: 'Purchase' },
@@ -165,7 +191,7 @@ export function donutRows(slices: StoreSlice[], labels: Record<string, L>, ar: b
   return slices.filter((s) => s.sessions > 0).map((s) => ({ key: s.key, name: t(labels[s.key] ?? labels[s.key.toLowerCase()] ?? { ar: s.key, en: s.key }, ar), value: s.sessions }))
 }
 
-function Donut({ testId, title, slices, labels, ar }: { testId: string; title: string; slices: StoreSlice[] | null | undefined; labels: Record<string, L>; ar: boolean }) {
+function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; title: string; slices: StoreSlice[] | null | undefined; labels: Record<string, L>; ar: boolean; meta?: StoreBreakdownMeta | null }) {
   const rows = slices ? donutRows(slices, labels, ar) : []
   const total = rows.reduce((a, b) => a + b.value, 0)
 
@@ -176,20 +202,28 @@ function Donut({ testId, title, slices, labels, ar }: { testId: string; title: s
       ) : (
         <div data-testid={testId} data-slices={rows.length}>
           <PlatformDonutChart data={rows} colorBy="series" height={260} centerLabel={ar ? 'الزيارات' : 'Sessions'} centerValue={num(total)} />
+          {/* One number per figure: the centre is the visits figure; a breakdown that does not cover it says so with a slice and a chip. */}
+          {meta && (meta.unclassified > 0 || meta.rescaled) && (
+            <div className="mt-1 flex flex-wrap justify-center gap-1.5" data-testid={`${testId}-coverage`}>
+              {meta.unclassified > 0 && <Badge tone="warning">{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></Badge>}
+              {meta.days_total > 0 && meta.days_covered < meta.days_total && <Badge tone="neutral"><Num>{`${meta.days_covered}/${meta.days_total}`}</Num> {ar ? 'يوم' : 'days'}</Badge>}
+              {meta.rescaled && <Badge tone="neutral">{ar ? 'مطابَق للإجمالي' : 'Matched to total'}</Badge>}
+            </div>
+          )}
         </div>
       )}
     </ChartCard>
   )
 }
 
-export function Ga4Acquisition({ channels, devices, funnel, ar }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean }) {
+export function Ga4Acquisition({ channels, devices, funnel, ar, channelsMeta, devicesMeta }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" data-testid="ga4-acquisition">
-      <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} />
-      <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} />
-      <ChartCard title={ar ? 'القمع' : 'Funnel'}>
+      <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} meta={channelsMeta} />
+      <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} meta={devicesMeta} />
+      <ChartCard title={ar ? 'قمع الموقع' : 'Website funnel'}>
         <div data-testid="ga4-funnel">
-          <ConversionFunnelChart ar={ar} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
+          <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
         </div>
       </ChartCard>
     </div>
@@ -206,7 +240,7 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
   const locale = ar ? 'ar' : 'en'
 
   return (
-    <ChartCard title={ar ? 'GA4 والمنصات' : 'GA4 vs platforms'} action={<Badge tone="info" data-testid="ga4-gap-not-summed">{ar ? 'بلا جمع' : 'Not summed'}</Badge>}>
+    <ChartCard title={ar ? 'الموقع والمنصات' : 'Website vs platforms'} action={<Badge tone="info" data-testid="ga4-gap-not-summed">{ar ? 'بلا جمع' : 'Not summed'}</Badge>}>
       <div data-testid="ga4-gap" className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="min-w-0 lg:col-span-3">
           {bars.length === 0 ? (
@@ -216,7 +250,7 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
               <RankingBarChart height={Math.max(240, bars.length * 56)} horizontal data={bars}
                 bars={[
                   { key: 'reported', name: ar ? 'المنصة' : 'Platform', kind: 'num', color: 'var(--brand-600)' },
-                  { key: 'ga4', name: 'GA4', kind: 'num', color: 'var(--teal)' },
+                  { key: 'ga4', name: ar ? 'الموقع' : 'Website', kind: 'num', color: 'var(--teal)' },
                 ]} />
             </div>
           )}
@@ -244,13 +278,14 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
             )
           })}
           {(gap.unpaid.length > 0 || gap.other_paid) && (
-            <li className="flex flex-wrap gap-1.5 pt-1" data-testid="ga4-gap-unpaid">
-              {gap.unpaid.map((u) => (
-                <Badge key={u.class} tone="neutral" data-testid={`ga4-unpaid-${u.class}`}>
-                  {t(UNPAID[u.class], ar)} <Num>{num(u.sessions)}{u.session_share !== null ? ` · ${percent(u.session_share, 0)}` : ''}</Num>
-                </Badge>
-              ))}
-              {gap.other_paid && <Badge tone="neutral" data-testid="ga4-unpaid-other_paid">{ar ? 'مدفوع آخر' : 'Other paid'} <Num>{num(gap.other_paid.sessions)}</Num></Badge>}
+            <li className="pt-1" data-testid="ga4-gap-unpaid">
+              <OutsideCampaigns
+                items={[
+                  ...gap.unpaid.map((u) => ({ key: u.class, sessions: u.sessions, share: u.session_share })),
+                  ...(gap.other_paid ? [{ key: 'other_paid', sessions: gap.other_paid.sessions }] : []),
+                ]}
+                ar={ar}
+              />
             </li>
           )}
         </ul>

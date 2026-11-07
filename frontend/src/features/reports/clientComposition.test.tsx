@@ -182,13 +182,14 @@ describe('a funnel step that grew is not called a conversion', () => {
     { stage: 'checkout', label: 'Checkout', count: 7_420, step_rate: 1.65, cost_per: 1.33, exceeds_previous: true },
   ]
 
-  it('marks the ratio and explains why the stages do not nest', () => {
+  it('shows a neutral «definitions differ» chip instead of a percentage above 100', () => {
     renderWithProviders(<ConversionFunnelChart stages={stages} currency="USD" />)
 
-    const marked = screen.getByText(/165%/)
+    const chip = screen.getByTestId('funnel-definitions-differ')
 
-    expect(marked.getAttribute('title') ?? '', 'the client was given a bare 165% with no explanation')
-      .toMatch(/do not nest|لا تتداخلان/)
+    expect(chip).toHaveTextContent(/definitions differ|تعريفات المنصات تختلف/i)
+    expect(screen.queryByText(/165%/), 'a funnel must never print a step above 100%').toBeNull()
+    expect(chip.getAttribute('title') ?? '').toMatch(/do not nest|لا تتداخلان/)
   })
 
   /** An ordinary step keeps its plain reading — the marker means something only if it is rare. */

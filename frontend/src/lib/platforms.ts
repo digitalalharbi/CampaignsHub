@@ -90,7 +90,15 @@ export const PLATFORM_LABELS: Record<AdPlatform, { ar: string; en: string }> = {
 export const SOURCE_LABELS: Record<string, { ar: string; en: string }> = {
   salla: { ar: 'سلة', en: 'Salla' },
   zid: { ar: 'زد', en: 'Zid' },
-  ga4: { ar: 'جوجل أناليتكس 4', en: 'Google Analytics 4' },
+  ga4: { ar: 'الموقع', en: 'Website' },
+}
+
+/**
+ * REPORT-WEBSITE-TAB-001 — an AD platform, as opposed to a store or the website. A list of platform chips, a «not included»
+ * banner and a platform ranking hold ad platforms only: the website is not an excluded platform, it has its own tab.
+ */
+export function isAdPlatform(key: string | null | undefined): boolean {
+  return !(canonicalPlatform(key) in SOURCE_LABELS)
 }
 
 export function platformLabel(key: string | null | undefined, ar: boolean): string {

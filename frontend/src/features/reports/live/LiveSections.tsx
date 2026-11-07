@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
-import { canonicalPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
@@ -244,7 +244,7 @@ export function FunnelSection({ payload, ar, currency }: { payload: LivePayload;
     <>
         {(payload.funnel ?? []).length > 0 && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
-          <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
+          <ChartCard title={ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'}>
             <ConversionFunnelChart stages={payload.funnel ?? []} currency={currency} ar={ar} />
             {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
                 view of their account to check a gap against, so the gap must explain itself. */}
@@ -394,7 +394,7 @@ export function StoreFunnelSection({ payload, ar }: { payload: LivePayload; ar: 
     <>
         {payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
-            <h3 className="font-bold text-text-primary">{ar ? 'الفانل والمتجر' : 'Funnel & store'}</h3>
+            <h3 className="font-bold text-text-primary">{ar ? 'طلبات المتجر' : 'Store orders'}</h3>
             <ol className="mt-3 space-y-1.5">
               {payload.store_funnel.stages.map((stage) => (
                 <li key={stage.key} data-testid={`shared-stage-${stage.key}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-sm">
@@ -484,7 +484,8 @@ export function FreshnessStrip({
    * include Snapchat — and everything about our plumbing goes. The platform is NAMED rather than
    * keyed, because `snapchat` is a database value and «سناب شات» is a platform they buy on.
    */
-  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
+  // REPORT-WEBSITE-TAB-001 — the website is not an excluded ad platform: it has its own tab and its own empty state.
+  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials' && isAdPlatform(f.provider))
 
   // REPORT-FOOTER-FRESHNESS-001 — the report's one time is in its footer; here, only a sentence, and only when figures are late.
   const stamp = <DataFreshnessAlert freshness={freshness} ar={ar} />

@@ -100,45 +100,54 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
 ): S[] {
   const list = data.report_sections
   const named = (key: string, value: unknown) => Array.isArray(list) && (list as string[]).includes(key) && value != null
+  /*
+   * REPORT-WEBSITE-TAB-001 — the website pages follow the live link's «الموقع» tab, in its order: key figures and trend,
+   * channels / devices / website funnel, the attribution match, the website against the platforms, why the gap, the
+   * classification, the tables, the products. The one headline strip of the summary is NOT a website page: it sits with the
+   * summary, straight after the executive summary (or the cover).
+   */
+  if (named('ga4_pulse', data.ga4_pulse)) {
+    const at = slides.findIndex((x) => x.type === 'executive_summary')
+    const cover = slides.findIndex((x) => x.type === 'cover')
+    slides.splice(at !== -1 ? at + 1 : cover !== -1 ? cover + 1 : 0, 0, { id: '__ga4_pulse', type: '__ga4_pulse', order: 0, visible: true } as S)
+  }
   if (named('ga4_overview', data.ga4_overview)) slides.push({ id: '__ga4_overview', type: '__ga4_overview', order: 9990, visible: true } as S)
   if (named('ga4_acquisition', data.ga4_acquisition)) slides.push({ id: '__ga4_acquisition', type: '__ga4_acquisition', order: 9991, visible: true } as S)
-  if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9992, visible: true } as S)
-  // GA4-ATTRIBUTION-MATCH-001 — the measurement parts, one page each; a table inside is its fixed page, never a shrunken one.
-  if (named('ga4_pulse', data.ga4_pulse)) slides.push({ id: '__ga4_pulse', type: '__ga4_pulse', order: 9994, visible: true } as S)
   if (named('ga4_attribution', data.ga4_attribution)) {
     // On paper the platform rows are split across pages of six, never shrunk onto one.
     const n = ((data.ga4_attribution as { platforms?: unknown[] }).platforms ?? []).length
-    if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9995, visible: true } as S)
-    else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9995, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
+    if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9992, visible: true } as S)
+    else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9992, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
   }
-  if (named('ga4_gap_reasons', data.ga4_gap_reasons)) slides.push({ id: '__ga4_reasons', type: '__ga4_reasons', order: 9996, visible: true } as S)
+  if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9993, visible: true } as S)
+  if (named('ga4_gap_reasons', data.ga4_gap_reasons)) slides.push({ id: '__ga4_reasons', type: '__ga4_reasons', order: 9994, visible: true } as S)
   if (named('ga4_classification', data.ga4_classification)) {
     const groups = (data.ga4_classification as { groups?: Record<string, { rows?: unknown[] }> }).groups ?? {}
-    if (!paged) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9996, visible: true } as S)
+    if (!paged) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9995, visible: true } as S)
     else {
       // One page per grouping and per eight rows: a long grouping splits, so no row is cut and no page is shrunk.
       for (const [group, block] of Object.entries(groups)) {
         const n = block.rows?.length ?? 0
-        for (let i = 0; i < Math.max(n, 1); i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_classification:${group}:${i}`, type: '__ga4_classification', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, n)] } as S)
+        for (let i = 0; i < Math.max(n, 1); i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_classification:${group}:${i}`, type: '__ga4_classification', order: 9995, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, n)] } as S)
+      }
+    }
+  }
+  if (named('ga4_tables', data.ga4_tables)) {
+    if (!paged) {
+      slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9996, visible: true } as S)
+    } else {
+      for (const table of GA4_TABLE_ORDER) {
+        const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
+        for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) {
+          slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
+        }
       }
     }
   }
   if (named('ga4_products', data.ga4_products)) {
     const rows = Math.min(data.ga4_products?.table?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
-    if (!paged || rows <= GA4_ROWS_PER_PAGE) slides.push({ id: '__ga4_products:0', type: '__ga4_products', order: 9996, visible: true, range: [0, Math.min(rows, GA4_ROWS_PER_PAGE)] } as S)
-    else for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_products:${i}`, type: '__ga4_products', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
-  }
-  if (named('ga4_tables', data.ga4_tables)) {
-    if (!paged) {
-      slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9993, visible: true } as S)
-    } else {
-      for (const table of GA4_TABLE_ORDER) {
-        const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
-        for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) {
-          slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9993, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
-        }
-      }
-    }
+    if (!paged || rows <= GA4_ROWS_PER_PAGE) slides.push({ id: '__ga4_products:0', type: '__ga4_products', order: 9997, visible: true, range: [0, Math.min(rows, GA4_ROWS_PER_PAGE)] } as S)
+    else for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_products:${i}`, type: '__ga4_products', order: 9997, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
   }
 
   return slides

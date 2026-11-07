@@ -18,7 +18,7 @@
  * chose to send a short document, and the server has already trimmed what a summary does not carry
  * (`ReportComposition`). A DETAILED link opens on the dashboard and offers all four.
  */
-export type LiveMode = 'summary' | 'standard' | 'dashboard' | 'platforms' | 'content' | 'tables'
+export type LiveMode = 'summary' | 'standard' | 'dashboard' | 'platforms' | 'content' | 'website' | 'tables'
 
 /** REPORT-ARCHITECTURE-001 — the product the Owner chose: three different compositions, not one with a dial. */
 export type LiveLevel = 'summary' | 'standard' | 'detailed'
@@ -38,10 +38,11 @@ export type LiveForm = 'executive_summary' | 'detailed'
  */
 const BY_LEVEL: Record<LiveLevel, LiveMode[]> = {
   summary: ['summary'],
-  standard: ['standard'],
+  // REPORT-WEBSITE-TAB-001 — the website is its own tab wherever the link has one: a link with no website data never offers it.
+  standard: ['standard', 'website'],
   // The executive summary stays the Owner's chosen opening view (REPORT-EXECUTIVE-SUMMARY-001); the
   // analytical views are one tab away, and `tables` exists nowhere else.
-  detailed: ['summary', 'dashboard', 'platforms', 'content', 'tables'],
+  detailed: ['summary', 'dashboard', 'platforms', 'content', 'website', 'tables'],
 }
 
 export function levelOf(form: LiveForm, level?: LiveLevel | null): LiveLevel {
@@ -85,4 +86,5 @@ export const MODE_LABELS: Record<LiveMode, { ar: string; en: string }> = {
   dashboard: { ar: 'لوحة الأداء', en: 'Dashboard' },
   platforms: { ar: 'المنصات', en: 'Platforms' },
   content: { ar: 'المحتوى', en: 'Content' },
+  website: { ar: 'الموقع', en: 'Website' },
 }

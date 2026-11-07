@@ -81,7 +81,7 @@ function detailFields(module: string): { key: string; labelAr: string; labelEn: 
       return [
         { key: 'site_or_app', labelAr: 'الموقع أو التطبيق', labelEn: 'Website or app' },
         { key: 'platform_tech', labelAr: 'المنصة التقنية', labelEn: 'Tech platform' },
-        { key: 'ga4', labelAr: 'GA4', labelEn: 'GA4' },
+        { key: 'ga4', labelAr: 'الموقع', labelEn: 'Website' },
         { key: 'gtm', labelAr: 'GTM', labelEn: 'GTM' },
         { key: 'pixels', labelAr: 'Pixels / CAPI', labelEn: 'Pixels / CAPI' },
         { key: 'events', labelAr: 'الأحداث المطلوبة', labelEn: 'Required events', type: 'textarea' },

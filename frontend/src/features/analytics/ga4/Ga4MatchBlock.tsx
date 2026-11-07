@@ -5,6 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ChartCard, RankingBarChart } from '../charts'
 import { money, num, percent } from '../format'
+import { OutsideCampaigns } from './Ga4StoreView'
 import type { Confidence, GapContext, GapReason, GapReasonsPayload, MatchCampaign, MatchPayload, MatchPlatform, MatchSide } from './matchTypes'
 
 /**
@@ -106,7 +107,7 @@ export function matchColumns(ar: boolean, internal: boolean, onDrill: (row: Matc
     { key: 'confidence', header: ar ? 'الثقة' : 'Match', width: '11%', value: (r) => r.confidence ?? '', render: (r) => <ConfidenceChip value={r.confidence} ar={ar} /> },
     { key: 'claimed', header: ar ? 'المنصة' : 'Claimed', width: '11%', align: 'end', value: (r) => r.claimed, render: (r) => <Num>{dash(r.claimed)}</Num> },
     { key: 'sessions', header: ar ? 'الزيارات' : 'Sessions', width: '11%', align: 'end', value: (r) => r.ga4?.sessions ?? null, render: (r) => <Num>{dash(r.ga4?.sessions)}</Num> },
-    { key: 'purchases', header: 'GA4', width: '10%', align: 'end', value: (r) => r.ga4?.purchases ?? null, render: (r) => <Num>{dash(r.ga4?.purchases)}</Num> },
+    { key: 'purchases', header: ar ? 'الموقع' : 'Website', width: '10%', align: 'end', value: (r) => r.ga4?.purchases ?? null, render: (r) => <Num>{dash(r.ga4?.purchases)}</Num> },
     { key: 'gap', header: ar ? 'الفرق' : 'Gap', width: '15%', align: 'end', value: (r) => r.gapValue, render: (r) => <GapChip value={r.gapValue} share={r.gapShare} testId={`match-gap-${r.kind}-${r.key}`} /> },
     { key: 'aov', header: ar ? 'السلة' : 'AOV', width: internal ? '9%' : '14%', align: 'end', value: (r) => r.ga4?.aov_usd ?? null, render: (r) => <Num>{dash(r.ga4?.aov_usd, (x) => money(x, 'USD'))}</Num> },
     ...(internal ? [{ key: 'roas', header: 'ROAS', width: '9%', align: 'end' as const, value: (r: MatchRow) => r.roas ?? null, render: (r: MatchRow) => <Num>{dash(r.roas, (x) => `${x.toFixed(2)}×`)}</Num> }] : []),
@@ -126,22 +127,24 @@ export function MatchBars({ rows, ar, height }: { rows: MatchRow[]; ar: boolean;
   return (
     <div data-testid="match-bars" data-rows={data.length}>
       <RankingBarChart height={height ?? Math.max(220, Math.min(data.length, 8) * 48)} horizontal data={data.slice(0, 8)}
-        bars={[{ key: 'claimed', name: ar ? 'المنصة' : 'Platform', kind: 'num', color: 'var(--brand-600)' }, { key: 'ga4', name: 'GA4', kind: 'num', color: 'var(--teal)' }]} />
+        bars={[{ key: 'claimed', name: ar ? 'المنصة' : 'Platform', kind: 'num', color: 'var(--brand-600)' }, { key: 'ga4', name: ar ? 'الموقع' : 'Website', kind: 'num', color: 'var(--teal)' }]} />
     </div>
   )
 }
 
 export function Buckets({ data, ar }: { data: Pick<MatchPayload, 'unattributed' | 'unmatched' | 'other_paid'>; ar: boolean }) {
-  const classes: Record<string, L> = { organic: { ar: 'مجاني', en: 'Organic' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' } }
   const un = data.unattributed
   const um = data.unmatched
+  /* REPORT-WEBSITE-TAB-001 — «من خارج الحملات»: one umbrella a client reads without explanation, its sub-chips beneath. */
+  const items = [
+    ...(un?.classes ?? []).map((c) => ({ key: c.class, sessions: c.sessions ?? 0 })),
+    ...(data.other_paid ? [{ key: 'other_paid', sessions: data.other_paid.ga4.sessions ?? 0 }] : []),
+  ]
 
   return (
-    <div data-testid="match-buckets" className="flex flex-wrap items-center gap-1.5">
-      {un && <Badge tone="neutral" data-testid="bucket-unattributed">{ar ? 'بلا إسناد' : 'Unattributed'} <Num>{num(un.sessions)}</Num></Badge>}
-      {un?.classes.map((c) => <Badge key={c.class} tone="neutral" data-testid={`bucket-${c.class}`}>{t(classes[c.class] ?? { ar: c.class, en: c.class }, ar)} <Num>{num(c.sessions)}</Num></Badge>)}
-      {data.other_paid && <Badge tone="neutral" data-testid="bucket-other_paid">{ar ? 'مدفوع آخر' : 'Other paid'} <Num>{num(data.other_paid.ga4.sessions)}</Num></Badge>}
-      {um && <Badge tone={um.campaigns > 0 ? 'warning' : 'neutral'} data-testid="bucket-unmatched">{ar ? 'بلا أثر' : 'Unmatched'} <Num>{um.campaigns}</Num>{um.spend_usd !== null ? <Num>{` · ${money(um.spend_usd, 'USD')}`}</Num> : null}</Badge>}
+    <div data-testid="match-buckets" className="flex flex-wrap items-start gap-3">
+      {(un || data.other_paid) && <OutsideCampaigns items={items} ar={ar} total={(un?.sessions ?? 0) + (data.other_paid?.ga4.sessions ?? 0)} />}
+      {um && <Badge tone={um.campaigns > 0 ? 'warning' : 'neutral'} data-testid="bucket-unmatched">{ar ? 'حملات بلا أثر' : 'Campaigns, no trace'} <Num>{um.campaigns}</Num>{um.spend_usd !== null ? <Num>{` · ${money(um.spend_usd, 'USD')}`}</Num> : null}</Badge>}
     </div>
   )
 }
@@ -159,7 +162,7 @@ export function AttributionMatchBlock({ data, ar, pageSize = 8, paged = false, r
   const first = !range || range[0] === 0
 
   return (
-    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<Badge tone="info" data-testid="match-basis">GA4</Badge>}>
+    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<Badge tone="info" data-testid="match-basis">{ar ? 'الموقع' : 'Website'}</Badge>}>
       <div data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-3">
         <MatchBars rows={rows} ar={ar} height={paged ? 150 : undefined} />
         <FixedPageTable testId="match-table" ar={ar} pageSize={pageSize} pager={!paged} rows={rows} rowKey={(r) => r.key}
@@ -206,11 +209,11 @@ export function GapReasonsBlock({ data, ar, onReason }: { data: GapReasonsPayloa
   const reasons = data.reasons ?? []
 
   return (
-    <ChartCard title={ar ? 'سبب الفرق' : 'Why the gap'} action={<Badge tone="info">GA4</Badge>}>
+    <ChartCard title={ar ? 'سبب الفرق' : 'Why the gap'} action={<Badge tone="info">{ar ? 'الموقع' : 'Website'}</Badge>}>
       <div data-testid="gap-reasons" className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2" data-testid="gap-headline">
           <Badge tone="neutral">{ar ? 'المنصات' : 'Claimed'} <Num>{dash(h?.claimed)}</Num></Badge>
-          <Badge tone="neutral">GA4 <Num>{dash(h?.measured)}</Num></Badge>
+          <Badge tone="neutral">{ar ? 'الموقع' : 'Website'} <Num>{dash(h?.measured)}</Num></Badge>
           <Badge tone={h?.gap === null || h?.gap === undefined ? 'neutral' : 'warning'} data-testid="gap-headline-gap">{ar ? 'الفرق' : 'Gap'} <Num>{signed(h?.gap)}{h?.gap_share != null ? ` · ${percent(Math.abs(h.gap_share), 0)}` : ''}</Num></Badge>
           {h?.gap_usd != null && <Badge tone="neutral"><Num>{money(h.gap_usd, 'USD')}</Num></Badge>}
         </div>

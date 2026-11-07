@@ -88,10 +88,10 @@ export function PrintReport() {
     for (let i = 0; i < (d.attention?.length ?? 0); i += ATTENTION_PER_PAGE) {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
-    withDailyRecordsSlides(visible, d)
     withStreamsSlide(visible, d)
-    // GA4-REPORT-SECTIONS-001 — the store reading; each table split into fixed pages of eight rows.
+    // REPORT-WEBSITE-TAB-001 — the website pages in the live tab's order, each table split into fixed pages of eight rows; then the tables view (daily records).
     withGa4Slides(visible, d, true)
+    withDailyRecordsSlides(visible, d)
     // WD-EVIDENCE-001 — the platform screenshots close the deck, as its appendix.
     withEvidenceSlides(visible, d)
     // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.

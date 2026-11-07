@@ -72,11 +72,13 @@ describe('the attribution match table', () => {
     }
     renderWithProviders(<AttributionMatchBlock data={client} ar={false} />, { locale: 'en' })
 
-    expect(screen.getByTestId('match-basis')).toHaveTextContent('GA4')
+    expect(screen.getByTestId('match-basis')).toHaveTextContent('Website')
     expect(screen.getByTestId('confidence-utm')).toBeInTheDocument()
     expect(screen.queryByText('campaign-01')).toBeNull()
     expect(screen.queryByText('ROAS')).toBeNull()
-    expect(screen.getByTestId('bucket-unattributed')).toHaveTextContent('300')
+    // REPORT-WEBSITE-TAB-001 — the umbrella a client reads without explanation, with its total.
+    expect(screen.getByTestId('outside-campaigns-total')).toHaveTextContent('Outside campaigns')
+    expect(screen.getByTestId('outside-campaigns-total')).toHaveTextContent('300')
   })
 })
 
@@ -86,7 +88,7 @@ const reasons: GapReasonsPayload = {
   bar: [{ key: 'no_trace', value: 10, share: 0.357 }, { key: 'attribution_rule', value: 33, share: 1.178 }, { key: 'untagged_channel', value: -5, share: -0.178 }, { key: 'no_platform_trace', value: -10, share: -0.357 }, { key: 'unexplained', value: 0, share: 0 }],
   reasons: [
     { key: 'no_trace', label_ar: 'حملات بلا أثر', label_en: 'No GA4 trace', measured: true, value: 10, value_usd: 500, share: 0.357, direction: 'widens', cause_unmeasured: false, rows: [{ platform: 'meta', campaign: 'ghost', claimed: 10, ga4: null }] },
-    { key: 'no_platform_trace', label_ar: 'مبيعات بلا منصة', label_en: 'No platform trace', measured: true, value: -10, value_usd: null, share: -0.357, direction: 'narrows', cause_unmeasured: false, rows: [] },
+    { key: 'no_platform_trace', label_ar: 'من خارج الحملات', label_en: 'Outside campaigns', measured: true, value: -10, value_usd: null, share: -0.357, direction: 'narrows', cause_unmeasured: false, rows: [] },
   ],
   unexplained: { key: 'unexplained', value: 0 },
   unmeasured: [{ key: 'view_through', label_ar: 'مشاهدة دون نقر', label_en: 'View-through', measured: false, value: null }, { key: 'timing', label_ar: 'تأخر التحويل', label_en: 'Conversion lag', measured: false, value: null }],

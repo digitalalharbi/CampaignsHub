@@ -32,7 +32,7 @@ import {
   useSpendCharting,
 } from './LiveSections'
 import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
-import { Ga4ReportBlocks } from '../Ga4ReportBlocks'
+import { Ga4ReportBlocks, ga4PartShown, WEBSITE_PARTS, WebsiteStrip, websiteHasContent } from '../Ga4ReportBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
@@ -46,6 +46,8 @@ type Common = {
   currency: string
   locale: Locale
   onOpenContent: (content: ReportAd) => void
+  /** REPORT-WEBSITE-TAB-001 — the summary's one website strip opens the «الموقع» tab where the link offers it. */
+  onOpenWebsite?: () => void
 }
 
 const LEGACY_FLAG: Partial<Record<ReportSectionKey, keyof NonNullable<LivePayload['sections']>>> = {
@@ -159,7 +161,7 @@ function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; a
 
 /* ─────────────────────────────── A — Executive summary ─────────────────────────────── */
 
-export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
+export function SummaryView({ payload, reader, currency, locale, onOpenContent, onOpenWebsite }: Common) {
   /*
    * REPORT-EXECUTIVE-SUMMARY-001 / CLIENT-REPORT-FRAMING-001 — the summary a shared link opens on is
    * the platforms summary with the results around it: platform cards → results board → results over
@@ -168,6 +170,8 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
    */
   return (
     <div className="flex flex-col gap-6">
+      {/* REPORT-WEBSITE-TAB-001 — the ONE website headline strip; everything else about the website lives in its own tab. */}
+      <WebsiteStrip payload={payload} ar={locale === 'ar'} onOpen={onOpenWebsite} />
       <ExecutiveSummary
         payload={payload}
         reader={reader}
@@ -176,7 +180,6 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
         onOpenContent={onOpenContent}
         sectionOn={(key) => sectionOn(payload, key)}
       />
-      <Ga4ReportBlocks payload={payload} ar={locale === 'ar'} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
     </div>
   )
 }
@@ -192,11 +195,12 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
  * to look at — and it stops there. No tabs, no tables to work in, no pacing, no segmentation, no
  * per-platform drill-down: that depth is the Detailed product's, and it travels only in that payload.
  */
-export function StandardView({ payload, reader, currency, locale, onOpenContent }: Common) {
+export function StandardView({ payload, reader, currency, locale, onOpenContent, onOpenWebsite }: Common) {
   const ar = locale === 'ar'
 
   return (
     <div data-testid="live-mode-standard" className="flex flex-col gap-6">
+      <WebsiteStrip payload={payload} ar={ar} onOpen={onOpenWebsite} />
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} heroOnly />
       {sectionOn(payload, 'recommendations') && (
         <section data-testid="standard-commentary" className="rounded-2xl border border-border bg-surface p-4">
@@ -237,7 +241,6 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
         </section>
       )}
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
-      <Ga4ReportBlocks payload={payload} ar={ar} parts={['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap']} />
     </div>
   )
 }
@@ -348,17 +351,33 @@ export function DashboardView({
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
       {sectionOn(payload, 'detailed_tables') && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
       {sectionOn(payload, 'budget_pacing') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
-      {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
-      {/*
-        GA4-INTEGRATION-001 — after the paid-media story and before the insights, because that is
-        what it is: context for the campaigns, never a verdict on them. Off by default on a
-        client-facing link; `sectionOn` is what the operator's choice flows through.
-      */}
-      {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
-      {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
-      {/* GA4-REPORT-SECTIONS-001 — the store as its GA4 property measured it: four parts, each the operator's own switch. */}
-      <Ga4ReportBlocks payload={payload} ar={ar} />
+      {/* REPORT-WEBSITE-TAB-001 — the store's funnel, the site measurement, the store orders and the website reading left the dashboard: they live in the «الموقع» tab, once. */}
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
+    </div>
+  )
+}
+
+/* ─────────────────────────────── W — Website ─────────────────────────────── */
+
+/**
+ * REPORT-WEBSITE-TAB-001 — «الموقع»: EVERYTHING about the website and the store, once.
+ *
+ * Key figures (one source per figure), the trend, channels / devices / the website funnel, the attribution match against
+ * the ad platforms, why the gap, the classification, the sources / campaign / landing / product tables, then the store's
+ * own orders. The website's attribution is its own: never added to a platform figure and never an order-level match.
+ * Each part is its own SHOW/HIDE on the server, so a hidden part is absent from the payload and from this page.
+ */
+export function WebsiteView({ payload, ar }: { payload: LivePayload; ar: boolean }) {
+  const ga4Shown = WEBSITE_PARTS.some((p) => ga4PartShown(payload, p))
+
+  return (
+    <div data-testid="live-mode-website" className="flex flex-col gap-6">
+      <Ga4ReportBlocks payload={payload} ar={ar} />
+      {/* The older site reading repeats the tiles above; it stands only where the website reading itself is not carried. */}
+      {!ga4Shown && sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
+      {!websiteHasContent(payload as never) && <p data-testid="website-empty" className="rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-text-muted">{ar ? 'لا بيانات للموقع في هذه الفترة' : 'No website data in this period'}</p>}
     </div>
   )
 }

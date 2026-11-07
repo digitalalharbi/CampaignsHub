@@ -222,7 +222,7 @@ const TAB_GROUPS = [
       { id: 'funnel', ar: 'القمع', en: 'Funnel' },
       { id: 'store', ar: 'المتجر', en: 'Store' },
       // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platforms.
-      { id: 'site', ar: 'الموقع (GA4)', en: 'Site (GA4)' },
+      { id: 'site', ar: 'الموقع (الموقع)', en: 'Site (Website)' },
     ],
   },
   {

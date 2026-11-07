@@ -125,8 +125,8 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
     en: 'Open the live source view — the whole project is stale or its sync failed, and the figures on the pages are older than they look.',
   },
   measurement_outage: {
-    ar: 'افحص ربط خاصية GA4: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
-    en: 'Check the GA4 property connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
+    ar: 'افحص ربط خاصية الموقع: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
+    en: 'Check the website connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
   },
   tracking_health: {
     ar: 'افتح «سلامة التتبع» في صفحة النماذج: كل بند يقول ما الخلل وما المطلوب فعله.',

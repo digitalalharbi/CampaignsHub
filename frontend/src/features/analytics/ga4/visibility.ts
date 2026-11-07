@@ -28,13 +28,13 @@ export const ELEMENT_GROUPS: ElementGroup[] = [
     e('col.purchases', 'الشراء', 'Orders', true), e('col.revenue', 'المبيعات', 'Sales', true), e('col.aov', 'السلة', 'Basket', true), e('col.conversion_rate', 'التحويل', 'CVR', true),
   ] },
   { key: 'match', label: { ar: 'المطابقة', en: 'Match' }, items: [
-    e('attr.claimed', 'ما ادّعته المنصة', 'Claimed', false), e('attr.confidence', 'الثقة', 'Confidence', false), e('attr.unattributed', 'بلا إسناد', 'Unattributed', false), e('attr.unmatched', 'بلا أثر', 'Unmatched', false),
-    e('attr.sales', 'مبيعات GA4', 'GA4 sales', true), e('attr.gap', 'الفرق', 'Gap', true),
+    e('attr.claimed', 'ما ادّعته المنصة', 'Claimed', false), e('attr.confidence', 'الثقة', 'Confidence', false), e('attr.unattributed', 'من خارج الحملات', 'Outside campaigns', false), e('attr.unmatched', 'حملات بلا أثر', 'Campaigns, no trace', false),
+    e('attr.sales', 'مبيعات الموقع', 'Website sales', true), e('attr.gap', 'الفرق', 'Gap', true),
     e('dim.channel', 'تصنيف: قناة', 'By channel', false), e('dim.platform', 'تصنيف: منصة', 'By platform', false), e('dim.landing_page', 'تصنيف: صفحة', 'By page', false),
   ] },
   { key: 'reasons', label: { ar: 'سبب الفرق', en: 'Why' }, items: [
     e('gap.headline', 'الرقم الرئيسي', 'Headline', true), e('gap.reason.no_trace', 'حملات بلا أثر', 'No trace', true), e('gap.reason.attribution_rule', 'قاعدة الإسناد', 'Rule', true),
-    e('gap.reason.untagged_channel', 'زيارات بلا حملة', 'Untagged', true), e('gap.reason.no_platform_trace', 'مبيعات بلا منصة', 'No platform', true),
+    e('gap.reason.untagged_channel', 'زيارات بلا حملة', 'Untagged', true), e('gap.reason.no_platform_trace', 'من خارج الحملات', 'Outside campaigns', true),
   ] },
 ]
 

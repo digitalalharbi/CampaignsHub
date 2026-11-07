@@ -60,7 +60,7 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
   const defined = Object.keys(NAME).map((key) => by.get(key)).filter((k): k is SiteKpi => k !== undefined)
   if (defined.length === 0) return null
   return (
-    <section data-testid="site-kpis" aria-label={ar ? 'مؤشرات GA4' : 'GA4 KPIs'} className="space-y-2">
+    <section data-testid="site-kpis" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="space-y-2">
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         {rows.map((k) => {
           const name = NAME[k.key]?.[ar ? 'ar' : 'en'] ?? k.key
@@ -80,12 +80,12 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
           {defined.map((k) => (
             <li key={k.key} data-testid={`site-kpi-def-${k.key}`}>
               <span className="font-semibold text-text-primary">{NAME[k.key]?.[ar ? 'ar' : 'en']}</span> — {k.definition}{' '}
-              <span dir="ltr" className="font-mono">[GA4: {k.source.metrics.join(', ')}]</span>{' '}
+              <span dir="ltr" className="font-mono">[{k.source.metrics.join(', ')}]</span>{' '}
               {k.freshness.newest_day ? <span dir="ltr">· {k.freshness.days_with_data}/{k.freshness.days_in_window} {ar ? 'يوم' : 'days'}, {ar ? 'آخر يوم' : 'newest'} {k.freshness.newest_day}</span> : null}
             </li>
           ))}
         </ul>
-        <p className="mt-2">{ar ? 'أرقام GA4 لا تُجمع مع أرقام المتجر أو المنصات الإعلانية.' : 'GA4 figures are never added to store or ad-platform figures.'}</p>
+        <p className="mt-2">{ar ? 'أرقام الموقع لا تُجمع مع أرقام المتجر أو المنصات الإعلانية.' : 'Website figures are never added to store or ad-platform figures.'}</p>
       </details>
     </section>
   )
