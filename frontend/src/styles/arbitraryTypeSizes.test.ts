@@ -26,8 +26,14 @@ const ALLOW = {
   'src/features/auth': 'auth visual-regression baselines, same reason',
 } as const
 
-/** Post-migration count (1,115 before the codemod, counting everything). Only ever lower it. */
-const REMAINING = 729
+/**
+ * Post-migration count (1,115 before the codemod, counting everything). Only ever lower it.
+ *
+ * 2026-11-07 — re-baselined once, at the merge of the type-scale branch with the main that had moved on (batch/pricing-tenancy-1):
+ * the codemod was re-run over the merged tree, and the 39 sizes it leaves are ones with no scale step within 1px (11px, 9px)
+ * that landed in main (GA4, integrations, reports, console panels) after 729 was measured. From here the number only goes down.
+ */
+const REMAINING = 768
 
 /** Scale classes the migration emits; each must resolve to a real token. */
 const MAPPED_STEPS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'] as const
