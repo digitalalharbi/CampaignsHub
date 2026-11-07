@@ -158,6 +158,61 @@ export function Ga4Tiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
   )
 }
 
+/**
+ * REPORT-WEBSITE-TAB-001 (Owner, permanent): «البطاقات الكبيرة + تحتها البطاقات الصغيرة الفرعية». The same measured tiles, no
+ * duplicates, as a hierarchy: one BIG card per headline (visits, sales) with its own small sub-cards under it. A tile the server
+ * did not send (hidden, or not measured) is simply absent; a group whose headline is hidden promotes its first sub-card.
+ */
+const TILE_GROUPS: Array<{ id: string; keys: string[] }> = [
+  { id: 'visits', keys: ['sessions', 'users_daily_sum', 'new_users', 'bounce_rate', 'engagement_rate', 'avg_session_seconds'] },
+  { id: 'sales', keys: ['revenue', 'transactions', 'aov', 'conversion_rate', 'add_to_carts', 'checkouts'] },
+]
+
+export function Ga4TileGroups({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
+  const by = new Map(kpis.map((k) => [k.key, k]))
+  const grouped = new Set(TILE_GROUPS.flatMap((g) => g.keys))
+  const groups = TILE_GROUPS.map((g) => g.keys.map((k) => by.get(k)).filter((k): k is StoreKpi => k !== undefined))
+  // A tile no group names still shows, as a sub-card of the last group: nothing measured is dropped.
+  const rest = kpis.filter((k) => !grouped.has(k.key))
+  if (rest.length > 0) groups[groups.length - 1] = [...groups[groups.length - 1], ...rest]
+
+  return (
+    <section data-testid="ga4-tiles" data-layout="groups" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {groups.filter((g) => g.length > 0).map((g, i) => {
+        const [head, ...subs] = g
+        const usd = head.kind === 'money' ? head.current_usd : undefined
+        const shownInUsd = head.kind === 'money' && usd !== null && usd !== undefined && (head.currency ?? '').toUpperCase() !== 'USD'
+
+        return (
+          <div key={TILE_GROUPS[i]?.id ?? i} data-testid={`ga4-group-${TILE_GROUPS[i]?.id ?? i}`} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
+            {/* The headline is the product's one card, the group's big figure, across the group's width. */}
+            <StatCard testid={`ga4-tile-${head.key}`} lead tone={TONE[head.key] ?? 'neutral'} dot label={t(KPI_LABEL[head.key] ?? { ar: head.key, en: head.key }, ar)}
+              value={<Num>{kpiText(head, head.current, usd)}</Num>}
+              hint={shownInUsd && head.current !== null ? money(head.current, head.currency) : undefined}
+              trailing={<Delta kpi={head} ar={ar} />}
+              spark={(head.trend?.length ?? 0) >= 2 ? <KpiSparkline points={(head.trend ?? []).map((p) => p.value)} height={48} /> : undefined} />
+            {subs.length > 0 && (
+              <StatGrid columns="grid-cols-2 sm:grid-cols-3" sparks>
+                {subs.map((k) => {
+                  const subUsd = k.kind === 'money' ? k.current_usd : undefined
+                  const inUsd = k.kind === 'money' && subUsd !== null && subUsd !== undefined && (k.currency ?? '').toUpperCase() !== 'USD'
+
+                  return (
+                    <StatCard key={k.key} testid={`ga4-tile-${k.key}`} tone={TONE[k.key] ?? 'neutral'} dot label={t(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}
+                      value={<Num>{kpiText(k, k.current, subUsd)}</Num>}
+                      hint={inUsd && k.current !== null ? money(k.current, k.currency) : undefined}
+                      trailing={<Delta kpi={k} ar={ar} />} />
+                  )
+                })}
+              </StatGrid>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 /** The chart's rows: revenue in USD where every day converted, otherwise in the property's currency. */
 export function seriesForChart(series: StoreSeriesDay[], currency: string | null | undefined): { data: Array<Record<string, unknown>>; currency: string } {
   const withRevenue = series.filter((d) => d.revenue !== null)
@@ -225,12 +280,14 @@ function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; ti
   )
 }
 
-export function Ga4Acquisition({ channels, devices, funnel, ar, channelsMeta, devicesMeta }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null }) {
+/** `frozen` — the three-across layout a snapshot saved before the website tab was printed with (its pages render as frozen). */
+export function Ga4Acquisition({ channels, devices, funnel, ar, channelsMeta, devicesMeta, frozen = false }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null; frozen?: boolean }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" data-testid="ga4-acquisition">
+    <div className={`grid grid-cols-1 gap-4 ${frozen ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`} data-testid="ga4-acquisition">
       <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} meta={channelsMeta} />
       <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} meta={devicesMeta} />
-      <ChartCard title={ar ? 'قمع الموقع' : 'Website funnel'}>
+      {/* The funnel takes the full row: in a third of it the bars had no room for their figures. */}
+      <ChartCard className={frozen ? '' : 'lg:col-span-2'} title={ar ? 'قمع الموقع' : 'Website funnel'}>
         <div data-testid="ga4-funnel">
           <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
         </div>

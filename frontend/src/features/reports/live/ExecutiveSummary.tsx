@@ -430,6 +430,7 @@ function PlatformComparison({
       ) : (
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
+          pageSize={8}
             head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'نسبة النقر' : 'CTR'] : [])]}
             rows={rows.map((p) => {
               const key = canonicalPlatform(p.provider)

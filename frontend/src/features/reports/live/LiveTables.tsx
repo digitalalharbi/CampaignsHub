@@ -162,13 +162,13 @@ export function TablesView({
       {/* NASEL 2026-10-29 — a table of the «detailed tables» component: the switch that names it is the one that hides it. */}
       {sectionShown(payload, 'detailed_tables') && (
         <Block ar={ar} title={ar ? 'كل منصة مقابل الفترة السابقة' : 'Every platform against the previous period'} testid="tables-platforms" empty={platforms.length === 0}>
-          <MetricTable head={platTable.head} rows={platTable.rows} values={platTable.values} initialSort={{ column: sortIndex(platTable.keys, 'results'), dir: 'desc' }} />
+          <MetricTable pageSize={8} head={platTable.head} rows={platTable.rows} values={platTable.values} initialSort={{ column: sortIndex(platTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
       {sectionShown(payload, 'account_breakdown') && (
         <Block ar={ar} title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
-          <MetricTable head={accTable.head} rows={accTable.rows} values={accTable.values} initialSort={{ column: sortIndex(accTable.keys, 'results'), dir: 'desc' }} />
+          <MetricTable pageSize={8} head={accTable.head} rows={accTable.rows} values={accTable.values} initialSort={{ column: sortIndex(accTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
@@ -177,7 +177,7 @@ export function TablesView({
 
       {sectionShown(payload, 'content_performance') && (
         <Block ar={ar} title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
-          <MetricTable head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
+          <MetricTable pageSize={8} head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 

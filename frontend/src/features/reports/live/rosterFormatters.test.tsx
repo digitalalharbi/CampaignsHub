@@ -93,7 +93,9 @@ describe('the live roster (PERF-RENDER-001)', () => {
     const before = constructions
     const { unmount } = render(<Tables payload={payloadWith(300)} />)
     // `querySelectorAll`, not `getAllByRole`: a role query walks the accessibility tree of every cell.
-    expect(screen.getByTestId('tables-content').querySelectorAll('tbody tr')).toHaveLength(300)
+    // REPORT-WEBSITE-TAB-001 — a fixed page of eight rows; the 300 are paged, never one long table.
+    expect(screen.getByTestId('tables-content').querySelectorAll('tbody tr')).toHaveLength(8)
+    expect(screen.getByTestId('tables-content')).toHaveTextContent('1–8 / 300')
     const first = constructions - before
 
     // Every (locale, options) pair the four tables format with — far fewer than one per figure.
@@ -103,7 +105,7 @@ describe('the live roster (PERF-RENDER-001)', () => {
     // A second roster, with fresh figures, builds nothing: the formatters are keyed by shape, not by value or row.
     const again = constructions
     render(<Tables payload={payloadWith(60)} />)
-    expect(screen.getByTestId('tables-content').querySelectorAll('tbody tr')).toHaveLength(60)
+    expect(screen.getByTestId('tables-content').querySelectorAll('tbody tr')).toHaveLength(8)
 
     expect(constructions - again, 'formatters built for 60 more rows').toBe(0)
     // Three hundred rows in jsdom is a slow DOM, not a slow formatter — the budget is for the DOM.

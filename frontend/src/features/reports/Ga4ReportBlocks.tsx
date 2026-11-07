@@ -2,7 +2,7 @@ import { ArrowUpLeft, ArrowUpRight, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
 import { Num } from '@/components/ui/Num'
-import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tables, Ga4Tiles, KPI_LABEL, kpiText, productColumns, sessionColumns } from '@/features/analytics/ga4/Ga4StoreView'
+import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tables, Ga4TileGroups, Ga4Tiles, KPI_LABEL, kpiText, productColumns, sessionColumns } from '@/features/analytics/ga4/Ga4StoreView'
 import type { Ga4AcquisitionSection, Ga4GapSection, Ga4OverviewSection, Ga4TablesSection, StoreProductRow, StoreSessionRow, StoreTableKey } from '@/features/analytics/ga4/storeTypes'
 import { AttributionMatchBlock, GapReasonsBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
@@ -85,7 +85,8 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       )}
       {overview && (
         <div data-testid="report-ga4-overview" className="flex min-w-0 flex-col gap-4">
-          <Ga4Tiles kpis={overview.kpis} ar={ar} />
+          {/* Owner, permanent: big headline cards first, their small sub-cards under them, then the charts. */}
+          <Ga4TileGroups kpis={overview.kpis} ar={ar} />
           <Ga4Series series={overview.series} currency={overview.currency} ar={ar} />
         </div>
       )}
@@ -210,14 +211,14 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
         </div>
       ) : null
     case '__ga4_acquisition':
-      return data.ga4_acquisition ? <div data-testid="slide-ga4-acquisition">{head('__ga4_acquisition')}<Ga4Acquisition channels={data.ga4_acquisition.channels} devices={data.ga4_acquisition.devices} funnel={data.ga4_acquisition.funnel} channelsMeta={data.ga4_acquisition.channels_meta} devicesMeta={data.ga4_acquisition.devices_meta} ar={ar} /></div> : null
+      return data.ga4_acquisition ? <div data-testid="slide-ga4-acquisition">{head('__ga4_acquisition')}<Ga4Acquisition channels={data.ga4_acquisition.channels} devices={data.ga4_acquisition.devices} funnel={data.ga4_acquisition.funnel} channelsMeta={data.ga4_acquisition.channels_meta} devicesMeta={data.ga4_acquisition.devices_meta} frozen={frozenBeforeWebsiteTab(data)} ar={ar} /></div> : null
     case '__ga4_gap':
       return data.ga4_platform_gap ? <div data-testid="slide-ga4-gap">{head('__ga4_gap')}<Ga4Gap gap={data.ga4_platform_gap} ar={ar} /></div> : null
     case '__ga4_tables':
       return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={withoutProducts(data.ga4_tables, !frozenBeforeWebsiteTab(data as { website_layout?: unknown }) && (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
     case '__ga4_pulse':
       // Only a snapshot frozen before the website tab has this page: it renders as it was frozen, its tiles and funnel included.
-      return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
+      return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition frozen channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
     case '__ga4_attribution':
       return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}<AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={paged ? 6 : 8} paged={paged} range={slide.range} /></div> : null
     case '__ga4_reasons':
