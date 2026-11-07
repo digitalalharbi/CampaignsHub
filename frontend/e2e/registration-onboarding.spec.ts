@@ -46,7 +46,7 @@ async function registerAndVerify(
 ) {
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(workspace)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(workspace)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('New Owner')
   await page.getByLabel(/Email|البريد/).fill(email)
   // Required since PHONE-VERIFY-001 — no account activates without a verified number.
@@ -511,7 +511,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Plans ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Plans ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Plan Picker')
   await page.getByLabel(/Email|البريد/).fill(`plans.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())
@@ -563,7 +563,7 @@ test('an invalid password is caught on the account step, not beside the price li
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Weak ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Weak ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Weak Password')
   await page.getByLabel(/Email|البريد/).fill(`weak.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())
@@ -608,7 +608,7 @@ test('the signup path decides which plans exist, and every price is USD', async 
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Paths ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Paths ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Path Picker')
   await page.getByLabel(/Email|البريد/).fill(`paths.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())
