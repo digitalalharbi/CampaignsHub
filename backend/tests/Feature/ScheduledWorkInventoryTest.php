@@ -45,8 +45,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'webhooks:reconcile',
         // SALLA-ONBOARD-001 — a Salla store uninstalled 30 days ago has its synced data removed (the retention promised to the merchant).
         'commerce:purge-uninstalled',
-        // TIKTOK-MEDIA-002 — covers into our own storage, nightly at 03:30, after the structure sweep refreshed the links.
-        'creatives:refresh-covers',
+        // TIKTOK-MEDIA-002 / CREATIVE-PREVIEWS-001 — covers into our own storage, hourly at :40, only what is due.
+        'creatives:backfill-covers',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',
         // DELIVERY-REMINDERS-001 — the chosen reviewer is nudged about a waiting, failed or unsent delivery.

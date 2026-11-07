@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Jobs\SyncAccountStructureJob;
 use App\Domains\Integrations\Models\ExternalAccount;
@@ -183,7 +184,8 @@ final class CampaignStructureController extends Controller
                 'id' => $ad->creative->id,
                 'name' => $ad->creative->name,
                 'format' => $ad->creative->format,
-                'thumbnail_url' => $ad->creative->thumbnail_url,
+                // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
+                'thumbnail_url' => CoverCache::displayUrlFor($ad->creative->provider, $ad->creative->cover_path, $ad->creative->thumbnail_url, (bool) $ad->creative->is_demo),
                 'preview_url' => $ad->creative->preview_url,
             ],
         ];

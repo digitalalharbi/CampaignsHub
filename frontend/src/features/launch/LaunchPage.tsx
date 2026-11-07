@@ -20,6 +20,7 @@ import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { localStill } from '@/features/content/providerMedia'
 
 /**
  * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
@@ -274,7 +275,7 @@ export function LaunchPage() {
                                   <button type="button" onClick={() => setSpec((s) => ({ ...s, ad: { ...s.ad!, creative_id: { ...(s.ad!.creative_id ?? {}), [p.provider]: c.id } } }))}
                                     className={`flex w-full flex-col gap-1 rounded-xl border p-2 text-start ${spec.ad!.creative_id?.[p.provider] === c.id ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}
                                     data-testid={`launch-creative-${c.id}`}>
-                                    {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="aspect-video w-full rounded-lg object-cover" /> : <div className="aspect-video w-full rounded-lg bg-surface-secondary" />}
+                                    {localStill(c.thumbnail_url) ? <img src={localStill(c.thumbnail_url) ?? undefined} alt="" className="aspect-video w-full rounded-lg object-cover" /> : <div className="aspect-video w-full rounded-lg bg-surface-secondary" />}
                                     <span className="truncate text-xs font-semibold text-text-primary">{c.name ?? c.id}</span>
                                   </button>
                                 </li>

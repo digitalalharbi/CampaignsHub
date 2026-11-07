@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
@@ -456,8 +457,9 @@ final class CampaignWriteService
                 ->whereNotNull('external_creative_id')
                 ->orderByDesc('last_active_at')
                 ->limit(60)
-                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id'])
-                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => $c->thumbnail_url])
+                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id', 'provider', 'cover_path', 'is_demo'])
+                // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
+                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => CoverCache::displayUrlFor($c->provider, $c->cover_path, $c->thumbnail_url, (bool) $c->is_demo)])
                 ->values()->all();
         }
 

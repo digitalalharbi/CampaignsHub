@@ -251,7 +251,8 @@ final class CreativePresenter
      *     cards: list<array<string, mixed>>|null,
      *     cards_reported: bool,
      *     cards_withheld: int,
-     *     text: array{headline: string|null, body: string|null}|null
+     *     text: array{headline: string|null, body: string|null}|null,
+     *     cover: array{state: string, reason: string|null}
      * }
      */
     public function preview(ExternalCreative $creative): array
@@ -281,10 +282,33 @@ final class CreativePresenter
          * A row with nothing but a share link now reads as what it is: an ad the platform exposed no
          * asset for. That sentence is true, and a reader can act on it. A blank rectangle is neither.
          */
-        $image = $this->safe($creative->asset_url);
+        /*
+         * CREATIVE-PREVIEWS-001 — our copy first; a short-lived platform grant is never given to the browser.
+         *
+         * Owner, 2026-11-07: Meta and TikTok drew no preview and no cover; Snapchat did. Meta's still was its
+         * `asset_url` — a `scontent-*.fbcdn.net` link signed with an `oe=` expiry — read BEFORE the cover we had
+         * already copied, so a dead link won over a good file. TikTok's were `*-sign.tiktokcdn.com` links that
+         * live an hour (images) or six (video covers). The cached cover now IS the still, for every kind; where
+         * there is none yet, a Meta or TikTok link is withheld and the card says the cover is on its way (or
+         * why it is not), and anyone else's link is shown only while the expiry it states has not passed.
+         * The playable film (`video_url`) is left alone: it is fetched on a click, and copying films is not
+         * what a cover cache is for.
+         */
+        $cover = CoverCache::urlFor($creative);
+        $demo = (bool) $creative->is_demo;
+        $still = fn (?string $url): ?string => CoverCache::hotlinkable($creative->provider, $url, $demo) ? $url : null;
+        $image = $cover ?? $still($this->safe($creative->asset_url));
         $video = $this->safe($creative->video_url);
         // TIKTOK-MEDIA-002 — cached cover first, the provider's live link second, the honest absence last.
-        $thumb = CoverCache::urlFor($creative) ?? $this->safe($creative->thumbnail_url);
+        $thumb = $cover ?? $still($this->safe($creative->thumbnail_url));
+        $expired = $creative->assetExpired();
+        if ($cover !== null && $expired) {
+            // The film's link has lapsed; the cover has not. The card draws the cover and offers no dead film.
+            $video = null;
+            $expired = false;
+        }
+        $awaitingCopy = $cover === null && $image === null && $thumb === null
+            && ($this->safe($creative->asset_url) !== null || $this->safe($creative->thumbnail_url) !== null);
 
         $blocked = $this->wasWithheld($creative);
 
@@ -306,7 +330,7 @@ final class CreativePresenter
          * so they carry the same credential and the same expiry — `cards()` says exactly that — and
          * promoting one would be reaching around a refusal this product made on purpose.
          */
-        if ($image === null && $video === null && $thumb === null && ! $blocked && ! $creative->assetExpired()) {
+        if ($image === null && $video === null && $thumb === null && ! $blocked && ! $expired && ! $awaitingCopy) {
             [$image, $video, $thumb] = $this->heroFromCards($creative);
         }
 
@@ -320,7 +344,25 @@ final class CreativePresenter
                 'note_ar' => 'رابط المعاينة من المنصة يحمل بيانات اعتماد، فلا يُعرض.',
                 'note_en' => 'The platform’s preview link carries a credential, so it is not shown.',
             ],
-            $creative->assetExpired() => [
+            /*
+             * CREATIVE-PREVIEWS-001 — the platform gave a still, and our copy of it is not there yet (or could
+             * not be taken). Neither is «the platform exposed nothing», and neither may draw the platform's link.
+             */
+            $awaitingCopy && $video === null => [
+                'state' => CoverCache::stateOf($creative) === CoverCache::STATE_FAILED ? 'cover_failed' : 'cover_pending',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                ...(CoverCache::stateOf($creative) === CoverCache::STATE_FAILED ? [
+                    'note_ar' => 'تعذّر جلب الغلاف من المنصة — سيُعاد المحاولة تلقائيًا.',
+                    'note_en' => 'The cover could not be fetched from the platform — it will be retried automatically.',
+                ] : [
+                    'note_ar' => 'الغلاف قيد التجهيز.',
+                    'note_en' => 'The cover is being prepared.',
+                ]),
+            ],
+            $expired => [
                 'state' => 'expired',
                 'kind' => $kind,
                 'aspect' => $aspect,
@@ -535,7 +577,11 @@ final class CreativePresenter
             ],
         };
 
-        return $shape + ['text' => $this->copyText($creative)] + $this->cards($creative, $shape['state']);
+        return $shape + [
+            'text' => $this->copyText($creative),
+            // CREATIVE-PREVIEWS-001 — the cover's own state, so a card can say «pending» or «failed» in a chip.
+            'cover' => ['state' => CoverCache::stateOf($creative), 'reason' => $creative->cover_error],
+        ] + $this->cards($creative, $shape['state']);
     }
 
     /**
@@ -653,9 +699,9 @@ final class CreativePresenter
 
             $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
 
-            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $image = $this->cardStill($creative, $given('image_url')) ?? $this->cardStill($creative, $given('asset_url'));
             $video = $this->safe($given('video_url'));
-            $thumb = $this->safe($given('thumbnail_url'));
+            $thumb = $this->cardStill($creative, $given('thumbnail_url'));
 
             if ($image !== null || $video !== null || $thumb !== null) {
                 return [$image, $video, $thumb];
@@ -689,9 +735,9 @@ final class CreativePresenter
 
             $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
 
-            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $image = $this->cardStill($creative, $given('image_url')) ?? $this->cardStill($creative, $given('asset_url'));
             $video = $this->safe($given('video_url'));
-            $thumb = $this->safe($given('thumbnail_url'));
+            $thumb = $this->cardStill($creative, $given('thumbnail_url'));
 
             $hadLink = $given('image_url') ?? $given('asset_url') ?? $given('video_url') ?? $given('thumbnail_url');
 
@@ -722,6 +768,19 @@ final class CreativePresenter
         }
 
         return ['cards' => $cards, 'cards_reported' => true, 'cards_withheld' => $withheld];
+    }
+
+    /**
+     * CREATIVE-PREVIEWS-001 — a card's still obeys the hero's rule: a short-lived platform grant is not drawn.
+     *
+     * A carousel card's link is a Meta `fbcdn` grant like the hero's. It is withheld (and counted, so the strip
+     * can say how many it is not showing) rather than drawn as a frame that breaks once its `oe=` passes.
+     */
+    private function cardStill(ExternalCreative $creative, ?string $url): ?string
+    {
+        $safe = $this->safe($url);
+
+        return CoverCache::hotlinkable($creative->provider, $safe, (bool) $creative->is_demo) ? $safe : null;
     }
 
     private function text(mixed $value): ?string

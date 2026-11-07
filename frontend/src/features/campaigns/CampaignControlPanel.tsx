@@ -24,6 +24,7 @@ import {
   performWrite, removalConsequence, strategyName, useWriteOptions,
   type ActionState, type CreativeOption, type WriteActionKey, type WriteEntity, type WriteResult,
 } from './providerWrites'
+import { localStill } from '@/features/content/providerMedia'
 
 /**
  * CAMPAIGN-MGMT-WRITE-001 — the campaign's platform entities, operated from here.
@@ -562,7 +563,7 @@ function ActionDialog({ entity, action, creatives, ar, busy, onClose, onSubmit }
                   <li key={c.id}>
                     <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${creativeId === c.id ? 'border-brand-500' : 'border-border'}`}>
                       <input type="radio" name="creative" checked={creativeId === c.id} onChange={() => setCreativeId(c.id)} className="accent-brand-600" />
-                      {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className={`h-10 w-10 shrink-0 rounded-md ${mediaFitClass(null, null, 'thumb')}`} /> : <span className="h-10 w-10 shrink-0 rounded-md bg-surface-secondary" />}
+                      {localStill(c.thumbnail_url) ? <img src={localStill(c.thumbnail_url) ?? undefined} alt="" className={`h-10 w-10 shrink-0 rounded-md ${mediaFitClass(null, null, 'thumb')}`} /> : <span className="h-10 w-10 shrink-0 rounded-md bg-surface-secondary" />}
                       <span className="min-w-0 truncate text-text-primary">{c.name ?? c.id}</span>
                       {c.format && <Badge tone="neutral">{c.format}</Badge>}
                     </label>

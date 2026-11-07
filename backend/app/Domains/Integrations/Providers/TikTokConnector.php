@@ -509,6 +509,43 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         return $out;
     }
 
+    /**
+     * CREATIVE-PREVIEWS-001 — fresh signed links for named creatives, for the cover cache.
+     *
+     * The cover cache meets a TikTok link that has lapsed (an image link lives an hour, a video cover six)
+     * whenever the structure sweep that wrote it is older than that. Rather than wait for the next sweep,
+     * it asks the same two Asset Library reads the sweep uses — `GET /file/video/ad/info/` (`video_ids`,
+     * answering `video_cover_url`, `preview_url`, `preview_url_expire_time`) and `GET /file/image/ad/info/`
+     * (`image_ids`, answering `image_url`) — through the same budgeted client, for these ids only. A Spark
+     * post is not in the Asset Library and needs its ad's identity, which a creative row does not carry,
+     * so it is left to the sweep rather than asked half an address.
+     *
+     * @param  list<array{external_id:string, media:?string}>  $creatives
+     * @return array<string, array<string,mixed>> external id => the fresh link columns
+     */
+    public function renewCreativeMedia(string $adAccountId, array $creatives): array
+    {
+        $ads = [];
+        foreach ($creatives as $c) {
+            if (in_array($c['media'] ?? null, ['video', 'image'], true)) {
+                $ads[] = ['external_id' => null, 'creative' => ['external_id' => (string) $c['external_id'], 'raw' => ['media' => $c['media']]]];
+            }
+        }
+        if ($ads === []) {
+            return [];
+        }
+
+        $renewed = [];
+        foreach ($this->withMedia($this->tokens(), $adAccountId, $ads) as $ad) {
+            $renewed[(string) $ad['creative']['external_id']] = array_intersect_key(
+                (array) $ad['creative'],
+                ['asset_url' => true, 'video_url' => true, 'thumbnail_url' => true, 'asset_expires_at' => true],
+            );
+        }
+
+        return $renewed;
+    }
+
     /** An identifier TikTok may send as a string or as a number, as a non-empty string — or null. */
     private function scalarId(mixed $value): ?string
     {

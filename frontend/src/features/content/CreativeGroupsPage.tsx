@@ -21,6 +21,7 @@ import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { Num } from '@/components/ui/Num'
+import { localStill } from '@/features/content/providerMedia'
 
 /**
  * §15.8 and §15.13 — the same asset across platforms, as one thing.
@@ -464,9 +465,9 @@ function GroupDetail({
               className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-2"
             >
               <div className="flex min-w-0 items-center gap-3">
-                {member.preview.state === 'available' && member.preview.thumbnail_url ? (
+                {member.preview.state === 'available' && localStill(member.preview.thumbnail_url) ? (
                   <img
-                    src={member.preview.thumbnail_url}
+                    src={localStill(member.preview.thumbnail_url) ?? undefined}
                     alt=""
                     loading={imageLoading(member.preview.thumbnail_url)}
                     /*

@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Services\CampaignOutcomeResolver;
+use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Campaigns\Services\CreativeFunnel;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
@@ -1610,9 +1611,9 @@ final class MetricsAggregator
             ->join('external_creatives as c', 'c.id', '=', 'm.creative_id')
             ->whereIn('m.campaign_id', $campaignIds)
             ->whereBetween('m.metric_date', [$from->toDateString(), $to->toDateString()])
-            ->select('m.campaign_id', 'c.id as creative_id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider')
+            ->select('m.campaign_id', 'c.id as creative_id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path', 'c.is_demo')
             ->selectRaw('SUM(m.spend) AS spend, SUM(m.impressions) AS impressions, SUM(m.clicks) AS clicks, SUM(m.conversions) AS conversions')
-            ->groupBy('m.campaign_id', 'c.id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider')
+            ->groupBy('m.campaign_id', 'c.id', 'c.name', 'c.format', 'c.thumbnail_url', 'c.provider', 'c.cover_path', 'c.is_demo')
             ->orderByDesc('spend')
             ->get();
 
@@ -1630,7 +1631,8 @@ final class MetricsAggregator
                 'name' => $r->name,
                 'format' => $r->format,
                 'provider' => $r->provider,
-                'thumbnail_url' => $r->thumbnail_url,
+                // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
+                'thumbnail_url' => CoverCache::displayUrlFor($r->provider, $r->cover_path, $r->thumbnail_url, (bool) $r->is_demo),
                 'spend' => round($spend, 2),
                 'impressions' => round($impr, 2),
                 'clicks' => round((float) $r->clicks, 2),
