@@ -57,33 +57,22 @@ jobs:
             echo "== FACTS-CR"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
               exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
-            BEGIN READ ONLY; select 'run_media' q, a.provider, r.type, r.status, r.finished_at, r.meta->'media' from integration_sync_runs r join external_accounts a on a.id=r.external_account_id where a.provider in ('meta','snapchat','tiktok') and r.meta ? 'media' order by r.finished_at desc nulls last limit 8; ROLLBACK;
-            BEGIN READ ONLY; select 'meta_refs' q, format, k, count(*) from external_creatives, jsonb_object_keys(coalesce(raw->'media_refs','{}'::jsonb)) k where provider='meta' group by 2,3 order by 2,4 desc; ROLLBACK;
-            BEGIN READ ONLY; select 'meta_raw' q, format, k, count(*) from external_creatives, jsonb_object_keys(coalesce(raw,'{}'::jsonb)) k where provider='meta' group by 2,3 order by 2,4 desc limit 30; ROLLBACK;
-            BEGIN READ ONLY; select 'tt_vid_host' q, raw->>'media' m, substring(thumbnail_url from '^https?://([^/]+)') h, count(*), sum(case when asset_expires_at<now() then 1 else 0 end), min(last_synced_at), max(last_synced_at) from external_creatives where provider='tiktok' and thumbnail_url is not null group by 2,3 order by 4 desc limit 8; ROLLBACK;
-            BEGIN READ ONLY; select 'tt_spark_keys' q, raw->>'ad_format' f, k, count(*) from external_creatives, jsonb_object_keys(coalesce(raw,'{}'::jsonb)) k where provider='tiktok' and raw->>'media'='spark' group by 2,3 order by 2,4 desc; ROLLBACK;
-            BEGIN READ ONLY; select 'tt_reason_sync' q, raw->>'media_reason' r, date_trunc('day', last_synced_at) d, count(*) from external_creatives where provider='tiktok' and raw ? 'media_reason' group by 2,3 order by 3 desc limit 10; ROLLBACK;
-            BEGIN READ ONLY; select 'snap_media_ok' q, format, sum(case when video_url is not null and asset_url is null then 1 else 0 end) vid_only, sum(case when video_url is null and asset_url is null then 1 else 0 end) nothing, sum(case when cards is not null and jsonb_typeof(cards)='array' and jsonb_array_length(cards)>0 then 1 else 0 end) cards_n from external_creatives where provider='snapchat' and is_demo=false group by 2 order by 2; ROLLBACK;
-            BEGIN READ ONLY; select 'ext_ads_cols' q, string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_name='external_ads'; ROLLBACK;
+            BEGIN READ ONLY; select 'runs_cols' q, string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_name='integration_sync_runs'; ROLLBACK;
+            BEGIN READ ONLY; select 'run_media' q, provider, type, status, finished_at, meta->'media', left(coalesce(error,''),200) from integration_sync_runs where meta ? 'media' and provider in ('meta','snapchat') order by finished_at desc nulls last limit 6; ROLLBACK;
+            BEGIN READ ONLY; select 'proj_t' q, project_id, count(*) from external_creatives where coalesce(external_account_id,(select external_account_id from external_campaigns c where c.id=external_campaign_id))='383f29e9-7552-480a-8223-1a09dcbcc08f' group by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'm_cr' q, project_id, external_account_id is null acc_null, (select external_account_id from external_campaigns c where c.id=external_campaign_id)='1e027047-df04-40cf-872d-485eae82db12' camp_acc, campaign_id is null uc_null, count(*), min(last_active_at), max(last_active_at), max(last_synced_at) from external_creatives where provider='meta' group by 2,3,4,5; ROLLBACK;
+            BEGIN READ ONLY; select 'm_cdm' q, count(distinct m.creative_id), min(metric_date), max(metric_date), sum(impressions) from creative_daily_metrics m join external_creatives c on c.id=m.creative_id where c.provider='meta'; ROLLBACK;
+            BEGIN READ ONLY; select 'm_cdm_win' q, count(distinct m.creative_id) from creative_daily_metrics m join external_creatives c on c.id=m.creative_id where c.provider='meta' and metric_date between '2026-10-09' and '2026-11-07'; ROLLBACK;
+            BEGIN READ ONLY; select 'm_ads' q, count(*), count(creative_id), count(distinct creative_id) from external_ads where provider='meta'; ROLLBACK;
+            BEGIN READ ONLY; select 'm_edm_win' q, count(distinct e.entity_id), sum(e.impressions) from entity_daily_metrics e join external_ads a on a.id=e.entity_id where e.entity_type='ad' and a.provider='meta' and e.metric_date between '2026-10-09' and '2026-11-07'; ROLLBACK;
+            BEGIN READ ONLY; select 'm_dm_win' q, project_id, external_account_id, sum(impressions) from daily_metrics where external_account_id='1e027047-df04-40cf-872d-485eae82db12' and metric_date between '2026-10-09' and '2026-11-07' group by 2,3; ROLLBACK;
+            BEGIN READ ONLY; select 'm_uc_proj' q, uc.project_id, count(*) from external_creatives c join unified_campaigns uc on uc.id=c.campaign_id where c.provider='meta' group by 2; ROLLBACK;
+            BEGIN READ ONLY; select 'm_accts' q, id, project_id, provider_connection_id, status from external_accounts where provider='meta'; ROLLBACK;
+            BEGIN READ ONLY; select 'cdm_cols' q, string_agg(column_name, ',' order by ordinal_position) from information_schema.columns where table_name='creative_daily_metrics'; ROLLBACK;
             SQL
             echo "== covers on disk"
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T backend sh -c 'ls /var/www/html/storage/app/media/covers 2>/dev/null | wc -l; find /var/www/html/storage/app/media/covers -type f 2>/dev/null | wc -l; ls /var/www/html/storage/app/private/media/covers 2>/dev/null | wc -l; find /var/www/html/storage/app/private/media/covers -type f 2>/dev/null | wc -l' || true
             docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T backend php -r 'require "vendor/autoload.php"; $a=require "bootstrap/app.php"; $a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); echo "local root=".config("filesystems.disks.local.root").PHP_EOL;' || true
-            echo "== tt thumb probe (status/content-type/bytes only; no URL printed)"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T backend php <<'PHP' || true
-            <?php
-            require 'vendor/autoload.php'; $app = require 'bootstrap/app.php'; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-            foreach (['video', 'spark'] as $m) {
-              foreach ([true, false] as $fresh) {
-                $q = Illuminate\Support\Facades\DB::table('external_creatives')->where('provider', 'tiktok')->whereNotNull('thumbnail_url')->whereNull('cover_path')->whereRaw("raw->>'media' = ?", [$m]);
-                $fresh ? $q->where('asset_expires_at', '>', now()) : $q->where('asset_expires_at', '<=', now());
-                $u = $q->orderByDesc('last_synced_at')->value('thumbnail_url');
-                if (! $u) { echo "$m fresh=".(int)$fresh." none\n"; continue; }
-                try { $r = Illuminate\Support\Facades\Http::timeout(15)->get($u); echo "$m fresh=".(int)$fresh." status=".$r->status()." type=".$r->header('Content-Type')." bytes=".strlen($r->body())." host=".parse_url($u, PHP_URL_HOST)."\n"; }
-                catch (Throwable $e) { echo "$m fresh=".(int)$fresh." error=".get_class($e)."\n"; }
-              }
-            }
-            PHP
             echo "== END FACTS-CR"
             exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
