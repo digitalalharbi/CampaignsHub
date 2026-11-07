@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Measurement\Ga4Visibility;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -622,6 +623,8 @@ final class LiveReportService
              * would describe the ads a reader was not shown.
              */
             'content_formats' => $this->contentFormats($share, $scope, $applied, $from, $to),
+            // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», within this link's ceiling and cut for its reader.
+            ContentFormatComparison::KEY => $this->contentFormatComparison($share, $scope, $applied, $from, $to),
             'ads_groups' => ClientEntityBoundary::ads($built['groups']),
             /*
              * REPORT-DETAIL-PARITY-001 — the same ads on the platform axis, past the same boundary.
@@ -1520,6 +1523,41 @@ final class LiveReportService
     }
 
     /**
+     * CONTENT-FORMAT-COMPARISON-001 — the per-format comparison for a link: the same ceiling the format intelligence
+     * above reads (accounts through each creative's campaign, the link's campaigns and providers, its content
+     * lists), and the audience cut decided on the server — a client reads results and shares, never spend or cost.
+     *
+     * Nothing is read when the link names nothing or the operator hid the part.
+     *
+     * @param  array<string, mixed>  $scope
+     * @param  array<string, mixed>  $applied
+     * @return array<string, mixed>|null
+     */
+    private function contentFormatComparison(ReportShare $share, array $scope, array $applied, Carbon $from, Carbon $to): ?array
+    {
+        $projectId = (string) ($scope['project_id'] ?? '');
+        if ($projectId === '' || $this->namesNothing($share, $scope)) {
+            return null;
+        }
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
+        if ($report === null || ! app(ReportSectionSurfaces::class)->operatorAllows(ContentFormatComparison::KEY, $report, $share)) {
+            return null;
+        }
+
+        $named = array_values(array_filter((array) ($share->scope['campaign_ids'] ?? [])));
+        $block = app(ContentFormatComparison::class)->forScope($projectId, $from, $to, ceiling: [
+            'account_ids' => array_values(array_filter((array) ($share->scope['account_ids'] ?? []))),
+            'providers' => $applied['providers'] !== [] ? $applied['providers'] : $scope['providers'],
+            'campaign_ids' => $applied['campaigns'] !== [] ? $applied['campaigns'] : $named,
+            'creative_ids' => $this->shareList($share, 'creative_ids'),
+            'creative_group_ids' => $this->shareList($share, 'creative_group_ids'),
+            'excluded_creative_ids' => $this->shareList($share, 'excluded_creative_ids'),
+        ], drillRows: ContentFormatComparison::REPORT_DRILL_ROWS);
+
+        return ContentFormatComparison::forAudience($block, (string) ($report->audience ?? 'client') !== 'internal', (bool) $share->hide_spend, (bool) $share->hide_revenue);
+    }
+
+    /**
      * REPORT-FILTERS-FUNCTIONAL-001 — whether this link's ceiling names no campaign and no ad account at all.
      *
      * `$scope` is the resolved ceiling: a link that follows its accounts has their campaigns (or the impossible id) in it by now,
@@ -1681,6 +1719,7 @@ final class LiveReportService
                  * tests for, which is the rule this whole map exists to write down.
                  */
                 'content_formats' => null,
+                ContentFormatComparison::KEY => null,
             ],
             'budget' => ['budget' => []],
             'funnel_store' => ['funnel' => [], 'store_funnel' => null],

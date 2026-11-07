@@ -480,6 +480,27 @@ final class ReportExporter
         }
 
         /*
+         * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», one block per objective, in the file the section is
+         * in. The block arrives already cut for the audience (a client's has no spend or cost), and a cell the reading
+         * did not answer is EMPTY, never zero. A hidden part is absent from `$data`, so nothing is written.
+         */
+        foreach ((array) (($data['content_format_comparison'] ?? [])['objectives'] ?? []) as $objective) {
+            if (! is_array($objective)) {
+                continue;
+            }
+            $put([]);
+            $put(['Content types / أنواع المحتوى', (string) ($objective['label']['en'] ?? $objective['family'] ?? ''), 'result: '.($objective['result_metric'] ?? ''), 'winner: '.($objective['winner']['format'] ?? '')]);
+            $put(['format', 'creatives', 'spend', 'results', 'cost per result', 'ctr', 'cpm', 'cpc', 'conversion rate', 'roas', 'share of spend', 'share of results', 'small sample']);
+            foreach ((array) ($objective['formats'] ?? []) as $f) {
+                $put([
+                    $f['format'] ?? '', $f['creatives'] ?? '', $f['spend'] ?? '', $f['results'] ?? '', $f['cost_per_result'] ?? '', $f['ctr'] ?? '',
+                    $f['cpm'] ?? '', $f['cpc'] ?? '', $f['conversion_rate'] ?? '', $f['roas'] ?? '', $f['share_of_spend'] ?? '', $f['share_of_results'] ?? '',
+                    ($f['small_sample'] ?? false) ? 'yes' : '',
+                ]);
+            }
+        }
+
+        /*
          * The campaign roster, for the audiences that still have one.
          *
          * `ClientReportView` empties this for a client and an executive export, so the section is

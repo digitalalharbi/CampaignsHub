@@ -69,8 +69,13 @@ final class ContentIntelligence
         'view_rate', 'completion_rate', 'hook_rate', 'cost_per_lpv', 'engagement_rate', 'cpe',
     ];
 
-    /** Below this a «format» is one or two assets, and its aggregate is an anecdote. */
-    private const MINIMUM_CREATIVES = 2;
+    /**
+     * Below this a «format» is one or two assets, and its aggregate is an anecdote.
+     *
+     * Public since CONTENT-FORMAT-COMPARISON-001: the per-format comparison's «عينة صغيرة» rule reads
+     * this same constant rather than stating a second minimum that could drift from it.
+     */
+    public const MINIMUM_CREATIVES = 2;
 
     public function __construct(private readonly CreativeMetrics $metrics) {}
 

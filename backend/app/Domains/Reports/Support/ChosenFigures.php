@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Models\Report;
@@ -83,6 +84,8 @@ final class ChosenFigures
         'store_funnel', 'site_measurement', 'objective_analytics', 'results', 'verified_result',
         // GA4-REPORT-SECTIONS-001 — GA4's own vocabulary (sessions, purchases); only its money follows the KPI list, below.
         'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons',
+        // CONTENT-FORMAT-COMPARISON-001 — its own block, cut for its audience when built; only its money follows the KPI list, below.
+        'content_format_comparison',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */
@@ -446,6 +449,9 @@ final class ChosenFigures
         }
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
+        }
+        if (($hideSpend || $hideRevenue) && is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY] = ContentFormatComparison::forAudience($payload[ContentFormatComparison::KEY], false, $hideSpend, $hideRevenue);
         }
         if (is_array($payload['store_funnel']['stages'] ?? null)) {
             // A stage of an unchosen amount leaves the funnel: «not measured» would be untrue of a figure the store did measure.

@@ -178,4 +178,33 @@ final class RankingMetric
             ObjectiveFamily::Unknown => ['primary' => null, 'secondary' => ['spend', 'impressions', 'clicks']],
         };
     }
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — the COST each objective's result is judged on, in fallback order.
+     *
+     * The format comparison answers «what does a result cost in each format, for THIS job», so its verdict is a cost
+     * per result rather than the objective's ranking primary. That difference is deliberate for sales: the primary is
+     * ROAS, and a return computed at creative grain divides partially-reported revenue by fully-attributed spend —
+     * the contradiction CONTENT-FORMAT-ROAS-REMOVED-001 removed. A cost per conversion divides spend by the
+     * conversions the platform reported at that same grain, and is never projected from the campaign.
+     *
+     * Every key here is a declared metric of this registry (so its direction is this registry's), and a ratio
+     * `CreativeMetrics` derives (so its result is that ratio's own denominator). `Unknown` has none: an unclassified
+     * campaign has no result to price.
+     *
+     * @return list<string>
+     */
+    public static function costPerResult(ObjectiveFamily $family): array
+    {
+        return match ($family) {
+            ObjectiveFamily::Awareness => ['cpm'],
+            ObjectiveFamily::Traffic => ['cpc'],
+            ObjectiveFamily::Engagement => ['cpe'],
+            ObjectiveFamily::Video => ['cost_per_view'],
+            ObjectiveFamily::Leads => ['cpl', 'cpa'],
+            ObjectiveFamily::Sales => ['cpa'],
+            ObjectiveFamily::App => ['cpi'],
+            ObjectiveFamily::Unknown => [],
+        };
+    }
 }

@@ -63,7 +63,8 @@ final class CreativeRankingService
      * ratio over a single order is arithmetic, not performance. Volumes (spend, impressions, orders…)
      * are not gated: a count is the measurement itself.
      */
-    private const MATERIAL_SHARE = 0.01;
+    /** Public since CONTENT-FORMAT-COMPARISON-001 — the format comparison's small-sample rule reads this same share. */
+    public const MATERIAL_SHARE = 0.01;
 
     /** The bases that ARE volumes — gated by nothing but being present and positive. */
     private const VOLUMES = ['spend', 'impressions', 'clicks', 'reach', 'conversions', 'orders', 'purchases', 'revenue', 'leads', 'installs', 'engagements', 'video_views', 'landing_page_views', 'sign_ups', 'app_opens', 'page_views'];

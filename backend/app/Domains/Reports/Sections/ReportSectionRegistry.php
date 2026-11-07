@@ -110,6 +110,20 @@ final class ReportSectionRegistry
                 view: 'content',
             ),
             /*
+             * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: image, video, carousel, collection … per
+             * objective, with results, the cost of a result (internal readers only), shares and the winner.
+             *
+             * A SHOW/HIDE of its own and ON unless the operator hides it (the Owner's rule: nothing is hidden by
+             * default). No stored snapshot gains it: a saved report carries it only when it was generated with it.
+             */
+            new ReportSection(
+                key: 'content_format_comparison',
+                titleAr: 'مقارنة أنواع المحتوى',
+                titleEn: 'Content type comparison',
+                payloadKeys: ['content_format_comparison'],
+                view: 'content',
+            ),
+            /*
              * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
              *
              * After the paid-media story and before the insights, because that is what it is:
@@ -341,6 +355,10 @@ final class ReportSectionRegistry
         $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []
             // A summary withholds the list and states the count; the count alone is still the section.
             || (int) ($c->value('creatives_in_scope') ?? 0) > 0);
+
+        // CONTENT-FORMAT-COMPARISON-001 — a comparison with no objective in it (no creative in scope) is not a section.
+        $this->availableWhen('content_format_comparison', 'has_creatives', static fn (SectionContext $c): bool => is_array($c->value('content_format_comparison'))
+            && ((array) ($c->value('content_format_comparison')['objectives'] ?? [])) !== []);
 
         /*
          * A property somebody selected, with days actually read in this window.

@@ -40,9 +40,9 @@ final class ReportViews
      */
     public const DRAWS = [
         'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_attribution', 'ga4_pulse', 'ga4_gap_reasons', 'recommendations'],
-        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
+        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'content_format_comparison', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
         'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown'],
-        'content' => ['kpis', 'content_performance'],
+        'content' => ['kpis', 'content_performance', 'content_format_comparison'],
         'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables', 'ga4_tables', 'ga4_products'],
     ];
 

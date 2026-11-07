@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
@@ -493,6 +494,12 @@ final class ReportGenerator
             'store_analytics' => $report->sectionSettings()->enabled(app(ReportSectionRegistry::class)->get('store_analytics'), (string) ($report->audience ?? 'client'))
                 ? app(StoreAnalyticsSection::class)->build((string) $report->tenant_id, (string) $report->project_id, $from, $to, false, $scope->accountIds === [] && $scope->resolvedCampaignIds() === [])
                 : null,
+            /*
+             * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», FROZEN with the snapshot and cut for the report's
+             * audience before it is stored: a client snapshot never holds the spend it may not show. Read only when the
+             * operator left the part on, over the report's own scope.
+             */
+            ContentFormatComparison::KEY => $this->contentFormatComparison($report, $scope, $from, $to),
             /*
              * GA4-REPORT-SECTIONS-001 — the four GA4 parts, FROZEN with the snapshot: the saved report keeps the figures
              * it was saved with, and the section system removes a part the operator hid. Read against this report's own
@@ -1165,6 +1172,28 @@ final class ReportGenerator
 
         return ($results->configured() ? $results->over($campaigns, $destinations) : $none)
             + ['leads' => $leads->configured() ? $leads->leadBreakdown($campaigns, $destinations) : $none + ['landing' => null, 'native' => null]];
+    }
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — the report's own scope as the comparison's ceiling.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function contentFormatComparison(Report $report, ReportScope $scope, Carbon $from, Carbon $to): ?array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        if ($report->project_id === null || ! $report->sectionSettings()->enabled($registry->get(ContentFormatComparison::KEY), $audience)) {
+            return null;
+        }
+
+        $block = app(ContentFormatComparison::class)->forScope((string) $report->project_id, $from, $to, ceiling: array_filter([
+            'account_ids' => $scope->accountIds,
+            'providers' => $scope->providers,
+            'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+        ], static fn ($v): bool => $v !== []) ?: null, drillRows: ContentFormatComparison::REPORT_DRILL_ROWS);
+
+        return ContentFormatComparison::forAudience($block, $audience !== 'internal', false, false);
     }
 
     /**

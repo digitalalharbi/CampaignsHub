@@ -96,6 +96,32 @@ final class CreativeKind
         };
     }
 
+    /** CONTENT-FORMAT-COMPARISON-001 — the slice a token none of the kinds name is filed under, stated rather than guessed. */
+    public const UNCLASSIFIED = 'unclassified';
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — what the PLATFORM'S TOKEN alone says a creative is.
+     *
+     * The comparison of formats is a statement about money and results, and the Owner's rule for it is that the format
+     * comes only from the provider's own token in `external_creatives.format`: never from an asset that happened to
+     * resolve, a width, a height or a file name. So this is {@see of()} asked about a row that carries the token and
+     * nothing else — the SAME arms in the same order, which keeps one rule rather than a second spelling of it; the
+     * asset arms simply have nothing to read and fall through.
+     *
+     * Where the token names none of the kinds (`story_ad`, `chat_card`, `text`, an empty column) the answer is
+     * `unclassified`, a slice of its own with its share stated — never quietly filed under image or video.
+     */
+    public static function fromToken(?string $format): string
+    {
+        if (trim((string) $format) === '') {
+            return self::UNCLASSIFIED;
+        }
+
+        $kind = self::of((new ExternalCreative)->forceFill(['format' => trim((string) $format)]));
+
+        return in_array($kind, self::ALL, true) ? $kind : self::UNCLASSIFIED;
+    }
+
     /**
      * The same decision as a SQL predicate: rows whose kind is one of `$kinds`.
      *
