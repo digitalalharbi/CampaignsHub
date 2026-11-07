@@ -211,6 +211,16 @@ export function useTestChannel() {
     mutationFn: (channel: TestChannel) => postData<{ channel: TestChannel; state: string }>('/settings/notifications/channel-test', { channel }),
   })
 }
+/** NOTIFICATION-ENROLMENT-001 — one real digest, or one marked sample alert, to the signed-in person's own address only. */
+export type DigestKind = 'daily' | 'weekly' | 'monthly'
+export function useSendDigestNow() {
+  return useMutation({
+    mutationFn: (kind: DigestKind) => postData<{ kind: DigestKind; state: string; reason: string | null }>(`/settings/notifications/digest-now/${kind}`),
+  })
+}
+export function useSendSampleAlert() {
+  return useMutation({ mutationFn: () => postData<{ state: string }>('/settings/notifications/sample-alert') })
+}
 export function useWhatsAppOptIn() {
   const qc = useQueryClient()
   const refresh = () => { qc.invalidateQueries({ queryKey: ['settings', 'notifications'] }) }

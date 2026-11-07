@@ -51,6 +51,9 @@ final class DigestDispatcher
     /** Minutes before the next try, after the first and the second failure. */
     private const BACKOFF_MINUTES = [15, 60];
 
+    /** Ledger kind prefix of a send the person asked for, so it never competes with the scheduled one. */
+    public const ON_DEMAND_PREFIX = 'now_';
+
     /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
     public const DAILY_WINDOW_DAYS = 7;
 
@@ -126,6 +129,44 @@ final class DigestDispatcher
     }
 
     /**
+     * NOTIFICATION-ENROLMENT-001 — «أرسل لي الآن»: THIS digest, for THIS person's own scope, to THEIR own address, once.
+     *
+     * The same builder, scope, spend rule, gate, mailer and unsubscribe link as the scheduled send — that is the point: it
+     * answers «would my digest reach me, and what would it say?» by running the real path, not a lookalike. What differs is
+     * only the ledger identity (see `send()`), and the window: the one the scheduled run would use today for this person.
+     *
+     * The recipient is a parameter nobody can aim: callers pass the signed-in user, and the address is read from that user.
+     *
+     * @param  'daily'|'weekly'|'monthly'  $kind
+     * @return array{state: string, reason: ?string}
+     */
+    public function sendNow(User $user, string $tenantId, string $kind, ?Carbon $now = null): array
+    {
+        $row = DB::table('notification_preferences')->where('tenant_id', $tenantId)->where('user_id', $user->getKey())->first();
+        $timezone = $this->zone((string) ($row->timezone ?? $user->timezone ?? 'Asia/Riyadh'));
+        $locale = in_array((string) ($row->locale ?? $user->locale ?? 'ar'), ['ar', 'en'], true) ? (string) ($row->locale ?? $user->locale ?? 'ar') : 'ar';
+        $audience = ($row->client_workspace_id ?? null) !== null ? 'client' : 'agency';
+        $day = ($now ?? Carbon::now())->copy()->setTimezone($timezone)->subDay();
+
+        [$periodKey, $from, $to] = match ($kind) {
+            'daily' => [$day->toDateString(), $day->copy()->endOfDay()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay(), $day->copy()->endOfDay()],
+            'weekly' => [$day->copy()->endOfDay()->format('o-\WW'), $day->copy()->endOfDay()->subDays(6)->startOfDay(), $day->copy()->endOfDay()],
+            default => [$day->copy()->startOfMonth()->format('Y-m'), $day->copy()->startOfMonth()->startOfDay(), $day->copy()->endOfMonth()->endOfDay()],
+        };
+
+        $state = $this->send($user, $tenantId, $kind, $periodKey, $from, $to, $locale, $audience, onDemand: true);
+        $reason = DB::table('digest_sends')->where('user_id', $user->getKey())->where('kind', self::ON_DEMAND_PREFIX.$kind)
+            ->where('period_key', 'like', substr($periodKey, 0, 15).'#%')->orderByDesc('created_at')->value('reason');
+
+        return ['state' => $state, 'reason' => $reason === null ? null : (string) $reason];
+    }
+
+    private function zone(string $name): string
+    {
+        return in_array($name, timezone_identifiers_list(), true) ? $name : 'Asia/Riyadh';
+    }
+
+    /**
      * Try again every failed digest whose wait is over — EMAIL-DELIVERY-LEDGER-001.
      *
      * The class said «the next scheduled run picks it up», which was never true of a digest: the sweep
@@ -192,10 +233,22 @@ final class DigestDispatcher
         Carbon $to,
         string $locale,
         string $audience = 'agency',
+        bool $onDemand = false,
     ): string {
+        /*
+         * NOTIFICATION-ENROLMENT-001 — an on-demand send is its OWN ledger row.
+         *
+         * `$kind` and `$periodKey` keep meaning what they always did for the builder, the scope and the gate. The ledger
+         * identity is separate: `now_daily` and a period key with a random suffix, so the person's «send me this now» can
+         * never take the unique `(user, kind, period)` slot the scheduled send needs, and a scheduled send that already
+         * happened never blocks a person who wants to see the mail again. `retryDue()` selects only the three scheduled
+         * kinds, so an on-demand failure is shown to the person who pressed the button and never retried behind their back.
+         */
+        $ledgerKind = $onDemand ? self::ON_DEMAND_PREFIX.$kind : $kind;
+        $ledgerKey = $onDemand ? substr($periodKey, 0, 15).'#'.strtolower(substr(bin2hex(random_bytes(4)), 0, 8)) : $periodKey;
 
         // Claim the period first. A losing race means somebody else is already sending it.
-        if (! $this->claim($tenantId, $user, $kind, $periodKey, $from, $to)) {
+        if (! $this->claim($tenantId, $user, $ledgerKind, $ledgerKey, $from, $to)) {
             return 'already_sent';
         }
 
@@ -236,13 +289,13 @@ final class DigestDispatcher
             $digest['narrowing'] = $this->scope->narrowing($user, $tenantId);
 
             if (($digest['sendable'] ?? false) !== true) {
-                return $this->finish($user, $kind, $periodKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
+                return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
 
             // Honest classification, from the product's own answer about the channel — never from
             // an assumption that mail works because a mailer is configured in .env.
             if (! $this->providers->isConfigured('email')) {
-                return $this->finish($user, $kind, $periodKey, 'awaiting_credentials', 'no_email_provider');
+                return $this->finish($user, $ledgerKind, $ledgerKey, 'awaiting_credentials', 'no_email_provider');
             }
 
             /*
@@ -264,7 +317,7 @@ final class DigestDispatcher
             $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope);
 
             if ($refusal !== null) {
-                return $this->finish($user, $kind, $periodKey, $refusal, $refusal);
+                return $this->finish($user, $ledgerKind, $ledgerKey, $refusal, $refusal);
             }
 
             $sent = Mail::to($user->email)->send((new DailyDigestMail(
@@ -276,7 +329,7 @@ final class DigestDispatcher
                 $audience,
             ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
 
-            return $this->finish($user, $kind, $periodKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
+            return $this->finish($user, $ledgerKind, $ledgerKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
             /*
              * The failure is recorded with its reason and left visible.
@@ -287,12 +340,12 @@ final class DigestDispatcher
              * quote is removed first (MailFailure).
              */
             $failure = MailFailure::from($e);
-            $attempts = (int) DB::table('digest_sends')->where('user_id', $user->getKey())->where('kind', $kind)->where('period_key', $periodKey)->value('attempts');
+            $attempts = (int) DB::table('digest_sends')->where('user_id', $user->getKey())->where('kind', $ledgerKind)->where('period_key', $ledgerKey)->value('attempts');
             $next = $attempts < self::MAX_ATTEMPTS && ! MailFailure::isPermanent($failure['code'])
                 ? Carbon::now()->addMinutes(self::BACKOFF_MINUTES[$attempts - 1] ?? 60)
                 : null;
 
-            return $this->finish($user, $kind, $periodKey, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code'], nextAttemptAt: $next);
+            return $this->finish($user, $ledgerKind, $ledgerKey, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code'], nextAttemptAt: $next);
         } finally {
             $this->tenants->forget();
         }

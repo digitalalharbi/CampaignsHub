@@ -51,6 +51,7 @@ use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
 use App\Domains\Notifications\Console\ConfirmMailDelivery;
+use App\Domains\Notifications\Console\EnrolMembers;
 use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
@@ -132,6 +133,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
         RetryFailedDigests::class,
+        // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
+        EnrolMembers::class,
         ConfirmMailDelivery::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,

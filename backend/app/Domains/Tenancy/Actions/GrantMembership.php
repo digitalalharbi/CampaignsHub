@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Actions;
 
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\MembershipScope;
@@ -28,11 +29,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class GrantMembership
 {
-    public function __construct(private readonly ManageMembershipScopes $scopes) {}
+    public function __construct(
+        private readonly ManageMembershipScopes $scopes,
+        private readonly EnrolMemberNotifications $enrolment,
+    ) {}
 
     public function execute(MembershipGrant $grant): Membership
     {
-        return DB::transaction(function () use ($grant): Membership {
+        $membership = DB::transaction(function () use ($grant): Membership {
             $membership = Membership::query()
                 ->forUser($grant->user->id)
                 ->where('tenant_id', $grant->tenant->id)
@@ -74,5 +78,22 @@ final class GrantMembership
 
             return $membership->refresh()->load('scopes');
         });
+
+        /*
+         * NOTIFICATION-ENROLMENT-001 — a colleague is reachable from the day they are let in.
+         *
+         * This is the one door every grant passes through — an accepted invitation, an owner added by the
+         * platform, a registration approved, a marketplace install — so it is the one place the notification
+         * row is opened, rather than six call sites each remembering to. After the commit, so a rolled-back
+         * grant leaves no row; quietly, so a notification problem can never undo access. Client-portal and
+         * other non-staff portals are refused inside the service, not here.
+         */
+        if ($grant->enrolNotifications) {
+            $user = $grant->user;
+            $tenantId = (string) $grant->tenant->id;
+            DB::afterCommit(fn () => $this->enrolment->enrolQuietly($user, $tenantId, 'membership_grant'));
+        }
+
+        return $membership;
     }
 }

@@ -110,7 +110,7 @@ final class MetaSaasTestWorkspace
             $role = Role::firstOrCreate(['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'], ['name' => 'Tenant Owner', 'is_system' => true]);
             $role->givePermissionTo(...Permission::pluck('key')->all());
             $user->assignRole($role);
-            $this->grants->execute(new MembershipGrant(user: $user, tenant: $tenant, portal: Portal::forAccountType('self_serve_company'), role: 'owner'));
+            $this->grants->execute(new MembershipGrant(user: $user, tenant: $tenant, portal: Portal::forAccountType('self_serve_company'), role: 'owner', enrolNotifications: false)); // a demo/test account's address is never mailed
 
             $client = ClientWorkspace::firstOrNew(['tenant_id' => $tenant->id, 'slug' => 'meta-saas-test-store']);
             $client->fill(['name' => 'Meta SaaS Test', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active', 'owner_id' => $user->id, 'branding' => ['brand_name' => 'Meta SaaS Test']]);

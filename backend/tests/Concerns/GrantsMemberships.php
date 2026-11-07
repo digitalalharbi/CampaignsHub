@@ -35,6 +35,12 @@ trait GrantsMemberships
             portal: $portal,
             role: $role,
             clientScopeIds: $clientIds,
+            /*
+             * NOTIFICATION-ENROLMENT-001 — a fixture is not a colleague. Production opens a notification row at every
+             * grant; a test that wants one says so (MemberNotificationEnrolmentTest), because 300 suites that count
+             * alerts, mails and digests must not each gain a recipient they never asked for.
+             */
+            enrolNotifications: false,
         ));
     }
 

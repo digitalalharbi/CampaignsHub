@@ -365,6 +365,10 @@ final class DigestPresenter
         if ($spec['kind'] === 'count' && in_array($key, self::COUNTS, true) && ($reported[$key] ?? true) === false) {
             return null;
         }
+        // MONEY-USD-001 — spend and revenue are coalesced to 0 when no row carried them; that is a withheld figure, never «0 <currency>».
+        if ($spec['kind'] === 'money' && in_array($key, ['spend', 'revenue'], true) && ($reported[$key] ?? true) === false) {
+            return null;
+        }
         if (! is_numeric($value)) {
             return null;
         }

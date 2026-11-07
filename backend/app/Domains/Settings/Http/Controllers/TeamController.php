@@ -7,6 +7,7 @@ namespace App\Domains\Settings\Http\Controllers;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\InvitationService;
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
 use App\Domains\Notifications\Services\MemberNotices;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -230,6 +231,11 @@ final class TeamController extends Controller
         }
 
         $audit->log(action: $disabling ? 'settings.team.disabled' : 'settings.team.enabled', entityType: 'user', entityId: $target->uuid);
+
+        // NOTIFICATION-ENROLMENT-001 — re-enabled and reachable; a row that already exists is left exactly as it is.
+        if (! $disabling) {
+            app(EnrolMemberNotifications::class)->enrolQuietly($target, $this->tenantId(), 'team_reenabled');
+        }
 
         return ApiResponse::success(['disabled' => $disabling], $disabling ? 'Member disabled.' : 'Member enabled.');
     }

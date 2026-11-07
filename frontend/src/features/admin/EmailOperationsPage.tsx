@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
+import { ReachStrip } from './ReachStrip'
 import { useUi } from '@/stores/ui'
 import { days as countedDays } from '@/lib/counted'
 import { FAILURE_WORDS, stageWords, SUPPRESSION_WORDS, type StageWords } from '@/features/settings/deliveryWords'
@@ -120,6 +121,7 @@ export function EmailOperationsPage() {
         <div className="space-y-6">
           <TransportBanner transport={ledger.data.transport} ar={ar} />
           <MailSettingsCard transport={ledger.data.transport} ar={ar} test={testTarget} />
+          {ledger.data.reach && <ReachStrip reach={ledger.data.reach} ar={ar} />}
 
           {/* Counted over the whole window, not the page. */}
           <div className="flex flex-wrap gap-3">
@@ -204,7 +206,7 @@ export function EmailOperationsPage() {
                     <td className="p-3 text-xs text-text-primary"><span dir="ltr">{row.at.slice(0, 16).replace('T', ' ')}</span></td>
                     <td className="p-3">
                       <div className="text-text-primary">
-                        {row.is_test ? (ar ? 'رسالة اختبار' : 'Test message') : row.kind}
+                        {row.is_test ? (ar ? 'رسالة اختبار' : 'Test message') : row.kind.startsWith('now_') ? `${row.kind.slice(4)} · ${ar ? 'عند الطلب' : 'on demand'}` : row.kind}
                       </div>
                       <div className="text-xs text-text-muted">
                         {row.source === 'digest' ? (ar ? 'ملخص' : 'digest') : row.template}

@@ -38,6 +38,11 @@ final readonly class MembershipGrant
         public ?array $projectScopeIds = null,
         /** Who granted this. Null only for system provisioning (registration, seeding, migration). */
         public ?User $grantedBy = null,
+        /**
+         * NOTIFICATION-ENROLMENT-001 — whether this grant also opens the person's notification preferences.
+         * True for a real colleague; false for a demo, review or test account, whose address must not be mailed.
+         */
+        public bool $enrolNotifications = true,
     ) {}
 
     /**

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
+
 /**
  * Every message this product can send, named once — MAIL-011.
  *
@@ -43,6 +45,27 @@ namespace App\Domains\Notifications\Support;
  * is in their account. A product that lets you switch off «your password was changed» has built the
  * attacker a mute button. They appear in the catalogue, and the screen shows them as always-sent
  * with that reason written out, rather than hiding them and letting people wonder.
+ *
+ * ## What a new colleague starts with — decision NOTIFICATION-ENROLMENT-001 (2026-11-06)
+ *
+ * Owner: «كل مستخدم يحتاج إشعارات وملخصات على الإيميل». Every sender is driven from `notification_preferences`, and
+ * nothing created a row until somebody pressed save on the settings screen: Production had ten verified users and one
+ * row, so nine people could receive no alert and no digest. {@see EnrolMemberNotifications}
+ * now opens the row when a staff member is let in, with these defaults, decided and not discovered:
+ *
+ * - **In-app and email on**, realtime. The catalogue's own per-type defaults and importance thresholds apply (the row stores
+ *   no per-type choice, so nothing is frozen into it); a mandatory message is unaffected by any of this.
+ * - **Daily and weekly digests on, monthly off.** Monthly is the third mail of a rhythm most people only need once; the
+ *   daily and the weekly are the two a person misses when they are absent. Three would start every colleague on the
+ *   most mail they could receive, which is how a product teaches people to filter it. Monthly stays one tick away.
+ * - **Alerts and recommendations on.** An alert is the reason the channel exists.
+ * - **Eight o'clock, the person's own timezone** (their profile, else `Asia/Riyadh`), their own language (else Arabic).
+ * - **Quiet hours off.** A night the person has not asked for is a night nobody decided.
+ *
+ * What does NOT change: a digest still carries only what `DigestScope` lets that person read, a membership without
+ * `money.view` still receives it without spend, and a row that exists is never touched — somebody who switched everything
+ * off has a row that says so, and is never enrolled again. Client-portal users, platform admins and influencer-portal
+ * accounts are not enrolled.
  *
  * ## Legacy categories
  *

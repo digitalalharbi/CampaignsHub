@@ -1199,6 +1199,14 @@ export interface EmailLedger {
     last_failure?: { at: string; kind: string; error: string; failure_code?: string | null } | null
   }
   available_states: string[]
+  /** NOTIFICATION-ENROLMENT-001 — who the notification system can reach, and when each scheduled digest last went out. */
+  reach?: {
+    members: number
+    verified: number
+    enrolled: number
+    digest_on: number
+    last_digest: { daily: string | null; weekly: string | null; monthly: string | null }
+  }
 }
 
 export function fetchEmailLedger(params: {

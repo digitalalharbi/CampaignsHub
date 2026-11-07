@@ -39,12 +39,19 @@ return [
              */
             'scopes' => ['https://www.googleapis.com/auth/analytics.readonly'],
             /*
-             * Its OWN client, not Google Ads'. They are different consent screens asking for
-             * different scopes, and sharing one would mean a customer connecting Analytics is asked
-             * for advertising access — or worse, that revoking one silently breaks the other.
+             * GA4-PLATFORM-GOOGLE-CLIENT-001 — GA4 reads the platform's Google OAuth client (the sign-in one).
+             *
+             * Only the SCOPE keeps the consents apart: this flow asks for `analytics.readonly` and nothing else, never
+             * `include_granted_scopes`, so a customer connecting Analytics is not asked for sign-in or advertising access
+             * and the grant is revoked on its own. The callback above must be registered on that same client.
+             *
+             * The pair is chosen TOGETHER: `GA4_CLIENT_ID` set means both GA4 keys are used (a separate client stays
+             * possible), absent means both sign-in keys. Mixing one of each is an `invalid_client` at Google that names
+             * nothing. A value stored on the provider's admin row wins over both, as for every provider — clearing that
+             * row is what makes this take effect.
              */
-            'client_id' => env('GA4_CLIENT_ID'),
-            'client_secret' => env('GA4_CLIENT_SECRET'),
+            'client_id' => env('GA4_CLIENT_ID') ?: env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GA4_CLIENT_ID') ? env('GA4_CLIENT_SECRET') : env('GOOGLE_CLIENT_SECRET'),
         ],
     ],
 ];

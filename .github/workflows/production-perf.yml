@@ -78,3 +78,10 @@ jobs:
                 || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
               set -e
             fi
+            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
+            echo "── google client check"
+            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
+            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
+            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
+            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
+

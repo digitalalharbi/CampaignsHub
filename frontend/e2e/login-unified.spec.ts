@@ -157,8 +157,10 @@ test.describe('LOGIN-SINGLE-DOOR-001 — the destination is the server\'s', () =
     await signIn(page, 'client@campaignshub.io')
     await expect(page).toHaveURL(/\/portal(\/|$)/, { timeout: 20000 })
 
-    // Settled first: a response still in the air when the jar is cleared writes the session cookie straight back.
-    await page.waitForLoadState('networkidle')
+    // Leave the app before clearing the jar. `networkidle` was not enough on WebKit: a request the page fires
+    // afterwards (the CSRF prime, a refresh) wrote XSRF-TOKEN straight back between the clear and the check
+    // (#982, #983). With no app document loaded nothing can write a cookie, so the expiry is exact.
+    await page.goto('about:blank')
     await context.clearCookies()
     expect(await context.cookies()).toEqual([])
     await page.goto('/portal/requests')

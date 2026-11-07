@@ -59,7 +59,7 @@ final class AlertEventMailer
      *                                            detail, detail_ar, project_id, triggered_at
      * @return array<string,int>
      */
-    public function sweep(string $tenantId, array $items, ?Carbon $now = null): array
+    public function sweep(string $tenantId, array $items, ?Carbon $now = null, ?int $onlyUserId = null): array
     {
         $now ??= Carbon::now();
         $counts = ['sent' => 0, 'already_sent' => 0, 'awaiting_credentials' => 0, 'failed' => 0,
@@ -72,6 +72,8 @@ final class AlertEventMailer
         $rows = DB::table('notification_preferences')
             ->where('tenant_id', $tenantId)
             ->whereNull('client_workspace_id')
+            // NOTIFICATION-ENROLMENT-001 — the sample alert goes through this very path for ONE person; nobody else's row is read.
+            ->when($onlyUserId !== null, fn ($q) => $q->where('user_id', $onlyUserId))
             ->get();
 
         foreach ($rows as $row) {
@@ -173,7 +175,7 @@ final class AlertEventMailer
                     'figures' => AlertFigures::from((array) ($i['context'] ?? []), $ar),
                     // EMAIL-DECISION-REPORT-001 — an action-required card: what to decide, and the one place to do it.
                     'action' => self::action((string) ($i['notification_type'] ?? ''), $ar),
-                    'url' => Frontend::origin().'/app/alerts?event='.rawurlencode((string) ($i['event_id'] ?? '')),
+                    'url' => (string) ($i['url'] ?? Frontend::origin().'/app/alerts?event='.rawurlencode((string) ($i['event_id'] ?? ''))),
                 ], $claimed),
                 lang: $locale,
                 recipientName: (string) $user->name,
@@ -195,6 +197,7 @@ final class AlertEventMailer
             'budget_risk' => $ar ? 'قرار اليوم: أبقِ الميزانية أو عدّلها أو أوقف ما لا يؤدي.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
             'sync_failed' => $ar ? 'أعد ربط المصدر حتى تكتمل الأرقام.' : 'Reconnect the source so the figures are complete.',
             'token_expiring' => $ar ? 'جدّد الصلاحية قبل انقطاع البيانات.' : 'Renew the access before the data stops.',
+            'sample_alert' => $ar ? 'هذا تنبيه تجريبي لتتأكد أنه يصلك: لا يلزمك أي إجراء.' : 'This is a sample alert so you can see it arrives: no action is needed.',
             'report_failed' => $ar ? 'أعد توليد التقرير أو افتحه لترى السبب.' : 'Regenerate the report, or open it to read why.',
             default => $ar ? 'افتح التنبيه واتخذ قرارًا.' : 'Open the alert and decide.',
         };
