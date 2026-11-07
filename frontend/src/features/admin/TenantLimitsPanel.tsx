@@ -69,7 +69,8 @@ function LimitForm({ tenantId, limit, ar, onDone }: { tenantId: string; limit: T
     mutationFn: () => setTenantLimit(tenantId, limit.metric, {
       mode, limit: mode === 'cap' ? Number(value) : undefined, expires_at: mode !== 'inherit' && until ? until : null, reason: reason.trim(),
     }),
-    onSuccess: (next) => { qc.setQueryData(['admin', 'tenant-limits', tenantId], next); onDone() },
+    // The seats line in the credits panel shows the ad-account cap, so it refreshes with the limits.
+    onSuccess: (next) => { qc.setQueryData(['admin', 'tenant-limits', tenantId], next); void qc.invalidateQueries({ queryKey: ['admin', 'tenant-credits', tenantId] }); onDone() },
   })
   const valid = reason.trim().length >= 5 && (mode !== 'cap' || /^\d+$/.test(value))
 

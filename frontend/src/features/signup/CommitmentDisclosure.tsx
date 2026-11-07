@@ -22,6 +22,9 @@ const T = {
   ar: {
     heading: 'ما ستوافق عليه',
     today: 'المبلغ المستحق اليوم',
+    vatAdded: 'ضريبة القيمة المضافة 15%',
+    totalToday: 'الإجمالي المدفوع اليوم',
+    vatIncluded: (tax: string, cur: string) => `يشمل ضريبة القيمة المضافة ${tax} ${cur}`,
     regular: 'السعر الشهري بعد الشهر التمهيدي',
     commitment: 'الحد الأدنى للالتزام',
     months: (n: number) => `${n} ${n <= 10 ? 'أشهر' : 'شهرًا'}`,
@@ -39,6 +42,9 @@ const T = {
   en: {
     heading: 'What you are agreeing to',
     today: 'Due today',
+    vatAdded: 'VAT 15%',
+    totalToday: 'Total charged today',
+    vatIncluded: (tax: string, cur: string) => `Includes VAT of ${tax} ${cur}`,
     regular: 'Monthly price after the introductory month',
     commitment: 'Minimum commitment',
     months: (n: number) => `${n} months`,
@@ -86,6 +92,16 @@ export function CommitmentDisclosure({
       <h3 className="mb-2 font-bold text-text-primary">{t.heading}</h3>
 
       <Line label={t.today}>{quote.due_now} {quote.currency}</Line>
+      {/* PRICING-VAT-001 — the VAT and the amount the card is actually asked for, before it is asked. */}
+      {quote.vat && !quote.vat.now.prices_include_vat && (
+        <>
+          <Line label={t.vatAdded}><span data-testid="quote-vat">{quote.vat.now.tax} {quote.currency}</span></Line>
+          <Line label={t.totalToday}><span data-testid="quote-total">{quote.vat.now.gross} {quote.currency}</span></Line>
+        </>
+      )}
+      {quote.vat && quote.vat.now.prices_include_vat && Number(quote.vat.now.tax) > 0 && (
+        <p data-testid="quote-vat-included" className="py-1 text-[12px] text-text-muted">{t.vatIncluded(quote.vat.now.tax, quote.currency)}</p>
+      )}
       <Line label={t.regular}>{quote.regular_monthly} {quote.currency}</Line>
 
       {committed && (

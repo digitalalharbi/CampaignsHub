@@ -10,6 +10,7 @@ use App\Domains\Subscriptions\Http\Controllers\SubscriptionController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionInvoiceController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionPaymentController;
 use App\Domains\Subscriptions\Http\Controllers\SubscriptionPlanChangeController;
+use App\Domains\Subscriptions\Http\Controllers\UsageController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -86,6 +87,8 @@ Route::get('subscriptions/invoices/shared/{token}', [SubscriptionInvoiceControll
 
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(function (): void {
     // PRICING-ADDONS-001 — the add-ons shop: the catalogue with its readiness, and a request (no charge, no capacity on a click).
+    // PRICING-USAGE-CREDITS-001 — this month's usage, its cost, own-key caps and the credit balance.
+    Route::get('subscriptions/usage', [UsageController::class, 'index'])->name('subscriptions.usage');
     Route::get('subscriptions/addons', [AddonController::class, 'index'])->name('subscriptions.addons.index');
     Route::post('subscriptions/addons/{code}/request', [AddonController::class, 'request'])->middleware('throttle:10,1')->name('subscriptions.addons.request');
     // CampaignsHub's own invoices to this customer — NOT the agency's invoices to its clients,

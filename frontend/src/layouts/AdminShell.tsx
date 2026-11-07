@@ -3,6 +3,9 @@ import {
   ClipboardCheck,
   CreditCard,
   PackagePlus,
+  ArrowRightLeft,
+  Gauge,
+  Receipt,
   ShieldAlert,
   ScrollText,
   Settings,
@@ -62,6 +65,10 @@ const adminNav = [
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
   { to: '/admin/addons', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
+  // PRICING-MIGRATION-001 — launch-plan subscribers onto the current catalogue: previewed, typed, at period end.
+  { to: '/admin/plan-migration', ar: 'الانتقال للباقات الجديدة', en: 'Plan migration', icon: ArrowRightLeft },
+  { to: '/admin/usage', ar: 'الاستهلاك والرصيد', en: 'Usage and credits', icon: Gauge },
+  { to: '/admin/tax', ar: 'ضريبة القيمة المضافة', en: 'VAT', icon: Receipt },
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
   { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },

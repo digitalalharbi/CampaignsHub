@@ -63,6 +63,17 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByText('Scale')).toBeInTheDocument()
   })
 
+  /** PRICING-VAT-001/002 — the card states what THIS subscriber pays per renewal, with its VAT, not the catalogue price. */
+  it('shows the subscriber’s own price and term with the VAT each renewal carries', async () => {
+    vi.mocked(getCurrent).mockResolvedValue({ ...current, subscription: { ...current.subscription!, unit_amount: '6990.00', currency: 'SAR', billing_interval: 'annual',
+      vat: { net: '6990.00', tax: '1048.50', gross: '8038.50', treatment: 'basic_15', rate: 0.15, prices_include_vat: false } } })
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    expect(await screen.findByTestId('current-price')).toHaveTextContent('6990.00 SAR / year')
+    expect(screen.getByTestId('current-vat')).toHaveTextContent('+ VAT 1048.50 = 8038.50 SAR per renewal')
+  })
+
   it('hides the change-plan action without subscriptions.manage and shows the honest note', async () => {
     signInWith(['subscriptions.view'])
     renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
@@ -119,6 +130,20 @@ describe('SubscriptionsPage — mid-term plan change', () => {
     expect(screen.getByTestId('proration-note')).toHaveTextContent(/only once the gateway confirms/i)
     // Reviewing is not committing.
     expect(requestPlanChange).not.toHaveBeenCalled()
+  })
+
+  /** PRICING-VAT-001 — on a VAT-exclusive plan the review shows the VAT and the total the card is asked for. */
+  it('adds the VAT and the total charged on a VAT-exclusive plan, and nothing on an all-in one', async () => {
+    vi.mocked(quotePlanChange).mockResolvedValue({ ...upgradeQuote, quote: { ...upgradeQuote.quote, currency: 'SAR',
+      vat: { net: '133.33', tax: '20.00', gross: '153.33', treatment: 'basic_15', rate: 0.15, prices_include_vat: false } } })
+    signInWith(['subscriptions.view', 'subscriptions.manage'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    const switchButtons = await screen.findAllByRole('button', { name: /Switch to this plan/i })
+    fireEvent.click(switchButtons[switchButtons.length - 1])
+
+    expect(await screen.findByTestId('due-now-total')).toHaveTextContent('153.33 SAR')
+    expect(screen.getByText('20.00 SAR')).toBeInTheDocument()
   })
 
   /** A downgrade must say plainly that nothing is taken and nothing is given back. */

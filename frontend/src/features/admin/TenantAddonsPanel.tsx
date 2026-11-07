@@ -15,7 +15,12 @@ export function TenantAddonsPanel({ tenantId, ar }: { tenantId: string; ar: bool
   const catalogue = useQuery({ queryKey: ['admin', 'addons'], queryFn: fetchAddons })
   const [reason, setReason] = useState('')
   const [code, setCode] = useState('')
-  const done = { onSuccess: (next: Awaited<ReturnType<typeof fetchWorkspaceAddons>>) => { qc.setQueryData(key, next); setReason('') } }
+  // An add-on changes the workspace's effective caps: the limits and the seats in the same drawer must say so at once.
+  const done = { onSuccess: (next: Awaited<ReturnType<typeof fetchWorkspaceAddons>>) => {
+    qc.setQueryData(key, next); setReason('')
+    void qc.invalidateQueries({ queryKey: ['admin', 'tenant-limits', tenantId] })
+    void qc.invalidateQueries({ queryKey: ['admin', 'tenant-credits', tenantId] })
+  } }
   const decide = useMutation({ mutationFn: ({ id, d }: { id: string; d: 'approve' | 'decline' | 'cancel' }) => decideWorkspaceAddon(id, d, reason.trim()), ...done })
   const grant = useMutation({ mutationFn: () => grantWorkspaceAddon(tenantId, code, 1, reason.trim()), ...done })
   const ok = reason.trim().length >= 5

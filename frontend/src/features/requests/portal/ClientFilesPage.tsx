@@ -14,7 +14,7 @@ const COPY = {
     src_request: 'طلب', src_drive: 'المساحة', unknown_type: 'غير محدّد',
   },
   en: {
-    title: 'Files', subtitle: 'Every file shared across your requests and workspaces, in one place.',
+    title: 'Files', subtitle: 'Every file shared across your requests and client spaces, in one place.',
     none: 'No files yet.', error: 'Could not load files.',
     name: 'File', type: 'Type', source: 'Source', modified: 'Modified', open: 'Open',
     src_request: 'Request', src_drive: 'Drive', unknown_type: 'Unknown',

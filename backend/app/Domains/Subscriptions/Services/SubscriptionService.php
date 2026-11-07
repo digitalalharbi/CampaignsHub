@@ -8,6 +8,7 @@ use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Models\TenantLimitOverride;
 use App\Domains\Subscriptions\Models\UsageCounter;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Carbon;
@@ -52,10 +53,11 @@ final class SubscriptionService
      */
     public function effectiveLimit(Tenant $tenant, string $metric): ?int
     {
-        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace wins over its plan's, trial or not.
+        // SUPERADMIN-LIMITS-001 — a cap the console set for THIS workspace replaces its plan's, trial or not. Capacity add-ons the
+        // workspace holds still add on top: an override is the operator's base cap, never a way to lose what was paid for.
         [$overridden, $cap] = $this->override($tenant, $metric);
         if ($overridden) {
-            return $cap;
+            return $cap === null ? null : $cap + $this->addonCapacity($tenant, $metric);
         }
 
         $plan = $this->currentPlan($tenant);
@@ -126,6 +128,15 @@ final class SubscriptionService
          * are quoted; this column governs what an existing one owes, and changing one does not move
          * the other.
          */
+        /*
+         * A plan assigned outright supersedes a change booked for later (TENANCY-UNIFY-001): a downgrade scheduled while the
+         * workspace was on another plan must not fire against the plan it is on now. Re-assigning the SAME plan keeps it.
+         */
+        if ($subscription->exists && $subscription->plan_id !== null && $subscription->plan_id !== $plan->id) {
+            $subscription->forceFill(['scheduled_plan_id' => null, 'scheduled_billing_interval' => null,
+                'scheduled_unit_amount' => null, 'scheduled_change_at' => null]);
+        }
+
         $subscription->fill([
             'tenant_id' => $tenant->id,
             'plan_id' => $plan->id,
@@ -133,9 +144,13 @@ final class SubscriptionService
             'billing_interval' => $interval,
             'unit_amount' => $plan->priceFor($interval) ?? $plan->price_monthly,
             'currency' => $plan->currency,
+            // PRICING-VAT-002 — the VAT terms are captured with the price: a console change re-taxes nobody already sold.
+            ...app(SubscriptionTax::class)->termsFor($plan->loadMissing('catalogueVersion')),
             'current_period_end' => $currentPeriodEnd ?? $subscription->current_period_end,
             'seats' => $seats ?? $subscription->seats ?? 1,
         ])->save();
+        // The plan the console, the overview and onboarding display is the one the workspace is on (TENANCY-UNIFY-001).
+        $tenant->forceFill(['subscription_plan' => $plan->code])->save();
 
         return $subscription->refresh()->load('plan');
     }
@@ -229,8 +244,12 @@ final class SubscriptionService
         return match ($metric) {
             // Archived is not deleted, and it is not occupying a slot either — restoring one is a
             // create as far as the cap is concerned, which is why `restore` is guarded too.
-            'projects' => DB::table('projects')->where('tenant_id', $id)
-                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+            // …and a project whose client was removed (soft-deleted) is gone with it: it holds no slot (TENANCY-UNIFY-001).
+            'projects' => DB::table('projects')->where('projects.tenant_id', $id)
+                ->whereNull('projects.deleted_at')->where('projects.status', '!=', 'archived')
+                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('client_workspaces')
+                    ->whereColumn('client_workspaces.id', 'projects.client_workspace_id')->whereNotNull('client_workspaces.deleted_at'))
+                ->count(),
 
             /*
              * The agency's client roster — the axis the Agency plan is actually sold on.
@@ -243,8 +262,10 @@ final class SubscriptionService
              * Archived and soft-deleted rosters do not hold a slot, for the same reason an archived
              * project does not: the customer gave the capacity back and must get it back.
              */
+            // Archived from the clients screen sets `archived_at` / `client_status`, not `status` — all three are honoured.
             'clients' => DB::table('client_workspaces')->where('tenant_id', $id)
-                ->whereNull('deleted_at')->where('status', '!=', 'archived')->count(),
+                ->whereNull('deleted_at')->whereNull('archived_at')->where('status', '!=', 'archived')
+                ->where(fn ($q) => $q->whereNull('client_status')->orWhere('client_status', '!=', 'archived'))->count(),
 
             /*
              * Seats held, not accounts created.
@@ -253,9 +274,12 @@ final class SubscriptionService
              * so counting memberships alone would let a workspace on a cap of three invite thirty
              * people and pass every check until the day they all accepted.
              */
-            'team_members' => DB::table('memberships')->where('tenant_id', $id)->where('status', 'active')->count()
+            // A client's portal users read their own reports; they are the agency's clients, not its team (CP-USERS-001).
+            'team_members' => DB::table('memberships')->where('tenant_id', $id)->where('status', 'active')
+                ->where('portal', '!=', Portal::ClientPortal->value)->count()
                 + DB::table('workspace_invitations')->where('tenant_id', $id)
-                    ->whereNull('accepted_at')->where('expires_at', '>', now())->count(),
+                    ->whereNull('accepted_at')->where('expires_at', '>', now())
+                    ->where(fn ($q) => $q->whereNull('portal')->orWhere('portal', '!=', Portal::ClientPortal->value))->count(),
 
             /*
              * ORCH-100 — «Connected Ad Accounts» means ASSIGNED, and counts each account once.
