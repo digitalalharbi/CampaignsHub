@@ -68,7 +68,9 @@ final class CoverCache
     public static function wanted(ExternalCreative $creative): bool
     {
         if (self::sourceOf($creative) === null) {
-            return false;
+            // CREATIVE-COVERS-COVERAGE-001 — no link yet, but the platform can name one: ask it, at the backoff's pace.
+            return $creative->cover_path === null && CoverSourceRefresher::recoverable($creative)
+                && ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture());
         }
 
         $stale = $creative->cover_path === null || $creative->cover_cached_at === null
@@ -150,14 +152,26 @@ final class CoverCache
     public function capture(ExternalCreative $creative): bool
     {
         $source = self::sourceOf($creative);
+        $renewed = false;
+        if ($source === null && CoverSourceRefresher::recoverable($creative)) {
+            /*
+             * CREATIVE-COVERS-COVERAGE-001 — a creative the sweep left without any link (a Spark post past the old
+             * cap or under an unnamed identity, a video the Asset Library refused once, a Snapchat film whose still
+             * is a separate call) is asked for one through its connector before it is called «none».
+             */
+            $source = $this->renew($creative);
+            $renewed = true;
+            if ($source === null) {
+                return $this->failed($creative, 'provider_gave_none');
+            }
+        }
         if ($source === null) {
             $creative->forceFill(['cover_state' => self::STATE_NONE, 'cover_error' => null, 'cover_next_attempt_at' => null])->save();
 
             return false;
         }
 
-        $renewed = false;
-        if (self::lapsed($source)) {
+        if (! $renewed && self::lapsed($source)) {
             $source = $this->renew($creative);
             $renewed = true;
             if ($source === null) {

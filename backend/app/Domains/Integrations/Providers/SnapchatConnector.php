@@ -537,6 +537,81 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return [...($targeting ?? []), ...$placements];
     }
 
+    /**
+     * CREATIVE-COVERS-COVERAGE-001 — one creative's still, for the cover copy.
+     *
+     * Production 2026-11-07: 3,031 of 5,489 Snapchat creatives held a film (`video_url`) and no still at all, so no
+     * cover could be copied and a report drew an empty frame where the ad belongs. The sweep reads media in one
+     * batched call (`get_media_by_ids`), which answers the file and never a still. Snapchat names a film's still
+     * separately: `GET /v1/media/{media_id}/thumbnail` answers `link` (VIDEO media only). An image's file IS its
+     * still: `GET /v1/media/{media_id}` answers `download_link`.
+     *
+     * Asked one creative at a time from the cover queue (spaced, and through the provider's rate budget), not in
+     * the sweep: three thousand extra calls inside a structure pass is what made it time out before. A creative row
+     * written before the media id was kept is read once (`GET /v1/creatives/{id}`) for its top snap — a composite's
+     * from its first child, which is the snap Snapchat shows as the tile. Nothing is composed or guessed: an answer
+     * without a link is «no still».
+     *
+     * @return array<string, string> `thumbnail_url` (and `asset_url` for an image), with `asset_expires_at` when stated
+     */
+    public function renewCreativeStill(string $adAccountId, string $creativeId, ?string $mediaId): array
+    {
+        $tokens = $this->tokens();
+        $mediaId ??= $this->topSnapMediaId($tokens, $creativeId);
+        if ($mediaId === null) {
+            return [];
+        }
+
+        $thumbnail = null;
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("media/{$mediaId}/thumbnail")), 'media thumbnail');
+            $thumbnail = $this->safeAssetUrl($body['link'] ?? ($body['thumbnail']['link'] ?? null));
+        } catch (\Throwable) {
+            // An IMAGE has no thumbnail by Snapchat's own rule; its file is read below.
+        }
+        if ($thumbnail !== null) {
+            return array_filter([
+                'thumbnail_url' => $thumbnail,
+                'asset_expires_at' => AssetExpiry::fromUrl($thumbnail)?->toIso8601String(),
+            ], static fn ($v) => $v !== null);
+        }
+
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("media/{$mediaId}")), 'media');
+        } catch (\Throwable) {
+            return [];
+        }
+        $m = (array) (((array) (((array) ($body['media'] ?? []))[0] ?? []))['media'] ?? []);
+        if (strtoupper((string) ($m['type'] ?? '')) !== 'IMAGE') {
+            return [];
+        }
+        $link = $this->safeAssetUrl($m['download_link'] ?? null);
+
+        return $link === null ? [] : array_filter([
+            'asset_url' => $link,
+            'thumbnail_url' => $link,
+            'asset_expires_at' => AssetExpiry::fromUrl($link)?->toIso8601String(),
+        ], static fn ($v) => $v !== null);
+    }
+
+    /** A creative's top snap media id, or its first composite child's — one or two reads, null when neither names one. */
+    private function topSnapMediaId(OAuthTokens $tokens, string $creativeId, int $depth = 0): ?string
+    {
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("creatives/{$creativeId}")), 'creative');
+        } catch (\Throwable) {
+            return null;
+        }
+        $c = (array) (((array) (((array) ($body['creatives'] ?? []))[0] ?? []))['creative'] ?? []);
+        $media = $c['top_snap_media_id'] ?? null;
+        if (is_string($media) && trim($media) !== '') {
+            return $media;
+        }
+        $child = ((array) ($c['composite_properties']['creative_ids'] ?? []))[0] ?? null;
+
+        return $depth === 0 && is_string($child) && $child !== '' ? $this->topSnapMediaId($tokens, $child, 1) : null;
+    }
+
     public function lastMediaOutcome(): array
     {
         return [
@@ -1073,7 +1148,13 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $creatives[$id] = array_filter([
                 ...$creative,
                 // SNAP-OCT26-AI-MEDIA-DECLARATION — the declaration rides on the creative's own record.
-                'raw' => $aiSource === null ? ($creative['raw'] ?? null) : [...(array) ($creative['raw'] ?? []), 'ai_content_source' => $aiSource],
+                // CREATIVE-COVERS-COVERAGE-001 — and the top snap's media id and type, so a film's still can be asked later.
+                'raw' => array_filter([
+                    ...(array) ($creative['raw'] ?? []),
+                    'ai_content_source' => $aiSource,
+                    'media_id' => (string) $creative['media_id'],
+                    'media_type' => isset($m['type']) ? strtoupper((string) $m['type']) : null,
+                ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-PREVIEW-SHAPES-001 — a shape the creative body did not state, answered by
                  * the media Snapchat resolved for it.

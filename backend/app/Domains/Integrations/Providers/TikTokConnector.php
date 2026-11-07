@@ -466,8 +466,19 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
      * @param  list<array<string,mixed>>  $ads
      * @return list<array<string,mixed>>
      */
-    /** Spark posters asked for in one sweep — a call each, so bounded. */
-    private const SPARK_POSTER_CAP = 400;
+    /**
+     * Spark posters asked for in one sweep — a call each, so bounded.
+     *
+     * CREATIVE-COVERS-COVERAGE-001 — 400 was smaller than the live account: Production 2026-11-07 held 655
+     * Spark creatives, so the posts past the 400th were never asked, recorded «TikTok was asked and returned
+     * nothing» (`spark_post_info_missing`, 121 creatives) and lost the links a previous sweep had written. The
+     * cap now sits above the estate, every call still goes through the provider's rate budget, and a post past
+     * it says so (`spark_not_asked`) instead of blaming TikTok.
+     */
+    private const SPARK_POSTER_CAP = 1500;
+
+    /** Identities of the advertiser tried for one post whose own identity is unknown or did not answer. */
+    private const SPARK_FALLBACK_IDENTITIES = 4;
 
     /**
      * @param  list<string>  $ids
@@ -516,11 +527,14 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
      * whenever the structure sweep that wrote it is older than that. Rather than wait for the next sweep,
      * it asks the same two Asset Library reads the sweep uses — `GET /file/video/ad/info/` (`video_ids`,
      * answering `video_cover_url`, `preview_url`, `preview_url_expire_time`) and `GET /file/image/ad/info/`
-     * (`image_ids`, answering `image_url`) — through the same budgeted client, for these ids only. A Spark
-     * post is not in the Asset Library and needs its ad's identity, which a creative row does not carry,
-     * so it is left to the sweep rather than asked half an address.
+     * (`image_ids`, answering `image_url`) — through the same budgeted client, for these ids only.
      *
-     * @param  list<array{external_id:string, media:?string}>  $creatives
+     * CREATIVE-COVERS-COVERAGE-001 — a Spark post too. Its links live hours, and this used to leave it to the
+     * next sweep because a creative row did not carry the identity that owns the post. The sweep now keeps that
+     * identity on the creative (`raw.identity_*`), so the post is asked here with its full address, and with the
+     * advertiser's other identities when that one does not answer.
+     *
+     * @param  list<array{external_id:string, media:?string, identity?:array<string,string>}>  $creatives
      * @return array<string, array<string,mixed>> external id => the fresh link columns
      */
     public function renewCreativeMedia(string $adAccountId, array $creatives): array
@@ -529,6 +543,9 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         foreach ($creatives as $c) {
             if (in_array($c['media'] ?? null, ['video', 'image'], true)) {
                 $ads[] = ['external_id' => null, 'creative' => ['external_id' => (string) $c['external_id'], 'raw' => ['media' => $c['media']]]];
+            } elseif (($c['media'] ?? null) === 'spark') {
+                // CREATIVE-COVERS-COVERAGE-001 — the post's identity, kept on the creative by the sweep, is the ad's.
+                $ads[] = ['external_id' => null, 'raw' => (array) ($c['identity'] ?? []), 'creative' => ['external_id' => (string) $c['external_id'], 'raw' => ['media' => 'spark']]];
             }
         }
         if ($ads === []) {
@@ -539,7 +556,7 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         foreach ($this->withMedia($this->tokens(), $adAccountId, $ads) as $ad) {
             $renewed[(string) $ad['creative']['external_id']] = array_intersect_key(
                 (array) $ad['creative'],
-                ['asset_url' => true, 'video_url' => true, 'thumbnail_url' => true, 'asset_expires_at' => true],
+                ['asset_url' => true, 'video_url' => true, 'thumbnail_url' => true, 'asset_expires_at' => true, 'width' => true, 'height' => true],
             );
         }
 
@@ -608,45 +625,52 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
         $videos = [];
         $images = [];
         $posts = [];
+        $notAsked = [];
         $ownerBc = null;
-        foreach (array_slice($sparks, 0, self::SPARK_POSTER_CAP, true) as $itemId => $identity) {
-            if (! isset($identity['identity_type'], $identity['identity_id'])) {
+        /*
+         * CREATIVE-COVERS-COVERAGE-001 — a post whose ad named no identity, or whose identity did not answer, is
+         * asked with the advertiser's own identities (`identity/get/`), a few at most. Production 2026-11-07: 146
+         * Spark creatives were «identity unknown» and 121 «asked, nothing returned» — the Owner says the posts are
+         * live. TikTok answers a post only under the identity that owns it, so the right one answers and the
+         * others are refused; the identity that answered is kept on the creative for the cover renewal.
+         */
+        $fallback = null;
+        $asked = 0;
+        foreach ($sparks as $itemId => $identity) {
+            $itemId = (string) $itemId;
+            if ($asked >= self::SPARK_POSTER_CAP) {
+                $notAsked[$itemId] = true;
+
                 continue;
             }
-
-            /*
-             * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — every live call answered code 40000, «Unable to
-             * fetch a valid item. Please check the 'identity_id'», because the identities are `BC_AUTH_TT`:
-             * a post authorised to a Business Center. TikTok names the Business Center as part of that
-             * identity (`identity_authorized_bc_id`), and the ads' own bodies do not carry it, so the
-             * question was asked without half its address. The advertiser's `owner_bc_id` is that
-             * Business Center; it is read once per account and only when an identity lacks its own.
-             */
-            if ($identity['identity_type'] === 'BC_AUTH_TT' && ! isset($identity['identity_authorized_bc_id'])) {
-                $ownerBc ??= $this->ownerBusinessCenter($tokens, $adAccountId) ?? false;
-                if ($ownerBc !== false) {
-                    $identity['identity_authorized_bc_id'] = $ownerBc;
+            $tryList = isset($identity['identity_type'], $identity['identity_id']) ? [$identity] : [];
+            $expanded = false;
+            $media = null;
+            for ($i = 0; $media === null; $i++) {
+                if ($i === count($tryList)) {
+                    if ($expanded) {
+                        break;
+                    }
+                    $expanded = true;
+                    $fallback ??= $this->advertiserIdentities($tokens, $adAccountId, $ownerBc);
+                    $others = array_values(array_filter($fallback, static fn (array $o): bool => ! in_array($o, $tryList, true)));
+                    array_push($tryList, ...array_slice($others, 0, self::SPARK_FALLBACK_IDENTITIES));
+                    if ($i === count($tryList)) {
+                        break;
+                    }
                 }
-            }
-            try {
-                $body = $this->read($this->api($tokens)->get($this->url('identity/video/info/'), [
-                    'advertiser_id' => $adAccountId,
-                    'item_id' => $itemId,
-                ] + $identity), 'spark post info');
-                /*
-                 * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — the answer is `data.video_detail.video_info`.
-                 *
-                 * 154 of 163 live calls succeeded and every one was read from `data.video_info`, which TikTok
-                 * does not send, so a successful answer produced no poster and 283 creatives kept drawing
-                 * nothing. The receipt's key names showed the real nesting; the old position is still read
-                 * for an answer that uses it.
-                 */
-                $info = (array) ($body['data']['video_detail']['video_info'] ?? $body['data']['video_info'] ?? []);
-                if ($info !== []) {
-                    $posts[$itemId] = $info;
+                $candidate = $tryList[$i];
+                $asked++;
+                $media = $this->sparkPost($tokens, $adAccountId, $itemId, $candidate, $ownerBc);
+                if ($media !== null) {
+                    $sparks[$itemId] = $candidate;
+                    $posts[$itemId] = $media;
+                    // The identity that answered is the likeliest owner of the next post: ask it first.
+                    if ($fallback !== null && ($at = array_search($candidate, $fallback, true)) !== false) {
+                        unset($fallback[$at]);
+                        array_unshift($fallback, $candidate);
+                    }
                 }
-            } catch (RuntimeException $e) {
-                Log::warning('TikTok Spark post info could not be read; that creative keeps no poster.', ['reason' => $e->getMessage()]);
             }
         }
 
@@ -705,25 +729,26 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ], static fn ($x) => $x !== null);
             } elseif (isset($posts[$id])) {
                 $v = $posts[$id];
-                // Measured 2026-10-18: video_info carries bit_rate, duration, format, height, poster_url, signature, size, url, width.
-                $poster = collect(['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
-                $file = collect(['preview_url', 'url', 'video_url', 'play_url'])->map(fn ($k) => $v[$k] ?? null)->first(fn ($u) => is_string($u) && $u !== '');
+                $poster = $v['poster'];
+                $file = $v['file'];
                 /*
                  * CONTENT-PREVIEW-COVERAGE-001 — the post's own frame size, length and link expiry are kept too.
                  *
-                 * `video_info` states `width`, `height` and `duration` (measured 2026-10-18, above), and this arm
-                 * stored the two links only: every Spark creative reached the card with no shape, so a 9:16 post
-                 * was drawn in whatever frame the surface defaulted to. Its signed links carry their expiry in the
-                 * URL, which `AssetExpiry` reads; without it the row never turned `expired`, so a dead link was
-                 * served as `available` and drew a broken image. The earlier of the two links decides.
+                 * `video_info` states `width`, `height` and `duration` (measured 2026-10-18), and this arm stored the
+                 * two links only: every Spark creative reached the card with no shape. Its signed links carry their
+                 * expiry in the URL, which `AssetExpiry` reads; the earlier of the two links decides.
+                 *
+                 * CREATIVE-COVERS-COVERAGE-001 — a photo (carousel) post has no film: its first picture is both the
+                 * still and the content.
                  */
                 $expiries = array_filter([AssetExpiry::fromUrl($file), AssetExpiry::fromUrl($poster)]);
                 $creative += array_filter([
                     'thumbnail_url' => $poster,
                     'video_url' => $file,
-                    'width' => is_numeric($v['width'] ?? null) ? (int) $v['width'] : null,
-                    'height' => is_numeric($v['height'] ?? null) ? (int) $v['height'] : null,
-                    'duration_seconds' => is_numeric($v['duration'] ?? null) ? (float) $v['duration'] : null,
+                    'asset_url' => $file === null ? $poster : null,
+                    'width' => $v['width'],
+                    'height' => $v['height'],
+                    'duration_seconds' => $v['duration'],
                     'asset_expires_at' => $expiries === [] ? null : min($expiries)->toIso8601String(),
                 ], static fn ($x) => $x !== null);
             } elseif (isset($images[$id])) {
@@ -744,16 +769,172 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 $reason = match ($media) {
                     'video' => 'video_info_missing',
                     'image' => 'image_info_missing',
-                    'spark' => isset($sparks[$id]['identity_type'], $sparks[$id]['identity_id']) ? 'spark_post_info_missing' : 'spark_identity_unknown',
+                    'spark' => match (true) {
+                        isset($notAsked[$id]) => 'spark_not_asked',
+                        isset($sparks[$id]['identity_type'], $sparks[$id]['identity_id']) => 'spark_post_info_missing',
+                        default => 'spark_identity_unknown',
+                    },
                     default => 'no_asset_declared',
                 };
                 $creative['raw'] = ((array) ($creative['raw'] ?? [])) + ['media_reason' => $reason];
                 Log::info('TikTok creative has no displayable asset.', ['ad' => $ad['external_id'] ?? null, 'creative' => $id, 'media' => $media, 'reason' => $reason]);
             }
+            /*
+             * CREATIVE-COVERS-COVERAGE-001 — the identity that owns a Spark post rides on its creative, so the cover
+             * renewal can ask TikTok for the post again when its hours-long links have lapsed.
+             */
+            if ((((array) ($creative['raw'] ?? []))['media'] ?? null) === 'spark' && isset($sparks[$id]['identity_type'], $sparks[$id]['identity_id'])) {
+                $creative['raw'] = [...(array) $creative['raw'], ...array_filter([
+                    'identity_type' => $sparks[$id]['identity_type'],
+                    'identity_id' => $sparks[$id]['identity_id'],
+                    'identity_authorized_bc_id' => $sparks[$id]['identity_authorized_bc_id'] ?? null,
+                ], static fn ($v) => $v !== null)];
+            }
             $ads[$n]['creative'] = $creative;
         }
 
         return $ads;
+    }
+
+    /**
+     * One Spark post through `identity/video/info/`, asked under one identity — its still, file and shape, or null.
+     *
+     * TIKTOK-SPARK-COVER-001 (evidence 2026-10-18) — a `BC_AUTH_TT` identity is a post authorised to a Business
+     * Center and is answered only with that Business Center (`identity_authorized_bc_id`); the advertiser's
+     * `owner_bc_id` is used when the identity does not carry its own. The answer is `data.video_detail.video_info`
+     * (the legacy `data.video_info` is still read).
+     *
+     * @param  array<string,string>  $identity
+     * @return array{poster: ?string, file: ?string, width: ?int, height: ?int, duration: ?float}|null
+     */
+    private function sparkPost(OAuthTokens $tokens, string $adAccountId, string $itemId, array $identity, mixed &$ownerBc): ?array
+    {
+        if ($identity['identity_type'] === 'BC_AUTH_TT' && ! isset($identity['identity_authorized_bc_id'])) {
+            $ownerBc ??= $this->ownerBusinessCenter($tokens, $adAccountId) ?? false;
+            if ($ownerBc !== false) {
+                $identity['identity_authorized_bc_id'] = $ownerBc;
+            }
+        }
+
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url('identity/video/info/'), [
+                'advertiser_id' => $adAccountId,
+                'item_id' => $itemId,
+            ] + $identity), 'spark post info');
+        } catch (RuntimeException $e) {
+            Log::warning('TikTok Spark post info could not be read under one identity.', ['reason' => $e->getMessage(), 'identity_type' => $identity['identity_type']]);
+
+            return null;
+        }
+
+        return self::sparkMedia((array) ($body['data'] ?? []));
+    }
+
+    /**
+     * The still and the file a post info answer names.
+     *
+     * A video post states `video_info` (measured 2026-10-18: bit_rate, duration, format, height, poster_url,
+     * signature, size, url, width). A photo post (the Spark «carousel» posts — 26 live creatives with nothing
+     * drawn) carries no film; its pictures sit in an image list beside it, so the first picture TikTok names is
+     * its still. Only TikTok's own links are read — nothing is composed.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array{poster: ?string, file: ?string, width: ?int, height: ?int, duration: ?float}|null
+     */
+    public static function sparkMedia(array $data): ?array
+    {
+        $detail = (array) ($data['video_detail'] ?? $data);
+        $info = (array) ($detail['video_info'] ?? $data['video_info'] ?? []);
+        $first = static fn (array $from, array $keys): ?string => collect($keys)
+            ->map(static fn (string $k) => $from[$k] ?? null)
+            ->first(static fn ($u) => is_string($u) && str_starts_with($u, 'https://'));
+
+        $poster = $first($info, ['poster_url', 'cover_image_url', 'cover_url', 'video_cover_url'])
+            ?? $first($detail, ['poster_url', 'cover_url', 'cover_image_url', 'thumbnail_url']);
+        $file = $first($info, ['preview_url', 'url', 'video_url', 'play_url']);
+
+        if ($poster === null) {
+            foreach (['image_info', 'image_infos', 'images', 'image_list', 'carousel_info', 'photo_info'] as $key) {
+                if (isset($detail[$key]) && is_array($detail[$key]) && ($found = self::firstImageLink($detail[$key])) !== null) {
+                    $poster = $found;
+                    break;
+                }
+            }
+        }
+
+        if ($poster === null && $file === null) {
+            return null;
+        }
+
+        return [
+            'poster' => $poster,
+            'file' => $file,
+            'width' => is_numeric($info['width'] ?? null) ? (int) $info['width'] : null,
+            'height' => is_numeric($info['height'] ?? null) ? (int) $info['height'] : null,
+            'duration' => is_numeric($info['duration'] ?? null) ? (float) $info['duration'] : null,
+        ];
+    }
+
+    /** The first https link under an image-ish key, depth-first, in the order TikTok listed them. */
+    private static function firstImageLink(array $node, int $depth = 0): ?string
+    {
+        if ($depth > 4) {
+            return null;
+        }
+        foreach ($node as $key => $value) {
+            if (is_string($value) && str_starts_with($value, 'https://')
+                && (is_int($key) || preg_match('/(image|url|cover|poster|thumb)/i', (string) $key) === 1)) {
+                return $value;
+            }
+            if (is_array($value) && ($found = self::firstImageLink($value, $depth + 1)) !== null) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The advertiser's identities, from `identity/get/` — each type asked once per sweep, a refusal costing only that type.
+     *
+     * `BC_AUTH_TT` identities are listed under the Business Center that holds them, so that type is asked with the
+     * advertiser's owner Business Center when one is known.
+     *
+     * @return list<array<string,string>>
+     */
+    private function advertiserIdentities(OAuthTokens $tokens, string $adAccountId, mixed &$ownerBc): array
+    {
+        $found = [];
+        foreach (['BC_AUTH_TT', 'TT_USER', 'AUTH_CODE'] as $type) {
+            $query = ['advertiser_id' => $adAccountId, 'identity_type' => $type, 'page_size' => 100];
+            if ($type === 'BC_AUTH_TT') {
+                $ownerBc ??= $this->ownerBusinessCenter($tokens, $adAccountId) ?? false;
+                if ($ownerBc === false) {
+                    continue;
+                }
+                $query['identity_authorized_bc_id'] = $ownerBc;
+            }
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url('identity/get/'), $query), 'identities');
+            } catch (RuntimeException $e) {
+                Log::info('TikTok identities of one type could not be listed.', ['identity_type' => $type, 'reason' => $e->getMessage()]);
+
+                continue;
+            }
+            foreach ((array) ($body['data']['identity_list'] ?? []) as $row) {
+                $id = is_array($row) ? $this->scalarId($row['identity_id'] ?? null) : null;
+                if ($id === null) {
+                    continue;
+                }
+                $found[] = array_filter([
+                    'identity_type' => $this->scalarId($row['identity_type'] ?? null) ?? $type,
+                    'identity_id' => $id,
+                    'identity_authorized_bc_id' => $this->scalarId($row['identity_authorized_bc_id'] ?? null) ?? ($type === 'BC_AUTH_TT' && is_string($ownerBc) ? $ownerBc : null),
+                ], static fn ($v) => $v !== null);
+            }
+        }
+
+        return $found;
     }
 
     /**
