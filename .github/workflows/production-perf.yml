@@ -54,77 +54,18 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            PSQL="$DC exec -T db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -X -P pager=off'"
-            echo "== FACTS-COVER (read-only) $(date -u +%FT%TZ) (UTC; local = UTC+3)"
-            echo "-- 1 containers: image, created, started"
-            for c in $($DC ps -q backend queue scheduler); do docker inspect -f '{{.Name}} image={{slice .Image 7 19}} created={{.Created}} started={{.State.StartedAt}} status={{.State.Status}}' $c; done
-            echo "-- 1 image ids and created"
-            for c in $($DC ps -q backend queue scheduler); do docker image inspect -f '{{slice .Id 7 19}} imgcreated={{.Created}}' $(docker inspect -f '{{.Image}}' $c); done
-            for s in backend queue scheduler; do
-              echo "-- 1 $s: ffmpeg"
-              $DC exec -T $s sh -c 'which ffmpeg; ffmpeg -version 2>&1 | head -1; which nice; test -f app/Domains/Campaigns/Services/VideoFrameExtractor.php && echo "VideoFrameExtractor.php present" || echo "VideoFrameExtractor.php MISSING"; grep -c "video_frame" app/Domains/Campaigns/Services/CoverCache.php; grep -c "frames-per-minute" app/Domains/Campaigns/Console/BackfillCreativeCoversCommand.php' 2>&1 | head -12
-            done
-            echo "-- 1 horizon status + processes (queue)"
-            $DC exec -T queue php artisan horizon:status 2>&1 | head -3
-            $DC exec -T queue sh -c 'ps -eo pid,etime,args | grep -E "horizon|queue:work" | grep -v grep | cut -c1-140' 2>&1 | head -12
-            echo "-- 2 schedule:list (creatives only)"
-            $DC exec -T scheduler php artisan schedule:list 2>&1 | grep -iE "creatives|cover" | head
-            echo "-- 2 scheduled_runs for backfill-covers (last 12)"
+            echo "== FACTS-COVER2 $(date -u +%FT%TZ)"
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
             BEGIN READ ONLY;
-            select started_at, finished_at, duration_ms, outcome, exit_code, rows_affected, failure_class, left(regexp_replace(coalesce(failure_message,''),'https?://[^ ]+','<url>','g'),120) as msg from scheduled_runs where command like '%backfill-covers%' order by started_at desc limit 12;
-            select command, count(*) filter (where outcome='running') running_rows, max(started_at) last_start from scheduled_runs where command like '%backfill-covers%' group by 1;
+            select provider, coalesce(substring(video_url from '^https://([^/]+)/'),'-') host, (cover_error is not null) failed_marked, cover_attempts, count(*) n,
+              min(cover_next_attempt_at) min_next, max(cover_next_attempt_at) max_next
+            from external_creatives where is_demo=false and cover_path is null and video_url like 'https://%' and provider in ('snapchat','tiktok','meta')
+            group by 1,2,3,4 order by 1,5 desc;
+            select provider, cover_attempts, count(*) n, min(cover_next_attempt_at) min_next, max(cover_next_attempt_at) max_next
+            from external_creatives where is_demo=false and cover_path is null and cover_next_attempt_at > now() group by 1,2 order by 1,2;
+            select count(*) filter (where payload like '%CacheCreativeCover%') cover_jobs_failed_total, max(failed_at) filter (where payload like '%CacheCreativeCover%') newest_cover_fail, count(*) filter (where failed_at > now() - interval '24 hours') failed_24h from failed_jobs;
             ROLLBACK;
             SQL
-            echo "-- 2 scheduler container log, last 6h (command names and status only)"
-            $DC logs --since 6h scheduler 2>&1 | grep -iE "backfill|creatives:|cover|error|fail|skipp" | sed -E 's#https?://[^ ]+#<url>#g' | cut -c1-200 | tail -25
-            echo "-- 2 overlap mutex: redis keys (names + ttl)"
-            $DC exec -T redis sh -c 'redis-cli ping; for k in $(redis-cli --scan --pattern "*schedule-*" | head -40); do echo "$k ttl=$(redis-cli ttl "$k")"; done' 2>&1 | head -50
-            echo "-- 3 dry run (writes nothing)"
-            $DC exec -T backend php artisan creatives:backfill-covers 2>&1 | sed -E 's#https?://[^ ]+#<url>#g' | head -40
-            echo "-- 3 db counts"
-            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
-            BEGIN READ ONLY;
-            select now() as db_now;
-            select provider, count(*) total,
-              count(*) filter (where video_url is not null) with_video,
-              count(*) filter (where cover_path is not null) cached,
-              count(*) filter (where cover_source='video_frame') cached_video_frame,
-              count(*) filter (where cover_path is null and video_url like 'https://%' and coalesce(thumbnail_url,'') not like 'https://%' and coalesce(asset_url,'') not like 'https://%') film_no_still_no_copy,
-              count(*) filter (where cover_path is null and video_url like 'https://%' and (thumbnail_url like 'https://%' or asset_url like 'https://%')) film_with_stilllink_no_copy
-            from external_creatives where is_demo=false group by 1 order by 1;
-            select provider, coalesce(cover_state,'-') state, coalesce(cover_source,'-') source, coalesce(cover_error,'-') err,
-              case when cover_next_attempt_at is null then 'none' when cover_next_attempt_at > now() then 'future' else 'past' end next_attempt,
-              count(*) n, max(cover_attempts) max_attempts, min(cover_next_attempt_at) min_next, max(cover_next_attempt_at) max_next
-            from external_creatives where is_demo=false and cover_path is null and video_url is not null group by 1,2,3,4,5 order by 1,6 desc;
-            select 'tiktok film no copy' cohort, coalesce(substring(video_url from '^https://([^/]+)/'),'-') host,
-              case when substring(video_url from 'x-expires=([0-9]+)') is null then 'no x-expires'
-                   when to_timestamp(substring(video_url from 'x-expires=([0-9]+)')::bigint) < now() then 'EXPIRED' else 'live' end video_link,
-              (thumbnail_url like 'https://%' or asset_url like 'https://%') has_still_link,
-              coalesce(raw->>'media','-') media, (external_campaign_id is not null) has_campaign, count(*) n,
-              min(to_timestamp(nullif(substring(video_url from 'x-expires=([0-9]+)'),'')::bigint)) min_exp, max(to_timestamp(nullif(substring(video_url from 'x-expires=([0-9]+)'),'')::bigint)) max_exp,
-              max(updated_at) last_updated, max(asset_expires_at) max_asset_exp
-            from external_creatives where is_demo=false and provider='tiktok' and cover_path is null and video_url like 'https://%' group by 2,3,4,5,6 order by n desc;
-            select provider, count(*) filter (where cover_source='video_frame') frames, min(cover_cached_at) filter (where cover_source='video_frame') first_frame, max(cover_cached_at) filter (where cover_source='video_frame') last_frame, max(cover_cached_at) last_any_cache from external_creatives group by 1 order by 1;
-            select provider, coalesce(cover_error,'-') err, count(*) n, max(updated_at) newest from external_creatives where cover_error is not null group by 1,2 order by 1,3 desc;
-            ROLLBACK;
-            SQL
-            echo "-- 4 failed_jobs by class (counts, exception class only)"
-            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
-            BEGIN READ ONLY;
-            select payload::json->>'displayName' job, queue, substring(exception from '^[A-Za-z0-9_\\]+') exc_class, count(*) n, max(failed_at) newest from failed_jobs where failed_at > now() - interval '3 days' group by 1,2,3 order by newest desc limit 15;
-            select count(*) failed_cover_jobs_total, max(failed_at) from failed_jobs where payload::json->>'displayName' like '%CacheCreativeCover%';
-            ROLLBACK;
-            SQL
-            echo "-- 4 redis queue depth"
-            $DC exec -T redis sh -c 'for q in default reports sync live-refresh; do echo "$q pending=$(redis-cli llen queues:$q) delayed=$(redis-cli zcard queues:$q:delayed) reserved=$(redis-cli zcard queues:$q:reserved)"; done' 2>&1
-            echo "-- 4 delayed jobs: how many are cover captures (by displayName, counts only)"
-            $DC exec -T redis sh -c 'redis-cli zrange queues:default:delayed 0 -1' 2>/dev/null | grep -o 'CacheCreativeCoverJob' | wc -l
-            $DC exec -T redis sh -c 'redis-cli lrange queues:default 0 -1' 2>/dev/null | grep -o 'CacheCreativeCoverJob' | wc -l
-            $DC exec -T redis sh -c 'redis-cli zrange queues:default:delayed 0 0 WITHSCORES' 2>/dev/null | tail -1 | awk '{print "earliest delayed available_at epoch: "$1}'
-            echo "-- 4/5 logs: cover capture outcomes since the deploy (reason counts only)"
-            $DC exec -T backend sh -c 'ls -la storage/logs | tail -5; cat storage/logs/*.log 2>/dev/null | grep -E "^\[2026-11-0[89]" | grep -E "Creative cover" | grep -oE "(not cached|could not be renewed)|\"reason\":\"[^\"]{0,60}\"" | sed -E "s#https?://[^ \"]+#<url>#g" | sort | uniq -c | sort -rn | head -20'
-            echo "-- 5 files taken since the deploy"
-            $DC exec -T backend sh -c 'find storage/app/media/covers -type f -newermt "2026-11-08 20:30:00" | wc -l; find storage/app/media/covers -type f | wc -l'
-            echo "== END FACTS-COVER"
+            $DC exec -T backend sh -c 'cd storage/app; find . -path "*media/covers*" -type f -mmin -90 | wc -l; find . -path "*media/covers*" -type f | wc -l; ls'
+            echo "== END FACTS-COVER2"
             exit 0
