@@ -217,9 +217,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 continue;
             }
 
-            $ads[] = array_filter([
+            $ads[] = ['ad_set_external_id' => null] + array_filter([ // there is no such level on LinkedIn
                 'external_id' => $id,
-                'ad_set_external_id' => null, // there is no such level on LinkedIn
                 'campaign_external_id' => $campaignId,
                 // LinkedIn creatives carry no name; the id is the only label it gives one.
                 'name' => "Creative {$id}",

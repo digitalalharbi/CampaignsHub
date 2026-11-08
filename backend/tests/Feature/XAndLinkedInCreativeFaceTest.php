@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
@@ -117,7 +118,7 @@ final class XAndLinkedInCreativeFaceTest extends TestCase
         $this->assertArrayNotHasKey('creative', $ads[1], 'a sponsored post has no readable picture under r_ads');
     }
 
-    private ?\App\Domains\Integrations\Models\ProviderConnection $connection = null;
+    private ?ProviderConnection $connection = null;
 
     private function bound(string $platform): ApiAdvertisingConnector
     {
