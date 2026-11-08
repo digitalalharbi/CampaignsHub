@@ -549,6 +549,15 @@ final class CreativePresenter
                 'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: لم تُرجع المنصة رابطًا لصورتها (أو أنها بطاقة نصية)، فيُعرض نصّ الإعلان بدلًا منها.',
                 'note_en' => 'A ChatGPT Ads chat card: the platform returned no image link for it (or it is text-only), so the ad’s own text is shown instead.',
             ],
+            $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'text_card' => [
+                'state' => 'unavailable',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                'note_ar' => 'إعلان نصّي: لا صورة له على المنصة، فيُعرض نصّ الإعلان.',
+                'note_en' => 'A text ad: it has no picture on the platform, so the ad’s own words are shown.',
+            ],
             $image === null && $video === null && $thumb === null => [
                 'state' => 'unavailable',
                 'kind' => $kind,
@@ -592,7 +601,8 @@ final class CreativePresenter
      */
     private function copyText(ExternalCreative $creative): ?array
     {
-        if (strtolower((string) $creative->format) !== 'chat_card') {
+        // CREATIVE-SYNC-MEDIA-001 — `text_card`: a Google responsive search ad / X text post, whose words are the creative.
+        if (! in_array(strtolower((string) $creative->format), ['chat_card', 'text_card'], true)) {
             return null;
         }
 

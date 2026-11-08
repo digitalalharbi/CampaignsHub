@@ -466,6 +466,7 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
             GAQL);
 
         $ads = [];
+        $media = $this->creativeMedia($tokens, $adAccountId);
 
         foreach ($rows as $row) {
             /** @var array<string,mixed> $adGroupAd */
@@ -497,13 +498,236 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
                  * Google has no creative object beneath an ad — the ad IS the creative. So there is no
                  * separate row to make, and inventing one per ad would double every ad in the panel
                  * for no information at all. The ad's type is kept in `raw`.
+                 *
+                 * CREATIVE-SYNC-MEDIA-001 — what the ad SHOWS is read by `creativeMedia()` (a separate,
+                 * failure-tolerant query): its picture, its YouTube film, or its words. The creative that
+                 * comes back is that ad's own face under the ad's id, not a second row per ad.
                  */
-                'creative' => null,
+                'creative' => $media[(string) $ad['id']] ?? null,
                 'raw' => $row,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * CREATIVE-SYNC-MEDIA-001 — what each Google ad shows, keyed by ad id.
+     *
+     * Google's creative is the ad itself, and which field holds its face depends on the ad type:
+     *
+     *   - responsive display: `marketing_images` / `square_marketing_images` / `logo_images` are ASSET
+     *     resource names, resolved by one `asset` query to `image_asset.full_size.url`;
+     *   - image ad: `image_ad.image_url` (and `preview_image_url`) are already links;
+     *   - video ad / video responsive ad: an asset whose `youtube_video_asset.youtube_video_id` gives the
+     *     film — its cover is YouTube's public `hqdefault.jpg`, and the watch page is the preview link;
+     *   - responsive search ad: no picture exists. Headlines and descriptions are the creative, stored as
+     *     copy in a `text_card`.
+     *
+     * Asked separately from the ad list on purpose: a field Google refuses (an API-version change) must
+     * cost the pictures, never the ads, their status or their metrics. Any failure returns what was read
+     * so far — a card with no picture says so; nothing here draws a guess or a zero.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function creativeMedia(OAuthTokens $tokens, string $customerId): array
+    {
+        try {
+            $rows = $this->stream($tokens, $customerId, <<<'GAQL'
+                SELECT ad_group_ad.ad.id, ad_group_ad.ad.type,
+                       ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url,
+                       ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_display_ad.long_headline,
+                       ad_group_ad.ad.responsive_display_ad.descriptions, ad_group_ad.ad.responsive_display_ad.business_name,
+                       ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images,
+                       ad_group_ad.ad.responsive_display_ad.logo_images,
+                       ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
+                       ad_group_ad.ad.video_ad.video.asset,
+                       ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines,
+                       ad_group_ad.ad.video_responsive_ad.descriptions
+                FROM ad_group_ad
+                WHERE ad_group_ad.status != 'REMOVED'
+                GAQL);
+        } catch (\Throwable $e) {
+            Log::info('google ads creative media not read: '.mb_substr($e->getMessage(), 0, 200));
+
+            return [];
+        }
+
+        $refs = [];
+        foreach ($rows as $row) {
+            foreach ($this->assetRefs((array) ($row['adGroupAd']['ad'] ?? [])) as $name) {
+                $refs[$name] = true;
+            }
+        }
+
+        $assets = $this->assetsByName($tokens, $customerId, array_keys($refs));
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            $ad = (array) ($row['adGroupAd']['ad'] ?? []);
+            $id = (string) ($ad['id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $creative = $this->adFace($id, $ad, $assets);
+
+            if ($creative !== null) {
+                $out[$id] = $creative;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string,mixed>  $ad
+     * @return list<string>
+     */
+    private function assetRefs(array $ad): array
+    {
+        $names = [];
+        $display = (array) ($ad['responsiveDisplayAd'] ?? []);
+
+        foreach (['marketingImages', 'squareMarketingImages', 'logoImages'] as $key) {
+            foreach ((array) ($display[$key] ?? []) as $ref) {
+                $names[] = (string) (((array) $ref)['asset'] ?? '');
+            }
+        }
+
+        foreach ((array) ($ad['videoResponsiveAd']['videos'] ?? []) as $ref) {
+            $names[] = (string) (((array) $ref)['asset'] ?? '');
+        }
+
+        $names[] = (string) ($ad['videoAd']['video']['asset'] ?? '');
+
+        return array_values(array_filter($names, static fn (string $n): bool => $n !== ''));
+    }
+
+    /**
+     * The assets by resource name: an image's full-size link, or a YouTube film's id.
+     *
+     * @param  list<string>  $names
+     * @return array<string, array{image_url: ?string, youtube_id: ?string}>
+     */
+    private function assetsByName(OAuthTokens $tokens, string $customerId, array $names): array
+    {
+        $assets = [];
+
+        foreach (array_chunk($names, 100) as $chunk) {
+            $list = implode(', ', array_map(static fn (string $n): string => "'".str_replace("'", '', $n)."'", $chunk));
+
+            try {
+                $rows = $this->stream($tokens, $customerId, <<<GAQL
+                    SELECT asset.resource_name, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id
+                    FROM asset
+                    WHERE asset.resource_name IN ({$list})
+                    GAQL);
+            } catch (\Throwable $e) {
+                Log::info('google ads assets not read: '.mb_substr($e->getMessage(), 0, 200));
+
+                continue;
+            }
+
+            foreach ($rows as $row) {
+                $asset = (array) ($row['asset'] ?? []);
+                $name = (string) ($asset['resourceName'] ?? '');
+                $url = $asset['imageAsset']['fullSize']['url'] ?? null;
+                $yt = $asset['youtubeVideoAsset']['youtubeVideoId'] ?? null;
+
+                if ($name !== '') {
+                    $assets[$name] = [
+                        'image_url' => is_string($url) && str_starts_with($url, 'https://') ? $url : null,
+                        'youtube_id' => is_string($yt) && preg_match('~^[A-Za-z0-9_-]{6,20}$~', $yt) === 1 ? $yt : null,
+                    ];
+                }
+            }
+        }
+
+        return $assets;
+    }
+
+    /**
+     * One ad's face in the shape the cover pipeline reads — or null when the ad type shows nothing we can read.
+     *
+     * @param  array<string,mixed>  $ad
+     * @param  array<string, array{image_url: ?string, youtube_id: ?string}>  $assets
+     * @return array<string,mixed>|null
+     */
+    private function adFace(string $id, array $ad, array $assets): ?array
+    {
+        $text = static fn (mixed $list): array => array_values(array_filter(array_map(
+            static fn ($t): ?string => is_array($t) && is_string($t['text'] ?? null) && trim($t['text']) !== '' ? trim($t['text']) : null,
+            (array) $list,
+        )));
+
+        $display = (array) ($ad['responsiveDisplayAd'] ?? []);
+        $search = (array) ($ad['responsiveSearchAd'] ?? []);
+        $videoResponsive = (array) ($ad['videoResponsiveAd'] ?? []);
+        $image = (array) ($ad['imageAd'] ?? []);
+
+        $firstImage = static function (array $keys) use ($display, $assets): ?string {
+            foreach ($keys as $key) {
+                foreach ((array) ($display[$key] ?? []) as $ref) {
+                    $url = $assets[(string) (((array) $ref)['asset'] ?? '')]['image_url'] ?? null;
+
+                    if ($url !== null) {
+                        return $url;
+                    }
+                }
+            }
+
+            return null;
+        };
+
+        $youtube = null;
+        foreach (array_merge([(string) ($ad['videoAd']['video']['asset'] ?? '')], array_map(static fn ($r): string => (string) (((array) $r)['asset'] ?? ''), (array) ($videoResponsive['videos'] ?? []))) as $name) {
+            $youtube ??= $assets[$name]['youtube_id'] ?? null;
+        }
+
+        $headlines = array_merge($text($display['headlines'] ?? []), $text($search['headlines'] ?? []), $text($videoResponsive['headlines'] ?? []));
+        $descriptions = array_merge($text($display['descriptions'] ?? []), $text($search['descriptions'] ?? []), $text($videoResponsive['descriptions'] ?? []));
+        $headline = $headlines[0] ?? (is_string($display['longHeadline']['text'] ?? null) ? $display['longHeadline']['text'] : null);
+        $body = $descriptions[0] ?? null;
+
+        $still = $firstImage(['marketingImages', 'squareMarketingImages', 'logoImages']);
+        $imageAdUrl = is_string($image['imageUrl'] ?? null) && str_starts_with($image['imageUrl'], 'https://') ? $image['imageUrl'] : null;
+        $previewUrl = is_string($image['previewImageUrl'] ?? null) && str_starts_with($image['previewImageUrl'], 'https://') ? $image['previewImageUrl'] : null;
+
+        if ($youtube !== null) {
+            $format = 'video';
+            $thumb = "https://i.ytimg.com/vi/{$youtube}/hqdefault.jpg";
+            $asset = null;
+        } elseif ($still !== null || $imageAdUrl !== null || $previewUrl !== null) {
+            $format = 'image';
+            $asset = $imageAdUrl ?? $still ?? $previewUrl;
+            $thumb = $previewUrl ?? $still ?? $imageAdUrl;
+        } elseif ($search !== [] && $headline !== null) {
+            $format = 'text_card';
+            $asset = $thumb = null;
+        } else {
+            return null;
+        }
+
+        return array_filter([
+            'external_id' => $id,
+            'name' => $headline,
+            'headline' => $headline,
+            'body' => $body,
+            'format' => $format,
+            'thumbnail_url' => $thumb,
+            'asset_url' => $asset,
+            // The watch page is a PAGE (AD-PREVIEW-001): it opens the film, it is never drawn as a picture.
+            'preview_url' => $youtube === null ? null : "https://www.youtube.com/watch?v={$youtube}",
+            'raw' => array_filter([
+                'ad_type' => is_string($ad['type'] ?? null) ? $ad['type'] : null,
+                'youtube_video_id' => $youtube,
+                'headlines' => $headlines === [] ? null : array_slice($headlines, 0, 15),
+                'descriptions' => $descriptions === [] ? null : array_slice($descriptions, 0, 4),
+            ], static fn ($v) => $v !== null),
+        ], static fn ($v) => $v !== null);
     }
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
