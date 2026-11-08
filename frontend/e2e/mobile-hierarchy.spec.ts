@@ -16,7 +16,7 @@ import { signIn } from './helpers'
 test('the dashboard shows a figure before it asks for a filter', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, 'advertiser@campaignshub.io', 'password')
-  await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+  await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
   await page.goto('/app/dashboard')
 
   const strip = page.getByTestId('dashboard-metrics').first()
@@ -33,7 +33,7 @@ test('the dashboard shows a figure before it asks for a filter', async ({ page }
 test('the folded filters open on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, 'advertiser@campaignshub.io', 'password')
-  await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+  await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
   await page.goto('/app/dashboard')
 
   const toggle = page.getByTestId('dashboard-filters-toggle')
@@ -54,7 +54,7 @@ test('the folded filters open on a phone', async ({ page }) => {
 test('the analytics tabs scroll inside their row on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, 'advertiser@campaignshub.io', 'password')
-  await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+  await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
   await page.goto('/app/analytics')
 
   const tabs = page.getByRole('tablist').first()

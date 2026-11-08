@@ -58,7 +58,8 @@ test.describe('registration decision', () => {
     await expect(page.getByTestId('decision-submit')).toBeDisabled()
     await page.getByTestId('decision-confirm-waiver').check()
     await page.getByTestId('decision-submit').click()
-    await expect(page.getByTestId('registration-detail')).toHaveAttribute('data-state', 'active')
+    // The decision provisions a workspace on the server; CI logged that POST at 5 s. Wait for its outcome, not 5 s.
+    await expect(page.getByTestId('registration-detail')).toHaveAttribute('data-state', 'active', { timeout: 30_000 })
 
     // The status page says what happened, with no payment step ticked.
     await status.reload()

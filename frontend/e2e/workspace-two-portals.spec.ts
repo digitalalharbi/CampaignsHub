@@ -42,7 +42,7 @@ async function tabInBrand(context: BrowserContext): Promise<Page> {
   await page.goto('/login')
   await signIn(page, EMAIL)
   await page.getByTestId('switch-to-app').first().click({ timeout: 30_000 })
-  await page.waitForURL(/\/app(\/|$)/)
+  await expect(page).toHaveURL(/\/app(\/|$)/)
   await page.goto('/app/projects')
   await expect(shown(page, BRAND_PROJECT)).toBeVisible({ timeout: 20_000 })
 
@@ -79,7 +79,7 @@ test.describe('one session, two portals', () => {
     await expect(shown(tabA, BRAND_PROJECT)).toBeVisible()
 
     await tabB.getByTestId('portal-entry-stay').click()
-    await tabB.waitForURL(/\/app(\/|$)/)
+    await expect(tabB).toHaveURL(/\/app(\/|$)/)
     expect((await memberships(tabB)).current?.id).toBe(before.current?.id)
   })
 
@@ -91,12 +91,12 @@ test.describe('one session, two portals', () => {
     await tabB.goto('/agency/projects?from=link')
     await tabB.locator('[data-testid^="portal-entry-switch-"]').first().click()
 
-    await tabB.waitForURL(/\/agency\/projects\?from=link/)
+    await expect(tabB).toHaveURL(/\/agency\/projects\?from=link/)
     await expect(shown(tabB, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByText(BRAND_PROJECT)).toHaveCount(0)
 
     // Propagation: the tab left behind is moved, on a full load, to the portal's front door.
-    await tabA.waitForURL(/\/agency(\/|$)/, { timeout: 20_000 })
+    await expect(tabA).toHaveURL(/\/agency(\/|$)/, { timeout: 20_000 })
     await tabA.goto('/agency/projects')
     await expect(shown(tabA, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabA.getByText(BRAND_PROJECT)).toHaveCount(0)
@@ -168,7 +168,7 @@ test.describe('one session, two portals', () => {
 
     // Tab A's own client, on its own next request: refused, and it leaves for the chooser saying why.
     await tabA.locator('a[href^="/app/"]:not([href="/app/projects"])').first().click()
-    await tabA.waitForURL(/\/switch\?reason=workspace_changed/, { timeout: 20_000 })
+    await expect(tabA).toHaveURL(/\/switch\?reason=workspace_changed/, { timeout: 20_000 })
     await expect(tabA.getByTestId('workspace-changed-note')).toBeVisible()
     await expect(tabA.getByText(BRAND_PROJECT)).toHaveCount(0)
 
