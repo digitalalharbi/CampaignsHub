@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Models;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Services\ProviderAccountIdentity;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
@@ -50,6 +51,66 @@ final class ReportShare extends Model
         'paused_at' => 'datetime',
         'is_demo' => 'boolean',
     ];
+
+    /** Memo for {@see scope()} — the followed accounts are resolved once per stored value. */
+    private ?string $followedFrom = null;
+
+    /** @var array<string, mixed>|null */
+    private ?array $followedScope = null;
+
+    /**
+     * LIVE-LINK-ACCOUNT-IDENTITY-001 — the link's ceiling, with its ad accounts followed to the rows that now hold them.
+     *
+     * The stored scope is exactly what the operator granted and is never rewritten by a read. What a reader gets back adds, to
+     * each named account, the other rows of the same provider account that this link's project actively binds — see
+     * {@see ProviderAccountIdentity}. Without it a key entered again made the link's accounts «a row nobody shows», and its
+     * content left the report with nothing deleted (Owner defect 156).
+     *
+     * @return Attribute<array<string, mixed>|null, array<string, mixed>|null>
+     */
+    protected function scope(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): ?array {
+                if ($value === null) {
+                    return null;
+                }
+                if (is_array($value)) {
+                    return $this->followAccounts($value);
+                }
+                $raw = (string) $value;
+                if ($this->followedFrom === $raw && $this->followedScope !== null) {
+                    return $this->followedScope;
+                }
+                $decoded = json_decode($raw, true);
+                if (! is_array($decoded)) {
+                    return null;
+                }
+                $this->followedFrom = $raw;
+
+                return $this->followedScope = $this->followAccounts($decoded);
+            },
+            set: fn (mixed $value): array => ['scope' => $value === null ? null : (is_string($value) ? $value : json_encode($value))],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return array<string, mixed>
+     */
+    private function followAccounts(array $scope): array
+    {
+        $accounts = array_values(array_filter((array) ($scope['account_ids'] ?? []), 'is_string'));
+        $project = (string) ($scope['project_id'] ?? '');
+
+        if ($accounts === [] || $project === '') {
+            return $scope;
+        }
+
+        $scope['account_ids'] = ProviderAccountIdentity::followed($accounts, $project);
+
+        return $scope;
+    }
 
     /**
      * REPORT-SPEND-VISIBILITY-001 — the report's own KPI selection decides whether spend shows.
