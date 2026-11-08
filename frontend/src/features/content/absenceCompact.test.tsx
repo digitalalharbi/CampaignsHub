@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { AdPoster } from './AdPoster'
 import { renderWithProviders } from '@/test/utils'
 
@@ -62,16 +62,24 @@ describe('the absence that stands in for a picture', () => {
    */
   it.each([
     ['catalog', { kind: 'catalog', state: 'available' }, 'Catalog ad'],
-    /*
-      A film whose platform sent no still is the one state where the media is completely intact, and
-      «Video, no cover» described the AD as deficient. The label names what the card is showing.
-    */
-    ['a coverless video', { kind: 'video', state: 'available', video_url: 'https://cdn/a.mp4' }, 'Video preview'],
     ['a never-fetched row', { state: 'never_fetched' }, 'Never requested'],
     ['an expired link', { state: 'expired' }, 'Link expired'],
   ])('says what %s is in its own words', (_name, over, expected) => {
     renderWithProviders(<AdPoster preview={preview(over)} name="Hero" testid="p" />, { locale: 'en' })
 
     expect(screen.getByTestId('p-absent-label').textContent).toBe(expected)
+  })
+
+  /*
+    A film whose platform sent no still is the one state where the media is completely intact, and
+    «Video, no cover» described the AD as deficient. CREATIVE-VIEWER-FORMATS-001: the card now draws
+    the film's own first frame on every surface; the label names it only when the browser cannot.
+  */
+  it('says what a coverless video is in its own words when its frame cannot be drawn', () => {
+    renderWithProviders(<AdPoster preview={preview({ kind: 'video', state: 'available', video_url: 'https://cdn/a.mp4' })} name="Hero" testid="p" />, { locale: 'en' })
+
+    fireEvent.error(screen.getByTestId('p-first-frame'))
+
+    expect(screen.getByTestId('p-absent-label').textContent).toBe('Video preview')
   })
 })

@@ -49,6 +49,7 @@ const COPY = {
     cta: 'زر الإجراء',
     destination: 'الوجهة',
     noPreview: 'لا تتوفر معاينة لهذه البطاقة',
+    blankCards: (n: number) => `وصلت ${n} بطاقات من المنصة بلا صورة ولا نص — المعروض أعلاه هو غلاف الإعلان.`,
   },
   en: {
     title: 'Carousel cards',
@@ -66,6 +67,7 @@ const COPY = {
     cta: 'Call to action',
     destination: 'Destination',
     noPreview: 'No preview available for this card',
+    blankCards: (n: number) => `${n} cards arrived from the platform with no picture and no text — the cover above is the ad’s own.`,
   },
 } as const
 
@@ -130,6 +132,27 @@ export function CreativeCarousel({
           ledger spends most of its time removing.
         */}
         <p className="mt-2 text-sm text-text-secondary">{isCollection ? t.tilesNotFetched : t.notReported}</p>
+      </section>
+    )
+  }
+
+  /*
+   * CREATIVE-VIEWER-FORMATS-001 — a pager of blanks is not a carousel.
+   *
+   * The live estate holds 20 Snapchat collections whose zone named its tiles and whose tiles came back
+   * with no media, no title and no destination. Each opened to «Card 1 of 6 — no preview», six
+   * times, under a hero that does draw: the reader paged through nothing. Said once, with the count.
+   */
+  const blank = (card: (typeof cards)[number]) =>
+    !card.video_url && cardPoster(card) === null && !card.headline && !card.body && !card.cta && !card.destination_url
+  if (cards.length > 0 && cards.every(blank)) {
+    return (
+      <section className="rounded-lg border border-border bg-surface p-4" data-testid="creative-carousel-blank">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
+          <Images className="h-4 w-4" aria-hidden />
+          {heading}
+        </h2>
+        <p className="mt-2 text-sm text-text-secondary">{t.blankCards(cards.length)}</p>
       </section>
     )
   }
@@ -244,7 +267,7 @@ export function CreativeCarousel({
                     onClick={() => setActive(i)}
                     className={`overflow-hidden rounded border ${i === active ? 'border-primary' : 'border-border'}`}
                   >
-                    {card.thumbnail_url || card.image_url ? (
+                    {cardPoster(card) !== null ? (
                       <img
                         src={cardPoster(card) as string}
                         alt=""
