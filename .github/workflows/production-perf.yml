@@ -36,6 +36,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Runner-side availability probe (from GitHub runner, not over SSH)
+        continue-on-error: true
+        run: |
+          set +e
+          COVER='https://campaignshub.io/media/covers/29/292d830d89ec1d47c149ca2cc9903a636022e7ca17f3b625e1a983d83620b0da.png'
+          probe() {
+            name="$1"; url="$2"; shift 2
+            : > "/tmp/probe_$name.txt"
+            for i in $(seq 1 60); do
+              curl -s -o /dev/null -m 20 "$@" -w '%{http_code} %{time_connect} %{time_starttransfer} %{time_total} %{remote_ip}\n' "$url" >> "/tmp/probe_$name.txt"
+              sleep 0.2
+            done
+            echo "== PROBE $name $url"
+            pct() { sort -n | awk -v p="$1" '{a[NR]=$1} END{i=int(NR*p+0.999999); if(i<1)i=1; printf "%.3f", a[i]}'; }
+            n=$(wc -l < "/tmp/probe_$name.txt")
+            echo "n=$n code000=$(awk '$1=="000"' "/tmp/probe_$name.txt" | wc -l) non200=$(awk '$1!="200"' "/tmp/probe_$name.txt" | wc -l)"
+            for col in 2 3 4; do
+              lbl=$(echo "connect starttransfer total" | cut -d' ' -f$((col-1)))
+              echo "time_$lbl p50=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 0.5) p95=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 0.95) max=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 1)"
+            done
+            echo "distinct remote_ip:"; cut -d' ' -f5 "/tmp/probe_$name.txt" | sort | uniq -c
+            echo "status histogram:"; cut -d' ' -f1 "/tmp/probe_$name.txt" | sort | uniq -c
+            echo "slow/failed rows (code conn ttfb total ip):"; awk '$1!="200" || $4>3' "/tmp/probe_$name.txt" | head -20
+          }
+          echo "== FACTS-RUNNER $(date -u +%FT%TZ)"
+          echo "runner dns:"; getent ahosts campaignshub.io | awk '{print $1}' | sort -u; getent ahosts api.campaignshub.io | awk '{print $1}' | sort -u
+          probe health https://api.campaignshub.io/api/v1/health
+          probe robots https://campaignshub.io/robots.txt
+          probe cover "$COVER" -H 'Accept: image/*'
+          echo "== END FACTS-RUNNER"
       - name: Snapshot on VPS
         uses: appleboy/ssh-action@v1.2.2
         env:
@@ -54,19 +84,42 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "== FACTS-CR"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL' || echo "psql failed"
-            BEGIN READ ONLY; select 'acct' q, left(md5(a.id::text),5) acct, left(md5(a.provider_connection_id::text),5) conn, left(md5(a.external_id),5) extid, length(a.external_id) l, a.status, a.created_at, a.updated_at, a.last_synced_at from external_accounts a where a.provider='openai_ads' order by a.created_at; ROLLBACK;
-            BEGIN READ ONLY; select 'conn' q, left(md5(c.id::text),5) conn, c.status, c.created_at, c.updated_at from provider_connections c where c.provider='openai_ads' order by c.created_at; ROLLBACK;
-            BEGIN READ ONLY; select 'bind2' q, left(md5(b.external_account_id::text),5) acct, b.is_active, b.created_at, b.updated_at, b.created_by is not null by_user, b.settings::text from project_integration_bindings b where b.provider='openai_ads' order by b.created_at; ROLLBACK;
-            BEGIN READ ONLY; select 'seat' q, left(md5(external_id),5) extid, status, first_bound_at, last_bound_at, released_at, replaced_at from ad_account_seats where provider='openai_ads' order by first_bound_at; ROLLBACK;
-            BEGIN READ ONLY; select 'seat_ev' q, left(md5(seat_id::text),5) seat, type, created_at from ad_account_seat_events where seat_id in (select id from ad_account_seats where provider='openai_ads') order by created_at desc limit 12; ROLLBACK;
-            SQL
-            echo "== covers on disk"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T backend sh -c 'ls /var/www/html/storage/app/media/covers 2>/dev/null | wc -l; find /var/www/html/storage/app/media/covers -type f 2>/dev/null | wc -l; ls /var/www/html/storage/app/private/media/covers 2>/dev/null | wc -l; find /var/www/html/storage/app/private/media/covers -type f 2>/dev/null | wc -l' || true
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml exec -T backend php -r 'require "vendor/autoload.php"; $a=require "bootstrap/app.php"; $a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); echo "local root=".config("filesystems.disks.local.root").PHP_EOL;' || true
-            echo "== END FACTS-CR"
+            echo "== FACTS-AVAIL (read-only)"
+            echo "-- load/nproc/mem"; cat /proc/loadavg; nproc; free -m
+            echo "-- vmstat 1x5"; vmstat 1 5 2>/dev/null || true
+            echo "-- containers (name image status restarts oom)"
+            for c in $(docker ps -aq); do docker inspect -f '{{.Name}} {{.Config.Image}} status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' "$c"; done 2>/dev/null || true
+            echo "-- docker stats"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} pids={{.PIDs}}' || true
+            echo "-- ss -s"; ss -s || true
+            echo "-- listeners on 80/443"; ss -ltnH 2>/dev/null | awk '$4 ~ /:(80|443)$/ {print $1,$2,$3,$4}' || true
+            echo "-- conntrack"; cat /proc/sys/net/netfilter/nf_conntrack_count /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo "no conntrack"
+            echo "-- dmesg conntrack/oom/drop (count)"; (dmesg 2>/dev/null | grep -ciE "nf_conntrack: table full|out of memory|oom-kill") || true
+            echo "-- TCP listen overflows/drops"; nstat -az TcpExtListenOverflows TcpExtListenDrops TcpExtTCPTimeouts TcpRetransSegs TcpOutSegs 2>/dev/null || netstat -s 2>/dev/null | grep -iE "overflow|listen queue|retransmit|SYNs to LISTEN" || true
+            echo "-- proxy containers"
+            PROXIES=$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy|nginx|traefik|proxy|frontend/ {print $1}')
+            echo "$PROXIES"
+            for c in $PROXIES; do
+              echo "== LOG SUMMARY $c (last 200 lines of access, counts only)"
+              docker logs --tail 200 "$c" > /tmp/.fa_$$ 2>&1 || true
+              # caddy json: status + duration ; nginx combined: status field after request
+              echo "status counts (json):"; grep -o '"status":[0-9]*' /tmp/.fa_$$ | sort | uniq -c | sort -rn | head -12
+              echo "status counts (combined):"; grep -oE '" [1-5][0-9][0-9] ' /tmp/.fa_$$ | sort | uniq -c | sort -rn | head -12
+              echo "duration buckets (json, seconds):"; grep -o '"duration":[0-9.e-]*' /tmp/.fa_$$ | cut -d: -f2 | awk '{d=$1+0; b=(d<0.05)?"<50ms":(d<0.25)?"50-250ms":(d<1)?"250ms-1s":(d<5)?"1-5s":(d<20)?"5-20s":">=20s"; c[b]++} END{for(k in c)print c[k],k}' | sort -rn
+              echo "log lines total: $(wc -l < /tmp/.fa_$$)"
+              rm -f /tmp/.fa_$$
+              echo "error/warn types, last 1h:"
+              docker logs --since 1h "$c" 2>&1 | grep -oiE 'upstream timed out|connect\(\) failed|worker_connections|limit_req|limiting requests|i/o timeout|dial tcp[^"]{0,40}|context deadline exceeded|no route to host|connection reset by peer|too many open files|tls: [a-z ]{0,40}|read tcp|write tcp|504|502|499|"level":"error"|"level":"warn"|obtaining certificate|certificate' | sort | uniq -c | sort -rn | head -20
+            done
+            echo "-- host nginx/caddy services"; systemctl is-active nginx caddy fail2ban ufw 2>&1 || true
+            echo "-- nginx -T limit_ (host)"; (command -v nginx >/dev/null && nginx -T 2>/dev/null | grep -nE 'limit_(req|conn)|worker_(processes|connections)|keepalive|proxy_(read|connect)_timeout|listen' | head -40) || echo "no host nginx"
+            echo "-- nginx -T limit_ (frontend container)"; docker exec campaignshub-frontend nginx -T 2>/dev/null | grep -nE 'limit_(req|conn)|worker_(processes|connections)|keepalive_timeout|proxy_(read|connect)_timeout' | head -20 || true
+            echo "-- caddy rate limit config (container)"; for c in $(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy/ {print $1}'); do docker exec "$c" sh -c 'grep -nEi "rate_limit|rate-limit|servers|timeouts|keepalive|max_conns|log" /etc/caddy/Caddyfile 2>/dev/null' | head -30 || true; done
+            echo "-- fail2ban"; (command -v fail2ban-client >/dev/null && sudo -n fail2ban-client status 2>&1 | head -10) || echo "no fail2ban / not permitted"
+            echo "-- ufw/iptables rate rules"; (sudo -n ufw status 2>&1 | head -15) || true; (sudo -n iptables -S 2>/dev/null | grep -iE 'limit|recent|hashlimit|connlimit|DROP' | head -20) || echo "iptables not readable"
+            echo "-- cloud/host-level: public IP of VPS seen from itself"; curl -s -m 5 https://api.ipify.org || true; echo
+            echo "-- local loopback latency to services (on VPS)"
+            for u in https://api.campaignshub.io/api/v1/health https://campaignshub.io/robots.txt; do for i in 1 2 3 4 5 6 7 8 9 10; do curl -s -o /dev/null -m 20 -w "$u %{http_code} conn=%{time_connect} ttfb=%{time_starttransfer} total=%{time_total}\n" "$u"; done; done | awk '{print}' | sort | uniq -c | sort -rn | head -30
+            echo "== END FACTS-AVAIL"
             exit 0
             echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
             echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
