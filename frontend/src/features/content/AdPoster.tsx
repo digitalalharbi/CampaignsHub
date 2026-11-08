@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useUi } from '@/stores/ui'
 import { Film, Image as ImageIcon, ImageOff, LayoutGrid, ShoppingBag } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -6,14 +7,17 @@ import { platformColor } from '@/features/analytics/components'
 import { absenceLabel, absenceShort, assetAspect, clientAbsence, mediaFit, posterSource, previewShape, readPreview, type MediaAspect } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
+import { VideoPoster } from './VideoPoster'
 import { ProviderMark } from '@/components/ProviderMark'
 
 /**
  * AD-PREVIEW-001 — one still, drawn the same way on every surface that shows an ad.
  *
- * Never a `<video>`: a grid of twenty ads that each preloaded a stream costs a phone tens of
- * megabytes to open a page, and a player belongs in the panel somebody opened on purpose. When there
- * is nothing to draw, the reason is drawn instead — four sentences, never one grey box.
+ * Never a PLAYER: a grid of twenty ads that each preloaded a stream costs a phone tens of megabytes
+ * to open a page, and a player belongs in the panel somebody opened on purpose. The one `<video>` it
+ * draws is a film's own first frame, metadata only, for a film the platform sent without a still
+ * (CREATIVE-VIEWER-FORMATS-001). When there is nothing to draw, the reason is drawn instead — four
+ * sentences, never one grey box.
  */
 export function AdPoster({
   preview,
@@ -89,6 +93,10 @@ export function AdPoster({
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
   const src = posterSource(reading)
+  const film = reading.kind === 'video' && reading.poster === null ? reading.src : null
+  // A first frame the browser could not decode falls back to the stated absence, once per film.
+  const [filmFailed, setFilmFailed] = useState(false)
+  useEffect(() => setFilmFailed(false), [film])
 
   /*
    * The stated absence, drawn either because there was never a still to draw or because the browser
@@ -133,19 +141,24 @@ export function AdPoster({
       )
     }
 
-    // MEDIA-TRUTH-001 — a film the platform sent WITHOUT a cover frame still has one: its own first frame.
-    // Drawn from the real video (metadata only, paused, muted), never invented; the typed cover below
-    // is for the creative that has no media at all.
-    if (forClient && reading.kind === 'video' && reading.poster === null && reading.src) {
+    /*
+     * MEDIA-TRUTH-001 / CREATIVE-VIEWER-FORMATS-001 — a film the platform sent WITHOUT a cover frame
+     * still has one: its own first frame. Drawn from the real video (metadata only, paused, muted),
+     * never invented.
+     *
+     * This was the CLIENT's surfaces only, so the same Snapchat ad drew its frame on the live link
+     * and «Video — no cover» on the operator's Analytics grid and campaign centre — 242 live rows
+     * (117 collections whose top snap is a film, 125 videos) where the owner saw nothing. One cover
+     * rule for every surface; a browser that cannot decode falls back to the typed absence below.
+     */
+    if (film !== null && !filmFailed) {
       return (
-        <video
-          data-testid={testid ? `${testid}-first-frame` : undefined}
-          data-cover="video-first-frame"
-          src={`${reading.src}#t=0.1`}
-          preload="metadata"
-          muted
-          playsInline
-          aria-label={name}
+        <VideoPoster
+          src={film}
+          testid={testid ? `${testid}-first-frame` : 'ad-poster-first-frame'}
+          cover="video-first-frame"
+          label={name}
+          onUnavailable={() => setFilmFailed(true)}
           className={`rounded-lg bg-surface-secondary ${fit === 'cover' ? 'object-cover' : 'object-contain'} ${className}`}
         />
       )

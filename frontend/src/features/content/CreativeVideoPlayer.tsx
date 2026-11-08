@@ -3,6 +3,7 @@ import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { aspectClass } from './adPreview'
 import { formatClock } from './format'
 import { useUi } from '@/stores/ui'
+import { VideoPoster } from './VideoPoster'
 
 /**
  * §15.4 — a video player, rather than a thumbnail with a play icon on it.
@@ -104,6 +105,8 @@ export function CreativeVideoPlayer({
   const shellRef = useRef<HTMLDivElement>(null)
 
   const [armed, setArmed] = useState(false)
+  const [firstFrameFailed, setFirstFrameFailed] = useState(false)
+  useEffect(() => setFirstFrameFailed(false), [src])
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
@@ -245,6 +248,25 @@ export function CreativeVideoPlayer({
           setVolume(e.currentTarget.volume)
         }}
       />
+
+      {/*
+        CREATIVE-VIEWER-FORMATS-001 — a film with no still is not a black box before it plays.
+
+        The viewer drew `<video>` with no source until Play, and with no `poster` there was nothing
+        to paint: a Snapchat top snap or a collection's film hero opened as a black rectangle under a
+        play button (measured on the live link, «May 11 … AD9»). Its own first frame is the cover —
+        the same metadata-only frame the content grid draws — laid under the play button, and gone
+        the moment the reader plays. A browser that cannot decode it leaves the black box it had.
+      */}
+      {!armed && !poster && !firstFrameFailed && (
+        <VideoPoster
+          src={src}
+          testid="video-player-first-frame"
+          cover="video-first-frame"
+          onUnavailable={() => setFirstFrameFailed(true)}
+          className="absolute inset-0 h-full w-full bg-black object-contain"
+        />
+      )}
 
       {!armed && (
         <button
