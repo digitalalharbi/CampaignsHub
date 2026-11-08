@@ -17,6 +17,7 @@ export type ReportSectionKey =
   | 'budget_pacing'
   | 'funnel'
   | 'content_performance'
+  | 'content_format_comparison'
   | 'site_measurement'
   | 'store_analytics'
   | 'ga4_overview'
@@ -93,20 +94,28 @@ const GA4_TABLE_ORDER = ['sources', 'campaigns', 'landing_pages', 'products', 'c
  * by hand, so each table is split into pages of eight rows, never shrunk to fit: the slide id carries the table
  * and `range` the rows.
  */
-export function withGa4Slides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+/**
+ * REPORT-WEBSITE-TAB-001 — a snapshot saved before the website tab carries no `website_layout` stamp, and renders as it was frozen:
+ * its pages in their old order, the store-pulse page included («أي تغيير في Snapshot محفوظ يجب أن يحافظ على النسخة التاريخية»).
+ * The stamp is written by the generator into every new snapshot; it is never added to or removed from a stored one.
+ */
+export function frozenBeforeWebsiteTab(data: object | null | undefined): boolean {
+  return data != null && (data as { website_layout?: unknown }).website_layout == null
+}
+
+/** The pages exactly as a pre-website-tab snapshot laid them out (GA4-REPORT-SECTIONS-001 / GA4-ATTRIBUTION-MATCH-001). */
+function legacyGa4Slides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
   slides: S[],
-  data: WithReportSections & { ga4_overview?: unknown; ga4_acquisition?: unknown; ga4_platform_gap?: unknown; ga4_attribution?: unknown; ga4_pulse?: unknown; ga4_classification?: unknown; ga4_products?: { table?: { rows?: unknown[] } } | null; ga4_gap_reasons?: unknown; ga4_tables?: { tables?: Partial<Record<(typeof GA4_TABLE_ORDER)[number], { rows?: unknown[] } | null>> } | null },
-  paged = false,
+  data: Parameters<typeof withGa4Slides>[1],
+  paged: boolean,
 ): S[] {
   const list = data.report_sections
   const named = (key: string, value: unknown) => Array.isArray(list) && (list as string[]).includes(key) && value != null
   if (named('ga4_overview', data.ga4_overview)) slides.push({ id: '__ga4_overview', type: '__ga4_overview', order: 9990, visible: true } as S)
   if (named('ga4_acquisition', data.ga4_acquisition)) slides.push({ id: '__ga4_acquisition', type: '__ga4_acquisition', order: 9991, visible: true } as S)
   if (named('ga4_platform_gap', data.ga4_platform_gap)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9992, visible: true } as S)
-  // GA4-ATTRIBUTION-MATCH-001 — the measurement parts, one page each; a table inside is its fixed page, never a shrunken one.
   if (named('ga4_pulse', data.ga4_pulse)) slides.push({ id: '__ga4_pulse', type: '__ga4_pulse', order: 9994, visible: true } as S)
   if (named('ga4_attribution', data.ga4_attribution)) {
-    // On paper the platform rows are split across pages of six, never shrunk onto one.
     const n = ((data.ga4_attribution as { platforms?: unknown[] }).platforms ?? []).length
     if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9995, visible: true } as S)
     else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9995, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
@@ -116,7 +125,6 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
     const groups = (data.ga4_classification as { groups?: Record<string, { rows?: unknown[] }> }).groups ?? {}
     if (!paged) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9996, visible: true } as S)
     else {
-      // One page per grouping and per eight rows: a long grouping splits, so no row is cut and no page is shrunk.
       for (const [group, block] of Object.entries(groups)) {
         const n = block.rows?.length ?? 0
         for (let i = 0; i < Math.max(n, 1); i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_classification:${group}:${i}`, type: '__ga4_classification', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, n)] } as S)
@@ -129,16 +137,71 @@ export function withGa4Slides<S extends { id: string; type: string; order: numbe
     else for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_products:${i}`, type: '__ga4_products', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
   }
   if (named('ga4_tables', data.ga4_tables)) {
-    if (!paged) {
-      slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9993, visible: true } as S)
-    } else {
+    if (!paged) slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9993, visible: true } as S)
+    else {
       for (const table of GA4_TABLE_ORDER) {
         const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
+        for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9993, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
+      }
+    }
+  }
+
+  return slides
+}
+
+export function withGa4Slides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { website_layout?: unknown; ga4_overview?: unknown; ga4_acquisition?: unknown; ga4_platform_gap?: unknown; ga4_attribution?: unknown; ga4_pulse?: unknown; ga4_classification?: unknown; ga4_products?: { table?: { rows?: unknown[] } } | null; ga4_gap_reasons?: unknown; ga4_tables?: { tables?: Partial<Record<(typeof GA4_TABLE_ORDER)[number], { rows?: unknown[] } | null>> } | null },
+  paged = false,
+): S[] {
+  if (frozenBeforeWebsiteTab(data)) return legacyGa4Slides(slides, data, paged)
+  const list = data.report_sections
+  const named = (key: string, value: unknown) => Array.isArray(list) && (list as string[]).includes(key) && value != null
+  /*
+   * REPORT-WEBSITE-TAB-001 — the website pages follow the live link's «الموقع» tab, in its order: key figures and trend,
+   * channels / devices / website funnel, the attribution match, the website against the platforms, why the gap, the
+   * classification, the tables, the products. The one headline strip of the summary lives on the live link only.
+   */
+  // The headline strip (`ga4_pulse`) is a live-link element: a page of four figures on paper measured empty (util 0.01) and failed the layout gate, and the same figures are the first tiles of the overview page.
+  if (named('ga4_overview', data.ga4_overview)) slides.push({ id: '__ga4_overview', type: '__ga4_overview', order: 9990, visible: true } as S)
+  if (named('ga4_acquisition', data.ga4_acquisition)) slides.push({ id: '__ga4_acquisition', type: '__ga4_acquisition', order: 9991, visible: true } as S)
+  if (named('ga4_attribution', data.ga4_attribution)) {
+    // On paper the platform rows are split across pages of six, never shrunk onto one.
+    const n = ((data.ga4_attribution as { platforms?: unknown[] }).platforms ?? []).length
+    if (!paged || n <= GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: '__ga4_attribution', type: '__ga4_attribution', order: 9992, visible: true } as S)
+    else for (let i = 0; i < n; i += GA4_MATCH_ROWS_PER_PAGE) slides.push({ id: `__ga4_attribution:${i}`, type: '__ga4_attribution', order: 9992, visible: true, range: [i, Math.min(i + GA4_MATCH_ROWS_PER_PAGE, n)] } as S)
+  }
+  // The attribution match already sets the website beside each platform: the older comparison page stands only without it.
+  if (named('ga4_platform_gap', data.ga4_platform_gap) && !named('ga4_attribution', data.ga4_attribution)) slides.push({ id: '__ga4_gap', type: '__ga4_gap', order: 9993, visible: true } as S)
+  if (named('ga4_gap_reasons', data.ga4_gap_reasons)) slides.push({ id: '__ga4_reasons', type: '__ga4_reasons', order: 9994, visible: true } as S)
+  if (named('ga4_classification', data.ga4_classification)) {
+    const groups = (data.ga4_classification as { groups?: Record<string, { rows?: unknown[] }> }).groups ?? {}
+    if (!paged) slides.push({ id: '__ga4_classification', type: '__ga4_classification', order: 9995, visible: true } as S)
+    else {
+      // One page per grouping and per eight rows: a long grouping splits, so no row is cut and no page is shrunk.
+      for (const [group, block] of Object.entries(groups)) {
+        const n = block.rows?.length ?? 0
+        for (let i = 0; i < Math.max(n, 1); i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_classification:${group}:${i}`, type: '__ga4_classification', order: 9995, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, n)] } as S)
+      }
+    }
+  }
+  if (named('ga4_tables', data.ga4_tables)) {
+    if (!paged) {
+      slides.push({ id: '__ga4_tables', type: '__ga4_tables', order: 9996, visible: true } as S)
+    } else {
+      // The products have their own pages when that part is named: one product table, never two.
+      for (const table of GA4_TABLE_ORDER.filter((t) => t !== 'products' || !named('ga4_products', data.ga4_products))) {
+        const rows = Math.min(data.ga4_tables?.tables?.[table]?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
         for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) {
-          slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9993, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
+          slides.push({ id: `__ga4_table:${table}:${i}`, type: '__ga4_table', order: 9996, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
         }
       }
     }
+  }
+  if (named('ga4_products', data.ga4_products)) {
+    const rows = Math.min(data.ga4_products?.table?.rows?.length ?? 0, GA4_PRINT_ROWS_MAX)
+    if (!paged || rows <= GA4_ROWS_PER_PAGE) slides.push({ id: '__ga4_products:0', type: '__ga4_products', order: 9997, visible: true, range: [0, Math.min(rows, GA4_ROWS_PER_PAGE)] } as S)
+    else for (let i = 0; i < rows; i += GA4_ROWS_PER_PAGE) slides.push({ id: `__ga4_products:${i}`, type: '__ga4_products', order: 9997, visible: true, range: [i, Math.min(i + GA4_ROWS_PER_PAGE, rows)] } as S)
   }
 
   return slides
@@ -205,3 +268,36 @@ export function withEvidenceSlides<S extends { id: string; type: string; order: 
   return slides
 }
 
+
+/** CONTENT-FORMAT-COMPARISON-001 — format rows on one printed table page; a longer table is split, never shrunk. */
+export const FORMAT_ROWS_PER_PAGE = 6
+
+/**
+ * CONTENT-FORMAT-COMPARISON-001 — the deck's «مقارنة أنواع المحتوى» pages, only where the server named the part and
+ * sent it (a snapshot from before the part existed gains nothing).
+ *
+ * On screen: one page per objective, with its switches and its drill. On paper (`paged`): per objective a charts page
+ * (share, comparison, ranking) and the table split into pages of `FORMAT_ROWS_PER_PAGE` rows.
+ */
+export function withFormatComparisonSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & { content_format_comparison?: { objectives?: Array<{ family: string; formats?: unknown[] }> } | null },
+  paged = false,
+): S[] {
+  const list = data.report_sections
+  const block = data.content_format_comparison
+  if (!Array.isArray(list) || !(list as string[]).includes('content_format_comparison') || block == null) return slides
+  for (const objective of block.objectives ?? []) {
+    if (!paged) {
+      slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
+      continue
+    }
+    slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
+    const rows = objective.formats?.length ?? 0
+    for (let i = 0; i < rows; i += FORMAT_ROWS_PER_PAGE) {
+      slides.push({ id: `__formats_table:${objective.family}:${i}`, type: '__formats_table', order: 9989, visible: true, range: [i, Math.min(i + FORMAT_ROWS_PER_PAGE, rows)] } as S)
+    }
+  }
+
+  return slides
+}

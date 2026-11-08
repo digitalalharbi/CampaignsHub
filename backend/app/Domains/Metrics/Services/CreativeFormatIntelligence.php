@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -241,7 +242,17 @@ final class CreativeFormatIntelligence
      * what the figures are denominated in is a fact about the data, and a project whose stored rows
      * carry two currencies has no single one to name.
      */
+    public function projectCurrency(string $projectId): ?string
+    {
+        return $this->currency($projectId);
+    }
+
     private function currency(string $projectId): ?string
+    {
+        return ReportReadMemo::remember('format-currency|'.$projectId, fn (): ?string => $this->readCurrency($projectId));
+    }
+
+    private function readCurrency(string $projectId): ?string
     {
         $currencies = DB::table('daily_metrics')
             ->where('project_id', $projectId)
@@ -254,11 +265,41 @@ final class CreativeFormatIntelligence
     }
 
     /**
+     * CONTENT-FORMAT-COMPARISON-001 — the creatives a scope may compare, for the per-format comparison.
+     *
+     * The one isolation path (ACCOUNT-SCOPE-ISOLATION-001 through `BoundAccountVisibility`, and a link's ceiling)
+     * is this class's; the comparison asks it rather than stating a second query that could see a different set.
+     *
+     * @param  array<string, mixed>|null  $ceiling
+     * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string, campaign_id: ?string, name: string}>
+     */
+    public function scopedCreatives(string $projectId, ?string $accountId = null, ?string $campaignId = null, ?array $ceiling = null): array
+    {
+        return $this->creatives($projectId, $accountId, $campaignId, $ceiling);
+    }
+
+    /**
      * The creatives this scope may compare, with the two facts the comparison groups on.
      *
-     * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string}>
+     * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string, campaign_id: ?string, name: string}>
      */
     private function creatives(string $projectId, ?string $accountId, ?string $campaignId, ?array $ceiling = null): array
+    {
+        /*
+         * CONTENT-FORMAT-COMPARISON-001 / PERF-RECOVERY-001 — the format intelligence and the per-format comparison
+         * ask this same question inside one report build; it is read once. Every input is in the key.
+         */
+        return ReportReadMemo::remember(
+            'format-creatives|'.$projectId.'|'.($accountId ?? '').'|'.($campaignId ?? '').'|'.md5((string) json_encode($ceiling)),
+            fn (): array => $this->readCreatives($projectId, $accountId, $campaignId, $ceiling),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $ceiling
+     * @return list<array{id: string, format: ?string, objective: ?string, account_id: ?string, campaign_id: ?string, name: string}>
+     */
+    private function readCreatives(string $projectId, ?string $accountId, ?string $campaignId, ?array $ceiling = null): array
     {
         $rows = ExternalCreative::query()
             ->where('external_creatives.project_id', $projectId)
@@ -277,7 +318,7 @@ final class CreativeFormatIntelligence
                 }
                 app(CreativeRows::class)->applyFilters($q, array_diff_key((array) $ceiling, ['account_ids' => true]));
             })
-            ->get(['id', 'format', 'campaign_id', 'external_account_id']);
+            ->get(['id', 'format', 'campaign_id', 'external_account_id', 'name']);
 
         $objectives = UnifiedCampaign::query()
             ->whereIn('id', $rows->pluck('campaign_id')->filter()->unique()->all())
@@ -288,6 +329,8 @@ final class CreativeFormatIntelligence
             'format' => $c->format,
             'objective' => $c->campaign_id === null ? null : ($objectives[$c->campaign_id] ?? null),
             'account_id' => $c->external_account_id === null ? null : (string) $c->external_account_id,
+            'campaign_id' => $c->campaign_id === null ? null : (string) $c->campaign_id,
+            'name' => (string) ($c->name ?? ''),
         ])->all();
     }
 

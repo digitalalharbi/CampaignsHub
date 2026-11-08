@@ -56,7 +56,7 @@ final class EstablishSandboxConnection
                 $discovered->push($this->account($connection, 'ad_account', $acct['id'], $acct['name'], $acct['currency']));
             }
             $discovered->push($this->account($connection, 'pixel', 'sbx-pixel-1', 'Sandbox Pixel'));
-            $discovered->push($this->account($connection, 'analytics_property', 'sbx-ga4-1', 'Sandbox GA4 Property'));
+            $discovered->push($this->account($connection, 'analytics_property', 'sbx-ga4-1', 'Sandbox Website Property'));
             $discovered->push($this->account($connection, 'ecommerce_store', 'sbx-store-1', 'Sandbox Store'));
 
             $this->audit->log(

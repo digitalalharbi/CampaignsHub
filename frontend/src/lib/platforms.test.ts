@@ -76,7 +76,7 @@ describe('the product platform order', () => {
   it('names the stores and the measurement property without ranking them as ad platforms', () => {
     expect(platformLabel('salla', true)).toBe('سلة')
     expect(platformLabel('zid', false)).toBe('Zid')
-    expect(platformLabel('ga4', true)).toBe('جوجل أناليتكس 4')
+    expect(platformLabel('ga4', true)).toBe('الموقع')
     expect(platformLabel('openai_ads', true)).toBe('إعلانات ChatGPT')
     expect(sortPlatforms(['ga4', 'salla', 'snapchat'])).toEqual(['snapchat', 'ga4', 'salla'])
   })

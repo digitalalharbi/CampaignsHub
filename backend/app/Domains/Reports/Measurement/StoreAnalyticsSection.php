@@ -53,8 +53,8 @@ final class StoreAnalyticsSection
             'title_ar' => 'تحليلات المتجر والزيارات',
             'title_en' => 'Store & traffic analytics',
             'not_summed' => true,
-            'note_ar' => 'المتجر وGA4 مصدران مستقلان، لكل منهما نموذجه وعملته. لا يُجمعان ولا يُفترض تطابقهما.',
-            'note_en' => 'The store and GA4 are separate sources, each with its own model and currency. They are not added and not assumed to match.',
+            'note_ar' => 'المتجر والموقع مصدران مستقلان، لكل منهما نموذجه وعملته. لا يُجمعان ولا يُفترض تطابقهما.',
+            'note_en' => 'The store and the website are separate sources, each with its own model and currency. They are not added and not assumed to match.',
             'store' => $store,
             'site' => $site,
         ];
@@ -135,8 +135,8 @@ final class StoreAnalyticsSection
         $split = $this->traffic->page($tenantId, $projectId, $from, $to, ['breakdown' => 'traffic_class'], all: true);
 
         return [
-            'label_ar' => 'ما قاسه الموقع (GA4)',
-            'label_en' => 'Site-measured (GA4)',
+            'label_ar' => 'ما قاسه الموقع',
+            'label_en' => 'Site-measured',
             'currency' => $hideRevenue ? null : ($measured['currency'] ?? null),
             'totals' => ['sessions' => $measured['totals']['sessions'] ?? null, 'users' => $measured['totals']['users'] ?? null, 'transactions' => $measured['totals']['transactions'] ?? null, 'revenue' => $hideRevenue ? null : ($measured['totals']['revenue'] ?? null)],
             'engagement_rate' => $measured['rates']['engagement_rate'] ?? null,

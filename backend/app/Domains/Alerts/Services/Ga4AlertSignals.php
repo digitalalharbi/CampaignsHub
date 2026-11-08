@@ -87,7 +87,7 @@ final class Ga4AlertSignals
         }
 
         return $this->breach($project, "ga4:$key", "$en · ".abs((int) round($change)).'%', "$ar · ".abs((int) round($change)).'%',
-            'GA4 measured a change of '.round($change, 1).'% against the previous period.', 'قاس GA4 تغيّرًا بنسبة '.round($change, 1).'% عن الفترة السابقة.',
+            'The website measured a change of '.round($change, 1).'% against the previous period.', 'قاس الموقع تغيّرًا بنسبة '.round($change, 1).'% عن الفترة السابقة.',
             ['key' => $key, 'current' => $k['current'], 'previous' => $k['previous'], 'change_pct' => round($change, 1), 'from' => $from->toDateString(), 'to' => $to->toDateString()]);
     }
 
@@ -121,8 +121,8 @@ final class Ga4AlertSignals
         }
         $pct = (int) round($worst['share'] * 100);
 
-        return $this->breach($project, 'ga4:gap:'.$worst['platform'], 'Platform claims exceed GA4 · '.$pct.'%', 'ادّعاء المنصة يفوق GA4 · '.$pct.'%',
-            ucfirst($worst['platform']).' claimed '.$pct.'% more conversions than GA4 credited to it.', 'ادّعت '.$worst['platform'].' تحويلات أكثر بنسبة '.$pct.'% مما نسبه GA4 لها.',
+        return $this->breach($project, 'ga4:gap:'.$worst['platform'], 'Platform claims exceed the website · '.$pct.'%', 'ادّعاء المنصة يفوق الموقع · '.$pct.'%',
+            ucfirst($worst['platform']).' claimed '.$pct.'% more conversions than the website credited to it.', 'ادّعت '.$worst['platform'].' تحويلات أكثر بنسبة '.$pct.'% مما نسبه الموقع لها.',
             ['platform' => $worst['platform'], 'share' => $worst['share']]);
     }
 
@@ -154,7 +154,7 @@ final class Ga4AlertSignals
         }
 
         return $this->breach($project, 'ga4:tracking', 'Tracking may be broken', 'قد يكون التتبع معطّلًا',
-            'GA4 sessions fell '.(int) round($drop * 100).'% while the platforms still report activity.', 'انخفضت زيارات GA4 '.(int) round($drop * 100).'% بينما تواصل المنصات تسجيل نشاط.',
+            'Website sessions fell '.(int) round($drop * 100).'% while the platforms still report activity.', 'انخفضت زيارات الموقع '.(int) round($drop * 100).'% بينما تواصل المنصات تسجيل نشاط.',
             ['sessions' => $k['current'], 'previous' => $k['previous'], 'drop' => round($drop, 4)], 'critical');
     }
 
@@ -178,8 +178,8 @@ final class Ga4AlertSignals
         }
         $share = round($unmatched / $total, 4);
 
-        return $this->breach($project, 'ga4:unmatched', 'Ad spend with no GA4 trace · '.(int) round($share * 100).'%', 'إنفاق بلا أثر في GA4 · '.(int) round($share * 100).'%',
-            (int) round($share * 100).'% of ad spend sits in campaigns GA4 saw no visit from.', (int) round($share * 100).'% من الإنفاق في حملات لم يرصد GA4 أي زيارة منها.',
+        return $this->breach($project, 'ga4:unmatched', 'Clicks outside tracking · '.(int) round($share * 100).'%', 'نقرات خارج التتبع · '.(int) round($share * 100).'%',
+            (int) round($share * 100).'% of ad spend is in campaigns whose clicks reached no measured visit (consent, blockers, untagged links).', (int) round($share * 100).'% من الإنفاق في حملات لم تصل نقراتها إلى زيارة مقاسة (الموافقة، مانعات الإعلانات، روابط دون وسم).',
             ['share' => $share, 'campaigns' => $m['unmatched']['campaigns'] ?? 0]);
     }
 

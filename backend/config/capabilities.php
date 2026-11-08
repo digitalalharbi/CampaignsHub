@@ -30,7 +30,7 @@ return [
         'campaign_analytics' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Campaign analytics', 'ar' => 'تحليلات الحملات']],
         'premium_client_reports' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Premium client reports', 'ar' => 'تقارير العملاء المتقدمة']],
         'commerce_intelligence' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Commerce intelligence', 'ar' => 'ذكاء المتاجر']],
-        'ga4_intelligence' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'GA4 intelligence', 'ar' => 'ذكاء GA4']],
+        'ga4_intelligence' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Website intelligence', 'ar' => 'ذكاء الموقع']],
         'smart_links' => ['activation' => 'default_on', 'default_entitled' => true, 'label' => ['en' => 'Smart links', 'ar' => 'الروابط الذكية']],
         'influencer_intelligence' => ['activation' => 'default_on', 'default_entitled' => false, 'legacy_module' => 'influencer_marketing', 'label' => ['en' => 'Influencer intelligence', 'ar' => 'ذكاء المؤثرين']],
         'attribution_intelligence' => ['activation' => 'explicit', 'default_entitled' => false, 'label' => ['en' => 'Attribution intelligence', 'ar' => 'ذكاء الإسناد']],

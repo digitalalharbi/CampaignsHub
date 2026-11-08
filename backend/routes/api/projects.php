@@ -344,6 +344,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('creatives/format-intelligence', [CreativeAnalysisController::class, 'formatIntelligence'])
         ->middleware('project.can:campaigns.view')
         ->name('creatives.format-intelligence');
+    // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: per format and objective, results, cost and the winner.
+    Route::get('creatives/format-comparison', [CreativeAnalysisController::class, 'formatComparison'])
+        ->middleware('project.can:campaigns.view')
+        ->name('creatives.format-comparison');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->middleware('project.can:campaigns.view')->name('creatives.compare');
     /*
      * The group listing, which this surface was missing while the workspace surface had it.

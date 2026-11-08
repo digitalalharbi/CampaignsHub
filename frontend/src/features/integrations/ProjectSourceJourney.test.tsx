@@ -82,7 +82,7 @@ const META = { key: 'meta', label: 'Meta Ads', label_ar: 'ميتا', kind: 'adve
 const storeBoard = (key: string, state: StoreProvider['state'], stores: StoreProvider['stores'] = []): StoreProvider =>
   ({ key, label: key === 'salla' ? 'Salla' : 'Zid', state, connection_error: null, token_expires_at: null, stores, supports_abandoned_carts: key === 'salla' })
 const ga4Board = (state: MeasurementProvider['state'], properties: MeasurementProvider['properties'] = []): MeasurementProvider =>
-  ({ key: 'ga4', label: 'Google Analytics 4', label_ar: 'جوجل أناليتكس 4', state, connection_error: null, discovered_count: properties.length, selected_count: properties.length, properties })
+  ({ key: 'ga4', label: 'Google Analytics', label_ar: 'جوجل أناليتكس', state, connection_error: null, discovered_count: properties.length, selected_count: properties.length, properties })
 
 const source = (over: Partial<LinkSourceOption>): LinkSourceOption => ({ external_id: 'store-9', name: 'متجر تجريبي', detail: 'demo.salla.sa', currency: 'SAR', linked: null, ...over })
 
@@ -127,7 +127,7 @@ describe('the project link journey: a store and a GA4 property are chosen from t
     const order = screen.getAllByTestId(/^link-platform-row-/).map((el) => el.getAttribute('data-testid'))
     expect(order).toEqual(['link-platform-row-meta', 'link-platform-row-salla', 'link-platform-row-zid', 'link-platform-row-ga4'])
     expect(screen.getByTestId('link-platform-row-salla')).toHaveTextContent('سلة')
-    expect(screen.getByTestId('link-platform-row-ga4')).toHaveTextContent('جوجل أناليتكس 4')
+    expect(screen.getByTestId('link-platform-row-ga4')).toHaveTextContent('الموقع')
     // Asked for this project and for no other; never the whole workspace.
     expect(boards.asked).toEqual(expect.arrayContaining([['stores', 'p-1'], ['measurement', 'p-1']]))
     expect(boards.asked.every(([, project]) => project === 'p-1')).toBe(true)

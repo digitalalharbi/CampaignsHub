@@ -225,8 +225,29 @@ final class CreativeRows
             }
         }
 
+        /*
+         * CREATIVE-COVERS-COVERAGE-001 — a creative belongs to EVERY campaign one of its ads ran in.
+         *
+         * A creative row is one per account and creative id, so when two campaigns run ads with the same creative
+         * the row's own `campaign_id` names only the campaign imported last. Production 2026-11-07, the Owner's live
+         * link: all 13 Meta creatives of the project were filed under «4Aug 2026- Sales», which has no figures,
+         * while their ads ran — and spent — under «4Aug 2026- Sales -KSA». The link's ceiling is the campaigns with
+         * figures, so every Meta creative fell outside it and Meta vanished from the report's content (0 of 800
+         * rows) while its totals stood in the same report. The ads say where the creative ran; both are read.
+         */
+        if (($campaignIds = $list('campaign_ids')) !== []) {
+            $query->where(function ($q) use ($campaignIds): void {
+                $q->whereIn('external_creatives.campaign_id', $campaignIds)
+                    ->orWhereExists(function ($sub) use ($campaignIds): void {
+                        $sub->selectRaw('1')
+                            ->from('external_ads as ran_in')
+                            ->whereColumn('ran_in.creative_id', 'external_creatives.id')
+                            ->whereIn('ran_in.unified_campaign_id', $campaignIds);
+                    });
+            });
+        }
+
         foreach ([
-            'campaign_ids' => 'campaign_id',
             'ad_set_ids' => 'external_ad_set_id',
             'project_ids' => 'project_id',
         ] as $param => $column) {

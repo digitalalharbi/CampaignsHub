@@ -236,6 +236,18 @@ final class CreativeMetrics
     ];
 
     /**
+     * CONTENT-FORMAT-COMPARISON-001 — the volume a ratio divides by, read from the one map that defines the ratio.
+     *
+     * A «cost per result» is a ratio this service already derives (`cpa` is spend over conversions, `cpl` spend over
+     * leads …). The comparison needs to name the RESULT that cost is per, and stating that pairing a second time is how
+     * a cost per lead comes to sit beside a count of conversions. Null for a key that is not a derived ratio.
+     */
+    public static function ratioDenominator(string $ratio): ?string
+    {
+        return self::RATIO_INPUTS[$ratio][1] ?? null;
+    }
+
+    /**
      * Totals per creative for a window, with derived KPIs and a map of what was actually reported.
      *
      * @param  list<string>  $creativeIds
@@ -281,6 +293,20 @@ final class CreativeMetrics
         }
 
         $size = max(1, $size);
+
+        // CONTENT-FORMAT-COMPARISON-001 — the format intelligence and the per-format comparison bucket the same creatives the same way in one build.
+        return ReportReadMemo::remember(
+            'creative-blocks|'.app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId().'|'.$origin->toDateString().'|'.$size.'|'.$blocks.'|'.$to->toDateString().'|'.md5(implode(',', $creativeIds)),
+            fn (): array => $this->readBlocks($creativeIds, $origin, $size, $blocks, $to),
+        );
+    }
+
+    /**
+     * @param  list<string>  $creativeIds
+     * @return list<array<string, array<string, mixed>>>
+     */
+    private function readBlocks(array $creativeIds, Carbon $origin, int $size, int $blocks, Carbon $to): array
+    {
         $last = $origin->copy()->addDays($size * $blocks - 1)->min($to);
         $bucketing = ['origin' => $origin, 'size' => $size];
 

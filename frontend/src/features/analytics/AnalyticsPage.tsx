@@ -154,6 +154,7 @@ import { useWidgetLayout } from '@/features/widgets/api'
 import { AdPoster } from '@/features/content/AdPoster'
 import { usePortalPath } from '@/app/portalPath'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { FormatComparisonPanel } from './FormatComparisonPanel'
 import { creativeDialogFigures, type DialogFigure } from '@/features/content/creativeDialogFigures'
 import { metricLabel } from '@/features/content/metrics'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
@@ -222,7 +223,7 @@ const TAB_GROUPS = [
       { id: 'funnel', ar: 'القمع', en: 'Funnel' },
       { id: 'store', ar: 'المتجر', en: 'Store' },
       // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platforms.
-      { id: 'site', ar: 'الموقع (GA4)', en: 'Site (GA4)' },
+      { id: 'site', ar: 'الموقع (الموقع)', en: 'Site (Website)' },
     ],
   },
   {
@@ -3110,6 +3111,22 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           />
         )}
       </Panel>
+
+      {/*
+        CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», the Owner's request of 2026-11-07.
+
+        Not the removed verdict below: no format is declared better in general. The comparison is per objective, the
+        format is the platform's token, the verdict is the lowest cost per result in this window (never ROAS) and a
+        small sample cannot win — all decided by the server, which this panel only draws. Its drill opens the same
+        preview dialog as the table above.
+      */}
+      <FormatComparisonPanel
+        projectId={projectId}
+        range={range}
+        providers={filters.provider?.length ? filters.provider : undefined}
+        campaigns={filters.campaign?.length ? filters.campaign : undefined}
+        onOpen={(card) => setOpenCreative(card)}
+      />
 
       {/*
         CONTENT-FORMAT-ROAS-REMOVED-001 — the format READING is gone too, not just the comparison.

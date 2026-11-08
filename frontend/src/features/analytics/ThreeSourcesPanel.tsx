@@ -39,7 +39,7 @@ export function ThreeSourcesPanel({ projectId, range, ar }: { projectId: string;
   const material = d.rows.filter((r) => r.differences.material)
 
   return (
-    <ChartCard title={ar ? 'المنصات والمتجر وGA4 جنبًا إلى جنب' : 'Platforms, store and GA4, side by side'} subtitle={ar ? 'ثلاثة مصادر مستقلة لكل منها نموذجه. لا تُجمع ولا يُفترض تطابقها.' : 'Three separate sources, each with its own model. They are not added and not assumed to match.'}>
+    <ChartCard title={ar ? 'المنصات والمتجر والموقع جنبًا إلى جنب' : 'Platforms, store and website, side by side'} subtitle={ar ? 'ثلاثة مصادر مستقلة لكل منها نموذجه. لا تُجمع ولا يُفترض تطابقها.' : 'Three separate sources, each with its own model. They are not added and not assumed to match.'}>
       <div data-testid="three-sources" className="min-w-0 space-y-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {d.sources.map((s) => (

@@ -247,9 +247,9 @@ final class ReportSectionController extends Controller
             'visible' => $resolved->visible(),
             'availability_judged' => $resolved->availabilityJudged,
             // REPORT-COMPOSITION-CONTROL-001 — what the report offers, what this link chose, and the result.
-            'report_views' => $report->sectionSettings()->views(),
-            'views' => $link->views(),
-            'effective_views' => $surfaces->viewsFor($report, $link) ?? ReportViews::VIEWS,
+            'report_views' => ReportViews::visible($report->sectionSettings()->views()),
+            'views' => ReportViews::visible($link->views()),
+            'effective_views' => ReportViews::visible($surfaces->viewsFor($report, $link)) ?? ReportViews::VIEWS,
             'offers_views' => $surfaces->offersViews($report, $link),
             'generic_names' => GenericNames::ofShare($link),
             'generic_names_of_report' => GenericNames::ofReport($report),
@@ -340,10 +340,10 @@ final class ReportSectionController extends Controller
         }
         $request->validate([
             'views' => ['array', 'min:1'],
-            'views.*' => [Rule::in(ReportViews::VIEWS)],
+            'views.*' => [Rule::in([...ReportViews::VIEWS, ReportViews::WEBSITE_OFF])],
         ]);
 
-        return ReportViews::normalise($request->input('views'));
+        return ReportViews::normalise(ReportViews::explicit($request->input('views')));
     }
 
     /** @return list<string> */
@@ -500,7 +500,7 @@ final class ReportSectionController extends Controller
             'streams' => $settings->streams(),
             'ga4_hidden' => $settings->ga4Hidden(),
             // REPORT-COMPOSITION-CONTROL-001 — null is «every main section», which is what an untouched report offers.
-            'views' => $settings->views(),
+            'views' => ReportViews::visible($settings->views()),
             'offers_views' => app(ReportSectionSurfaces::class)->offersViews($report),
             'generic_names' => GenericNames::ofReport($report),
             'effective' => $settings->effective($this->registry, $audience),

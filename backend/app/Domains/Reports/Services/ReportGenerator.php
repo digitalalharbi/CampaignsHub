@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Context\ProjectContext;
@@ -494,11 +495,23 @@ final class ReportGenerator
                 ? app(StoreAnalyticsSection::class)->build((string) $report->tenant_id, (string) $report->project_id, $from, $to, false, $scope->accountIds === [] && $scope->resolvedCampaignIds() === [])
                 : null,
             /*
+             * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», FROZEN with the snapshot and cut for the report's
+             * audience before it is stored: a client snapshot never holds the spend it may not show. Read only when the
+             * operator left the part on, over the report's own scope.
+             */
+            ContentFormatComparison::KEY => $this->contentFormatComparison($report, $scope, $from, $to),
+            /*
              * GA4-REPORT-SECTIONS-001 — the four GA4 parts, FROZEN with the snapshot: the saved report keeps the figures
              * it was saved with, and the section system removes a part the operator hid. Read against this report's own
              * platform rows; a client-facing report never receives the campaigns table.
              */
             ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
+            /*
+             * REPORT-WEBSITE-TAB-001 — the layout this snapshot was frozen under. A snapshot WITHOUT this stamp was saved before the
+             * website tab existed and renders its pages exactly as then (its store-pulse page included); one with it renders the website
+             * pages in the tab's order. The stamp is never added to, or removed from, a stored snapshot.
+             */
+            'website_layout' => 1,
             'summary' => $this->executiveSummary($lens, $totals, $delta, $platforms, $campaigns, $currency ?? ''),
             /*
              * The professional analysis — §14.7.
@@ -1165,6 +1178,30 @@ final class ReportGenerator
 
         return ($results->configured() ? $results->over($campaigns, $destinations) : $none)
             + ['leads' => $leads->configured() ? $leads->leadBreakdown($campaigns, $destinations) : $none + ['landing' => null, 'native' => null]];
+    }
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — the report's own scope as the comparison's ceiling.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function contentFormatComparison(Report $report, ReportScope $scope, Carbon $from, Carbon $to): ?array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        $settings = $report->sectionSettings();
+        $contentOff = $settings->chose('content_performance') && ! $settings->enabled($registry->get('content_performance'), $audience);
+        if ($report->project_id === null || $contentOff || ! $settings->enabled($registry->get(ContentFormatComparison::KEY), $audience)) {
+            return null;
+        }
+
+        $block = app(ContentFormatComparison::class)->forScope((string) $report->project_id, $from, $to, ceiling: array_filter([
+            'account_ids' => $scope->accountIds,
+            'providers' => $scope->providers,
+            'campaign_ids' => $scope->resolvedCampaignIds() ?? [],
+        ], static fn ($v): bool => $v !== []) ?: null, drillRows: ContentFormatComparison::REPORT_DRILL_ROWS);
+
+        return ContentFormatComparison::forAudience($block, $audience !== 'internal', false, false);
     }
 
     /**

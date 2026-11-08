@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { Delta } from '@/components/ui/Delta'
 import { useUi } from '@/stores/ui'
-import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } from '@/styles/scale'
+import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
  * UX-KPI-PRESENTATION-001 — one card, and one grid, for every figure the product leads with.
@@ -95,6 +95,7 @@ export function StatCard({
   delta,
   spark,
   shape = 'auto',
+  lead = false,
   testid,
 }: {
   /**
@@ -155,6 +156,11 @@ export function StatCard({
    * choose is what a labelled figure looks like.
    */
   shape?: 'auto' | 'square'
+  /**
+   * REPORT-WEBSITE-TAB-001 — the group's headline card (Owner: «البطاقات الكبيرة + تحتها البطاقات الصغيرة الفرعية»): the value in the
+   * scale's lead size, the same one `MetricStrip` gives its lead item. The scale decides the size; the surface only says «lead».
+   */
+  lead?: boolean
   testid?: string
 }) {
   const grid = useContext(StatGridContext)
@@ -213,7 +219,7 @@ export function StatCard({
         dir="ltr"
         title={exact}
         data-testid={testid ? `${testid}-value` : undefined}
-        className={`min-h-9 text-start ${METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
+        className={`min-h-9 text-start ${lead ? METRIC_VALUE : METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
       >
         {value}
       </span>

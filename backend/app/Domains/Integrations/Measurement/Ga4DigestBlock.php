@@ -99,6 +99,6 @@ final class Ga4DigestBlock
             return null;
         }
 
-        return 'GA4 · '.implode(' · ', array_map(static fn (array $p): string => $ar && $p['label'] !== '' && str_starts_with($p['label'], 'فرق') ? $p['label'].' '.$p['value'] : trim($p['value'].' '.$p['label']), $parts));
+        return ($ar ? 'الموقع' : 'Website').' · '.implode(' · ', array_map(static fn (array $p): string => $ar && $p['label'] !== '' && str_starts_with($p['label'], 'فرق') ? $p['label'].' '.$p['value'] : trim($p['value'].' '.$p['label']), $parts));
     }
 }

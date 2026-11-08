@@ -5,7 +5,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
-import type { FormatIntelligencePayload } from '@/features/content/api'
+import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import type { BusinessStreamRow } from './BusinessStreamsSection'
@@ -643,6 +643,8 @@ export interface LivePayload {
   /** REPORT-EXECUTIVE-SUMMARY-001 — campaigns that spent, as a COUNT; `previous` null where the windows do not compare. */
   delivering_campaigns?: { current: number; previous: number | null }
   timeseries: Array<Record<string, unknown>>
+  /** REPORT-WEBSITE-TAB-001 — the same days per platform, for the interactive daily chart; money keys redacted exactly as `timeseries`'s are. */
+  platform_series?: Record<string, Array<Record<string, unknown>>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty on a client payload, and typed that way.
@@ -700,6 +702,8 @@ export interface LivePayload {
    * page would render the block and then read a key off it.
    */
   content_formats?: FormatIntelligencePayload | null
+  /** CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», cut for the link's reader on the server. */
+  content_format_comparison?: FormatComparisonPayload | null
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *
@@ -810,7 +814,8 @@ export interface LivePayload {
    * this link. Those are different, and merging them would tell a reader the site has no ecommerce.
    */
   site_measurement?: {
-    property: { id: string; name: string; timezone: string | null }
+    /** REPORT-WEBSITE-GAP-READING-001 — no property name or id on a report: only the calendar the days were measured on. */
+    property: { timezone: string | null }
     currency: string | null
     from: string
     to: string

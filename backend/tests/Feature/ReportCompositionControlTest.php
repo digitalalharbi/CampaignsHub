@@ -199,7 +199,8 @@ final class ReportCompositionControlTest extends TestCase
         [, , $raw] = $this->liveLink(['sections' => ['account_breakdown' => true, 'daily_records' => true], 'views' => ['dashboard']]);
         $payload = $this->live($raw);
 
-        $this->assertSame(['dashboard'], $payload['report_views']);
+        // A list stored before the website view existed drew the store parts on the dashboard, so it gains the website.
+        $this->assertSame(['dashboard', 'website'], $payload['report_views']);
         $this->assertNotContains('account_breakdown', $payload['report_sections']);
         $this->assertNotContains('daily_records', $payload['report_sections']);
         $this->assertContains('trends', $payload['report_sections']);
@@ -347,7 +348,7 @@ final class ReportCompositionControlTest extends TestCase
             ->assertJsonPath('data.effective_views', ['dashboard']);
         $this->assertSame(['dashboard'], $this->live($raw)['report_views']);
 
-        $this->actingAs($this->operator, 'sanctum')->getJson($url)->assertOk()->assertJsonPath('data.report_views', ['summary', 'dashboard', 'tables']);
+        $this->actingAs($this->operator, 'sanctum')->getJson($url)->assertOk()->assertJsonPath('data.report_views', ['summary', 'dashboard', 'website', 'tables']);
     }
 
     public function test_an_unknown_main_section_is_refused(): void

@@ -106,7 +106,7 @@ describe('the GA4 store view', () => {
     expect(screen.getByTestId('ga4-gap-chip-meta')).toHaveTextContent('+12 · 60%')
     expect(screen.getByTestId('ga4-gap-chip-snapchat')).toHaveTextContent('−2 · 20%')
     expect(screen.getByTestId('ga4-gap-chip-tiktok')).toHaveTextContent('—')
-    expect(screen.getByTestId('ga4-unpaid-organic')).toHaveTextContent('Organic 250 · 25%')
+    expect(screen.getByTestId('indirect-organic')).toHaveTextContent('Free 250 · 25%')
     // 28 = 20 + 8 and 22 = 10 + 12: no figure on the card is a platform number plus a GA4 number.
     expect(screen.getByTestId('ga4-gap').textContent).not.toMatch(/\b(28|22)\b/)
   })
@@ -146,5 +146,32 @@ describe('the GA4 store view', () => {
   it('says the tables are unavailable with a chip, not an empty grid', () => {
     renderWithProviders(<Ga4Tables tables={{}} currency="SAR" ar />, { locale: 'ar' })
     expect(screen.getByTestId('ga4-tables-absent')).toHaveTextContent('غير متاح')
+  })
+})
+
+describe('a breakdown that runs over the visits (REPORT-WEBSITE-TOTALS-001)', () => {
+  const devices = [
+    { key: 'mobile', sessions: 30000, purchases: null, revenue: null, revenue_usd: null, share: 0.8245 },
+    { key: 'desktop', sessions: 6000, purchases: null, revenue: null, revenue_usd: null, share: 0.1649 },
+    { key: 'tablet', sessions: 384, purchases: null, revenue: null, revenue_usd: null, share: 0.0106 },
+  ]
+  const meta = { total: 36361, measured: 36384, classified: 36361, unclassified: 0, over: 23, days_covered: 30, days_total: 30 }
+
+  it('keeps every measured slice, centres the ring on the measured sum labelled as such, and names the difference', () => {
+    expect(donutRows(devices, {}, false).map((r) => r.value)).toEqual([30000, 6000, 384])
+
+    renderWithProviders(<Ga4Acquisition ar={false} channels={null} devices={devices} devicesMeta={meta} funnel={[]} />, { locale: 'en' })
+    const ring = screen.getByTestId('ga4-devices')
+    expect(ring).toHaveTextContent('Breakdown sum')
+    expect(ring).toHaveTextContent('36,384')
+    expect(ring).not.toHaveTextContent('36,361')
+    expect(screen.getByTestId('ga4-devices-over')).toHaveTextContent('+23 over visits')
+    expect(screen.getByTestId('ga4-devices-coverage')).not.toHaveTextContent('Unclassified')
+  })
+
+  it('says it in Arabic too', () => {
+    renderWithProviders(<Ga4Acquisition ar channels={null} devices={devices} devicesMeta={meta} funnel={[]} />)
+    expect(screen.getByTestId('ga4-devices-over')).toHaveTextContent('عن الزيارات (تقارير Google تُحدَّث في أوقات مختلفة)')
+    expect(screen.getByTestId('ga4-devices')).toHaveTextContent('مجموع التقسيم')
   })
 })

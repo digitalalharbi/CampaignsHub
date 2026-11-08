@@ -22,8 +22,9 @@ describe('the live link modes', () => {
   })
 
   it('gives each level its own composition, not the same views with a dial', () => {
-    expect(modesFor('detailed', 'standard')).toEqual(['standard'])
-    expect(modesFor('detailed', 'detailed')).toEqual(['summary', 'dashboard', 'platforms', 'content', 'tables'])
+    // REPORT-WEBSITE-TAB-001 — «الموقع» is the one extra tab, drawn only where the link carries website data.
+    expect(modesFor('detailed', 'standard')).toEqual(['standard', 'website'])
+    expect(modesFor('detailed', 'detailed')).toEqual(['summary', 'dashboard', 'platforms', 'content', 'website', 'tables'])
     expect(modesFor('executive_summary', 'detailed')).toEqual(['summary'])
     // Tables exist only in the detailed product; a standard link asked for them still gets the standard report.
     expect(readMode('tables', 'detailed', 'standard')).toBe('standard')

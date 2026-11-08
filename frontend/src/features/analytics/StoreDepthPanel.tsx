@@ -80,7 +80,7 @@ export function StoreDepthPanel({ projectId, range, ar }: { projectId: string; r
     <section data-testid="store-depth" className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
         <Badge tone="success">{ar ? d.basis?.label_ar : d.basis?.label_en}</Badge>
-        <span>{ar ? 'مرجع الطلبات والمبيعات. لا يُجمع مع GA4 أو المنصات.' : 'The authority on orders and sales. Never added to GA4 or the platforms.'}</span>
+        <span>{ar ? 'مرجع الطلبات والمبيعات. لا يُجمع مع الموقع أو المنصات.' : 'The authority on orders and sales. Never added to Website or the platforms.'}</span>
         {d.basis && d.basis.kind !== 'live' && (
           <Badge tone="warning">
             <span data-testid="store-depth-demo">

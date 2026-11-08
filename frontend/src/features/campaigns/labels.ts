@@ -1,4 +1,4 @@
-import { canonicalPlatform, PLATFORM_LABELS } from '@/lib/platforms'
+import { canonicalPlatform, PLATFORM_LABELS, SOURCE_LABELS } from '@/lib/platforms'
 import type { Locale } from '@/stores/ui'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
@@ -64,6 +64,7 @@ const marketingPath: Record<string, { ar: string; en: string }> = {
  */
 const provider: Record<string, { ar: string; en: string }> = {
   ...PLATFORM_LABELS,
+  ...SOURCE_LABELS,
   microsoft: { ar: 'مايكروسوفت', en: 'Microsoft' },
   pinterest: { ar: 'بنترست', en: 'Pinterest' },
   sandbox: { ar: 'Sandbox', en: 'Sandbox' },

@@ -468,7 +468,7 @@ final class LiveReportBuilderController extends Controller
             'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
             // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) a detailed link offers; absent is all.
             'views' => ['sometimes', 'array', 'min:1'],
-            'views.*' => [Rule::in(ReportViews::VIEWS)],
+            'views.*' => [Rule::in([...ReportViews::VIEWS, ReportViews::WEBSITE_OFF])],
             /*
              * CREATIVE-DISPLAY-001 — the ad section, end to end.
              *
@@ -638,7 +638,7 @@ final class LiveReportBuilderController extends Controller
              * the level's full ON/OFF map, exactly as a saved report does (`ReportController`), and the
              * link narrows it from there.
              */
-            'section_settings' => $this->sectionSettingsFor($effective, ReportViews::normalise($data['views'] ?? null)),
+            'section_settings' => $this->sectionSettingsFor($effective, ReportViews::normalise(ReportViews::explicit($data['views'] ?? null))),
         ]);
 
         [$share, $raw] = $this->shares->create($report, [

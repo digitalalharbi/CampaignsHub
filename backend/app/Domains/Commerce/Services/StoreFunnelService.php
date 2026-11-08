@@ -437,12 +437,12 @@ final class StoreFunnelService
                 'kind' => $kind,
                 'ar' => match ($kind) {
                     'stores' => 'من المتجر المرتبط — سجل التاجر نفسه.',
-                    'ga4' => 'ما قاسه الموقع (GA4).',
+                    'ga4' => 'ما قاسه الموقع.',
                     default => 'من تقارير المنصات الإعلانية — قياس عبر البكسل، وقد يقل عن الواقع.',
                 },
                 'en' => match ($kind) {
                     'stores' => 'From the connected store — the merchant’s own ledger.',
-                    'ga4' => 'Site-measured (GA4).',
+                    'ga4' => 'Site-measured.',
                     default => 'From the ad platforms’ own reporting — a pixel measurement, which can undercount.',
                 },
             ],

@@ -124,6 +124,9 @@ final class Ga4StoreAnalytics
             $tiles[] = $tile;
         }
 
+        // WEBSITE-TOTALS-001 — the visits figure is the tile's: every breakdown of it is closed against THIS number.
+        $headline = isset($byKey['sessions']['current']) ? (float) $byKey['sessions']['current'] : null;
+        $dayCount = $this->sessionDays($tenantId, $projectId, $accountId, $period);
         $totalsSource = $rows['device'] ?? $rows['source_medium'] ?? $rows['landing_page'] ?? [];
         $visits = $this->aggregate($rows['source_medium'] ?? [], $currency, static fn (array $r): string => $r['d1']."\u{1F}".$r['d2']);
 
@@ -133,9 +136,11 @@ final class Ga4StoreAnalytics
             'not_summed' => true,
             'kpis' => $tiles,
             'series' => $this->series($tenantId, $projectId, $accountId, $currency, $period),
-            'channels' => $this->slices($rows['default_channel_group'] ?? null, $currency),
-            'devices' => $this->slices($rows['device'] ?? null, $currency),
-            'funnel' => $this->funnel($totalsSource),
+            'channels' => $this->slices($rows['default_channel_group'] ?? null, $currency, $headline),
+            'channels_meta' => $this->sliceMeta($rows['default_channel_group'] ?? null, $currency, $headline, $dayCount),
+            'devices' => $this->slices($rows['device'] ?? null, $currency, $headline),
+            'devices_meta' => $this->sliceMeta($rows['device'] ?? null, $currency, $headline, $dayCount),
+            'funnel' => $this->funnel($totalsSource, $byKey),
             'gap' => $this->gap->build(
                 $this->reportedUsd($reported ?? [], $to),
                 array_map(static fn (array $v): array => [
@@ -397,37 +402,98 @@ final class Ga4StoreAnalytics
 
     /**
      * A one-dimension breakdown as donut slices: sessions, purchases, revenue and each slice's share
-     * of the sessions. Null when the property never returned the breakdown — absent, not an empty ring.
+     * of the visits. Null when the property never returned the breakdown — absent, not an empty ring.
+     *
+     * WEBSITE-TOTALS-001 — every slice is the value GA4 measured; nothing is scaled, ever:
+     *   - short of the headline visits (the breakdown was synced for fewer days, or GA4 left sessions
+     *     out): an explicit, computed `unclassified` slice carries the remainder (visits − measured sum),
+     *     with no purchases or revenue of its own, so the ring closes on the visits;
+     *   - over it (GA4 restates the two reports at different times): the slices stay as measured and the
+     *     meta states the measured sum and the difference (`over`); the page names it, it never hides it.
+     * With no headline figure the slices stand on their own sum, as before.
      *
      * @param  list<array{date: string, d1: string, d2: string, m: array<string, mixed>}>|null  $rows
      * @return list<array<string, mixed>>|null
      */
-    private function slices(?array $rows, ?string $currency): ?array
+    private function slices(?array $rows, ?string $currency, ?float $total = null): ?array
     {
         if ($rows === null || $rows === []) {
             return null;
         }
         $agg = $this->aggregate($rows, $currency, static fn (array $r): string => $r['d1']);
-        $total = array_sum(array_map(static fn (array $a): float => (float) ($a['sessions'] ?? 0), $agg));
+        $sum = array_sum(array_map(static fn (array $a): float => (float) ($a['sessions'] ?? 0), $agg));
+        $total ??= $sum;
 
-        return collect($agg)->map(static fn (array $a): array => [
+        $items = collect($agg)->map(static fn (array $a): array => [
             'key' => $a['d1'],
             'sessions' => round((float) ($a['sessions'] ?? 0), 2),
             'purchases' => isset($a['purchases']) ? round((float) $a['purchases'], 2) : null,
             'revenue' => isset($a['revenue']) ? round((float) $a['revenue'], 2) : null,
             'revenue_usd' => $a['revenue_usd'],
-            'share' => $total > 0 ? round(((float) ($a['sessions'] ?? 0)) / $total, 4) : null,
         ])->sortBy([['sessions', 'desc'], ['key', 'asc']])->values()->all();
+
+        if ($sum < $total) {
+            $items[] = ['key' => 'unclassified', 'sessions' => round($total - $sum, 2), 'purchases' => null, 'revenue' => null, 'revenue_usd' => null];
+        }
+
+        // The ring's whole: the visits when the slices close onto them, the measured sum when they run over.
+        $whole = max($total, $sum);
+
+        return array_map(static fn (array $i): array => $i + ['share' => $whole > 0 ? round($i['sessions'] / $whole, 4) : null], $items);
+    }
+
+    /**
+     * What closed (or did not close) a breakdown against the visits: the figure, what the breakdown held, the remainder,
+     * what it measured above the visits, and on how many of the window's days it had rows.
+     *
+     * @param  list<array{date: string, d1: string, d2: string, m: array<string, mixed>}>|null  $rows
+     * @return array<string, mixed>|null
+     */
+    private function sliceMeta(?array $rows, ?string $currency, ?float $total, int $daysTotal): ?array
+    {
+        if ($rows === null || $rows === []) {
+            return null;
+        }
+        $sum = 0.0;
+        $dates = [];
+        foreach ($rows as $r) {
+            $sum += (float) ($r['m']['sessions'] ?? 0);
+            $dates[$r['date']] = true;
+        }
+        $total ??= $sum;
+
+        return [
+            'total' => round($total, 2),
+            'measured' => round($sum, 2),
+            'classified' => round(min($sum, $total), 2),
+            'unclassified' => round(max(0.0, $total - $sum), 2),
+            'over' => round(max(0.0, $sum - $total), 2),
+            'days_covered' => min(count($dates), max($daysTotal, 1)),
+            'days_total' => $daysTotal,
+        ];
+    }
+
+    /** @param  array{from: string, to: string}  $period */
+    private function sessionDays(string $tenantId, string $projectId, string $accountId, array $period): int
+    {
+        return (int) DB::table('measurement_daily_metrics')
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('external_account_id', $accountId)
+            ->where('metric_key', 'sessions')->whereBetween('metric_date', [$period['from'], $period['to']])
+            ->distinct()->count('metric_date');
     }
 
     /**
      * Sessions → add-to-carts → checkouts → purchases. Cart and checkout are EVENT counts, so a step
      * can exceed the one before it; that is said by `exceeds_previous`, not drawn as a widening funnel.
      *
+     * WEBSITE-TOTALS-001 — the stages are the tiles' own daily figures (sessions, add_to_carts, checkouts, transactions), so the
+     * funnel and the tiles cannot disagree; the breakdown rows only stand in for a stage whose tile is absent.
+     *
      * @param  list<array{m: array<string, mixed>}>  $rows
+     * @param  Collection<string, array<string, mixed>>  $byKey
      * @return list<array<string, mixed>>
      */
-    private function funnel(array $rows): array
+    private function funnel(array $rows, $byKey): array
     {
         $totals = [];
         foreach ($rows as $row) {
@@ -437,10 +503,12 @@ final class Ga4StoreAnalytics
                 }
             }
         }
+        $tileKey = ['sessions' => 'sessions', 'add_to_carts' => 'add_to_carts', 'checkouts' => 'checkouts', 'purchases' => 'transactions'];
         $steps = [];
         $previous = null;
         foreach (['sessions', 'add_to_carts', 'checkouts', 'purchases'] as $key) {
-            $count = isset($totals[$key]) ? round($totals[$key], 2) : null;
+            $tile = $byKey[$tileKey[$key]]['current'] ?? null;
+            $count = $tile !== null ? round((float) $tile, 2) : (isset($totals[$key]) ? round($totals[$key], 2) : null);
             $steps[] = [
                 'stage' => $key,
                 'count' => $count,

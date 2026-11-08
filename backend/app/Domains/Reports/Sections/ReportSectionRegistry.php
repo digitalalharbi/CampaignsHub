@@ -110,6 +110,20 @@ final class ReportSectionRegistry
                 view: 'content',
             ),
             /*
+             * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: image, video, carousel, collection … per
+             * objective, with results, the cost of a result (internal readers only), shares and the winner.
+             *
+             * A SHOW/HIDE of its own and ON unless the operator hides it (the Owner's rule: nothing is hidden by
+             * default). No stored snapshot gains it: a saved report carries it only when it was generated with it.
+             */
+            new ReportSection(
+                key: 'content_format_comparison',
+                titleAr: 'مقارنة أنواع المحتوى',
+                titleEn: 'Content type comparison',
+                payloadKeys: ['content_format_comparison'],
+                view: 'content',
+            ),
+            /*
              * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
              *
              * After the paid-media story and before the insights, because that is what it is:
@@ -128,7 +142,7 @@ final class ReportSectionRegistry
                 titleEn: 'Client site measurement',
                 payloadKeys: ['site_measurement'],
                 clientDefault: false,
-                view: 'dashboard',
+                view: 'website',
             ),
             /*
              * STORE-ANALYTICS-DEPTH-001 §3.1 — the store and its traffic as one category to show or hide, live and snapshot.
@@ -142,7 +156,7 @@ final class ReportSectionRegistry
                 titleEn: 'Store & traffic analytics',
                 payloadKeys: ['store_analytics'],
                 clientDefault: false,
-                view: 'dashboard',
+                view: 'website',
             ),
             /*
              * GA4-REPORT-SECTIONS-001 — the store as its own GA4 property measured it, in four parts.
@@ -157,67 +171,67 @@ final class ReportSectionRegistry
              */
             new ReportSection(
                 key: 'ga4_overview',
-                titleAr: 'زيارات ومبيعات المتجر (GA4)',
-                titleEn: 'Store visits & sales (GA4)',
+                titleAr: 'الموقع: زيارات ومبيعات',
+                titleEn: 'Website: visits & sales',
                 payloadKeys: ['ga4_overview'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_acquisition',
-                titleAr: 'القنوات والأجهزة والقمع (GA4)',
-                titleEn: 'Channels, devices & funnel (GA4)',
+                titleAr: 'القنوات والأجهزة والقمع',
+                titleEn: 'Channels, devices & funnel',
                 payloadKeys: ['ga4_acquisition'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_platform_gap',
-                titleAr: 'GA4 مقابل المنصات',
-                titleEn: 'GA4 vs platforms',
+                titleAr: 'الموقع مقابل المنصات',
+                titleEn: 'Website vs platforms',
                 payloadKeys: ['ga4_platform_gap'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_tables',
-                titleAr: 'جداول المتجر (GA4)',
-                titleEn: 'Store tables (GA4)',
+                titleAr: 'جداول الموقع',
+                titleEn: 'Website tables',
                 payloadKeys: ['ga4_tables'],
-                view: 'tables',
+                view: 'website',
             ),
             // GA4-ATTRIBUTION-MATCH-001 — four more parts, each its own SHOW/HIDE, on by default like the first four.
             new ReportSection(
                 key: 'ga4_attribution',
-                titleAr: 'مطابقة الإسناد (GA4)',
-                titleEn: 'Attribution match (GA4)',
+                titleAr: 'مطابقة الإسناد',
+                titleEn: 'Attribution match',
                 payloadKeys: ['ga4_attribution'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_pulse',
-                titleAr: 'نبض المتجر (GA4)',
-                titleEn: 'Store pulse (GA4)',
+                titleAr: 'ملخص الموقع',
+                titleEn: 'Website summary',
                 payloadKeys: ['ga4_pulse'],
-                view: 'dashboard',
+                view: 'summary',
             ),
             new ReportSection(
                 key: 'ga4_classification',
-                titleAr: 'تصنيف الزيارات (GA4)',
-                titleEn: 'Traffic classification (GA4)',
+                titleAr: 'تصنيف الزيارات',
+                titleEn: 'Traffic classification',
                 payloadKeys: ['ga4_classification'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_products',
-                titleAr: 'منتجات المتجر (GA4)',
-                titleEn: 'Store products (GA4)',
+                titleAr: 'منتجات الموقع',
+                titleEn: 'Website products',
                 payloadKeys: ['ga4_products'],
-                view: 'tables',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'ga4_gap_reasons',
-                titleAr: 'سبب الفرق',
-                titleEn: 'Why the gap (GA4)',
+                titleAr: 'قراءة الفرق',
+                titleEn: 'Reading the gap',
                 payloadKeys: ['ga4_gap_reasons'],
-                view: 'dashboard',
+                view: 'website',
             ),
             new ReportSection(
                 key: 'recommendations',
@@ -341,6 +355,10 @@ final class ReportSectionRegistry
         $this->availableWhen('content_performance', 'has_content', static fn (SectionContext $c): bool => $c->rows('ads') !== [] || $c->rows('ads_roster') !== []
             // A summary withholds the list and states the count; the count alone is still the section.
             || (int) ($c->value('creatives_in_scope') ?? 0) > 0);
+
+        // CONTENT-FORMAT-COMPARISON-001 — a comparison with no objective in it (no creative in scope) is not a section.
+        $this->availableWhen('content_format_comparison', 'has_creatives', static fn (SectionContext $c): bool => is_array($c->value('content_format_comparison'))
+            && ((array) ($c->value('content_format_comparison')['objectives'] ?? [])) !== []);
 
         /*
          * A property somebody selected, with days actually read in this window.

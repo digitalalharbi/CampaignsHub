@@ -216,7 +216,6 @@ final class Ga4StoreAnalyticsTest extends TestCase
             ['Organic Search', '', ['sessions' => 300, 'purchases' => 6, 'revenue' => 900]],
             ['Direct', '', ['sessions' => 100, 'purchases' => 2, 'revenue' => 200]],
         ]);
-        $this->dimRows($property, $this->project, 'default_channel_group', '2026-10-06', [['Direct', '', ['sessions' => 100, 'purchases' => 0, 'revenue' => 0]]]);
         $this->dimRows($property, $this->project, 'device', '2026-10-05', [
             ['mobile', '', ['sessions' => 800, 'add_to_carts' => 120, 'checkouts' => 50, 'purchases' => 16, 'revenue' => 2800]],
             ['desktop', '', ['sessions' => 200, 'add_to_carts' => 30, 'checkouts' => 10, 'purchases' => 4, 'revenue' => 700]],
@@ -230,8 +229,8 @@ final class Ga4StoreAnalyticsTest extends TestCase
         $out = $this->store('from=2026-10-01&to=2026-10-10');
 
         $this->assertSame(['Paid Social', 'Organic Search', 'Direct'], array_column($out['channels'], 'key'));
-        $this->assertEquals([600, 300, 200], array_column($out['channels'], 'sessions'));
-        $this->assertEquals([0.5455, 0.2727, 0.1818], array_column($out['channels'], 'share'));
+        $this->assertEquals([600, 300, 100], array_column($out['channels'], 'sessions'));
+        $this->assertEquals([0.6, 0.3, 0.1], array_column($out['channels'], 'share'));
         $this->assertEquals(1.0, round(array_sum(array_column($out['channels'], 'share')), 3));
         $this->assertEquals(600.0, $out['channels'][0]['revenue_usd']);
         $this->assertSame(['mobile', 'desktop'], array_column($out['devices'], 'key'));

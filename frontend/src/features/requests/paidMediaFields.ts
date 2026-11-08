@@ -116,7 +116,7 @@ const DATA_SOURCES: PaidFieldOption[] = [
    * They stay a literal because they are not in the canonical list and must not be added to it:
    * that list answers «what can this product connect an ad account to».
    */
-  { value: 'ga4', ar: 'GA4', en: 'GA4' },
+  { value: 'ga4', ar: 'الموقع', en: 'Website' },
   { value: 'crm', ar: 'نظام CRM', en: 'CRM' },
   { value: 'salla', ar: 'سلة', en: 'Salla' },
   { value: 'zid', ar: 'زد', en: 'Zid' },

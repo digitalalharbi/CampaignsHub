@@ -8,7 +8,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, RankingBarChart } from '../charts'
 import { money, num, percent } from '../format'
-import type { StoreFunnelStep, StoreGap, StoreKpi, StoreProductRow, StoreSeriesDay, StoreSessionRow, StoreSlice, StoreTableKey, StoreTables } from './storeTypes'
+import type { StoreBreakdownMeta, StoreFunnelStep, StoreGap, StoreKpi, StoreProductRow, StoreSeriesDay, StoreSessionRow, StoreSlice, StoreTableKey, StoreTables } from './storeTypes'
 
 /**
  * GA4-STORE-ANALYTICS-001 — the drawn parts of the store reading.
@@ -62,13 +62,43 @@ const CHANNEL: Record<string, L> = {
   Display: { ar: 'عرض', en: 'Display' },
   Affiliates: { ar: 'شركاء', en: 'Affiliates' },
   'Cross-network': { ar: 'متعدد', en: 'Cross-network' },
-  Unassigned: { ar: 'غير مصنف', en: 'Unassigned' },
+  Unassigned: { ar: 'غير محدد القناة', en: 'No channel' },
+  unclassified: { ar: 'غير مصنّف', en: 'Unclassified' },
 }
 const DEVICE: Record<string, L> = {
-  mobile: { ar: 'جوال', en: 'Mobile' }, desktop: { ar: 'حاسوب', en: 'Desktop' }, tablet: { ar: 'لوحي', en: 'Tablet' }, 'smart tv': { ar: 'تلفاز', en: 'TV' },
+  unclassified: { ar: 'غير مصنّف', en: 'Unclassified' }, mobile: { ar: 'جوال', en: 'Mobile' }, desktop: { ar: 'حاسوب', en: 'Desktop' }, tablet: { ar: 'لوحي', en: 'Tablet' }, 'smart tv': { ar: 'تلفاز', en: 'TV' },
 }
-const UNPAID: Record<string, L> = {
-  organic: { ar: 'مجاني', en: 'Organic' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
+export const UNPAID: Record<string, L> = {
+  organic: { ar: 'مجاني', en: 'Free' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
+  other_paid: { ar: 'مدفوع آخر', en: 'Other paid' }, unassigned: { ar: 'غير محدد', en: 'Unassigned' },
+}
+/**
+ * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — «مسار غير مباشر»: visits and sales that reached the site without a tracked ad
+ * click (direct, free search and social, referral, another device, after a view). A tracking path, never a verdict that the campaigns
+ * did not bring them, and never a claim that they did.
+ */
+export const INDIRECT_PATH: L = { ar: 'مسار غير مباشر', en: 'Indirect path' }
+
+/**
+ * The indirect path and its sub-chips: free, direct, referral, other, other paid. The website's own attribution, never added to
+ * a platform's figure and never an order-level match, which the «not summed» chip beside it states.
+ */
+export function IndirectPath({ items, ar, total }: { items: Array<{ key: string; sessions: number; share?: number | null; tone?: 'neutral' | 'warning' }>; ar: boolean; total?: number | null }) {
+  const sum = total ?? items.reduce((a, b) => a + b.sessions, 0)
+  if (items.length === 0 && !(sum > 0)) return null
+
+  return (
+    <div data-testid="indirect-path" className="flex min-w-0 flex-col gap-1.5">
+      <Badge tone="info" data-testid="indirect-path-total">{t(INDIRECT_PATH, ar)} <Num>{num(sum)}</Num></Badge>
+      <div className="flex flex-wrap gap-1.5" data-testid="indirect-path-chips">
+        {items.map((u) => (
+          <Badge key={u.key} tone={u.tone ?? 'neutral'} data-testid={`indirect-${u.key}`}>
+            {t(UNPAID[u.key] ?? { ar: u.key, en: u.key }, ar)} <Num>{num(u.sessions)}{u.share !== null && u.share !== undefined ? ` · ${percent(u.share, 0)}` : ''}</Num>
+          </Badge>
+        ))}
+      </div>
+    </div>
+  )
 }
 const FUNNEL: Record<string, L> = {
   sessions: { ar: 'الزيارات', en: 'Sessions' }, add_to_carts: { ar: 'السلة', en: 'Cart' }, checkouts: { ar: 'الدفع', en: 'Checkout' }, purchases: { ar: 'الشراء', en: 'Purchase' },
@@ -132,6 +162,61 @@ export function Ga4Tiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
   )
 }
 
+/**
+ * REPORT-WEBSITE-TAB-001 (Owner, permanent): «البطاقات الكبيرة + تحتها البطاقات الصغيرة الفرعية». The same measured tiles, no
+ * duplicates, as a hierarchy: one BIG card per headline (visits, sales) with its own small sub-cards under it. A tile the server
+ * did not send (hidden, or not measured) is simply absent; a group whose headline is hidden promotes its first sub-card.
+ */
+const TILE_GROUPS: Array<{ id: string; keys: string[] }> = [
+  { id: 'visits', keys: ['sessions', 'users_daily_sum', 'new_users', 'bounce_rate', 'engagement_rate', 'avg_session_seconds'] },
+  { id: 'sales', keys: ['revenue', 'transactions', 'aov', 'conversion_rate', 'add_to_carts', 'checkouts'] },
+]
+
+export function Ga4TileGroups({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
+  const by = new Map(kpis.map((k) => [k.key, k]))
+  const grouped = new Set(TILE_GROUPS.flatMap((g) => g.keys))
+  const groups = TILE_GROUPS.map((g) => g.keys.map((k) => by.get(k)).filter((k): k is StoreKpi => k !== undefined))
+  // A tile no group names still shows, as a sub-card of the last group: nothing measured is dropped.
+  const rest = kpis.filter((k) => !grouped.has(k.key))
+  if (rest.length > 0) groups[groups.length - 1] = [...groups[groups.length - 1], ...rest]
+
+  return (
+    <section data-testid="ga4-tiles" data-layout="groups" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {groups.filter((g) => g.length > 0).map((g, i) => {
+        const [head, ...subs] = g
+        const usd = head.kind === 'money' ? head.current_usd : undefined
+        const shownInUsd = head.kind === 'money' && usd !== null && usd !== undefined && (head.currency ?? '').toUpperCase() !== 'USD'
+
+        return (
+          <div key={TILE_GROUPS[i]?.id ?? i} data-testid={`ga4-group-${TILE_GROUPS[i]?.id ?? i}`} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
+            {/* The headline is the product's one card, the group's big figure, across the group's width. */}
+            <StatCard testid={`ga4-tile-${head.key}`} lead tone={TONE[head.key] ?? 'neutral'} dot label={t(KPI_LABEL[head.key] ?? { ar: head.key, en: head.key }, ar)}
+              value={<Num>{kpiText(head, head.current, usd)}</Num>}
+              hint={shownInUsd && head.current !== null ? money(head.current, head.currency) : undefined}
+              trailing={<Delta kpi={head} ar={ar} />}
+              spark={(head.trend?.length ?? 0) >= 2 ? <KpiSparkline points={(head.trend ?? []).map((p) => p.value)} height={48} /> : undefined} />
+            {subs.length > 0 && (
+              <StatGrid columns="grid-cols-2 sm:grid-cols-3" sparks>
+                {subs.map((k) => {
+                  const subUsd = k.kind === 'money' ? k.current_usd : undefined
+                  const inUsd = k.kind === 'money' && subUsd !== null && subUsd !== undefined && (k.currency ?? '').toUpperCase() !== 'USD'
+
+                  return (
+                    <StatCard key={k.key} testid={`ga4-tile-${k.key}`} tone={TONE[k.key] ?? 'neutral'} dot label={t(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}
+                      value={<Num>{kpiText(k, k.current, subUsd)}</Num>}
+                      hint={inUsd && k.current !== null ? money(k.current, k.currency) : undefined}
+                      trailing={<Delta kpi={k} ar={ar} />} />
+                  )
+                })}
+              </StatGrid>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 /** The chart's rows: revenue in USD where every day converted, otherwise in the property's currency. */
 export function seriesForChart(series: StoreSeriesDay[], currency: string | null | undefined): { data: Array<Record<string, unknown>>; currency: string } {
   const withRevenue = series.filter((d) => d.revenue !== null)
@@ -165,9 +250,10 @@ export function donutRows(slices: StoreSlice[], labels: Record<string, L>, ar: b
   return slices.filter((s) => s.sessions > 0).map((s) => ({ key: s.key, name: t(labels[s.key] ?? labels[s.key.toLowerCase()] ?? { ar: s.key, en: s.key }, ar), value: s.sessions }))
 }
 
-function Donut({ testId, title, slices, labels, ar }: { testId: string; title: string; slices: StoreSlice[] | null | undefined; labels: Record<string, L>; ar: boolean }) {
+function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; title: string; slices: StoreSlice[] | null | undefined; labels: Record<string, L>; ar: boolean; meta?: StoreBreakdownMeta | null }) {
   const rows = slices ? donutRows(slices, labels, ar) : []
   const total = rows.reduce((a, b) => a + b.value, 0)
+  const over = meta?.over ?? 0
 
   return (
     <ChartCard title={title}>
@@ -175,21 +261,39 @@ function Donut({ testId, title, slices, labels, ar }: { testId: string; title: s
         <div data-testid={`${testId}-absent`} className="grid place-items-center" style={{ height: 260 }}><Badge tone="neutral">{ar ? 'غير متاح' : 'Unavailable'}</Badge></div>
       ) : (
         <div data-testid={testId} data-slices={rows.length}>
-          <PlatformDonutChart data={rows} colorBy="series" height={260} centerLabel={ar ? 'الزيارات' : 'Sessions'} centerValue={num(total)} />
+          {/*
+            Every slice is measured; nothing is scaled. A ring that closes onto the visits (an unclassified slice included) is centred
+            on the visits; a ring that runs over them is centred on its own measured sum, labelled as such, and a chip names the difference.
+          */}
+          <PlatformDonutChart data={rows} colorBy="series" height={260}
+            centerLabel={over > 0 ? (ar ? 'مجموع التقسيم' : 'Breakdown sum') : (ar ? 'الزيارات' : 'Sessions')} centerValue={num(total)} />
+          {meta && (meta.unclassified > 0 || over > 0) && (
+            <div className="mt-1 flex flex-wrap justify-center gap-1.5" data-testid={`${testId}-coverage`}>
+              {meta.unclassified > 0 && <Badge tone="warning">{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></Badge>}
+              {meta.days_total > 0 && meta.days_covered < meta.days_total && <Badge tone="neutral"><Num>{`${meta.days_covered}/${meta.days_total}`}</Num> {ar ? 'يوم' : 'days'}</Badge>}
+              {over > 0 && (
+                <Badge tone="neutral" data-testid={`${testId}-over`}>
+                  <Num>{`+${num(over)}`}</Num> {ar ? 'عن الزيارات (تقارير Google تُحدَّث في أوقات مختلفة)' : 'over visits (Google updates its reports at different times)'}
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       )}
     </ChartCard>
   )
 }
 
-export function Ga4Acquisition({ channels, devices, funnel, ar }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean }) {
+/** `frozen` — the three-across layout a snapshot saved before the website tab was printed with (its pages render as frozen). */
+export function Ga4Acquisition({ channels, devices, funnel, ar, channelsMeta, devicesMeta, frozen = false }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; ar: boolean; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null; frozen?: boolean }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" data-testid="ga4-acquisition">
-      <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} />
-      <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} />
-      <ChartCard title={ar ? 'القمع' : 'Funnel'}>
+    <div className={`grid grid-cols-1 gap-4 ${frozen ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`} data-testid="ga4-acquisition">
+      <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} meta={channelsMeta} />
+      <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} meta={devicesMeta} />
+      {/* The funnel takes the full row: in a third of it the bars had no room for their figures. */}
+      <ChartCard className={frozen ? '' : 'lg:col-span-2'} title={ar ? 'قمع الموقع' : 'Website funnel'}>
         <div data-testid="ga4-funnel">
-          <ConversionFunnelChart ar={ar} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
+          <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
         </div>
       </ChartCard>
     </div>
@@ -206,7 +310,7 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
   const locale = ar ? 'ar' : 'en'
 
   return (
-    <ChartCard title={ar ? 'GA4 والمنصات' : 'GA4 vs platforms'} action={<Badge tone="info" data-testid="ga4-gap-not-summed">{ar ? 'بلا جمع' : 'Not summed'}</Badge>}>
+    <ChartCard title={ar ? 'الموقع والمنصات' : 'Website vs platforms'} action={<Badge tone="info" data-testid="ga4-gap-not-summed">{ar ? 'بلا جمع' : 'Not summed'}</Badge>}>
       <div data-testid="ga4-gap" className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="min-w-0 lg:col-span-3">
           {bars.length === 0 ? (
@@ -216,7 +320,7 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
               <RankingBarChart height={Math.max(240, bars.length * 56)} horizontal data={bars}
                 bars={[
                   { key: 'reported', name: ar ? 'المنصة' : 'Platform', kind: 'num', color: 'var(--brand-600)' },
-                  { key: 'ga4', name: 'GA4', kind: 'num', color: 'var(--teal)' },
+                  { key: 'ga4', name: ar ? 'الموقع' : 'Website', kind: 'num', color: 'var(--teal)' },
                 ]} />
             </div>
           )}
@@ -244,13 +348,14 @@ export function Ga4Gap({ gap, ar }: { gap: StoreGap; ar: boolean }) {
             )
           })}
           {(gap.unpaid.length > 0 || gap.other_paid) && (
-            <li className="flex flex-wrap gap-1.5 pt-1" data-testid="ga4-gap-unpaid">
-              {gap.unpaid.map((u) => (
-                <Badge key={u.class} tone="neutral" data-testid={`ga4-unpaid-${u.class}`}>
-                  {t(UNPAID[u.class], ar)} <Num>{num(u.sessions)}{u.session_share !== null ? ` · ${percent(u.session_share, 0)}` : ''}</Num>
-                </Badge>
-              ))}
-              {gap.other_paid && <Badge tone="neutral" data-testid="ga4-unpaid-other_paid">{ar ? 'مدفوع آخر' : 'Other paid'} <Num>{num(gap.other_paid.sessions)}</Num></Badge>}
+            <li className="pt-1" data-testid="ga4-gap-unpaid">
+              <IndirectPath
+                items={[
+                  ...gap.unpaid.map((u) => ({ key: u.class, sessions: u.sessions, share: u.session_share })),
+                  ...(gap.other_paid ? [{ key: 'other_paid', sessions: gap.other_paid.sessions }] : []),
+                ]}
+                ar={ar}
+              />
             </li>
           )}
         </ul>

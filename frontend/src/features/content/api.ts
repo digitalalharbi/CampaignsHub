@@ -368,6 +368,8 @@ export interface LibraryQuery {
   kinds?: string[]
   statuses?: string[]
   health?: string
+  /** CONTENT-FORMAT-COMPARISON-001 — one page of a format's creatives, for the comparison's drill-down. */
+  creative_ids?: string[]
 }
 
 /**
@@ -520,6 +522,95 @@ export const formatIntelligence = (
     `/projects/${projectId}/creatives/format-intelligence${qs === '' ? '' : `?${qs}`}`,
   )
 }
+
+/**
+ * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», one comparison per objective family.
+ *
+ * Every figure is the canonical creative reader's: `null` is «not reported» or «withheld», never zero; ratios are pooled
+ * on the server; the winner is the one ranker's on a cost per result (never ROAS) and absent with a reason when the
+ * formats cannot be compared. A client's copy arrives with every money field nulled and `spend_hidden: true`.
+ */
+export interface FormatComparisonCreative {
+  id: string
+  name: string
+  token: string | null
+  spend: number | null
+  results: number | null
+  cost_per_result: number | null
+  ctr: number | null
+  impressions: number | null
+  clicks: number | null
+  results_not_attributable: boolean
+}
+
+export interface FormatComparisonFigures {
+  spend: number | null
+  results: number | null
+  cost_per_result: number | null
+  ctr: number | null
+  cpm: number | null
+  cpc: number | null
+  conversion_rate: number | null
+  roas: number | null
+  impressions: number | null
+  clicks: number | null
+}
+
+export interface FormatComparisonRow extends FormatComparisonFigures {
+  /** A `CreativeKind` or `unclassified` — named through `creativeKindLabel`, never printed raw. */
+  format: string
+  /** The platform tokens behind the unclassified slice, labelled as the platform's own. */
+  tokens: Array<{ token: string; creatives: number }>
+  creatives: number
+  creatives_with_metrics: number
+  spend_withheld: boolean
+  spend_original: number | null
+  original_currency: string | null
+  results_partial: boolean
+  revenue: number | null
+  share_of_spend: number | null
+  share_of_results: number | null
+  small_sample: boolean
+  small_sample_reason: string | null
+  creative_list: FormatComparisonCreative[]
+  creative_list_total: number
+  previous: Partial<FormatComparisonFigures> | null
+}
+
+export interface FormatComparisonObjective {
+  family: string
+  label: { ar: string; en: string }
+  result_metric: string | null
+  cost_metric: string | null
+  lower_is_better: boolean | null
+  totals: { creatives: number; spend: number | null; results: number | null; cost_per_result: number | null }
+  coverage: { spend_known_share: number | null; results_known_share: number | null }
+  reconciles: boolean | null
+  formats: FormatComparisonRow[]
+  winner: { format: string; metric: string; value: number | null } | null
+  winner_refusal: string | null
+  trend: {
+    metric: string | null
+    result: string | null
+    points: Array<{ from: string; to: string; formats: Record<string, { results: number | null; cost_per_result: number | null }> }>
+  } | null
+}
+
+export interface FormatComparisonPayload {
+  period: { from: string; to: string }
+  previous_period: { from: string; to: string }
+  currency: string | null
+  spend_hidden?: boolean
+  totals: { creatives: number; creatives_with_metrics: number; spend: number | null; reconciles: boolean | null }
+  coverage: { creatives_total: number; creatives_known: number; spend_known_share: number | null }
+  objectives: FormatComparisonObjective[]
+  sample_rule: { minimum_creatives: number; material_share: number }
+}
+
+export const formatComparison = (
+  projectId: string,
+  query: { from?: string; to?: string; providers?: string[]; campaign_ids?: string[] } = {},
+) => getData<FormatComparisonPayload>(`/projects/${projectId}/creatives/format-comparison${libraryQueryString(query)}`)
 
 /**
  * `objective` chooses which metric the comparison is DECIDED on — it does not narrow the set.

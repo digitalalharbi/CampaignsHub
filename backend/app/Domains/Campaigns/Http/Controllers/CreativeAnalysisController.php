@@ -20,6 +20,7 @@ use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -304,6 +305,30 @@ final class CreativeAnalysisController extends Controller
         return ApiResponse::success(
             app(CreativeFormatIntelligence::class)->forScope($project, $from, $to, $account, $campaign),
             'Creative format intelligence.',
+        );
+    }
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» for Analytics: one comparison per objective family, the
+     * format from the platform's token only, figures from the canonical creative reader, the verdict from the one
+     * ranker. The operator's own reading: spend and cost are shown (an internal view), and the report part cuts them
+     * for a client through {@see ContentFormatComparison::forAudience()}.
+     */
+    public function formatComparison(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $account = $request->string('external_account_id')->toString() ?: null;
+        $campaign = $request->string('campaign_id')->toString() ?: null;
+        $providers = array_values(array_filter((array) $request->input('providers', []), 'is_string'));
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', []), 'is_string'));
+        $ceiling = $providers === [] && $campaigns === [] ? null : array_filter(['providers' => $providers, 'campaign_ids' => $campaigns]);
+
+        return ApiResponse::success(
+            app(ContentFormatComparison::class)->forScope($project, $from, $to, $account, $campaign, $ceiling),
+            'Content format comparison.',
         );
     }
 
@@ -739,8 +764,13 @@ final class CreativeAnalysisController extends Controller
          * forwarded from the query string here: on this surface they would be a filter nothing in
          * the UI sets, and enumerating what a request may contain is cheaper to keep right than
          * remembering what it may not.
+         *
+         * CONTENT-FORMAT-COMPARISON-001 — `creative_ids` IS set by the UI now: the format comparison's drill-down asks
+         * the library for the cards of one page of a format's creatives. It only ever narrows, and the reach above it
+         * still decides what this reader may see, so an id from another project returns nothing.
          */
         $this->rows->applyFilters($query, $request->only([
+            'creative_ids',
             'provider', 'providers', 'format', 'formats', 'status', 'statuses',
             'campaign_ids', 'ad_set_ids', 'ad_ids', 'project_ids', 'client_ids',
             'search', 'kinds', 'objectives', 'paths',

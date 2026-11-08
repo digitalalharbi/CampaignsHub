@@ -31,7 +31,8 @@ final class ReportSectionSurfaces
     public const SHARE_FLAGS = [
         'platform_comparison' => ['platform_comparison'],
         'objective_breakdown' => ['objective_breakdown', 'advanced_segmentation'],
-        'creatives' => ['content_performance'],
+        // CONTENT-FORMAT-COMPARISON-001 — the comparison is a statement about those creatives, and goes with them.
+        'creatives' => ['content_performance', 'content_format_comparison'],
         'budget' => ['budget_pacing'],
         'funnel_store' => ['funnel'],
     ];
@@ -55,7 +56,18 @@ final class ReportSectionSurfaces
             $off[] = $key;
         }
 
-        return $off === [] ? $settings : $settings->narrowedBy(array_fill_keys($off, false), $this->registry);
+        $settings = $off === [] ? $settings : $settings->narrowedBy(array_fill_keys($off, false), $this->registry);
+
+        /*
+         * CONTENT-FORMAT-COMPARISON-001 — a report whose content the operator switched off does not describe that content
+         * by format either: the comparison names the creatives and their figures. The repo's own precedent
+         * (`content_formats` leaves with the creatives); the comparison stays its own switch whenever content is on.
+         */
+        if ($settings->chose('content_performance') && ! $settings->enabled($this->registry->get('content_performance'), 'client')) {
+            $settings = $settings->narrowedBy(['content_format_comparison' => false], $this->registry);
+        }
+
+        return $settings;
     }
 
     /**
@@ -209,7 +221,7 @@ final class ReportSectionSurfaces
             }, $payload['attention']);
         }
         // The tabs a reader is offered, named by the server like the sections are.
-        $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
+        $payload['report_views'] = ReportViews::visible($this->viewsFor($report, $share)) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
         // built from a link (page, print, file). Absent means every column.
         // IP-TRACE-001 — the link's opaque reference travels with every file built from it (CSV, XLSX manifest, print).

@@ -220,7 +220,7 @@ final class RequestConversionService
                 'Review Creative Assets', 'Confirm Budget and Dates', 'Build Media Plan', 'Configure Reporting', 'Launch Readiness Review',
             ],
             'tracking' => [
-                'Audit Current Tracking', 'Configure GA4 / GTM', 'Define Conversion Events', 'Verify Pixels and CAPI',
+                'Audit Current Tracking', 'Configure Analytics / GTM', 'Define Conversion Events', 'Verify Pixels and CAPI',
                 'Test Event Quality', 'Document Tracking Setup',
             ],
             'analytics', 'reporting' => [

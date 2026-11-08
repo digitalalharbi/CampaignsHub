@@ -15,7 +15,7 @@ import { hideParam } from './visibility'
  * The tab above this decides «not connected / not selected / empty»; this part draws only a ready
  * reading and stays silent otherwise, so the page never says the same thing twice.
  */
-export function Ga4StoreSection({ projectId, range, ar, hide = [] }: { projectId: string; range: { from: string; to: string }; ar: boolean; hide?: string[] }) {
+export function Ga4StoreSection({ projectId, range, ar, hide = [], showGap = true }: { projectId: string; range: { from: string; to: string }; ar: boolean; hide?: string[]; showGap?: boolean }) {
   const q = useSwrQuery({
     name: 'ga4-store',
     scope: [projectId, [...hide].sort().join(',')],
@@ -45,8 +45,8 @@ export function Ga4StoreSection({ projectId, range, ar, hide = [] }: { projectId
         <Badge tone="warning" data-testid="ga4-usd-withheld">{ar ? `بلا سعر صرف ${d.usd.from ?? ''}` : `No ${d.usd.from ?? ''} rate`}</Badge>
       )}
       <Ga4Series series={d.series ?? []} currency={d.currency} ar={ar} />
-      <Ga4Acquisition channels={d.channels} devices={d.devices} funnel={d.funnel ?? []} ar={ar} />
-      {d.gap && <Ga4Gap gap={d.gap} ar={ar} />}
+      <Ga4Acquisition channels={d.channels} devices={d.devices} channelsMeta={d.channels_meta} devicesMeta={d.devices_meta} funnel={d.funnel ?? []} ar={ar} />
+      {d.gap && showGap && <Ga4Gap gap={d.gap} ar={ar} />}
       {d.tables && <Ga4Tables tables={d.tables} currency={d.currency} ar={ar} />}
     </div>
   )

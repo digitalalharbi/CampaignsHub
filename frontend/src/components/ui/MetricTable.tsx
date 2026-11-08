@@ -184,9 +184,18 @@ export function MetricTable({
   values,
   exact,
   initialSort,
+  pageSize,
+  testId,
 }: {
   head: string[]
   rows: ReactNode[][]
+  /**
+   * REPORT-WEBSITE-TAB-001 (Owner, permanent: «جزء بسيط الجداول لكن ليست طويلة») — a fixed-size page of rows. The table keeps the
+   * same height on every page (the last page is padded with empty rows) and the reader pages with Next / Previous; sorting
+   * sorts the whole table, not the page. Absent, the table shows every row as before.
+   */
+  pageSize?: number
+  testId?: string
   values?: SortValues[]
   /**
    * NUMBER-PRESENTATION-001 — the exact figure behind an abbreviated one, per cell.
@@ -212,7 +221,14 @@ export function MetricTable({
     [rows, values, sort],
   )
 
+  const [page, setPage] = useState(0)
+  const pages = pageSize ? Math.max(1, Math.ceil(order.length / pageSize)) : 1
+  const current = Math.min(page, pages - 1)
+  const shown = pageSize ? order.slice(current * pageSize, current * pageSize + pageSize) : order
+  const padding = pageSize && pages > 1 ? pageSize - shown.length : 0
+
   const toggle = (i: number) => {
+    setPage(0)
     if (!values) return
     setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
   }
@@ -258,11 +274,24 @@ export function MetricTable({
           </tr>
         </thead>
         <tbody>
-          {order.map((rowIndex) => (
+          {shown.map((rowIndex) => (
             <MetricRow key={rowIndex} cells={rows[rowIndex]} exact={exact?.[rowIndex]} />
+          ))}
+          {Array.from({ length: padding }, (_, i) => (
+            <tr key={`pad-${i}`} aria-hidden className="border-b border-border last:border-0"><td colSpan={head.length} className="py-2.5">&nbsp;</td></tr>
           ))}
         </tbody>
       </table>
+      {pageSize !== undefined && pages > 1 && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-muted" data-testid={testId ? `${testId}-pager` : 'metric-table-pager'}>
+          <span className="tnum" dir="ltr">{`${current * pageSize + 1}–${Math.min(order.length, (current + 1) * pageSize)} / ${order.length}`}</span>
+          <span className="inline-flex items-center gap-1">
+            <button type="button" aria-label="Previous" disabled={current === 0} onClick={() => setPage(current - 1)} data-testid={testId ? `${testId}-prev` : undefined} className="rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary disabled:opacity-40">‹</button>
+            <span className="tnum font-semibold text-text-secondary" dir="ltr">{`${current + 1} / ${pages}`}</span>
+            <button type="button" aria-label="Next" disabled={current >= pages - 1} onClick={() => setPage(current + 1)} data-testid={testId ? `${testId}-next` : undefined} className="rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary disabled:opacity-40">›</button>
+          </span>
+        </div>
+      )}
     </div>
   )
 }

@@ -30,7 +30,17 @@ namespace App\Domains\Reports\Sections;
 final class ReportViews
 {
     /** In the order the link's tabs are drawn. */
-    public const VIEWS = ['summary', 'dashboard', 'platforms', 'content', 'tables'];
+    public const VIEWS = ['summary', 'dashboard', 'platforms', 'content', 'website', 'tables'];
+
+    /**
+     * WEBSITE-TAB-001 — marker stored with a list that CHOSE «dashboard without website».
+     *
+     * Before the `website` view existed, the store/site components were drawn by the dashboard, so a stored list with
+     * `dashboard` and no `website` is a legacy list and gains `website` when read (otherwise those links would lose the
+     * store parts they had). A list somebody saves NOW with the dashboard and without the website is a decision and must
+     * survive a re-read: the input paths mark it with this token, which is never a view and never drawn.
+     */
+    public const WEBSITE_OFF = 'website_off';
 
     /**
      * The components each view may draw (registry keys). `kpis` is in every view: the header figures
@@ -39,11 +49,13 @@ final class ReportViews
      * @var array<string, list<string>>
      */
     public const DRAWS = [
-        'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_attribution', 'ga4_pulse', 'ga4_gap_reasons', 'recommendations'],
-        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
+        // `ga4_pulse` is the ONE small headline strip the summary carries; every other website component is the website view's alone.
+        'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'ga4_pulse', 'recommendations'],
+        'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
         'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown'],
-        'content' => ['kpis', 'content_performance'],
-        'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables', 'ga4_tables', 'ga4_products'],
+        'content' => ['kpis', 'content_performance', 'content_format_comparison'],
+        'website' => ['kpis', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'site_measurement', 'store_analytics'],
+        'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables'],
     ];
 
     /** @var array<string, array{ar: string, en: string}> */
@@ -52,6 +64,7 @@ final class ReportViews
         'dashboard' => ['ar' => 'لوحة الأداء', 'en' => 'Performance dashboard'],
         'platforms' => ['ar' => 'المنصات', 'en' => 'Platforms'],
         'content' => ['ar' => 'المحتوى', 'en' => 'Content'],
+        'website' => ['ar' => 'الموقع', 'en' => 'Website'],
         'tables' => ['ar' => 'الجداول', 'en' => 'Tables'],
     ];
 
@@ -68,8 +81,40 @@ final class ReportViews
         }
         $wanted = array_filter($raw, 'is_string');
         $views = array_values(array_filter(self::VIEWS, static fn (string $v): bool => in_array($v, $wanted, true)));
+        if ($views === []) {
+            return null;
+        }
+        if (in_array('dashboard', $views, true) && ! in_array('website', $views, true)) {
+            if (! in_array(self::WEBSITE_OFF, $wanted, true)) {
+                // Legacy list: the dashboard used to draw the store parts, so the website view is implied (see WEBSITE_OFF).
+                $views = array_values(array_filter(self::VIEWS, static fn (string $v): bool => $v === 'website' || in_array($v, $views, true)));
+            } else {
+                $views[] = self::WEBSITE_OFF;
+            }
+        }
 
-        return $views === [] ? null : $views;
+        return $views;
+    }
+
+    /**
+     * The list as a reader sees it: the marker is storage, never a view.
+     *
+     * @param  list<string>|null  $views
+     * @return list<string>|null
+     */
+    public static function visible(?array $views): ?array
+    {
+        return $views === null ? null : array_values(array_filter($views, static fn (string $v): bool => $v !== self::WEBSITE_OFF));
+    }
+
+    /** A list somebody is saving NOW: a «dashboard without website» choice is marked so a re-read does not undo it. */
+    public static function explicit(mixed $raw): mixed
+    {
+        if (is_array($raw) && in_array('dashboard', $raw, true) && ! in_array('website', $raw, true) && ! in_array(self::WEBSITE_OFF, $raw, true)) {
+            $raw[] = self::WEBSITE_OFF;
+        }
+
+        return $raw;
     }
 
     /**

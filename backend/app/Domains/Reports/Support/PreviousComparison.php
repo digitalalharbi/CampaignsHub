@@ -84,6 +84,26 @@ final class PreviousComparison
             ));
         }
 
+        // CONTENT-FORMAT-COMPARISON-001 — the comparison carries each format's figures of the window before, and names that window.
+        if (is_array($payload['content_format_comparison'] ?? null)) {
+            $block = $payload['content_format_comparison'];
+            unset($block['previous_period']);
+            $block['objectives'] = array_map(static function ($objective) {
+                if (is_array($objective)) {
+                    $objective['formats'] = array_map(static function ($format) {
+                        if (is_array($format)) {
+                            unset($format['previous']);
+                        }
+
+                        return $format;
+                    }, (array) ($objective['formats'] ?? []));
+                }
+
+                return $objective;
+            }, (array) ($block['objectives'] ?? []));
+            $payload['content_format_comparison'] = $block;
+        }
+
         // The deck's «this period against the last» slide has nothing left to draw.
         if (is_array($payload['slides'] ?? null)) {
             $payload['slides'] = array_values(array_filter(

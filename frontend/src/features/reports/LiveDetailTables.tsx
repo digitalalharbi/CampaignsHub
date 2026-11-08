@@ -304,6 +304,7 @@ export function LivePlatformComparison({
   return (
     <div className="mt-3 min-w-0">
       <Section title={t.title} testid="live-platform-comparison" empty={rows.length === 0} none={t.none}>
+        {/* One row per platform: a short list by nature, never paged, so every platform is on the page. */}
         <MetricTable
           head={pick(head)}
           rows={built.rows.map(pick)}
@@ -479,6 +480,7 @@ export function LiveDetailTables({
         none={t.noObjectives}
       >
         <MetricTable
+          pageSize={8}
           head={[t.objective, t.spend, t.impressions, t.clicks, t.results, t.costPerResult]}
           rows={objectives.rows}
           values={objectives.values}

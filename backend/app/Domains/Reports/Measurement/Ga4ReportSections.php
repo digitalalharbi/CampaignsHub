@@ -85,7 +85,7 @@ final class Ga4ReportSections
                 'usd' => $reading['usd'],
                 'period' => $reading['period'],
                 'previous_period' => $reading['previous_period'],
-                'property' => ['name' => $reading['property']['name']],
+                // REPORT-WEBSITE-GAP-READING-001 — no property name or URL on a report: the source is «الموقع», never a named tool.
                 'last_synced_at' => $reading['last_synced_at'],
                 'revenue_hidden' => false,
                 'kpis' => $reading['kpis'],
@@ -93,14 +93,14 @@ final class Ga4ReportSections
             ],
             'ga4_acquisition' => $reading['channels'] === null && $reading['devices'] === null && $this->funnelIsEmpty($reading['funnel'])
                 ? null
-                : ['currency' => $reading['currency'], 'channels' => $reading['channels'], 'devices' => $reading['devices'], 'funnel' => $reading['funnel']],
+                : ['currency' => $reading['currency'], 'channels' => $reading['channels'], 'devices' => $reading['devices'], 'channels_meta' => $reading['channels_meta'] ?? null, 'devices_meta' => $reading['devices_meta'] ?? null, 'funnel' => $reading['funnel']],
             'ga4_platform_gap' => $gap['rows'] === [] && $gap['unpaid'] === [] && $gap['other_paid'] === null
                 ? null
                 : $gap + ['currency' => $reading['currency']],
             'ga4_tables' => $tables === [] ? null : ['currency' => $reading['currency'], 'tables' => $tables],
         ] + $this->measurementParts($tenantId, $projectId, $from, $to, $reading, $clientFacing, $wholeProject, $platformCeiling);
 
-        $sections = Ga4Visibility::applyToSections($sections, $hidden);
+        $sections = self::withoutSource(Ga4Visibility::applyToSections($sections, $hidden));
 
         return $hideRevenue ? self::withoutMoney($sections) : $sections;
     }
@@ -348,6 +348,25 @@ final class Ga4ReportSections
                 }
             }
             $sections['ga4_tables']['currency'] = null;
+        }
+
+        return $sections;
+    }
+
+    /**
+     * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07: «بشكل صارم لا تُظهر المصدر للبيانات») — a report part carries no property id,
+     * name or URL. What the reading needs from the property (its currency) stays; what names the source goes.
+     *
+     * @param  array<string, array<string, mixed>|null>  $sections
+     * @return array<string, array<string, mixed>|null>
+     */
+    private static function withoutSource(array $sections): array
+    {
+        foreach ($sections as $key => $part) {
+            if (is_array($part) && is_array($part['property'] ?? null)) {
+                unset($part['property']['id'], $part['property']['name']);
+                $sections[$key] = $part;
+            }
         }
 
         return $sections;

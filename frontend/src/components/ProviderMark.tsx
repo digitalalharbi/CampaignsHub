@@ -24,7 +24,7 @@ const MARKS: Record<string, { letters: string; tone: string }> = {
   // INTEG-PROJECT-LINK-STORES-GA4-001 — the two stores and the measurement property are linked from the same list.
   salla: { letters: 'Sa', tone: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' },
   zid: { letters: 'Zd', tone: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-500/20 dark:text-zinc-200' },
-  ga4: { letters: 'GA', tone: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
+  ga4: { letters: 'Wb', tone: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
 }
 
 const FALLBACK = { letters: '··', tone: 'bg-surface-secondary text-text-muted' }

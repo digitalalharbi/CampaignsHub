@@ -992,6 +992,55 @@ final class UnifiedFigureConsistencyTest extends TestCase
         );
     }
 
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — the formats add up to the content total, which is the platform total.
+     *
+     * The same sync wrote 100 at campaign grain; the creatives beneath it carry 60 as images and 40 as a video inside
+     * the window, and 999 outside it. The comparison, the content library's headline and the platform breakdown must
+     * all say 100 for this window: a reader comparing formats is reading the same money the dashboard shows, split.
+     */
+    public function test_the_content_format_comparison_reconciles_with_the_content_and_platform_totals(): void
+    {
+        $this->holdingTenant((string) $this->tenant->id);
+        $external = ExternalCampaign::withoutGlobalScopes()->where('unified_campaign_id', $this->campaign->id)->firstOrFail();
+
+        foreach ([['image', [[self::DATE, 35.0], ['2026-07-11', 25.0], ['2026-06-01', 999.0]]], ['video', [[self::DATE, 40.0]]]] as [$format, $days]) {
+            $creative = ExternalCreative::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'campaign_id' => $this->campaign->id,
+                'external_campaign_id' => $external->getKey(), 'external_account_id' => $this->account->getKey(),
+                'provider' => 'meta', 'external_creative_id' => 'fmt-'.uniqid(), 'name' => 'محتوى '.$format, 'format' => $format,
+                'status' => 'active', 'source_type' => 'sync',
+            ]);
+            foreach ($days as [$date, $spend]) {
+                DB::table('creative_daily_metrics')->insert([
+                    'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+                    'creative_id' => $creative->getKey(), 'campaign_id' => $this->campaign->id, 'metric_date' => $date,
+                    'spend' => $spend, 'impressions' => $spend * 10, 'clicks' => 1, 'conversions' => 1, 'is_demo' => false,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        }
+        app(TenantContext::class)->forget();
+
+        $comparison = $this->read('creatives/format-comparison')->json('data');
+        $byFormats = round(array_sum(array_map(
+            static fn (array $f): float => (float) $f['spend'],
+            array_merge(...array_map(static fn (array $o): array => $o['formats'], $comparison['objectives'])),
+        )), 6);
+        $content = round((float) $this->read('creatives')->json('data.totals.spend'), 6);
+        $platforms = $this->sum($this->read('metrics/platforms')->json('data'), 'spend');
+
+        $this->assertSame(self::SPEND, $byFormats, 'the formats do not add up to the window’s spend (the June row must be excluded)');
+        $this->assertSame($content, $byFormats, 'the format comparison disagrees with the content library');
+        $this->assertSame($platforms, $byFormats, 'the format comparison disagrees with the platform totals');
+        $this->assertTrue($comparison['totals']['reconciles']);
+        $this->assertSame(self::SPEND, (float) $comparison['totals']['spend']);
+        // The June row is outside this window and inside the previous one: it is the comparison's «before», never its «now».
+        $image = collect($comparison['objectives'][0]['formats'])->firstWhere('format', 'image');
+        $this->assertSame(60.0, (float) $image['spend']);
+        $this->assertSame(999.0, (float) $image['previous']['spend']);
+    }
+
     private function read(string $path, string $extra = ''): TestResponse
     {
         return $this->actingAs($this->operator, 'sanctum')

@@ -126,10 +126,10 @@ function SourcesTable({ projectId, range, ar }: { projectId: string; range: { fr
     { key: 'confirmed', header: ar ? 'المؤكدة' : 'Confirmed', sortable: true, align: 'end', hideable: true, render: (r) => <span dir="ltr" className="tnum">{num(r.confirmed)}</span> },
     { key: 'net_revenue', header: ar ? 'صافي المتجر' : 'Store net', sortable: true, align: 'end', render: (r) => <span dir="ltr" className="tnum">{money(r.net_revenue, cur)}</span> },
     { key: 'share', header: ar ? 'الحصة' : 'Share', sortable: true, align: 'end', hideable: true, render: (r) => <span dir="ltr" className="tnum">{percent(r.share, 1)}</span> },
-    { key: 'ga4_sessions', header: ar ? 'جلسات GA4' : 'GA4 sessions', sortable: true, align: 'end', hideable: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_sessions === null ? '—' : num(r.ga4_sessions)}</span> },
+    { key: 'ga4_sessions', header: ar ? 'جلسات الموقع' : 'Website sessions', sortable: true, align: 'end', hideable: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_sessions === null ? '—' : num(r.ga4_sessions)}</span> },
     { key: 'confirmed_per_session', header: ar ? 'مؤكد لكل جلسة' : 'Confirmed per session', sortable: true, align: 'end', hideable: true, render: (r) => <span dir="ltr" className="tnum">{r.confirmed_per_session === null ? '—' : percent(r.confirmed_per_session, 2)}</span> },
-    { key: 'ga4_add_to_carts', header: ar ? 'إضافات GA4 للسلة' : 'GA4 add to carts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_add_to_carts === null ? '—' : num(r.ga4_add_to_carts)}</span> },
-    { key: 'ga4_revenue', header: ar ? 'إيراد GA4' : 'GA4 revenue', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_revenue === null ? '—' : money(r.ga4_revenue, r.ga4_currency ?? '')}</span> },
+    { key: 'ga4_add_to_carts', header: ar ? 'إضافات الموقع للسلة' : 'Website add to carts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_add_to_carts === null ? '—' : num(r.ga4_add_to_carts)}</span> },
+    { key: 'ga4_revenue', header: ar ? 'إيراد الموقع' : 'Website revenue', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{r.ga4_revenue === null ? '—' : money(r.ga4_revenue, r.ga4_currency ?? '')}</span> },
   ]
   const onDownload = (format: 'csv' | 'xlsx') => {
     const p = new URLSearchParams(params)
@@ -158,7 +158,7 @@ function SourcesTable({ projectId, range, ar }: { projectId: string; range: { fr
               <div className="space-y-1.5">
                 <MethodBadges methods={r.methods} ar={ar} />
                 {r.money_withheld_orders > 0 && <p className="text-warning">{ar ? `${num(r.money_withheld_orders)} طلبًا بلا مبلغ محوَّل.` : `${num(r.money_withheld_orders)} order(s) with no converted amount.`}</p>}
-                {r.ga4_purchases !== null && <p>{ar ? `قاس GA4 ${num(r.ga4_purchases)} عملية شراء لهذا المصدر بنموذجه هو.` : `GA4 measured ${num(r.ga4_purchases)} purchase(s) for this source, under its own model.`}</p>}
+                {r.ga4_purchases !== null && <p>{ar ? `قاس الموقع ${num(r.ga4_purchases)} عملية شراء لهذا المصدر بنموذجه هو.` : `Website measured ${num(r.ga4_purchases)} purchase(s) for this source, under its own model.`}</p>}
               </div>
             )}
             server={{ total: q.data?.total ?? 0, state: table, onChange: setTable }} maxHeight="32rem"
@@ -166,8 +166,8 @@ function SourcesTable({ projectId, range, ar }: { projectId: string; range: { fr
           {t && (
             <p data-testid="order-sources-footer" className="text-[11px] text-text-muted">
               {ar
-                ? `${num(t.orders)} طلبًا حيًا. استُبعد ${num(t.cancelled_excluded)} طلبًا ملغى. ${q.data?.ga4_available ? 'أعمدة GA4 قياس مستقل ولا تُجمع مع المتجر.' : 'لا خاصية GA4 لهذا التقسيم، فأعمدتها فارغة وليست صفرًا.'}`
-                : `${num(t.orders)} live orders. ${num(t.cancelled_excluded)} cancelled excluded. ${q.data?.ga4_available ? 'GA4 columns are a separate measurement, never added to the store.' : 'No GA4 data for this grouping, so its columns are empty, not zero.'}`}
+                ? `${num(t.orders)} طلبًا حيًا. استُبعد ${num(t.cancelled_excluded)} طلبًا ملغى. ${q.data?.ga4_available ? 'أعمدة الموقع قياس مستقل ولا تُجمع مع المتجر.' : 'لا خاصية الموقع لهذا التقسيم، فأعمدتها فارغة وليست صفرًا.'}`
+                : `${num(t.orders)} live orders. ${num(t.cancelled_excluded)} cancelled excluded. ${q.data?.ga4_available ? 'Website columns are a separate measurement, never added to the store.' : 'No Website data for this grouping, so its columns are empty, not zero.'}`}
               {(t.money_withheld_orders ?? 0) > 0 && <span className="block text-warning">{ar ? `${num(t.money_withheld_orders)} طلبًا بعملة (${t.money_withheld_currencies.join('، ')}) بلا سعر صرف موثوق: عُدّت ولم تدخل مبالغها.` : `${num(t.money_withheld_orders)} order(s) in ${t.money_withheld_currencies.join(', ')} have no trustworthy rate: counted, their amounts left out.`}</span>}
             </p>
           )}

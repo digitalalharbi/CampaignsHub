@@ -17,7 +17,7 @@ import type { ConversionDestination, ConversionKind } from './types'
  * agreed to it, on a form that asked.
  */
 const KIND: Record<ConversionKind, { ar: string; en: string; config: Array<{ key: string; ar: string; en: string; placeholder: string }>; secrets: Array<{ key: string; ar: string; en: string }> }> = {
-  ga4: { ar: 'GA4 (Measurement Protocol)', en: 'GA4 (Measurement Protocol)', config: [{ key: 'measurement_id', ar: 'معرّف القياس', en: 'Measurement id', placeholder: 'G-XXXXXXXXXX' }], secrets: [{ key: 'api_secret', ar: 'مفتاح API السري', en: 'API secret' }] },
+  ga4: { ar: 'جوجل أناليتكس (Measurement Protocol)', en: 'Google Analytics (Measurement Protocol)', config: [{ key: 'measurement_id', ar: 'معرّف القياس', en: 'Measurement id', placeholder: 'G-XXXXXXXXXX' }], secrets: [{ key: 'api_secret', ar: 'مفتاح API السري', en: 'API secret' }] },
   meta_capi: { ar: 'Meta (واجهة التحويلات)', en: 'Meta (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل / مجموعة البيانات', en: 'Pixel / dataset id', placeholder: '123456789012345' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
   snapchat_capi: { ar: 'Snapchat (واجهة التحويلات)', en: 'Snapchat (Conversions API)', config: [{ key: 'pixel_id', ar: 'معرّف البيكسل', en: 'Pixel id', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' }], secrets: [{ key: 'access_token', ar: 'رمز الوصول', en: 'Access token' }] },
   gtm_server: { ar: 'GTM من جهة الخادم', en: 'Server-side GTM', config: [{ key: 'endpoint_url', ar: 'عنوان الحاوية (https)', en: 'Container address (https)', placeholder: 'https://gtm.example.com/collect' }], secrets: [{ key: 'api_key', ar: 'مفتاح API (اختياري)', en: 'API key (optional)' }] },

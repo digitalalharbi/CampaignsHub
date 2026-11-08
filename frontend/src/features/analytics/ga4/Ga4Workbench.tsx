@@ -71,7 +71,8 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
 
       <FilterBar ar={ar} range={range} f={f} setF={(n) => { setF(n); setDrill(null) }} platforms={platformChips} />
 
-      <Ga4StoreSection projectId={projectId} range={range} ar={ar} hide={hidden} />
+      {/* REPORT-WEBSITE-TAB-001 — the match below sets the website beside each platform; the older comparison card stands only without it. */}
+      <Ga4StoreSection projectId={projectId} range={range} ar={ar} hide={hidden} showGap={match.data?.state !== 'ready'} />
 
       <MatchSection q={match} ar={ar} drill={drill} setDrill={setDrill} projectId={projectId} range={range} hidden={hidden} compare={f.compare} />
 
@@ -117,7 +118,7 @@ function MatchSection({ q, ar, drill, setDrill, projectId, range, hidden, compar
   }
 
   return (
-    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<span className="inline-flex items-center gap-1.5"><Badge tone="info" data-testid="match-basis">GA4</Badge>{compare && d.previous && <Badge tone="neutral" data-testid="match-previous"><Num>{d.previous.period.from} → {d.previous.period.to}</Num></Badge>}</span>}>
+    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<span className="inline-flex items-center gap-1.5"><Badge tone="info" data-testid="match-basis">{ar ? 'الموقع' : 'Website'}</Badge>{compare && d.previous && <Badge tone="neutral" data-testid="match-previous"><Num>{d.previous.period.from} → {d.previous.period.to}</Num></Badge>}</span>}>
       <div data-testid="ga4-match" className="flex min-w-0 flex-col gap-3">
         <Breadcrumb ar={ar} drill={drill} onBack={() => setDrill(drill?.campaign ? { platform: drill.platform, campaign: null } : null)} onHome={() => setDrill(null)} />
         {drill?.campaign ? (
@@ -190,7 +191,7 @@ function GapPanel({ data, ar }: { data: GapReasonsPayload; ar: boolean }) {
             columns={[
               { key: 'who', header: ar ? 'المصدر' : 'Source', width: '46%', value: (r) => r.campaign ?? r.platform ?? r.source ?? '', title: (r) => r.campaign ?? r.platform ?? r.source ?? '', render: (r) => <span dir="auto" className="font-semibold">{r.campaign ?? (r.platform ? providerLabel(r.platform, ar ? 'ar' : 'en') : r.source)}</span> },
               { key: 'claimed', header: ar ? 'المنصة' : 'Claimed', width: '27%', align: 'end', value: (r) => r.claimed ?? null, render: (r) => <Num>{r.claimed == null ? '—' : num(r.claimed)}</Num> },
-              { key: 'ga4', header: 'GA4', width: '27%', align: 'end', value: (r) => r.ga4 ?? null, render: (r) => <Num>{r.ga4 == null ? '—' : num(r.ga4)}</Num> },
+              { key: 'ga4', header: ar ? 'الموقع' : 'Website', width: '27%', align: 'end', value: (r) => r.ga4 ?? null, render: (r) => <Num>{r.ga4 == null ? '—' : num(r.ga4)}</Num> },
             ]} />
         </div>
       )}
@@ -208,7 +209,7 @@ function ClassifySection({ projectId, range, ar, f, setF, hidden, drillCampaign 
   const d = q.data
 
   return (
-    <ChartCard title={ar ? 'تصنيف' : 'Classify'} action={<Badge tone="info">GA4</Badge>}>
+    <ChartCard title={ar ? 'تصنيف' : 'Classify'} action={<Badge tone="info">{ar ? 'الموقع' : 'Website'}</Badge>}>
       <div data-testid="ga4-classify" className="flex min-w-0 flex-col gap-3">
         <div role="radiogroup" aria-label={ar ? 'التصنيف' : 'Group by'} className="flex flex-wrap gap-1">
           {CLASSIFY_GROUPS.map((g) => (

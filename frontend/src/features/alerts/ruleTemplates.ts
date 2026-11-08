@@ -84,8 +84,8 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'measurement_24', group: 'health', type: 'measurement_outage', threshold: { hours: 24 }, severity: 'warning',
-    name: { ar: 'توقف قياس GA4', en: 'GA4 measurement stopped' },
-    why: { ar: 'ينبّه حين لا تنجح مزامنة GA4 لأكثر من 24 ساعة.', en: 'Warns when GA4 has not synced successfully for more than 24 hours.' },
+    name: { ar: 'توقف قياس الموقع', en: 'Website measurement stopped' },
+    why: { ar: 'ينبّه حين لا تنجح مزامنة الموقع لأكثر من 24 ساعة.', en: 'Warns when Website has not synced successfully for more than 24 hours.' },
     extra: { cooldown_minutes: 1440 },
   }),
   build({

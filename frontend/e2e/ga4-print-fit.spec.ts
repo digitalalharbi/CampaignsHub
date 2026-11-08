@@ -54,7 +54,7 @@ for (const [mode, hidden] of [['full data', [] as string[]], ['marketing only', 
     console.log(`GA4-PRINT-FIT ${mode}: ` + ga4.map((p) => `${p.slideType}=${p.fitScale}`).join(' '))
 
     const types = new Set(ga4.map((p) => p.slideType))
-    for (const t of mode === 'full data' ? ['__ga4_pulse', '__ga4_attribution', '__ga4_reasons', '__ga4_classification', '__ga4_products'] : ['__ga4_pulse', '__ga4_attribution', '__ga4_classification']) {
+    for (const t of mode === 'full data' ? ['__ga4_overview', '__ga4_attribution', '__ga4_reasons', '__ga4_classification', '__ga4_products'] : ['__ga4_overview', '__ga4_attribution', '__ga4_classification']) {
       expect(types.has(t), `no ${t} page was printed (${[...types].join(',')})`).toBe(true)
     }
     for (const p of ga4) {

@@ -19,6 +19,8 @@ export interface StoreKpi {
 
 export interface StoreSeriesDay { date: string; sessions: number | null; purchases: number | null; revenue: number | null; revenue_usd: number | null }
 export interface StoreSlice { key: string; sessions: number; purchases: number | null; revenue: number | null; revenue_usd: number | null; share: number | null }
+/** REPORT-WEBSITE-TAB-001 — how a breakdown closes onto the visits figure: a short one carries a computed `unclassified` slice, one that runs over keeps its measured slices and states `over`. */
+export interface StoreBreakdownMeta { total: number; measured?: number; classified: number; unclassified: number; over?: number; days_covered: number; days_total: number }
 export interface StoreFunnelStep { stage: string; count: number | null; step_rate: number | null; exceeds_previous: boolean }
 
 export interface StoreGapSide { sessions: number; purchases: number; revenue: number; currency: string | null; revenue_usd: number | null; session_share: number | null }
@@ -65,13 +67,15 @@ export interface StorePayload {
   series?: StoreSeriesDay[]
   channels?: StoreSlice[] | null
   devices?: StoreSlice[] | null
+  channels_meta?: StoreBreakdownMeta | null
+  devices_meta?: StoreBreakdownMeta | null
   funnel?: StoreFunnelStep[]
   gap?: StoreGap
   tables?: StoreTables
 }
 
 /** The four report sections, each present only when the server resolved it as shown. */
-export interface Ga4OverviewSection { currency: string | null; usd: StoreUsd; period: { from: string; to: string }; previous_period: { from: string; to: string }; property: { name: string | null }; last_synced_at: string | null; kpis: StoreKpi[]; series: StoreSeriesDay[] }
-export interface Ga4AcquisitionSection { currency: string | null; channels: StoreSlice[] | null; devices: StoreSlice[] | null; funnel: StoreFunnelStep[] }
+export interface Ga4OverviewSection { currency: string | null; usd: StoreUsd; period: { from: string; to: string }; previous_period: { from: string; to: string }; property?: { name?: string | null }; last_synced_at: string | null; kpis: StoreKpi[]; series: StoreSeriesDay[] }
+export interface Ga4AcquisitionSection { currency: string | null; channels: StoreSlice[] | null; devices: StoreSlice[] | null; channels_meta?: StoreBreakdownMeta | null; devices_meta?: StoreBreakdownMeta | null; funnel: StoreFunnelStep[] }
 export interface Ga4GapSection extends StoreGap { currency: string | null }
 export interface Ga4TablesSection { currency: string | null; tables: StoreTables }
