@@ -534,13 +534,11 @@ final class CreativePresenter
                 'note_en' => 'This ad’s cards were fetched and none of them carried a usable asset.',
             ],
             /*
-             * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card has a file the API will not give back.
+             * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card whose picture the single-ad read did not resolve.
              *
-             * The Ads API documents `POST /upload` (which returns a `file_id`) and attaches that id to
-             * a card, and documents no call that reads a file by its id. So the picture exists and is
-             * out of reach by design, which is neither «the platform exposed no asset» (it did name
-             * one) nor a gap in this product to fix with a request. The card's own words are shown in
-             * its place, and the state stays `unavailable`: no image is claimed.
+             * CREATIVE-SYNC-MEDIA-001 — the connector now reads `GET /ads/{id}`, which resolves the
+             * card's `image_url` / `images[]`; a card reaching this branch is one OpenAI returned with
+             * a null URL (or a text-only card), so no picture is claimed and its own words are shown.
              */
             $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'chat_card' => [
                 'state' => 'unavailable',
@@ -548,8 +546,17 @@ final class CreativePresenter
                 'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
-                'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: صورتها ملف مرفوع لا تتيح واجهة المنصة قراءته، فيُعرض نصّ الإعلان بدلًا منها.',
-                'note_en' => 'A ChatGPT Ads chat card: its image is an uploaded file the platform’s API offers no way to read back, so the ad’s own text is shown instead.',
+                'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: لم تُرجع المنصة رابطًا لصورتها (أو أنها بطاقة نصية)، فيُعرض نصّ الإعلان بدلًا منها.',
+                'note_en' => 'A ChatGPT Ads chat card: the platform returned no image link for it (or it is text-only), so the ad’s own text is shown instead.',
+            ],
+            $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'text_card' => [
+                'state' => 'unavailable',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                'note_ar' => 'إعلان نصّي: لا صورة له على المنصة، فيُعرض نصّ الإعلان.',
+                'note_en' => 'A text ad: it has no picture on the platform, so the ad’s own words are shown.',
             ],
             $image === null && $video === null && $thumb === null => [
                 'state' => 'unavailable',
@@ -594,7 +601,8 @@ final class CreativePresenter
      */
     private function copyText(ExternalCreative $creative): ?array
     {
-        if (strtolower((string) $creative->format) !== 'chat_card') {
+        // CREATIVE-SYNC-MEDIA-001 — `text_card`: a Google responsive search ad / X text post, whose words are the creative.
+        if (! in_array(strtolower((string) $creative->format), ['chat_card', 'text_card'], true)) {
             return null;
         }
 

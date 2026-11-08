@@ -224,6 +224,104 @@ final class OpenAiAdsConnectorTest extends TestCase
         $this->assertSame('file_9', $out['raw']['file_id']);
     }
 
+    /**
+     * CREATIVE-SYNC-MEDIA-001 — the list read leaves the picture null; `GET /ads/{id}` resolves it.
+     *
+     * @param  array<string, mixed>  $listed
+     * @param  array<string, mixed>|int  $single  the creative the single-ad read returns, or an HTTP status
+     * @return array{0: array<string, mixed>, 1: int} the stored creative and how many single-ad reads were made
+     */
+    private function adsWith(array $listed, array|int $single): array
+    {
+        $reads = 0;
+
+        Http::fake(function (Request $request) use ($listed, $single, &$reads) {
+            $url = $request->url();
+            $path = (string) parse_url($url, PHP_URL_PATH);
+
+            if (str_contains($url, '/campaigns')) {
+                return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
+            }
+            if (str_contains($url, '/ad_groups')) {
+                return Http::response(['data' => [['id' => 'grp_1', 'campaign_id' => 'cmp_1', 'name' => 'G']], 'has_more' => false]);
+            }
+            if (str_ends_with($path, '/ads/ad_1')) {
+                $reads++;
+
+                return is_int($single)
+                    ? Http::response(['error' => 'nope'], $single)
+                    : Http::response(['id' => 'ad_1', 'creative' => $single]);
+            }
+            if (str_ends_with($path, '/ads')) {
+                return Http::response(['data' => [['id' => 'ad_1', 'ad_group_id' => 'grp_1', 'campaign_id' => 'cmp_1', 'name' => 'Card', 'creative' => $listed]], 'has_more' => false]);
+            }
+
+            return Http::response(['id' => 'acct_live_1']);
+        });
+
+        $method = new \ReflectionMethod(OpenAiAdsConnector::class, 'fetchAds');
+
+        /** @var list<array<string, mixed>> $ads */
+        $ads = $method->invoke($this->connector(), app(TokenVault::class)->stored($this->connection), 'acct_live_1');
+
+        return [$ads[0]['creative'], $reads];
+    }
+
+    public function test_a_single_image_is_resolved_through_the_single_ad_read(): void
+    {
+        [$creative, $reads] = $this->adsWith(
+            ['type' => 'chat_card', 'title' => 'T', 'file_id' => 'file_9', 'image_url' => null],
+            ['type' => 'chat_card', 'file_id' => 'file_9', 'image_url' => 'https://cdn.openai.example/files/file_9.png?exp=1'],
+        );
+
+        $this->assertSame(1, $reads);
+        $this->assertSame('https://cdn.openai.example/files/file_9.png?exp=1', $creative['thumbnail_url']);
+        $this->assertSame($creative['thumbnail_url'], $creative['asset_url']);
+        $this->assertArrayNotHasKey('cards', $creative);
+    }
+
+    public function test_several_images_become_the_cards_strip_in_order_and_null_ones_are_skipped(): void
+    {
+        [$creative] = $this->adsWith(
+            ['type' => 'chat_card', 'images' => [['item_id' => 'a', 'file_id' => 'f1', 'image_url' => null], ['item_id' => 'b', 'file_id' => 'f2', 'image_url' => null]]],
+            ['type' => 'chat_card', 'images' => [
+                ['item_id' => 'a', 'file_id' => 'f1', 'image_url' => 'https://cdn.openai.example/1.png'],
+                ['item_id' => 'b', 'file_id' => 'f2', 'image_url' => null],
+                ['item_id' => 'c', 'file_id' => 'f3', 'image_url' => 'https://cdn.openai.example/3.png'],
+            ]],
+        );
+
+        $this->assertSame('https://cdn.openai.example/1.png', $creative['thumbnail_url']);
+        $this->assertSame([['image_url' => 'https://cdn.openai.example/1.png'], ['image_url' => 'https://cdn.openai.example/3.png']], $creative['cards']);
+    }
+
+    public function test_a_url_the_list_already_carries_costs_no_second_read(): void
+    {
+        [$creative, $reads] = $this->adsWith(
+            ['type' => 'chat_card', 'file_id' => 'file_9', 'image_url' => 'https://cdn.openai.example/a.png'],
+            ['image_url' => 'https://cdn.openai.example/other.png'],
+        );
+
+        $this->assertSame(0, $reads);
+        $this->assertSame('https://cdn.openai.example/a.png', $creative['thumbnail_url']);
+    }
+
+    public function test_a_text_only_card_asks_for_nothing(): void
+    {
+        [$text, $textReads] = $this->adsWith(['type' => 'chat_card', 'title' => 'Only words', 'body' => 'b'], ['image_url' => 'https://x.example/p.png']);
+        $this->assertSame(0, $textReads);
+        $this->assertArrayNotHasKey('thumbnail_url', $text);
+    }
+
+    public function test_a_refused_single_ad_read_invents_no_picture(): void
+    {
+        [$refused, $reads] = $this->adsWith(['type' => 'chat_card', 'title' => 'T', 'file_id' => 'file_9'], 403);
+        $this->assertSame(1, $reads);
+        $this->assertArrayNotHasKey('thumbnail_url', $refused);
+        $this->assertSame('T', $refused['headline']);
+        $this->assertSame('file_9', $refused['raw']['file_id']);
+    }
+
     private function connector(): OpenAiAdsConnector
     {
         return (new OpenAiAdsConnector)->withConnection($this->connection);

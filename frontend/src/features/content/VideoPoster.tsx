@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { firstFrameSrc } from './adPreview'
 
 /**
  * CONTENT-VIDEO-POSTER-001 — a still frame from a video that has no thumbnail.
@@ -40,10 +41,19 @@ export function VideoPoster({
   src,
   className,
   onUnavailable,
+  testid = 'creative-video-poster',
+  cover,
+  label,
 }: {
   src: string
   className: string
   onUnavailable: () => void
+  /** CREATIVE-VIEWER-FORMATS-001 — the surface's own handle; the library keeps the historical one. */
+  testid?: string
+  /** `data-cover` for surfaces that name what their cover is (`video-first-frame`). */
+  cover?: string
+  /** The ad's name, for a reader that cannot see the frame. */
+  label?: string
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   const [painted, setPainted] = useState(false)
@@ -168,13 +178,16 @@ export function VideoPoster({
   return (
     <video
       ref={ref}
-      src={src}
+      // CREATIVE-VIEWER-FORMATS-001 — the fragment asks for the frame; the seek below performs it.
+      src={firstFrameSrc(src)}
       preload="metadata"
       muted
       playsInline
       controls={false}
       className={className}
-      data-testid="creative-video-poster"
+      data-testid={testid}
+      data-cover={cover}
+      aria-label={label}
       data-painted={painted ? 'true' : 'false'}
       onLoadedMetadata={() => {
         const el = ref.current

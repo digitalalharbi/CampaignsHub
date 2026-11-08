@@ -19,6 +19,7 @@ import { clientAbsence, posterSource, readPreview } from '@/features/content/adP
 import { metricState } from '@/features/content/metrics'
 import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
+import { PrintFilmFrame, printChatText, printFilm, settlePrintFilms } from './printCover'
 import { reportPageTitle } from './sharedBranding'
 
 /**
@@ -260,7 +261,8 @@ export function PrintDocument({
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
     }
     // No live charts in the document layout; data is inline. Signal readiness after fonts settle.
-    void document.fonts.ready.then(() => {
+    // CREATIVE-VIEWER-FORMATS-001 — printed films paint (or become their sentence) before the file is cut.
+    void document.fonts.ready.then(() => settlePrintFilms()).then(() => {
       w.__REPORT_DATA_READY__ = true
       w.__REPORT_CHARTS_READY__ = true
       w.__REPORT_IMAGES_READY__ = true
@@ -367,6 +369,9 @@ export function PrintDocument({
 
     return {
       thumb: posterSource(reading),
+      // CREATIVE-VIEWER-FORMATS-001 — a film with no still prints its first frame; a chat card its own words.
+      film: printFilm(reading),
+      chat: printChatText(ad.preview as CreativePreview | null | undefined),
       /*
        * CLIENT-DIAGNOSTIC-SEPARATION-001 — the forwarded file says a missing picture in the client's
        * words, as every other client surface does: never the server's operator note, and never how
@@ -786,7 +791,16 @@ export function PrintDocument({
                           }}
                         />
                       )
-                      : <span className="doc-ad-absent">{ad.absence}</span>}
+                      : ad.film
+                        ? <PrintFilmFrame src={ad.film} absence={ad.absence} absentClass="doc-ad-absent" />
+                        : ad.chat
+                          ? (
+                            <span className="doc-ad-chat" data-cover="text-card">
+                              {ad.chat.headline && <b>{ad.chat.headline}</b>}
+                              {ad.chat.body && <span>{ad.chat.body}</span>}
+                            </span>
+                          )
+                          : <span className="doc-ad-absent">{ad.absence}</span>}
                   </td>
                   <td>{ad.name}</td>
                   <td>{platformCell(ad.provider)}</td>
@@ -1004,6 +1018,8 @@ const DOC_CSS = `
 .doc-table thead { display: table-header-group; }
 .doc-ads td.doc-ad-thumb { width: 84pt; }
 .doc-ads td.doc-ad-thumb img { width: 78pt; height: 44pt; object-fit: cover; border-radius: 3pt; }
+.doc-ads td.doc-ad-thumb video { width: 78pt; height: 44pt; object-fit: cover; border-radius: 3pt; background: #000; }
+.doc-ads td.doc-ad-thumb .doc-ad-chat { display: flex; flex-direction: column; gap: 1pt; width: 78pt; max-height: 44pt; overflow: hidden; font-size: 6.5pt; line-height: 1.25; }
 .doc-ad-absent { display: inline-block; max-width: 78pt; font-size: 7.5pt; line-height: 1.25; color: #6b7280; }  /* repeat header on every page */
 .doc-table tr { break-inside: avoid; }             /* never split a row across pages */
 .doc-table th { text-align: left; background: #f1f5f9; color: #334155; font-weight: 700; padding: 5pt 7pt; border-bottom: 1.5px solid #cbd5e1; }

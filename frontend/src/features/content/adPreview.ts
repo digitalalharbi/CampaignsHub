@@ -327,6 +327,18 @@ export function cardPoster(card: { image_url?: string | null; thumbnail_url?: st
   return localStill(card.image_url) ?? localStill(card.thumbnail_url) ?? null
 }
 
+/**
+ * CREATIVE-VIEWER-FORMATS-001 — the address that makes a film paint its own first frame.
+ *
+ * A Snapchat top snap (a video, or the hero of a collection) usually arrives with a `video_url` and
+ * no still at all. The film IS the cover, so a surface draws it with `preload="metadata"` at a media
+ * fragment just past zero — some browsers paint nothing at exactly 0. A link that already carries a
+ * fragment is left as it is, because a second `#` would be part of the first fragment, not a seek.
+ */
+export function firstFrameSrc(src: string): string {
+  return src.includes('#') ? src : `${src}#t=0.1`
+}
+
 /** The still to draw for a reading — a video's poster, an image's file, or nothing. */
 export function posterSource(reading: PreviewReading): string | null {
   // A collection's HERO is a real frame and is drawn; the tiles beneath it are the part a still

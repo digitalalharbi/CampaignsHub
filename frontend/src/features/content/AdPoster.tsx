@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useUi } from '@/stores/ui'
 import { Film, Image as ImageIcon, ImageOff, LayoutGrid, ShoppingBag } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -6,14 +7,17 @@ import { platformColor } from '@/features/analytics/components'
 import { absenceLabel, absenceShort, assetAspect, clientAbsence, mediaFit, posterSource, previewShape, readPreview, type MediaAspect } from './adPreview'
 import type { CreativePreview } from './api'
 import { PosterImage } from './PosterImage'
+import { VideoPoster } from './VideoPoster'
 import { ProviderMark } from '@/components/ProviderMark'
 
 /**
  * AD-PREVIEW-001 — one still, drawn the same way on every surface that shows an ad.
  *
- * Never a `<video>`: a grid of twenty ads that each preloaded a stream costs a phone tens of
- * megabytes to open a page, and a player belongs in the panel somebody opened on purpose. When there
- * is nothing to draw, the reason is drawn instead — four sentences, never one grey box.
+ * Never a PLAYER: a grid of twenty ads that each preloaded a stream costs a phone tens of megabytes
+ * to open a page, and a player belongs in the panel somebody opened on purpose. The one `<video>` it
+ * draws is a film's own first frame, metadata only, for a film the platform sent without a still
+ * (CREATIVE-VIEWER-FORMATS-001). When there is nothing to draw, the reason is drawn instead — four
+ * sentences, never one grey box.
  */
 export function AdPoster({
   preview,
@@ -29,6 +33,7 @@ export function AdPoster({
   provider = null,
   onMeasured,
   eager = false,
+  textScale = 'tile',
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -85,10 +90,20 @@ export function AdPoster({
   onMeasured?: (width: number, height: number) => void
   /** A viewer the reader opened on purpose: the one image must load now, not when a 0×0 box scrolls into view. */
   eager?: boolean
+  /**
+   * CREATIVE-VIEWER-FORMATS-001 — how large a chat card's own words are drawn. A grid tile clamps them;
+   * a viewer the reader opened draws the whole card at reading size (it opened to a thumbnail-sized
+   * card floating in an empty stage).
+   */
+  textScale?: 'tile' | 'stage'
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
   const src = posterSource(reading)
+  const film = reading.kind === 'video' && reading.poster === null ? reading.src : null
+  // A first frame the browser could not decode falls back to the stated absence, once per film.
+  const [filmFailed, setFilmFailed] = useState(false)
+  useEffect(() => setFilmFailed(false), [film])
 
   /*
    * The stated absence, drawn either because there was never a still to draw or because the browser
@@ -117,6 +132,24 @@ export function AdPoster({
       const key = provider ? canonicalPlatform(provider) : null
       const color = key ? platformColor(key) : 'var(--brand-600)'
 
+      if (textScale === 'stage') {
+        return (
+          <span
+            data-testid={testid ? `${testid}-absent` : undefined}
+            data-absence={reason}
+            data-cover="text-card"
+            title={absenceLabel(reading, ar)}
+            className="relative flex w-full max-w-md flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-surface p-5 text-start shadow-sm"
+          >
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: color }} />
+            {key ? <span className="flex items-center gap-1.5 text-xs font-semibold text-text-muted"><ProviderMark provider={key} size={16} />{providerLabel(key, ar ? 'ar' : 'en')}</span> : null}
+            {copy.headline && <span className="text-lg font-bold leading-snug text-text-primary">{copy.headline}</span>}
+            {copy.body && <span className="text-sm leading-relaxed text-text-secondary">{copy.body}</span>}
+            <span className="text-xs font-semibold text-text-muted">{ar ? 'نص الإعلان — الصورة غير متاحة' : 'Ad text — image not available'}</span>
+          </span>
+        )
+      }
+
       return (
         <span
           data-testid={testid ? `${testid}-absent` : undefined}
@@ -133,19 +166,24 @@ export function AdPoster({
       )
     }
 
-    // MEDIA-TRUTH-001 — a film the platform sent WITHOUT a cover frame still has one: its own first frame.
-    // Drawn from the real video (metadata only, paused, muted), never invented; the typed cover below
-    // is for the creative that has no media at all.
-    if (forClient && reading.kind === 'video' && reading.poster === null && reading.src) {
+    /*
+     * MEDIA-TRUTH-001 / CREATIVE-VIEWER-FORMATS-001 — a film the platform sent WITHOUT a cover frame
+     * still has one: its own first frame. Drawn from the real video (metadata only, paused, muted),
+     * never invented.
+     *
+     * This was the CLIENT's surfaces only, so the same Snapchat ad drew its frame on the live link
+     * and «Video — no cover» on the operator's Analytics grid and campaign centre — 242 live rows
+     * (117 collections whose top snap is a film, 125 videos) where the owner saw nothing. One cover
+     * rule for every surface; a browser that cannot decode falls back to the typed absence below.
+     */
+    if (film !== null && !filmFailed) {
       return (
-        <video
-          data-testid={testid ? `${testid}-first-frame` : undefined}
-          data-cover="video-first-frame"
-          src={`${reading.src}#t=0.1`}
-          preload="metadata"
-          muted
-          playsInline
-          aria-label={name}
+        <VideoPoster
+          src={film}
+          testid={testid ? `${testid}-first-frame` : 'ad-poster-first-frame'}
+          cover="video-first-frame"
+          label={name}
+          onUnavailable={() => setFilmFailed(true)}
           className={`rounded-lg bg-surface-secondary ${fit === 'cover' ? 'object-cover' : 'object-contain'} ${className}`}
         />
       )
