@@ -4,11 +4,10 @@ import { AlertTriangle, X } from 'lucide-react'
 import { compareCreatives, type CreativeCard } from './api'
 import { metricKind, metricLabel, metricState } from './metrics'
 import { creativeFigureText } from './creativeMoney'
-import { imageLoading } from './format'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { objectiveLabel, providerLabel } from '@/features/campaigns/labels'
-import { absenceShort, mediaFitClass, posterSource, readPreview } from './adPreview'
+import { AdPoster } from './AdPoster'
 
 /**
  * §15.7 — creatives side by side, with a winner per metric and never an overall one.
@@ -126,18 +125,15 @@ export function CreativeCompare({
                   * absence wording, because the platform's raw note was the only thing a reader got
                   * where there was no picture.
                 */}
-                {posterSource(readPreview(creative.preview, ar)) !== null ? (
-                  <img
-                    src={posterSource(readPreview(creative.preview, ar)) as string}
-                    alt={creative.name}
-                    loading={imageLoading(posterSource(readPreview(creative.preview, ar)))}
-                    className={`h-20 w-full rounded ${mediaFitClass(creative.preview.aspect ?? null, null)}`}
-                  />
-                ) : (
-                  <div className="flex h-20 items-center justify-center rounded bg-surface-hover px-1 text-center text-[11px] text-text-secondary">
-                    {absenceShort(readPreview(creative.preview, ar), ar) || (ar ? creative.preview.note_ar : creative.preview.note_en)}
-                  </div>
-                )}
+                {/* CREATIVE-VIEWER-FORMATS-001 — the shared cover: still, else the film's first frame, else the stated absence. */}
+                <AdPoster
+                  preview={creative.preview}
+                  name={creative.name}
+                  className="h-20 w-full"
+                  stage={null}
+                  testid={`compare-poster-${creative.id}`}
+                  provider={creative.provider}
+                />
                 <p className="text-xs font-medium text-text-primary">{creative.name}</p>
                 <p className="text-[11px] text-text-secondary">
                   {providerLabel(creative.provider, locale)}

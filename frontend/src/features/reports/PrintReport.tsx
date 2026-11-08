@@ -5,6 +5,7 @@ import { getData } from '@/lib/api/client'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
+import { settlePrintFilms } from './printCover'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
 import { REPORT_NOTE, reportFooterItems } from './reportFooter'
@@ -150,6 +151,14 @@ export function PrintReport() {
         img.onload = img.onerror = () => res(null)
         setTimeout(() => res(null), 4000)
       }))))
+      /*
+        CREATIVE-VIEWER-FORMATS-001 — a film's first frame is a cover in the deck too: the slide's
+        content tiles (`AdPoster`) and the drilldowns draw one for every film with no still. Each is
+        given a bounded chance to paint; one that does not is replaced by its sentence, never printed
+        as a black box.
+      */
+      await settleSlideFilms()
+      await settlePrintFilms()
       if (cancelled) return
       w.__REPORT_CHARTS_READY__ = true
       fitSlides() // scale any slightly-too-tall slide to fit exactly one page (readable floor 0.82)
@@ -484,4 +493,22 @@ function printCss(landscape: boolean): string {
   /* Never split a chart, card, or table row across pages. */
   .recharts-wrapper, table, .rounded-2xl, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   `
+}
+
+/**
+ * The deck's tile films (`AdPoster` → `VideoPoster`, `data-cover="video-first-frame"`), waited for with
+ * a budget just past `VideoPoster`'s own eight-second give-up, which swaps in the typed cover — so a
+ * tile is printed as a frame or as its cover, never cut mid-decode.
+ */
+async function settleSlideFilms(budgetMs = 8500): Promise<void> {
+  const films = Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-cover="video-first-frame"]:not([data-print-film])'))
+  await Promise.all(films.map((video) => new Promise<void>((resolve) => {
+    if (video.error || video.readyState >= 2) { resolve(); return }
+    const timer = setTimeout(resolve, budgetMs)
+    const settle = () => { clearTimeout(timer); resolve() }
+    video.addEventListener('loadeddata', settle, { once: true })
+    video.addEventListener('error', settle, { once: true })
+  })))
+  // VideoPoster gives up at 8s and swaps in the typed cover; let that render land before the cut.
+  await new Promise((r) => setTimeout(r, 150))
 }

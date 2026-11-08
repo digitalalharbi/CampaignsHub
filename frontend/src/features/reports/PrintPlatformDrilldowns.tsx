@@ -6,6 +6,7 @@ import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
 import { clientAbsence, posterSource, readPreview, type PreviewReading } from '@/features/content/adPreview'
 import type { CreativePreview } from '@/features/content/api'
+import { PrintFilmFrame, printChatText, printFilm } from './printCover'
 import type { LiveObjectiveBlock, LivePlatformPayload, LiveShare } from './api'
 import type { ReportAd } from './ReportAdsSection'
 
@@ -155,6 +156,9 @@ function ContentRow({ ad, ar, currency }: { ad: ReportAd; ar: boolean; currency:
   const reading = readPreview(ad.preview as CreativePreview | null | undefined, ar)
   const src = posterSource(reading)
   const absence = printAbsence(reading, ar)
+  // CREATIVE-VIEWER-FORMATS-001 — a film with no still prints its first frame; a chat card its own words.
+  const film = printFilm(reading)
+  const chat = printChatText(ad.preview as CreativePreview | null | undefined)
 
   return (
     <li className="pdd-ad" data-testid="print-drilldown-ad">
@@ -173,7 +177,16 @@ function ContentRow({ ad, ar, currency }: { ad: ReportAd; ar: boolean; currency:
               }}
             />
           )
-          : <span className="pdd-ad-absent" data-testid="print-drilldown-absence">{absence}</span>}
+          : film
+            ? <PrintFilmFrame src={film} absence={absence} absentClass="pdd-ad-absent" />
+            : chat
+              ? (
+                <span className="pdd-ad-chat" data-cover="text-card">
+                  {chat.headline && <b>{chat.headline}</b>}
+                  {chat.body && <span>{chat.body}</span>}
+                </span>
+              )
+              : <span className="pdd-ad-absent" data-testid="print-drilldown-absence">{absence}</span>}
       </span>
       <span className="pdd-ad-name">{ad.name ?? '—'}</span>
       <span className="pdd-ad-fig"><bdi dir="ltr">{ad.spend === null || ad.spend === undefined ? '—' : moneyExact(Number(ad.spend), currency || null)}</bdi></span>
@@ -270,6 +283,8 @@ const PDD_CSS = `
 .pdd-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4pt; }
 .pdd-ad { display: grid; grid-template-columns: 70pt 1fr 70pt 40pt; align-items: center; gap: 6pt; font-size: 8.5pt; break-inside: avoid; }
 .pdd-ad-thumb img { width: 66pt; height: 38pt; object-fit: cover; border-radius: 3pt; display: block; }
+.pdd-ad-thumb video { width: 66pt; height: 38pt; object-fit: cover; border-radius: 3pt; display: block; background: #000; }
+.pdd-ad-chat { display: flex; flex-direction: column; gap: 1pt; width: 66pt; max-height: 38pt; overflow: hidden; font-size: 6.5pt; line-height: 1.25; }
 .pdd-ad-absent { display: inline-block; font-size: 7pt; line-height: 1.25; color: #6b7280; }
 .pdd-ad-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 `

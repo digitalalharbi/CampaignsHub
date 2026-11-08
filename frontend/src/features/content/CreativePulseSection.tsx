@@ -11,6 +11,7 @@ import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComp
 import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { imageLoading } from './format'
+import { VideoPoster } from './VideoPoster'
 import {
   libraryQueryString,
   type CreativeCard,
@@ -723,6 +724,24 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(creative.preview, ar)
   const src = posterSource(reading)
+  const [filmFailed, setFilmFailed] = useState(false)
+
+  /*
+   * CREATIVE-VIEWER-FORMATS-001 — a film with no still is the commonest Snapchat shape, and its own
+   * first frame (metadata only, never a player) is its cover here as on every other surface.
+   */
+  if (!src && reading.kind === 'video' && !filmFailed) {
+    return (
+      <VideoPoster
+        src={reading.src}
+        testid="pulse-poster-first-frame"
+        cover="video-first-frame"
+        label={creative.name}
+        onUnavailable={() => setFilmFailed(true)}
+        className={`h-16 w-16 shrink-0 rounded-xl bg-surface-secondary ${mediaFitClass(creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), 'square', 'thumb')}`}
+      />
+    )
+  }
 
   if (!src) {
     /*
