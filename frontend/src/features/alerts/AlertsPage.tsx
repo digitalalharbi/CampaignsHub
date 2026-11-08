@@ -100,7 +100,7 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   /* Same wording as the taxonomy option the picker reads — one name for one type. */
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
-  measurement_outage: { ar: 'انقطاع القياس (GA4)', en: 'Measurement outage (GA4)' },
+  measurement_outage: { ar: 'انقطاع القياس (الموقع)', en: 'Measurement outage (Website)' },
   tracking_health: { ar: 'سلامة التتبع', en: 'Tracking health' },
   launch_advance: { ar: 'مرحلة إطلاق أفضل متاحة', en: 'Better launch stage available' },
 }

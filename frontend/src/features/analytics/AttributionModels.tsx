@@ -24,7 +24,7 @@ export function AttributionModels({ data, ar }: { data: ModelComparisonData | un
     first: ar ? 'أول لمسة' : 'First touch',
     assisted: ar ? 'ساعدت في' : 'Assisted',
     claimed: ar ? 'زعم المنصة' : 'Platform claim',
-    ga4: ar ? 'مشتريات GA4' : 'GA4 purchases',
+    ga4: ar ? 'مشتريات الموقع' : 'Website purchases',
     evidence: ar ? 'دليل آخر لمسة' : 'Last-touch evidence',
     orders: ar ? 'طلب' : 'orders',
     paths: ar ? 'مسارات التحويل' : 'Conversion paths',

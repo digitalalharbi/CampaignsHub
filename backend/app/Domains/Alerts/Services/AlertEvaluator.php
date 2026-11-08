@@ -632,13 +632,13 @@ final class AlertEvaluator
                 'project_id' => $latest->project_id ? (string) $latest->project_id : null,
                 'title' => $failedNow ? 'Measurement sync failed' : 'Measurement data is stale',
                 'message' => $failedNow
-                    ? 'The latest GA4 sync failed'.($latest->error ? ': '.$latest->error : '.')
-                    : 'No successful GA4 sync in the last '.$hours.' hours'.($lastSuccess?->finished_at ? ' (last success '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
+                    ? 'The latest website sync failed'.($latest->error ? ': '.$latest->error : '.')
+                    : 'No successful website sync in the last '.$hours.' hours'.($lastSuccess?->finished_at ? ' (last success '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
                 'context' => [
                     'title_ar' => $failedNow ? 'فشلت مزامنة القياس' : 'بيانات القياس متأخرة',
                     'message_ar' => $failedNow
-                        ? 'فشلت آخر مزامنة لـ GA4'.($latest->error ? ': '.$latest->error : '.')
-                        : 'لا مزامنة ناجحة لـ GA4 خلال آخر '.$hours.' ساعة'.($lastSuccess?->finished_at ? ' (آخر نجاح '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
+                        ? 'فشلت آخر مزامنة للموقع'.($latest->error ? ': '.$latest->error : '.')
+                        : 'لا مزامنة ناجحة للموقع خلال آخر '.$hours.' ساعة'.($lastSuccess?->finished_at ? ' (آخر نجاح '.$lastSuccess->finished_at->toDateTimeString().').' : '.'),
                     'provider' => 'ga4',
                     'sync_run_id' => (string) $latest->id,
                     'error' => $latest->error,

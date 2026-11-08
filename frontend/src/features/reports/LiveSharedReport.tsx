@@ -1,16 +1,18 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
-import { FileText, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
+import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
+import { isAdPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
 import { LivePlatformDrawer } from './live/LivePlatformDrawer'
 import { FreshnessStrip } from './live/LiveSections'
-import { ContentView, DashboardView, PlatformsView, platformsOf, StandardView, SummaryView } from './live/LiveViews'
+import { ContentView, DashboardView, PlatformsView, platformsOf, StandardView, SummaryView, WebsiteView } from './live/LiveViews'
+import { websiteHasContent } from './Ga4ReportBlocks'
 import { TablesView } from './live/LiveTables'
 import { useLiveMetricReader } from './live/liveMetrics'
 import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
@@ -55,6 +57,7 @@ const MODE_ICONS: Record<LiveMode, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
   platforms: Layers,
   content: ImageIcon,
+  website: Globe,
 }
 
 export function LiveSharedReport({
@@ -139,7 +142,8 @@ export function LiveSharedReport({
   const offeredHere = whole === null ? offered : offeredViews(offered, whole.report_views).filter((m) => (
     m === 'platforms' ? sectionShown(whole, 'platform_comparison')
       : m === 'content' ? sectionShown(whole, 'content_performance')
-        : true
+        : m === 'website' ? websiteHasContent(whole as never)
+          : true
   ))
   // REPORT-COMPOSITION-CONTROL-001 — the address names a view; only one this link offers opens.
   const mode = whole === null ? readMode(search.get('view'), form, level) : (offeredHere.find((m) => m === search.get('view')) ?? offeredHere[0])
@@ -263,9 +267,9 @@ export function LiveSharedReport({
           ))}
         </div>
 
-        {!ownsPlatformChoice(mode) && payload.available.providers.length > 1 && (
+        {!ownsPlatformChoice(mode) && payload.available.providers.filter(isAdPlatform).length > 1 && (
           <div className="flex flex-wrap gap-1" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
-            {payload.available.providers.map((p) => (
+            {payload.available.providers.filter(isAdPlatform).map((p) => (
               <button
                 key={p}
                 type="button"
@@ -323,8 +327,9 @@ export function LiveSharedReport({
 
       {/* Dimmed, not blanked, while refreshing: blanking would make every filter change feel like a page load. */}
       <div className={refreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
-        {mode === 'summary' && <SummaryView payload={payload} {...common} />}
-        {mode === 'standard' && <StandardView payload={payload} {...common} />}
+        {mode === 'summary' && <SummaryView payload={payload} {...common} onOpenWebsite={offeredHere.includes('website') ? () => navigate('website') : undefined} />}
+        {mode === 'standard' && <StandardView payload={payload} {...common} onOpenWebsite={offeredHere.includes('website') ? () => navigate('website') : undefined} />}
+        {mode === 'website' && offeredHere.includes('website') && <WebsiteView payload={payload} ar={ar} />}
         {mode === 'tables' && <TablesView payload={payload} reader={reader} locale={locale === 'ar' ? 'ar' : 'en'} onOpenContent={onOpenContent} />}
         {mode === 'dashboard' && <DashboardView payload={payload} {...common} goTo={(m, p) => navigate(m, p)} canGo={(m) => offeredHere.includes(m)} onOpenPlatform={setDrawer} />}
         {mode === 'platforms' && offeredHere.includes('platforms') && (

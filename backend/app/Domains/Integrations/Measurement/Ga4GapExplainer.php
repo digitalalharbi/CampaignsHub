@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Measurement;
 
 /**
- * GA4-GAP-EXPLAINED-001 — «سبب الفرق»: the gap between what the platforms claimed and what GA4 measured,
+ * GA4-GAP-EXPLAINED-001 — «قراءة الفرق» (was «سبب الفرق»): the gap between what the platforms claimed and what GA4 measured,
  * decomposed by MEASURED quantities only.
  *
  * ## The identity (conversions; the same terms in USD for revenue)
@@ -40,10 +40,11 @@ final class Ga4GapExplainer
 {
     /** key => [ar, en] */
     private const LABELS = [
-        'no_trace' => ['حملات بلا أثر', 'No GA4 trace'],
+        // REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — tracking and attribution PATHS, never a verdict on the campaigns.
+        'no_trace' => ['نقرات خارج التتبع', 'Clicks outside tracking'],
         'attribution_rule' => ['قاعدة الإسناد', 'Attribution rule'],
-        'untagged_channel' => ['زيارات بلا حملة', 'Untagged visits'],
-        'no_platform_trace' => ['مبيعات بلا منصة', 'No platform trace'],
+        'untagged_channel' => ['زيارات المنصة دون وسم', 'Platform visits, untagged'],
+        'no_platform_trace' => ['مسار غير مباشر', 'Indirect path'],
         'unexplained' => ['غير مفسَّر', 'Unexplained'],
     ];
 

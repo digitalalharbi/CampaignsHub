@@ -11,6 +11,8 @@ use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Commerce\Services\StoreFunnelService;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
@@ -988,6 +990,14 @@ final class LiveReportService
             'timeseries' => $window['kind'] === 'daily'
                 ? $engine->timeseries($to->copy()->subDays(6), $to)
                 : ReportPeriod::bucket($engine->timeseries($from, $to), $window['grain']),
+            /*
+             * REPORT-WEBSITE-TAB-001 — the daily figures per platform, for the interactive measurement chart that replaced the
+             * daily table. Same scope, same grain as `timeseries`; money keys are redacted by `HiddenMoney` like every other series.
+             */
+            'platform_series' => array_map(
+                static fn (array $rows): array => $window['kind'] === 'daily' ? $rows : ReportPeriod::bucket($rows, $window['grain']),
+                $engine->timeseriesByProvider($window['kind'] === 'daily' ? $to->copy()->subDays(6) : $from, $to),
+            ),
             'platforms' => $this->platformsWithMovement($engine, $from, $to, $comparison['comparable']),
             /*
              * CLIENT-REPORT-ENTITY-BOUNDARY-001 — a shared link carries PERFORMANCE, not the campaign
@@ -1208,7 +1218,8 @@ final class LiveReportService
                 static fn ($m): bool => is_string($m) && $m !== '',
             )),
             'available' => [
-                'providers' => $scope['providers'],
+                // WEBSITE-TAB-001 — the platform chips are AD platforms: the website is a measurement source with a tab of its own.
+                'providers' => self::withoutMeasurement($scope['providers']),
                 /*
                  * The campaign PICKER is gone from a client link — the owner's own report of it:
                  * «اسم واختيار الحملة احذفه من التقارير… ممكن استبداله باختيار المنصات».
@@ -2283,7 +2294,11 @@ final class LiveReportService
             return [];
         }
 
-        $sources = app(DataFreshnessService::class)->sources($tenantId, [$projectId], $providers);
+        // WEBSITE-TAB-001 — a measurement source is never «a platform these figures do not include».
+        $sources = array_values(array_filter(
+            app(DataFreshnessService::class)->sources($tenantId, [$projectId], $providers),
+            static fn (array $source): bool => ! self::isMeasurement((string) $source['provider']),
+        ));
 
         /*
          * CLIENT-DIAGNOSTIC-SEPARATION-001 — the payload carries what a CLIENT can act on.
@@ -2318,6 +2333,17 @@ final class LiveReportService
             'name' => $source['name'],
             'state' => $source['state'] === 'awaiting_credentials' ? 'awaiting_credentials' : 'synced',
         ] + ($source['kind'] === 'ad_platform' ? ($stamps[$source['provider']] ?? $unknown) : $noStamp), $sources));
+    }
+
+    /** @param  list<string>  $providers */
+    private static function withoutMeasurement(array $providers): array
+    {
+        return array_values(array_filter($providers, static fn (string $p): bool => ! self::isMeasurement($p)));
+    }
+
+    private static function isMeasurement(string $provider): bool
+    {
+        return ProviderCatalogue::has($provider) && ProviderCatalogue::get($provider)->kind === ProviderKind::Measurement;
     }
 
     private function iso(mixed $value): ?string

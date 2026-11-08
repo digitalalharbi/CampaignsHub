@@ -1,7 +1,7 @@
 import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { sectionShown, withDailyRecordsSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
+import { frozenBeforeWebsiteTab, sectionShown, withDailyRecordsSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { Ga4Slide, type WithGa4Sections } from './Ga4ReportBlocks'
 import { FormatComparisonSlide } from './FormatComparisonBlocks'
 import { StoreAnalyticsBlock, type StoreAnalyticsPayload } from './StoreAnalyticsBlock'
@@ -399,7 +399,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
     case '__formats': case '__formats_table':
       return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
-    case '__store_analytics': return <div><Title sub="من سجل المتجر وGA4، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
+    case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
@@ -465,11 +465,21 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       .sort((a, b) => a.order - b.order)
     // The story ends with what needs attention — a page only when the server sent something to show.
     if ((data.attention?.length ?? 0) > 0) visible.push(ATTENTION_SLIDE)
-    withDailyRecordsSlides(visible, data)
-    withStreamsSlide(visible, data)
-    withStoreAnalyticsSlide(visible, data)
-    withGa4Slides(visible, data)
-    withFormatComparisonSlides(visible, data)
+    if (frozenBeforeWebsiteTab(data)) {
+      // A snapshot frozen before the website tab renders in its frozen order.
+      withDailyRecordsSlides(visible, data)
+      withStreamsSlide(visible, data)
+      withStoreAnalyticsSlide(visible, data)
+      withGa4Slides(visible, data)
+      withFormatComparisonSlides(visible, data)
+    } else {
+      withStreamsSlide(visible, data)
+      // REPORT-WEBSITE-TAB-001 — the website pages (store orders first, then the website reading in the live tab's order), then the daily records.
+      withStoreAnalyticsSlide(visible, data)
+      withGa4Slides(visible, data)
+      withFormatComparisonSlides(visible, data)
+      withDailyRecordsSlides(visible, data)
+    }
     return visible
   }, [data])
   const cur = slides[i]

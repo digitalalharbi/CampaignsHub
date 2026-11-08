@@ -21,7 +21,7 @@ declare(strict_types=1);
 return [
     'platforms' => [
         'ga4' => [
-            'label' => 'Google Analytics 4',
+            'label' => 'Google Analytics',
             'authorize_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
             'token_url' => 'https://oauth2.googleapis.com/token',
             /*

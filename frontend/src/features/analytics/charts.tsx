@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ProviderMark } from '@/components/ProviderMark'
 import {
   Area,
@@ -207,6 +207,79 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = '' }: { d
   )
 }
 
+// ---- Stacked area: one metric over time, one series per platform (or one total) -------------------
+
+/**
+ * REPORT-WEBSITE-TAB-001 — the interactive daily chart that replaced the measurement table.
+ *
+ * Presentational: it draws the rows it is given, stacked, with a tooltip on hover and the SAME readout on the keyboard
+ * (Left / Right move the cursor along the days, Home / End jump), so a reader without a pointer gets every value.
+ * A fixed height, so toggling a series or switching the metric never moves the page.
+ */
+export function StackedAreaChart({
+  data,
+  series,
+  height = 280,
+  formatValue,
+  label,
+}: {
+  data: Array<Record<string, unknown>>
+  series: Array<{ key: string; name: string; color?: string }>
+  height?: number
+  formatValue: (v: number) => string
+  label: string
+}) {
+  const [cursor, setCursor] = useState<number | null>(null)
+  const last = data.length - 1
+  const at = cursor === null ? null : Math.min(Math.max(cursor, 0), last)
+  const row = at === null ? null : data[at]
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (data.length === 0) return
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0
+    if (step !== 0) { e.preventDefault(); setCursor((c) => (c === null ? (step > 0 ? 0 : last) : c + step)) }
+    else if (e.key === 'Home') { e.preventDefault(); setCursor(0) }
+    else if (e.key === 'End') { e.preventDefault(); setCursor(last) }
+    else if (e.key === 'Escape') setCursor(null)
+  }
+
+  return (
+    <div className={TICK_LTR} data-testid="stacked-area" data-points={data.length} data-series={series.length}>
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={label}
+        onKeyDown={onKey}
+        onBlur={() => setCursor(null)}
+        className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+        style={{ height }}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            {GRID}
+            <XAxis dataKey="date" tick={AXIS} tickFormatter={(d) => String(d).slice(5)} minTickGap={24} />
+            <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
+            <Tooltip {...tooltipProps} formatter={(v: number) => formatValue(Number(v))} />
+            {series.map((s, i) => {
+              const color = s.color ?? CHART_SERIES[i % CHART_SERIES.length]
+
+              return <Area key={s.key} stackId="one" name={s.name} type="monotone" dataKey={s.key} stroke={color} strokeWidth={2} fill={color} fillOpacity={0.18} isAnimationActive={false} />
+            })}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      {/* The keyboard's readout (and a harmless duplicate of the tooltip for a pointer): the day and each series' value. */}
+      <p aria-live="polite" data-testid="stacked-area-readout" className="mt-1 min-h-[1.25rem] text-center text-xs text-text-secondary">
+        {row ? (
+          <>
+            <span className="tnum font-semibold text-text-primary">{String(row.date)}</span>
+            {series.map((s) => <span key={s.key} className="tnum ms-3">{s.name} {typeof row[s.key] === 'number' ? formatValue(row[s.key] as number) : '—'}</span>)}
+          </>
+        ) : null}
+      </p>
+    </div>
+  )
+}
+
 // ---- Donut: distribution with total in the center, share %, Others grouping ----------------------
 
 /**
@@ -364,7 +437,7 @@ function countRead(value: number | null | undefined): { text: string; exact: str
   return { text: read.text, exact: read.exact }
 }
 
-export function ConversionFunnelChart({ stages, currency = '', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
+export function ConversionFunnelChart({ stages, currency = '', ar = false, differLabel }: { differLabel?: string; stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
   return (
@@ -417,18 +490,20 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false }: { s
                 * widened. The figure stays, because it is real and hiding it would hide a fact about
                 * the account; what changes is that it stops claiming to be a conversion.
               */}
-              {s.step_rate !== null && (
+              {s.step_rate !== null && (s.exceeds_previous || s.step_rate > 1) && (
+                /* REPORT-WEBSITE-TAB-001 — a stage larger than the one above it is a different definition, never a percentage over 100. */
                 <span
-                  className={`tnum ${s.exceeds_previous ? 'text-warning' : ''}`}
-                  title={s.exceeds_previous
-                    ? (ar
-                        ? 'هذه المرحلة أكبر من التي قبلها، فالمرحلتان لا تتداخلان: يمكن الوصول إلى الدفع دون إضافة للسلة، وكل حدث يُنسب في نافذته. النسبة ليست معدل تحويل.'
-                        : 'This stage is larger than the one above it, so the two do not nest: checkout is reachable without an add to cart, and each event is attributed in its own window. This ratio is not a conversion rate.')
-                    : undefined}
+                  data-testid="funnel-definitions-differ"
+                  className="inline-flex items-center rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
+                  title={ar
+                    ? 'هذه المرحلة أكبر من التي قبلها: كل منصة تعرّف الحدث بنافذتها ونموذجها، فلا تتداخل المرحلتان. لا تُحسب نسبة.'
+                    : 'This stage is larger than the one above it: each platform defines the event with its own window and model, so the two do not nest. No rate is computed.'}
                 >
-                  {percent(s.step_rate, 0)}
-                  {s.exceeds_previous && <span aria-hidden> ⚠</span>}
+                  {differLabel ?? (ar ? 'تعريفات المنصات تختلف' : 'Platform definitions differ')}
                 </span>
+              )}
+              {s.step_rate !== null && !s.exceeds_previous && s.step_rate <= 1 && (
+                <span className="tnum">{percent(s.step_rate, 0)}</span>
               )}
               {s.cost_per != null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>

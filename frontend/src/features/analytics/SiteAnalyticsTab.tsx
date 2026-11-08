@@ -15,7 +15,6 @@ import { SiteKpis, type SiteKpi } from './SiteKpis'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 import { TrafficExplorer } from './TrafficExplorer'
 import { Ga4Workbench } from './ga4/Ga4Workbench'
-import { Num } from '@/components/ui/Num'
 
 /**
  * GA4-ANALYTICS-PRODUCT-001 — what the SITE measured, from the project's own GA4 property.
@@ -78,7 +77,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
   if (d.state !== 'ready') {
     // A short chip and one action — the Owner's rule: no paragraph where a chip says it.
     const chip = {
-      not_connected: ar ? 'GA4 غير مربوط' : 'GA4 not connected',
+      not_connected: ar ? 'الموقع غير مربوط' : 'Website not connected',
       not_selected: ar ? 'لا خاصية محددة' : 'No property selected',
       empty: ar ? 'بانتظار المزامنة' : 'Awaiting sync',
     }[d.state]
@@ -100,8 +99,8 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
   return (
     <div data-testid="site-analytics" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
-        <Badge tone="info">GA4</Badge>
-        <span className="font-semibold text-text-primary">{d.property?.name} <Num className="font-normal text-text-muted">· {d.property?.id}</Num></span>
+        <Badge tone="info">{ar ? 'الموقع' : 'Website'}</Badge>
+        {/* REPORT-WEBSITE-GAP-READING-001 — the source is «الموقع»: no property name, id or URL on an analytics view. */}
         <DataFreshness lastSyncAt={d.last_synced_at ?? null} ar={ar} staleAfterHours={36} testid="site-freshness" />
         <Badge tone="neutral" data-testid="site-not-summed">{ar ? 'مستقل عن المنصات' : 'Separate from platforms'}</Badge>
         {note}

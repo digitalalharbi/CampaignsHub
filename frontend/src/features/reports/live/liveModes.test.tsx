@@ -408,7 +408,9 @@ describe('the report levels are different products', () => {
 
     const tables = await screen.findByTestId('live-mode-tables')
     expect(within(tables).getByTestId('tables-platforms')).toBeInTheDocument()
-    expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
+    // REPORT-WEBSITE-TAB-001 — the daily values table is the interactive daily chart now; the rows live in the CSV / XLSX download.
+    expect(within(tables).getByTestId('daily-chart')).toBeInTheDocument()
+    expect(within(tables).queryByTestId('tables-days')).not.toBeInTheDocument()
     expect(within(tables).getByTestId('tables-content')).toBeInTheDocument()
     // The roster nests figures under `metrics`; read flat, every cell was a dash.
     const contentRow = within(within(tables).getByTestId('tables-content')).getAllByRole('row')[1]
@@ -432,8 +434,8 @@ describe('the report levels are different products', () => {
     expect(heads('tables-accounts').join('|')).not.toMatch(/Impressions|Clicks|Platform/)
     expect(heads('tables-content').join('|')).toMatch(/Content.*Results.*Cost per result/)
     expect(heads('tables-content').join('|')).not.toMatch(/Spend|Impressions|Platform/)
-    expect(heads('tables-days').join('|')).toMatch(/Day.*Clicks/)
-    expect(heads('tables-days').join('|')).not.toMatch(/Impressions|Spend|Results/)
+    // The day table is a chart now; a hidden-spend link never offers a spend chip on it.
+    expect(within(tables).queryByTestId('tables-days')).not.toBeInTheDocument()
     expect(heads('tables-platforms').join('|')).not.toMatch(/Spend|CTR|Cost/)
   })
 
@@ -465,7 +467,7 @@ describe('the report levels are different products', () => {
 
     fireEvent.click(screen.getByTestId('live-mode-tab-tables'))
     const tables = await screen.findByTestId('live-mode-tables')
-    expect(within(tables).queryByTestId('tables-days')).not.toBeInTheDocument()
+    expect(within(tables).queryByTestId('daily-chart')).not.toBeInTheDocument()
     expect(within(tables).getByTestId('tables-platforms')).toBeInTheDocument()
   })
 
@@ -475,7 +477,7 @@ describe('the report levels are different products', () => {
 
     const tables = await screen.findByTestId('live-mode-tables')
     expect(screen.queryByTestId('live-modes')).not.toBeInTheDocument()
-    expect(within(tables).getByTestId('tables-days')).toBeInTheDocument()
+    expect(within(tables).getByTestId('daily-chart')).toBeInTheDocument()
   })
 
   it('the two levels share no composition: a standard report never contains the tables view', async () => {

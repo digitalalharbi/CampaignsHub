@@ -267,7 +267,7 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
         />
         {(effective.ga4_overview || effective.ga4_attribution || effective.ga4_gap_reasons || effective.ga4_pulse) && (
           <div data-testid="ga4-visibility-section" className="mt-3 rounded-xl border border-border p-3">
-            <p className="mb-2 text-xs font-bold text-text-primary">{ar ? 'المتجر وGA4' : 'Store & GA4'}</p>
+            <p className="mb-2 text-xs font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</p>
             <Ga4VisibilityControl
               ar={ar}
               hidden={(onLink ? linkData?.ga4_hidden : state.data.ga4_hidden) ?? []}

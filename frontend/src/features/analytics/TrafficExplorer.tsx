@@ -174,7 +174,7 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
         {q.isError ? (
           <QueryFailure error={q.error} ar={ar} testId="site-traffic-failure" onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّرت قراءة جدول الزيارات' : 'The traffic table could not be read'} />
         ) : q.data && q.data.state !== 'ready' ? (
-          <p data-testid="site-traffic-absent" className="text-sm text-text-muted">{ar ? 'لا خاصية GA4 محددة لهذا المشروع.' : 'No GA4 property is selected for this project.'}</p>
+          <p data-testid="site-traffic-absent" className="text-sm text-text-muted">{ar ? 'لا خاصية الموقع محددة لهذا المشروع.' : 'No Website property is selected for this project.'}</p>
         ) : (
           <DataTable<TrafficRow>
             columns={columns} rows={q.data?.rows ?? []} loading={q.isLoading}

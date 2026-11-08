@@ -975,7 +975,8 @@ final class LiveReportShareTest extends TestCase
         $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
 
         $this->assertNotNull($res->json('data.site_measurement'));
-        $this->assertSame('111', $res->json('data.site_measurement.property.id'));
+        // REPORT-WEBSITE-GAP-READING-001 — no property id or name on a report: the calendar alone.
+        $this->assertNull($res->json('data.site_measurement.property.id'));
         $this->assertSame('Asia/Riyadh', $res->json('data.site_measurement.property.timezone'));
         $this->assertSame(900.0, (float) $res->json('data.site_measurement.totals.revenue'));
         $this->assertSame('SAR', $res->json('data.site_measurement.currency'));
@@ -990,14 +991,15 @@ final class LiveReportShareTest extends TestCase
      * «Do not expose asset ids or private storage paths» — a primary key on a client's report is the
      * same mistake in a different column.
      */
-    public function test_site_measurement_names_the_property_and_not_our_primary_key(): void
+    public function test_site_measurement_names_neither_the_property_nor_our_primary_key(): void
     {
         $account = $this->seedProperty();
 
         $res = $this->getJson('/api/v1/reports/shared/'.$this->liveLink().'/live')->assertOk();
 
         /* The section has to BE there, or the absence below is true of a payload that carries nothing. */
-        $this->assertSame('111', $res->json('data.site_measurement.property.id'));
+        $this->assertSame('Asia/Riyadh', $res->json('data.site_measurement.property.timezone'));
+        $this->assertNull($res->json('data.site_measurement.property.id'), 'REPORT-WEBSITE-GAP-READING-001 — no property id on a report');
         $this->assertStringNotContainsString((string) $account->getKey(), $res->getContent());
     }
 

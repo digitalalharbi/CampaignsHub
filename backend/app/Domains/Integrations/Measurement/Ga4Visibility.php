@@ -14,7 +14,9 @@ namespace App\Domains\Integrations\Measurement;
  * MARKETING figure, and one list of hidden keys travels with a report, a link, or a user's saved view.
  *
  *   all        nothing hidden — the default; nothing is hidden by default (permanent report rule)
- *   marketing  hides every sales element
+ *   marketing  hides every sales element (WEBSITE-TAB-001: the sales figures only — visits, channels, devices, the
+ *              funnel up to checkout and the marketing columns stay; the «الموقع» tab is NEVER hidden wholesale by a
+ *              preset, because the tab is a view of its own switched in the report builder, and a preset is a cut of figures)
  *   sales      hides every marketing element
  *   custom     any other hidden list
  *
@@ -56,10 +58,18 @@ final class Ga4Visibility
     /** Element keys that are not a fixed list: `platform:<key>` hides one platform's row everywhere. */
     private const PLATFORM = '/^platform:[a-z0-9_]{1,40}$/';
 
+    /**
+     * REPORT-WEBSITE-GAP-READING-001 — the «غير مقاس» chips of the gap reading, a SHOW/HIDE of their own so an operator can keep
+     * them off a client link. In no preset: «تسويق» and «مبيعات» cut figures, and these are not figures. Shown unless hidden.
+     *
+     * @var list<string>
+     */
+    public const NOTES = ['gap.unmeasured'];
+
     /** @return list<string> */
     public static function catalogue(): array
     {
-        return [...self::MARKETING, ...self::SALES];
+        return [...self::MARKETING, ...self::SALES, ...self::NOTES];
     }
 
     /**
@@ -145,6 +155,9 @@ final class Ga4Visibility
             $a = $sections['ga4_acquisition'];
             $a['channels'] = isset($h['chart.channels']) || isset($h['dim.channel']) ? null : self::slices($a['channels'] ?? null, $h);
             $a['devices'] = isset($h['chart.devices']) ? null : self::slices($a['devices'] ?? null, $h);
+            // The closing figures of a breakdown (`*_meta`) are numbers of that chart: they leave with it.
+            $a['channels_meta'] = $a['channels'] === null ? null : ($a['channels_meta'] ?? null);
+            $a['devices_meta'] = $a['devices'] === null ? null : ($a['devices_meta'] ?? null);
             $a['funnel'] = self::funnel((array) ($a['funnel'] ?? []), $h);
             $sections['ga4_acquisition'] = $a['channels'] === null && $a['devices'] === null && $a['funnel'] === [] ? null : $a;
         }
@@ -204,6 +217,7 @@ final class Ga4Visibility
         $reading['series'] = self::series((array) ($reading['series'] ?? []), $h);
         foreach (['channels' => 'chart.channels', 'devices' => 'chart.devices'] as $k => $switch) {
             $reading[$k] = isset($h[$switch]) ? null : self::slices($reading[$k] ?? null, $h);
+            $reading[$k.'_meta'] = $reading[$k] === null ? null : ($reading[$k.'_meta'] ?? null);
         }
         $reading['funnel'] = self::funnel((array) ($reading['funnel'] ?? []), $h);
         $reading['tables'] = self::tables((array) ($reading['tables'] ?? []), $h);
@@ -473,6 +487,11 @@ final class Ga4Visibility
             }
         }
         $r['reasons'] = array_values(array_filter((array) ($r['reasons'] ?? []), static fn ($x): bool => is_array($x) && ! isset($h['gap.reason.'.($x['key'] ?? '')])));
+        if (isset($h['gap.unmeasured'])) {
+            // Absent from the data, not only the page: the unmeasured causes and every context chip that was not measured.
+            $r['unmeasured'] = [];
+            $r['context'] = array_values(array_filter((array) ($r['context'] ?? []), static fn ($x): bool => is_array($x) && ($x['measured'] ?? false) === true));
+        }
         $r['hidden_reasons'] = true;
 
         return $r['reasons'] === [] && ($r['headline']['gap'] ?? null) === null ? null : $r;
