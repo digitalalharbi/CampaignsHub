@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
@@ -127,7 +128,7 @@ final class GoogleAdsCreativeMediaTest extends TestCase
         $this->assertArrayNotHasKey('creative', $ads[0]);
     }
 
-    private ?\App\Domains\Integrations\Models\ProviderConnection $connection = null;
+    private ?ProviderConnection $connection = null;
 
     private function google(): GoogleAdsConnector
     {
