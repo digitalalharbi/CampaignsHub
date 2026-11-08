@@ -13,7 +13,7 @@ import { API_HEADERS, AUTH, csrfHeaders, seededProject } from './helpers'
  * download) and read with Apple's PDFKit — the reader the repo notes name, not pdfplumber. macOS only: skipped elsewhere.
  */
 const STORE_PROJECT = 'متجر تجريبي — Demo'
-const PHRASES = ['العروض والخصومات', 'مستوى المنافسة', 'جودة المحتوى', 'سلوك العملاء', 'تكاليف المنصات الإعلانية']
+const PHRASES = ['العروض والخصومات', 'مستوى المنافسة', 'جودة المحتوى', 'سلوك العملاء', 'تكاليف المنصات', 'طبيعة المنتج والتسعير']
 const SHORT = 'تُدار الحملات وفق منهجية قائمة على الأداء'
 const reversed = (s: string) => [...s].reverse().join('')
 
@@ -69,7 +69,8 @@ test('the PDF carries the approved note and every page holds the fit floor', asy
   }, { timeout: 150_000, intervals: [2000] }).not.toBe('')
   const res = await request.get(`/api/v1/reports/download/${token}`, { headers: API_HEADERS })
   expect(res.ok()).toBe(true)
-  const text = pdfText(await res.body())
+  // A printed line may break inside a phrase; the text layer holds a newline there, so compare on collapsed whitespace.
+  const text = pdfText(await res.body()).replace(/\s+/g, ' ')
   writeFileSync(join(tmpdir(), 'disclaimer-pdf.txt'), text)
   // eslint-disable-next-line no-console
   console.log(`DISCLAIMER-PDF-TEXT ${text.length} chars; ` + [SHORT, ...PHRASES].map((p) => `${p}=${text.includes(p)}`).join('; '))

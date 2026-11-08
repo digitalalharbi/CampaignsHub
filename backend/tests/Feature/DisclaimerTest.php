@@ -127,8 +127,8 @@ final class DisclaimerTest extends TestCase
     public function test_system_full_copy_names_no_source_and_lists_the_owner_factors(): void
     {
         $factors = [
-            'ar' => ['العروض والخصومات', 'جودة المحتوى', 'سلوك العملاء', 'مستوى المنافسة', 'تكاليف المنصات الإعلانية', 'المؤثرون', 'المتجر أو الموقع'],
-            'en' => ['offers and discounts', 'quality of the content', 'customer behaviour', 'level of competition', 'advertising platform costs', 'influencers', 'store or website'],
+            'ar' => ['العروض والخصومات', 'جودة المحتوى', 'سلوك العملاء', 'مستوى المنافسة', 'تكاليف المنصات', 'طبيعة المنتج والتسعير', 'المؤثرون', 'المتجر أو الموقع'],
+            'en' => ['offers and discounts', 'content quality', 'customer behaviour', 'level of competition', 'platform costs', 'nature of the product and its pricing', 'influencers', 'store or website'],
         ];
 
         foreach ($factors as $locale => $words) {
