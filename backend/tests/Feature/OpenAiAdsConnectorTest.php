@@ -229,7 +229,7 @@ final class OpenAiAdsConnectorTest extends TestCase
      *
      * @param  array<string, mixed>  $listed
      * @param  array<string, mixed>|int  $single  the creative the single-ad read returns, or an HTTP status
-     * @return array{0: array<string, mixed>, 1: int}  the stored creative and how many single-ad reads were made
+     * @return array{0: array<string, mixed>, 1: int} the stored creative and how many single-ad reads were made
      */
     private function adsWith(array $listed, array|int $single): array
     {

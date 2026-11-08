@@ -208,7 +208,7 @@ final class XConnector extends ApiAdvertisingConnector
      * A refused read leaves the old minimal creative: the tweet id, as before.
      *
      * @param  list<string>  $tweetIds
-     * @return array<string, array<string, mixed>>  keyed by tweet id
+     * @return array<string, array<string, mixed>> keyed by tweet id
      */
     private function tweetsById(OAuthTokens $tokens, string $adAccountId, array $tweetIds): array
     {
