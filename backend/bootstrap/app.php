@@ -12,6 +12,7 @@ use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
+use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
@@ -142,6 +143,7 @@ return Application::configure(basePath: dirname(__DIR__))
         RemindDeliveryReviewers::class,
         PurgeAgentChat::class,
         RefreshCreativeCoversCommand::class,
+        BackfillCreativeCoversCommand::class,
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
