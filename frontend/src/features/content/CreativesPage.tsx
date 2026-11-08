@@ -57,6 +57,7 @@ import { useProject } from '@/stores/project'
 import { campaignStatusLabel, marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { Num } from '@/components/ui/Num'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 /**
  * §15.2 — the Creative Library, in `/app` and `/agency`.
@@ -1543,6 +1544,7 @@ export function CreativesPage() {
           onClose={() => setComparing(false)}
         />
       )}
+      <LivePerformanceNotice variant="compact" />
     </div>
   )
 }

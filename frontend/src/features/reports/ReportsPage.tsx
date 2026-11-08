@@ -75,6 +75,7 @@ import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { reports as countedReports } from '@/lib/counted'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -818,6 +819,7 @@ export function ReportsPage() {
           <ScopeLostDialog ar={ar} onClose={() => setScopeId(null)} />
         )
       )}
+      <LivePerformanceNotice variant="compact" />
     </div>
   )
 }
