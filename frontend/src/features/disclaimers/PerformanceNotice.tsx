@@ -32,7 +32,8 @@ export function PerformanceNotice({
   const [open, setOpen] = useState(false)
   const t = LABELS[locale]
 
-  if (!data) return null
+  // A missing or malformed payload (an unmocked/empty response) renders nothing rather than crashing the page.
+  if (!data || !data.sections) return null
   const on = (k: string) => (data.enabled?.[k] ?? true) === true
   const short = on('short') ? pickText(data.sections.short, locale) : null
   const full = on('full') ? pickText(data.sections.full, locale) : null

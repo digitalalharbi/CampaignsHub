@@ -8,7 +8,7 @@ import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
 import { settlePrintFilms } from './printCover'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
-import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, reportFooterItems } from './reportFooter'
 import { brand } from '@/lib/brand'
 
 const ATTENTION_PER_PAGE = 2
@@ -214,7 +214,8 @@ export function PrintReport() {
 
     return new Date().getFullYear()
   })()
-  const total = slides.length
+  const total = slides.length + 1 // + the closing notes page
+  const footerFacts = { updatedAt: d.generated_at ?? null, period: d.period ?? null, currency: payload.currency, timezone: d.timezone ?? 'Asia/Riyadh', objective: typeof d.objective === 'string' ? d.objective : null }
 
   return (
     <div className={`report-print ${type}`} data-theme={theme} dir="rtl" lang="ar">
@@ -293,6 +294,27 @@ export function PrintReport() {
           )}
         </section>
       ))}
+      {/*
+        DISCLAIMER-COPY-001 (Owner, 2026-11-08) — the full approved note, on the report's LAST page. Pages carry
+        the short note in their footer; the long explanation is printed once here, where it can be read in full
+        without shrinking any page of data. Same text as «معرفة المزيد» on the live link.
+      */}
+      <section className="report-slide" data-print-page={total} data-slide-type="notes">
+        <div className="report-slide-inner">
+          <div data-testid="print-notes-full" style={{ paddingTop: '6mm' }}>
+            <p style={{ fontSize: '0.8rem', fontWeight: 700, margin: '0 0 3mm' }}>{REPORT_NOTE.ar}</p>
+            <p style={{ fontSize: '0.8rem', lineHeight: 1.9, margin: 0 }}>{REPORT_NOTE_MORE.ar}</p>
+          </div>
+        </div>
+        <footer className="report-slide-footer">
+          <div className="report-footer-meta">
+            <span className="report-footer-brand">
+              {reportFooterItems(footerFacts, 'ar').map(([k, v]) => `${k}: ${v}`).join(' | ')}
+            </span>
+            <span className="report-footer-page"><bdi dir="ltr">{total} / {total}</bdi></span>
+          </div>
+        </footer>
+      </section>
     </div>
   )
 }
@@ -340,7 +362,7 @@ function measureLayout() {
     const isCover = !!el.querySelector('.report-cover')
     // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
     // So is an attention page holding a single block: its content is complete, not missing.
-    const isTextPage = ['__attention'].includes(el.getAttribute('data-slide-type') ?? '')
+    const isTextPage = ['__attention', 'notes'].includes(el.getAttribute('data-slide-type') ?? '')
     const pr = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
     const padT = parseFloat(cs.paddingTop) || 0
