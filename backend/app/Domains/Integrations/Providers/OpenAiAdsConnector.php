@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
@@ -248,13 +249,103 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
                     'review_status' => $this->stringOrNull($a, 'review_status'),
                     // The documented field is `creative.target_url`; `destination_url` is kept for older payloads.
                     'destination_url' => $this->stringOrNull($a, 'destination_url') ?? $this->stringOrNull((array) ($a['creative'] ?? []), 'target_url'),
-                    'creative' => $this->creative($id, (array) $a),
+                    'creative' => $this->creative($id, $this->withResolvedImages($tokens, $id, (array) $a)),
                     'raw' => (array) $a,
                 ], static fn ($v) => $v !== null);
             }
         }
 
         return $ads;
+    }
+
+    /** Ads whose picture is resolved by `GET /ads/{id}` in one sync — a bound, not a quota. */
+    private const MAX_IMAGE_LOOKUPS = 500;
+
+    private int $imageLookups = 0;
+
+    /**
+     * CREATIVE-SYNC-MEDIA-001 — the picture's URL, which only `GET /ads/{id}` resolves.
+     *
+     * OpenAI's Ads reference documents `POST /upload` (a `file_id`) and no call that reads a file by id; the
+     * way the picture comes back is the single-ad read, which "resolves image URLs": `creative.image_url`
+     * for one image and an ordered `creative.images[]` of `{item_id, file_id, image_url}` for several (each
+     * of which may be null). The list read this connector pages through can leave them null, so an ad that
+     * names a file and has no usable URL is read once more. A refusal, a missing credential or the bound
+     * leaves the ad exactly as listed — a card with no picture says so, it never draws a guess.
+     *
+     * @param  array<string, mixed>  $ad
+     * @return array<string, mixed>
+     */
+    private function withResolvedImages(OAuthTokens $tokens, string $adId, array $ad): array
+    {
+        $creative = $ad['creative'] ?? null;
+
+        if (! is_array($creative) || ! $this->needsImageLookup($creative) || $this->imageLookups >= self::MAX_IMAGE_LOOKUPS) {
+            return $ad;
+        }
+
+        $this->imageLookups++;
+
+        try {
+            $one = $this->read($this->api($tokens)->get($this->url('ads/'.rawurlencode($adId))), 'ad');
+        } catch (\Throwable) {
+            return $ad;
+        }
+
+        $resolved = is_array($one['creative'] ?? null) ? $one['creative'] : (is_array(Arr::get($one, 'data.creative')) ? Arr::get($one, 'data.creative') : null);
+
+        if (! is_array($resolved)) {
+            return $ad;
+        }
+
+        foreach (['image_url', 'images'] as $key) {
+            if (isset($resolved[$key]) && $resolved[$key] !== [] && $resolved[$key] !== '') {
+                $creative[$key] = $resolved[$key];
+            }
+        }
+
+        $ad['creative'] = $creative;
+
+        return $ad;
+    }
+
+    /** @param  array<string, mixed>  $creative */
+    private function needsImageLookup(array $creative): bool
+    {
+        $images = $creative['images'] ?? null;
+
+        if (is_array($images) && $images !== []) {
+            foreach ($images as $image) {
+                if (is_array($image) && $this->stringOrNull($image, 'image_url') === null) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return $this->stringOrNull($creative, 'image_url') === null && $this->stringOrNull($creative, 'file_id') !== null;
+    }
+
+    /**
+     * The https URLs of a multi-image card, in order. Anything else is not a picture.
+     *
+     * @param  array<string, mixed>  $creative
+     * @return list<string>
+     */
+    private function imageUrls(array $creative): array
+    {
+        $urls = [];
+
+        foreach ((array) ($creative['images'] ?? []) as $image) {
+            $url = is_array($image) ? $this->stringOrNull($image, 'image_url') : null;
+
+            if ($url !== null && str_starts_with($url, 'https://')) {
+                $urls[] = $url;
+            }
+        }
+
+        return $urls;
     }
 
     /**
@@ -275,17 +366,25 @@ final class OpenAiAdsConnector extends ApiAdvertisingConnector implements Report
             return null;
         }
 
+        $urls = $this->imageUrls($creative);
+        $first = $this->stringOrNull($creative, 'image_url') ?? ($urls[0] ?? null);
+
         return array_filter([
             'external_id' => (string) ($creative['id'] ?? $adId),
             'name' => $this->stringOrNull($creative, 'title') ?? $this->stringOrNull($ad, 'name'),
-            // OPENAI-CHAT-CARD-TEXT-001 — the card's own words, kept as copy: the Ads API documents file
-            // UPLOAD and no retrieval, so for a card with a file the text is all the product can show.
+            // OPENAI-CHAT-CARD-TEXT-001 — the card's own words, kept as copy beside the picture
+            // (resolved by the single-ad read, CREATIVE-SYNC-MEDIA-001).
             'headline' => $this->stringOrNull($creative, 'title'),
             'body' => $this->stringOrNull($creative, 'body'),
             /* OpenAI's documented ad creative. Not a story, not a video, not a carousel. */
             'format' => 'chat_card',
-            'thumbnail_url' => $this->stringOrNull($creative, 'image_url'),
-            'asset_url' => $this->stringOrNull($creative, 'image_url') ?? $this->stringOrNull($creative, 'file_url'),
+            'thumbnail_url' => $first,
+            'asset_url' => $first ?? $this->stringOrNull($creative, 'file_url'),
+            'asset_expires_at' => $first === null ? null : AssetExpiry::fromUrl($first)?->toIso8601String(),
+            // Several images are the card's strip; one is its cover alone.
+            'cards' => count($urls) > 1
+                ? array_map(static fn (string $u): array => ['image_url' => $u], $urls)
+                : null,
             'preview_url' => $this->stringOrNull($creative, 'preview_url'),
             'destination_url' => $this->stringOrNull($creative, 'target_url'),
             /*
