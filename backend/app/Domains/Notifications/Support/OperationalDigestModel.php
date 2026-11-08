@@ -115,7 +115,9 @@ final class OperationalDigestModel
 
         // The platform rows, biggest spend first. Share is of the platforms' own total so the bars add up.
         $rows = array_values(array_filter((array) ($block['platform_rows'] ?? []), 'is_array'));
-        usort($rows, static fn (array $a, array $b): int => (float) ($b['spend'] ?? 0) <=> (float) ($a['spend'] ?? 0));
+        // Biggest spend first; ties (and platforms that spent nothing) fall back to the canonical platform order, never a list of ours.
+        $rank = static fn (array $r): int => ($i = array_search(AdPlatforms::canonical((string) ($r['provider'] ?? '')), AdPlatforms::ORDER, true)) === false ? PHP_INT_MAX : $i;
+        usort($rows, static fn (array $a, array $b): int => ((float) ($b['spend'] ?? 0) <=> (float) ($a['spend'] ?? 0)) ?: $rank($a) <=> $rank($b));
         $prevByProvider = [];
         foreach ((array) ($block['platform_previous'] ?? []) as $r) {
             $prevByProvider[(string) ($r['provider'] ?? '')] = (array) $r;

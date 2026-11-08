@@ -243,7 +243,7 @@ final class AlertEventText
         }
         $platforms = $campaign !== null ? array_values(array_filter((array) $campaign->platforms, 'is_string')) : [];
 
-        return implode($ar ? '، ' : ', ', array_map(static fn (string $p): string => AdPlatforms::name($p, $locale), array_slice($platforms, 0, 2)));
+        return implode($ar ? '، ' : ', ', array_map(static fn (string $p): string => AdPlatforms::name($p, $locale), $platforms));
     }
 
     private static function objectiveOf(string $objective, bool $ar): string
