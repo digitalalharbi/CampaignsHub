@@ -35,6 +35,12 @@ RUN apk add --no-cache \
         chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto-arabic \
         nodejs npm python3 py3-pikepdf
 
+# CREATIVE-VIDEO-FRAME-COVER-001 — `VideoFrameExtractor` takes ONE still frame from a creative's film when its
+# platform sent no still (or the still's link is dead), so every video has a cover of our own that does not
+# depend on a browser decoding a signed link. The task brief said `apt-get`; this base is Alpine, so the same
+# intent is `apk add --no-cache` (no index or package cache is left in the layer). `nice` is busybox's.
+RUN apk add --no-cache ffmpeg
+
 # `playwright-core` resolved from a location that EXISTS on a server.
 #
 # The default `require_base` points at `../frontend/package.json` — a developer's

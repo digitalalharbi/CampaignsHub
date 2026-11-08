@@ -55,6 +55,11 @@ final class CoverCache
      */
     private const COPY_ONLY_HOSTS = ['fbcdn.net', 'facebook.com', 'fbsbx.com', 'cdninstagram.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'tiktokcdn-eu.com', 'ibyteimg.com', 'byteimg.com', 'byteoversea.com'];
 
+    /** CREATIVE-VIDEO-FRAME-COVER-001 — where our copy came from: the platform's still, or a frame taken from the film. */
+    public const SOURCE_PROVIDER = 'provider';
+
+    public const SOURCE_VIDEO_FRAME = 'video_frame';
+
     private const MAX_BYTES = 5 * 1024 * 1024;
 
     private const TYPES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'image/avif' => 'avif'];
@@ -64,16 +69,42 @@ final class CoverCache
 
     private const BACKOFF_CAP_MINUTES = 24 * 60;
 
+    /** @return list<string> the provider CDN host suffixes whose links are copied (and whose films may be framed) */
+    public static function copyOnlyHosts(): array
+    {
+        return self::COPY_ONLY_HOSTS;
+    }
+
+    /**
+     * CREATIVE-VIDEO-FRAME-COVER-001 — the film's link, when a frame may be taken from it: https, a known CDN host.
+     * Read from the row alone, like {@see CoverSourceRefresher::recoverable()}, so the backfill and the job agree.
+     */
+    public static function videoSourceOf(ExternalCreative $creative): ?string
+    {
+        $url = $creative->video_url;
+
+        return is_string($url) && VideoFrameExtractor::allowed($url) ? $url : null;
+    }
+
+    /** A creative whose only picture can be a frame from its film: no still link at all, a playable film. */
+    public static function frameOnly(ExternalCreative $creative): bool
+    {
+        return self::sourceOf($creative) === null && self::videoSourceOf($creative) !== null;
+    }
+
     /** Whether this creative needs a (re)capture now: no cover yet, or the provider link changed — and not backing off. */
     public static function wanted(ExternalCreative $creative): bool
     {
         if (self::sourceOf($creative) === null) {
             // CREATIVE-COVERS-COVERAGE-001 — no link yet, but the platform can name one: ask it, at the backoff's pace.
-            return $creative->cover_path === null && CoverSourceRefresher::recoverable($creative)
+            // CREATIVE-VIDEO-FRAME-COVER-001 — or the creative holds a playable film, whose own frame is the cover.
+            return $creative->cover_path === null && (CoverSourceRefresher::recoverable($creative) || self::videoSourceOf($creative) !== null)
                 && ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture());
         }
 
+        // A frame we took stands in until the platform's own still is copied; a still link that has appeared since is tried.
         $stale = $creative->cover_path === null || $creative->cover_cached_at === null
+            || $creative->cover_source === self::SOURCE_VIDEO_FRAME
             || ($creative->source_updated_at !== null && $creative->source_updated_at->greaterThan($creative->cover_cached_at));
 
         return $stale && ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture());
@@ -153,6 +184,7 @@ final class CoverCache
     {
         $source = self::sourceOf($creative);
         $renewed = false;
+        $reason = null;
         if ($source === null && CoverSourceRefresher::recoverable($creative)) {
             /*
              * CREATIVE-COVERS-COVERAGE-001 — a creative the sweep left without any link (a Spark post past the old
@@ -161,35 +193,62 @@ final class CoverCache
              */
             $source = $this->renew($creative);
             $renewed = true;
-            if ($source === null) {
-                return $this->failed($creative, 'provider_gave_none');
-            }
-        }
-        if ($source === null) {
-            $creative->forceFill(['cover_state' => self::STATE_NONE, 'cover_error' => null, 'cover_next_attempt_at' => null])->save();
-
-            return false;
-        }
-
-        if (! $renewed && self::lapsed($source)) {
+            $reason = $source === null ? 'provider_gave_none' : null;
+        } elseif ($source !== null && self::lapsed($source)) {
             $source = $this->renew($creative);
             $renewed = true;
-            if ($source === null) {
-                return $this->failed($creative, 'link_expired');
-            }
+            $reason = $source === null ? 'link_expired' : null;
         }
 
-        [$body, $ext, $reason] = $this->fetch($source);
+        $body = $ext = null;
+        $origin = self::SOURCE_PROVIDER;
+        if ($source !== null) {
+            [$body, $ext, $reason] = $this->fetch($source);
 
-        // A CDN that refuses a link it signed is a link that lapsed before its stated time: ask the platform once.
-        if ($body === null && ! $renewed && in_array($reason, ['http_403', 'http_404', 'http_410'], true)) {
-            $fresh = $this->renew($creative);
-            if ($fresh !== null) {
-                [$body, $ext, $reason] = $this->fetch($fresh);
+            // A CDN that refuses a link it signed is a link that lapsed before its stated time: ask the platform once.
+            if ($body === null && ! $renewed && in_array($reason, ['http_403', 'http_404', 'http_410'], true)) {
+                $fresh = $this->renew($creative);
+                $renewed = true;
+                if ($fresh !== null) {
+                    [$body, $ext, $reason] = $this->fetch($fresh);
+                }
             }
         }
 
         if ($body === null || $ext === null) {
+            /*
+             * CREATIVE-VIDEO-FRAME-COVER-001 — the platform gave no still, or its link is dead even after a renewal:
+             * the film itself is the source. One frame, taken on the server, stored exactly like any other copy.
+             * Not when a frame is already what we hold (re-taking the same frame is not an upgrade).
+             */
+            $video = self::videoSourceOf($creative);
+            if ($video !== null && $creative->cover_source !== self::SOURCE_VIDEO_FRAME) {
+                if (self::lapsed($video) && ! $renewed) {
+                    $this->renew($creative);
+                    $renewed = true;
+                    $video = self::videoSourceOf($creative);
+                }
+                if ($video !== null && ! self::lapsed($video)) {
+                    [$frame, $frameReason] = app(VideoFrameExtractor::class)->extract($video);
+                    if ($frame !== null) {
+                        [$body, $ext, $origin, $reason] = [$frame, 'jpg', self::SOURCE_VIDEO_FRAME, null];
+                    } else {
+                        $reason = $frameReason;
+                    }
+                } else {
+                    $reason = 'video_expired';
+                }
+            }
+        }
+
+        if ($body === null || $ext === null) {
+            if ($source === null && $reason === null) {
+                // Nothing to copy, nothing to ask for, no film: the platform gives none.
+                $creative->forceFill(['cover_state' => self::STATE_NONE, 'cover_error' => null, 'cover_next_attempt_at' => null])->save();
+
+                return false;
+            }
+
             return $this->failed($creative, $reason ?? 'unknown');
         }
 
@@ -200,6 +259,7 @@ final class CoverCache
         $previous = $creative->cover_path;
         $creative->forceFill([
             'cover_path' => $path,
+            'cover_source' => $origin,
             'cover_cached_at' => Carbon::now(),
             'cover_state' => self::STATE_CACHED,
             'cover_error' => null,
