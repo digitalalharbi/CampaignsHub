@@ -36,36 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Runner-side availability probe (from GitHub runner, not over SSH)
-        continue-on-error: true
-        run: |
-          set +e
-          COVER='https://campaignshub.io/media/covers/29/292d830d89ec1d47c149ca2cc9903a636022e7ca17f3b625e1a983d83620b0da.png'
-          probe() {
-            name="$1"; url="$2"; shift 2
-            : > "/tmp/probe_$name.txt"
-            for i in $(seq 1 60); do
-              curl -s -o /dev/null -m 20 "$@" -w '%{http_code} %{time_connect} %{time_starttransfer} %{time_total} %{remote_ip}\n' "$url" >> "/tmp/probe_$name.txt"
-              sleep 0.2
-            done
-            echo "== PROBE $name $url"
-            pct() { sort -n | awk -v p="$1" '{a[NR]=$1} END{i=int(NR*p+0.999999); if(i<1)i=1; printf "%.3f", a[i]}'; }
-            n=$(wc -l < "/tmp/probe_$name.txt")
-            echo "n=$n code000=$(awk '$1=="000"' "/tmp/probe_$name.txt" | wc -l) non200=$(awk '$1!="200"' "/tmp/probe_$name.txt" | wc -l)"
-            for col in 2 3 4; do
-              lbl=$(echo "connect starttransfer total" | cut -d' ' -f$((col-1)))
-              echo "time_$lbl p50=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 0.5) p95=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 0.95) max=$(cut -d' ' -f$col "/tmp/probe_$name.txt" | pct 1)"
-            done
-            echo "distinct remote_ip:"; cut -d' ' -f5 "/tmp/probe_$name.txt" | sort | uniq -c
-            echo "status histogram:"; cut -d' ' -f1 "/tmp/probe_$name.txt" | sort | uniq -c
-            echo "slow/failed rows (code conn ttfb total ip):"; awk '$1!="200" || $4>3' "/tmp/probe_$name.txt" | head -20
-          }
-          echo "== FACTS-RUNNER $(date -u +%FT%TZ)"
-          echo "runner dns:"; getent ahosts campaignshub.io | awk '{print $1}' | sort -u; getent ahosts api.campaignshub.io | awk '{print $1}' | sort -u
-          probe health https://api.campaignshub.io/api/v1/health
-          probe robots https://campaignshub.io/robots.txt
-          probe cover "$COVER" -H 'Accept: image/*'
-          echo "== END FACTS-RUNNER"
       - name: Snapshot on VPS
         uses: appleboy/ssh-action@v1.2.2
         env:
@@ -81,72 +51,80 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
-            cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
             set +e
-            echo "== FACTS-AVAIL (read-only)"
-            echo "-- load/nproc/mem"; cat /proc/loadavg; nproc; free -m
-            echo "-- vmstat 1x5"; vmstat 1 5 2>/dev/null || true
-            echo "-- containers (name image status restarts oom)"
-            for c in $(docker ps -aq); do docker inspect -f '{{.Name}} {{.Config.Image}} status={{.State.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' "$c"; done 2>/dev/null || true
-            echo "-- docker stats"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} pids={{.PIDs}}' || true
-            echo "-- ss -s"; ss -s || true
-            echo "-- listeners on 80/443"; ss -ltnH 2>/dev/null | awk '$4 ~ /:(80|443)$/ {print $1,$2,$3,$4}' || true
-            echo "-- conntrack"; cat /proc/sys/net/netfilter/nf_conntrack_count /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo "no conntrack"
-            echo "-- dmesg conntrack/oom/drop (count)"; (dmesg 2>/dev/null | grep -ciE "nf_conntrack: table full|out of memory|oom-kill") || true
-            echo "-- dmesg by kind (count, last-seen line without payload)"; for k in "nf_conntrack: table full" "Out of memory" "oom-kill" "Killed process" "TCP: request_sock" "possible SYN flooding" "dropping packet"; do n=$(dmesg -T 2>/dev/null | grep -c "$k"); echo "$k: $n  last: $(dmesg -T 2>/dev/null | grep "$k" | tail -1 | cut -c1-60)"; done
-            echo "-- dmesg oom victims (process names only)"; dmesg -T 2>/dev/null | grep -oE "Killed process [0-9]+ \([^)]*\)" | sed 's/[0-9]\+ //' | sort | uniq -c | sort -rn | head
-            echo "-- crash-looping containers: exit code + oom, last start/finish"; for c in vps-app-1 vps-queue-1 platform-queue-1 handover-queue-1 leadflow-production-horizon-1; do docker inspect -f '{{.Name}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} err={{.State.Error}} restartpolicy={{.HostConfig.RestartPolicy.Name}} finished={{.State.FinishedAt}}' $c 2>/dev/null; done
-            echo "-- memory by process (top 8, comm only)"; ps -eo comm,rss --sort=-rss | head -9
-            echo "-- TCP listen overflows/drops"; nstat -az TcpExtListenOverflows TcpExtListenDrops TcpExtTCPTimeouts TcpRetransSegs TcpOutSegs 2>/dev/null || netstat -s 2>/dev/null | grep -iE "overflow|listen queue|retransmit|SYNs to LISTEN" || true
-            echo "-- proxy containers"
-            PROXIES=$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy|nginx|traefik|proxy|frontend/ {print $1}')
-            echo "$PROXIES"
-            for c in $PROXIES; do
-              echo "== LOG SUMMARY $c (last 200 lines of access, counts only)"
-              docker logs --tail 200 "$c" > /tmp/.fa_$$ 2>&1 || true
-              # caddy json: status + duration ; nginx combined: status field after request
-              echo "status counts (json):"; grep -o '"status":[0-9]*' /tmp/.fa_$$ | sort | uniq -c | sort -rn | head -12
-              echo "status counts (combined):"; grep -oE '" [1-5][0-9][0-9] ' /tmp/.fa_$$ | sort | uniq -c | sort -rn | head -12
-              echo "duration buckets (json, seconds):"; grep -o '"duration":[0-9.e-]*' /tmp/.fa_$$ | cut -d: -f2 | awk '{d=$1+0; b=(d<0.05)?"<50ms":(d<0.25)?"50-250ms":(d<1)?"250ms-1s":(d<5)?"1-5s":(d<20)?"5-20s":">=20s"; c[b]++} END{for(k in c)print c[k],k}' | sort -rn
-              echo "log lines total: $(wc -l < /tmp/.fa_$$)"
-              rm -f /tmp/.fa_$$
-              echo "error/warn types, last 1h:"
-              docker logs --since 1h "$c" 2>&1 | grep -oiE 'upstream timed out|connect\(\) failed|worker_connections|limit_req|limiting requests|i/o timeout|dial tcp[^"]{0,40}|context deadline exceeded|no route to host|connection reset by peer|too many open files|tls: [a-z ]{0,40}|read tcp|write tcp|504|502|499|"level":"error"|"level":"warn"|obtaining certificate|certificate' | sort | uniq -c | sort -rn | head -20
+            cd /opt/campaignshub
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            PSQL="$DC exec -T db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -X -P pager=off'"
+            echo "== FACTS-COVER (read-only) $(date -u +%FT%TZ) (UTC; local = UTC+3)"
+            echo "-- 1 containers: image, created, started"
+            for c in $($DC ps -q backend queue scheduler); do docker inspect -f '{{.Name}} image={{slice .Image 7 19}} created={{.Created}} started={{.State.StartedAt}} status={{.State.Status}}' $c; done
+            echo "-- 1 image ids and created"
+            for c in $($DC ps -q backend queue scheduler); do docker image inspect -f '{{slice .Id 7 19}} imgcreated={{.Created}}' $(docker inspect -f '{{.Image}}' $c); done
+            for s in backend queue scheduler; do
+              echo "-- 1 $s: ffmpeg"
+              $DC exec -T $s sh -c 'which ffmpeg; ffmpeg -version 2>&1 | head -1; which nice; test -f app/Domains/Campaigns/Services/VideoFrameExtractor.php && echo "VideoFrameExtractor.php present" || echo "VideoFrameExtractor.php MISSING"; grep -c "video_frame" app/Domains/Campaigns/Services/CoverCache.php; grep -c "frames-per-minute" app/Domains/Campaigns/Console/BackfillCreativeCoversCommand.php' 2>&1 | head -12
             done
-            echo "-- host nginx/caddy services"; systemctl is-active nginx caddy fail2ban ufw 2>&1 || true
-            echo "-- nginx -T limit_ (host)"; (command -v nginx >/dev/null && nginx -T 2>/dev/null | grep -nE 'limit_(req|conn)|worker_(processes|connections)|keepalive|proxy_(read|connect)_timeout|listen' | head -40) || echo "no host nginx"
-            echo "-- nginx -T limit_ (frontend container)"; docker exec campaignshub-frontend nginx -T 2>/dev/null | grep -nE 'limit_(req|conn)|worker_(processes|connections)|keepalive_timeout|proxy_(read|connect)_timeout' | head -20 || true
-            echo "-- caddy rate limit config (container)"; for c in $(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy/ {print $1}'); do docker exec "$c" sh -c 'grep -nEi "rate_limit|rate-limit|servers|timeouts|keepalive|max_conns|log" /etc/caddy/Caddyfile 2>/dev/null' | head -30 || true; done
-            echo "-- fail2ban"; (command -v fail2ban-client >/dev/null && sudo -n fail2ban-client status 2>&1 | head -10) || echo "no fail2ban / not permitted"
-            echo "-- ufw/iptables rate rules"; (sudo -n ufw status 2>&1 | head -15) || true; (sudo -n iptables -S 2>/dev/null | grep -iE 'limit|recent|hashlimit|connlimit|DROP' | head -20) || echo "iptables not readable"
-            echo "-- cloud/host-level: public IP of VPS seen from itself"; curl -s -m 5 https://api.ipify.org || true; echo
-            echo "-- local loopback latency to services (on VPS)"
-            for u in https://api.campaignshub.io/api/v1/health https://campaignshub.io/robots.txt; do for i in 1 2 3 4 5 6 7 8 9 10; do curl -s -o /dev/null -m 20 -w "$u %{http_code} conn=%{time_connect} ttfb=%{time_starttransfer} total=%{time_total}\n" "$u"; done; done | awk '{print}' | sort | uniq -c | sort -rn | head -30
-            echo "== END FACTS-AVAIL"
-            exit 0
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
+            echo "-- 1 horizon status + processes (queue)"
+            $DC exec -T queue php artisan horizon:status 2>&1 | head -3
+            $DC exec -T queue sh -c 'ps -eo pid,etime,args | grep -E "horizon|queue:work" | grep -v grep | cut -c1-140' 2>&1 | head -12
+            echo "-- 2 schedule:list (creatives only)"
+            $DC exec -T scheduler php artisan schedule:list 2>&1 | grep -iE "creatives|cover" | head
+            echo "-- 2 scheduled_runs for backfill-covers (last 12)"
+            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
+            BEGIN READ ONLY;
+            select started_at, finished_at, duration_ms, outcome, exit_code, rows_affected, failure_class, left(regexp_replace(coalesce(failure_message,''),'https?://[^ ]+','<url>','g'),120) as msg from scheduled_runs where command like '%backfill-covers%' order by started_at desc limit 12;
+            select command, count(*) filter (where outcome='running') running_rows, max(started_at) last_start from scheduled_runs where command like '%backfill-covers%' group by 1;
+            ROLLBACK;
             SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
+            echo "-- 2 scheduler container log, last 6h (command names and status only)"
+            $DC logs --since 6h scheduler 2>&1 | grep -iE "backfill|creatives:|cover|error|fail|skipp" | sed -E 's#https?://[^ ]+#<url>#g' | cut -c1-200 | tail -25
+            echo "-- 2 overlap mutex: redis keys (names + ttl)"
+            $DC exec -T redis sh -c 'redis-cli ping; for k in $(redis-cli --scan --pattern "*schedule-*" | head -40); do echo "$k ttl=$(redis-cli ttl "$k")"; done' 2>&1 | head -50
+            echo "-- 3 dry run (writes nothing)"
+            $DC exec -T backend php artisan creatives:backfill-covers 2>&1 | sed -E 's#https?://[^ ]+#<url>#g' | head -40
+            echo "-- 3 db counts"
+            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
+            BEGIN READ ONLY;
+            select now() as db_now;
+            select provider, count(*) total,
+              count(*) filter (where video_url is not null) with_video,
+              count(*) filter (where cover_path is not null) cached,
+              count(*) filter (where cover_source='video_frame') cached_video_frame,
+              count(*) filter (where cover_path is null and video_url like 'https://%' and coalesce(thumbnail_url,'') not like 'https://%' and coalesce(asset_url,'') not like 'https://%') film_no_still_no_copy,
+              count(*) filter (where cover_path is null and video_url like 'https://%' and (thumbnail_url like 'https://%' or asset_url like 'https://%')) film_with_stilllink_no_copy
+            from external_creatives where is_demo=false group by 1 order by 1;
+            select provider, coalesce(cover_state,'-') state, coalesce(cover_source,'-') source, coalesce(cover_error,'-') err,
+              case when cover_next_attempt_at is null then 'none' when cover_next_attempt_at > now() then 'future' else 'past' end next_attempt,
+              count(*) n, max(cover_attempts) max_attempts, min(cover_next_attempt_at) min_next, max(cover_next_attempt_at) max_next
+            from external_creatives where is_demo=false and cover_path is null and video_url is not null group by 1,2,3,4,5 order by 1,6 desc;
+            select 'tiktok film no copy' cohort, coalesce(substring(video_url from '^https://([^/]+)/'),'-') host,
+              case when substring(video_url from 'x-expires=([0-9]+)') is null then 'no x-expires'
+                   when to_timestamp(substring(video_url from 'x-expires=([0-9]+)')::bigint) < now() then 'EXPIRED' else 'live' end video_link,
+              (thumbnail_url like 'https://%' or asset_url like 'https://%') has_still_link,
+              coalesce(raw->>'media','-') media, (external_campaign_id is not null) has_campaign, count(*) n,
+              min(to_timestamp(nullif(substring(video_url from 'x-expires=([0-9]+)'),'')::bigint)) min_exp, max(to_timestamp(nullif(substring(video_url from 'x-expires=([0-9]+)'),'')::bigint)) max_exp,
+              max(updated_at) last_updated, max(asset_expires_at) max_asset_exp
+            from external_creatives where is_demo=false and provider='tiktok' and cover_path is null and video_url like 'https://%' group by 2,3,4,5,6 order by n desc;
+            select provider, count(*) filter (where cover_source='video_frame') frames, min(cover_cached_at) filter (where cover_source='video_frame') first_frame, max(cover_cached_at) filter (where cover_source='video_frame') last_frame, max(cover_cached_at) last_any_cache from external_creatives group by 1 order by 1;
+            select provider, coalesce(cover_error,'-') err, count(*) n, max(updated_at) newest from external_creatives where cover_error is not null group by 1,2 order by 1,3 desc;
+            ROLLBACK;
+            SQL
+            echo "-- 4 failed_jobs by class (counts, exception class only)"
+            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off' <<'SQL'
+            BEGIN READ ONLY;
+            select payload::json->>'displayName' job, queue, substring(exception from '^[A-Za-z0-9_\\]+') exc_class, count(*) n, max(failed_at) newest from failed_jobs where failed_at > now() - interval '3 days' group by 1,2,3 order by newest desc limit 15;
+            select count(*) failed_cover_jobs_total, max(failed_at) from failed_jobs where payload::json->>'displayName' like '%CacheCreativeCover%';
+            ROLLBACK;
+            SQL
+            echo "-- 4 redis queue depth"
+            $DC exec -T redis sh -c 'for q in default reports sync live-refresh; do echo "$q pending=$(redis-cli llen queues:$q) delayed=$(redis-cli zcard queues:$q:delayed) reserved=$(redis-cli zcard queues:$q:reserved)"; done' 2>&1
+            echo "-- 4 delayed jobs: how many are cover captures (by displayName, counts only)"
+            $DC exec -T redis sh -c 'redis-cli zrange queues:default:delayed 0 -1' 2>/dev/null | grep -o 'CacheCreativeCoverJob' | wc -l
+            $DC exec -T redis sh -c 'redis-cli lrange queues:default 0 -1' 2>/dev/null | grep -o 'CacheCreativeCoverJob' | wc -l
+            $DC exec -T redis sh -c 'redis-cli zrange queues:default:delayed 0 0 WITHSCORES' 2>/dev/null | tail -1 | awk '{print "earliest delayed available_at epoch: "$1}'
+            echo "-- 4/5 logs: cover capture outcomes since the deploy (reason counts only)"
+            $DC exec -T backend sh -c 'ls -la storage/logs | tail -5; cat storage/logs/*.log 2>/dev/null | grep -E "^\[2026-11-0[89]" | grep -E "Creative cover" | grep -oE "(not cached|could not be renewed)|\"reason\":\"[^\"]{0,60}\"" | sed -E "s#https?://[^ \"]+#<url>#g" | sort | uniq -c | sort -rn | head -20'
+            echo "-- 5 files taken since the deploy"
+            $DC exec -T backend sh -c 'find storage/app/media/covers -type f -newermt "2026-11-08 20:30:00" | wc -l; find storage/app/media/covers -type f | wc -l'
+            echo "== END FACTS-COVER"
+            exit 0
