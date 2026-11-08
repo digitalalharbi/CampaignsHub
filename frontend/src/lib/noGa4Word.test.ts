@@ -62,13 +62,24 @@ describe('the website is never called GA4 in the interface', () => {
 describe('a report surface names no measurement source', () => {
   const REPORT_SURFACES = ['/src/features/reports/', '/src/features/analytics/', '/src/components/']
 
-  it('says neither «Google Analytics» nor «جوجل أناليتكس», nor prints a property name, id or URL', () => {
+  it('says neither «Google Analytics» nor «جوجل أناليتكس», nor «Google reports/updates» («تقارير Google»), nor prints a property name, id or URL', () => {
     const offenders = Object.entries(TREE)
       .filter(([path]) => REPORT_SURFACES.some((d) => path.startsWith(d)) && !/\.test\.(ts|tsx)$/.test(path))
       .flatMap(([path, source]) => code(source).split('\n').map((line, i) => [path, i + 1, line] as const))
-      .filter(([, , line]) => /Google Analytics|جوجل أناليتكس|analytics\.google\.com|property\??\.(name|id|url|uri)\b|default_?uri|website_?url/i.test(line))
+      .filter(([, , line]) => /Google Analytics|جوجل أناليتكس|analytics\.google\.com|Google[’']?s?\s+(reports?|updates?|restates?|data|tag|search console)|(تقارير|بيانات|تحديثات)\s+(Google|جوجل|غوغل)|property\??\.(name|id|url|uri)\b|default_?uri|website_?url/i.test(line))
       .map(([path, n]) => `${path}:${n}`)
 
     expect(offenders, 'a report surface names the source: say «الموقع» / «Website»').toEqual([])
+  })
+})
+
+/** WORDING (Owner 2026-11-08) — «مصادر الزيارات» for clicks; «مصادر <النتيجة>» otherwise; never «من أين جاءت». */
+describe('the summary split panel title is plain', () => {
+  it('reads Traffic sources for clicks and Sources of <result> otherwise', async () => {
+    const { splitTitle } = await import('@/features/reports/live/ExecutiveSummary')
+    expect(splitTitle(true, 'النقرات', true)).toBe('مصادر الزيارات')
+    expect(splitTitle(true, 'Clicks', false)).toBe('Traffic sources')
+    expect(splitTitle(false, 'المحادثات', true)).toBe('مصادر المحادثات')
+    expect(splitTitle(false, 'Leads', false)).toBe('Sources of leads')
   })
 })
