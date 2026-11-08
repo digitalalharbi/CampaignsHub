@@ -14,6 +14,10 @@ import { E2E_BACKEND_ENV } from './env'
  */
 const STORE_PROJECT = 'متجر تجريبي — Demo'
 const FLOOR = 0.85
+// The seeded report whose period (the last 30 days) holds the demo store's GA4 data. Not «the newest completed report»: specs that run
+// before this one (report-form-composition) save June-2026 reports, newer than the seeded one, whose period has no GA4 rows — their
+// `ga4_pulse` is honestly null, so the poll below could never turn true.
+const SEEDED_REPORT = 'تقرير المنصات — مقارنة'
 
 test.use({ storageState: AUTH.owner })
 
@@ -32,8 +36,8 @@ async function layout(page: Page, projectId: string, reportId: string): Promise<
 test('a snapshot frozen before the website tab keeps its pulse page, inside the floor, and still exports; a new one prints none', async ({ page, request }) => {
   test.setTimeout(360_000)
   const projectId = await seededProject(request, STORE_PROJECT)
-  const list = ((await (await request.get(`/api/v1/projects/${projectId}/reports`, { headers: API_HEADERS })).json()).data?.reports ?? []) as Array<{ id: string; status?: string }>
-  const reportId = list.find((r) => r.status === 'completed')!.id
+  const list = ((await (await request.get(`/api/v1/projects/${projectId}/reports`, { headers: API_HEADERS })).json()).data?.reports ?? []) as Array<{ id: string; name?: string; status?: string }>
+  const reportId = list.find((r) => r.status === 'completed' && r.name === SEEDED_REPORT)!.id
   const headers = { ...(await csrfHeaders(request)), 'Content-Type': 'application/json' }
   await request.put(`/api/v1/projects/${projectId}/reports/${reportId}/sections`, { headers, data: { ga4_hidden: [] } })
   expect((await request.post(`/api/v1/projects/${projectId}/reports/${reportId}/regenerate`, { headers, data: { confirm: true } })).ok()).toBe(true)
