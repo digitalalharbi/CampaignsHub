@@ -64,6 +64,7 @@ import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
+import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -1569,6 +1570,7 @@ export function CampaignsPage() {
           {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
+      <LivePerformanceNotice variant="compact" />
     </div>
   )
 }

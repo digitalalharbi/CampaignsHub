@@ -20,8 +20,8 @@ export const REPORT_NOTE = {
 
 /** The longer explanation, kept behind «معرفة المزيد» — never printed unless a reader asks for it. */
 export const REPORT_NOTE_MORE = {
-  ar: 'تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.',
-  en: 'Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.',
+  ar: 'لكل جهة قياس — المنصات الإعلانية، والمتجر أو الموقع، والمؤثرون، وكل قناة — طريقة احتساب وتوقيت تحديث خاص بها، فيختلف الرقم من مصدر إلى آخر وتُقرأ النتائج في صورتها الكاملة. وتتأثر النتائج كذلك بطبيعة المنتج والتسعير، والعروض والخصومات، وجودة المحتوى، وسلوك العملاء، ومستوى المنافسة، وتكاليف المنصات، وقد تتغير الأرقام بعد اكتمال معالجة البيانات. لذلك لا تمثل المؤشرات ضمانًا لنتائج مستقبلية.',
+  en: 'Each measurement source — the advertising platforms, the store or website, influencers and every other channel — has its own way of counting and its own update timing, so a figure differs from one source to another and results are read as a whole. Results are also affected by the nature of the product and its pricing, offers and discounts, content quality, customer behaviour, the level of competition and platform costs, and figures may change once data processing completes. The indicators are therefore not a guarantee of future results.',
 } as const
 
 const MORE_LABEL = { ar: { more: 'معرفة المزيد', less: 'إخفاء' }, en: { more: 'Learn more', less: 'Hide' } } as const

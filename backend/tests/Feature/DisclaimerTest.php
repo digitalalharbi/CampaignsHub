@@ -123,4 +123,21 @@ final class DisclaimerTest extends TestCase
             'scope' => 'organization', 'payload' => ['sections' => []],
         ])->assertForbidden();
     }
+
+    public function test_system_full_copy_names_no_source_and_lists_the_owner_factors(): void
+    {
+        $factors = [
+            'ar' => ['العروض والخصومات', 'جودة المحتوى', 'سلوك العملاء', 'مستوى المنافسة', 'تكاليف المنصات', 'طبيعة المنتج والتسعير', 'المؤثرون', 'المتجر أو الموقع'],
+            'en' => ['offers and discounts', 'content quality', 'customer behaviour', 'level of competition', 'platform costs', 'nature of the product and its pricing', 'influencers', 'store or website'],
+        ];
+
+        foreach ($factors as $locale => $words) {
+            $text = (string) config("disclaimers.sections.full.{$locale}");
+            $this->assertDoesNotMatchRegularExpression('/GA4|Google Analytics|جوجل أناليتكس|قوقل أناليتكس/iu', $text);
+            foreach ($words as $word) {
+                $this->assertStringContainsString($word, $text);
+            }
+            $this->assertDoesNotMatchRegularExpression('/GA4|Google Analytics|جوجل أناليتكس/iu', (string) config("disclaimers.sections.objectives.sales.{$locale}"));
+        }
+    }
 }

@@ -125,8 +125,8 @@ final class DailyDigestMail extends Mailable
 
         return [
             'note' => $ar
-                ? 'ملاحظة: تُقرأ النتائج وفق الأداء والبيانات المتاحة خلال الفترة، وقد تختلف المؤشرات باختلاف مصادر القياس والإسناد والعوامل المؤثرة على الحملة.'
-                : 'Note: Results reflect the performance and data available in the period; indicators may vary with measurement sources, attribution and other factors affecting the campaign.',
+                ? 'ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.'
+                : 'Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.',
             'items' => $items,
         ];
     }
