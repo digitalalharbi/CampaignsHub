@@ -886,6 +886,7 @@ function SharedCreativeDetail({
               className="h-64 w-full max-w-md"
               fit="contain"
               testid="shared-creative-detail-poster"
+              textScale="stage"
               forClient
               provider={creative.provider}
             />

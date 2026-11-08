@@ -135,3 +135,19 @@ describe('the printed file', () => {
     expect(container.querySelectorAll('.doc-ad-absent')).toHaveLength(0)
   })
 })
+
+describe('a ChatGPT chat card opened in a viewer', () => {
+  /** It opened to a thumbnail-sized card floating in an empty stage. */
+  it('draws the whole card at reading size, with the platform named', () => {
+    const chat = preview({
+      state: 'unavailable', kind: 'other', video_url: null,
+      text: { headline: 'Silver rings', body: 'A long body that a tile would clamp at four lines but a viewer shows whole.' },
+    })
+    renderWithProviders(<AdPoster preview={chat} name="Chat" testid="v" textScale="stage" forClient provider="openai_ads" />, { locale: 'en' })
+
+    const card = screen.getByTestId('v-absent')
+    expect(card).toHaveAttribute('data-cover', 'text-card')
+    expect(card).toHaveTextContent('ChatGPT')
+    expect(card.querySelector('.line-clamp-4')).toBeNull()
+  })
+})
