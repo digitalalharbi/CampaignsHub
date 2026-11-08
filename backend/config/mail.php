@@ -136,7 +136,7 @@ return [
     | one: `notification_preferences` and the digest ledger decide that exactly as before. Off by
     | default so merging changes nothing in an inbox until the Owner turns it on.
     */
-    'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', false),
+    'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', true),
 
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),

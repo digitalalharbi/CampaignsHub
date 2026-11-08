@@ -61,6 +61,8 @@ final class DigestDeliveryTest extends TestCase
     {
         parent::setUp();
         Carbon::setTestNow(Carbon::parse(self::NOW, 'UTC'));
+        // These tests are about delivery mechanics and the older layout; the operational layout has its own test below.
+        config()->set('mail.operational_digests', false);
         $this->seed(PermissionSeeder::class);
 
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-digest-delivery', 'status' => 'active']);
@@ -163,9 +165,9 @@ final class DigestDeliveryTest extends TestCase
     }
 
     /**
-     * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digest is behind a switch that is OFF, and ON changes only WHAT is sent.
+     * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digest is on by default, can be switched off, and changes only WHAT is sent.
      *
-     * Off: the layout everyone already receives. On: one project in scope is the project digest. The ledger, the gate, the
+     * Off (`MAIL_OPERATIONAL_DIGESTS=false`): the older layout. On (the default): one project in scope is the project digest. The ledger, the gate, the
      * once-per-period claim and the recipient are the same in both — nothing new reaches anyone who had not enabled digests.
      */
     public function test_the_operational_digest_replaces_the_layout_only_when_switched_on(): void
@@ -174,6 +176,7 @@ final class DigestDeliveryTest extends TestCase
         $this->withConfiguredEmail();
         $dispatcher = app(DigestDispatcher::class);
 
+        $this->assertTrue((bool) (require config_path('mail.php'))['operational_digests'], 'the operational digest is on unless the env var switches it off');
         config()->set('mail.operational_digests', false);
         $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()));
         Mail::assertSent(DailyDigestMail::class, 1);

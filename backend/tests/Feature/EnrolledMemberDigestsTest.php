@@ -55,6 +55,8 @@ final class EnrolledMemberDigestsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // This suite is about who is enrolled and what the sweep reaches, asserted on the older digest layout.
+        config()->set('mail.operational_digests', false);
         Carbon::setTestNow(Carbon::parse(self::NOW, 'UTC'));
         Mail::fake();
         config([
