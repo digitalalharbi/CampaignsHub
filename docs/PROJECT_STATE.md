@@ -11,7 +11,7 @@ in `CLAUDE.md` stands: Git outranks
 [`docs/RESUME_STATE.md`](RESUME_STATE.md), which outranks this file. Where this file and Git
 disagree, **Git is right and this file is stale.**
 
-Updated 2026-11-05. The per-item record is the section `Cumulative execution record 2026-11-05` of the matrix; `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md` governs priority.
+Updated 2026-11-08. The per-item record is the section `Cumulative execution record 2026-11-05` of the matrix; `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md` governs priority.
 
 ## Last verified commit
 
@@ -19,9 +19,9 @@ Updated 2026-11-05. The per-item record is the section `Cumulative execution rec
 |---|---|
 | Repository | `digitalalharbi/CampaignsHub` |
 | Branch | `main` |
-| Commit | `cc27831c1` — fix(money): a currency is never assumed (#966) |
-| Full sha | `cc27831c19b1ffbc9f824b75aecd95a0135366c2` |
-| Deployed | Deploy Production run 42039534931, success |
+| Commit | `1769c5307` — batch: every content format opens with a live cover + sync-side media for ChatGPT, Google, X, LinkedIn (#989) |
+| Full sha | `1769c530773e9b72ab1d403d821579d49d1f69ca` |
+| Deployed | Deploy Production run 42456226278, success (conclusion read from GitHub; not a user-facing check by itself) |
 
 Verify, do not trust:
 
@@ -29,27 +29,38 @@ Verify, do not trust:
 git fetch origin && git log --oneline -10 origin/main && git status
 ```
 
-## Active pull requests
+## Landed since the 2026-11-05 entry (merged on main; deployed as noted above)
+
+#973 Meta diagnostics · #975 sync checkpoints and budget · #976 stores/GA4 link · #978 mail test send, logo, footer ·
+#979 GA4 store analytics · #980 Google link in place · #981 notification channels · #982 attribution match ·
+#983 notification enrolment, digest no-data, GA4 Google client · #984 pricing and tenancy batch ·
+#985 covers served through the site edge · #986 batch (content format comparison, Website tab «قراءة الفرق» with no
+source named, cover coverage for Meta, TikTok Spark and Snapchat) · #989 batch (viewer formats; ChatGPT, Google, X and
+LinkedIn media on the sync side). Earlier entries (#965, #963, #966 and the rest of the 2026-11-05 queue) are on main.
+
+Evidence read on Production 2026-11-08 (read-only, one real live link, no token recorded): Meta 13 of 13 creatives with
+our own cover copy (before 0); TikTok 269 rows, 175 with our copy, 57 shown by first frame, 37 unavailable (26 Asset
+Library returned no data, 9 Spark posts returned nothing, 2 Spark rows with no identity named); Snapchat 658 rows, 657
+with our copy; Google 3 text ads shown by their words; ChatGPT Ads 11 chat cards as text (no image link returned);
+Website tab, English view: «Reading the gap», «Indirect path», «Clicks outside tracking», no «GA4»/«Google Analytics»
+string, no retired bucket names. The Arabic view is not read yet. Matrix rows CREATIVE-PREVIEWS-001,
+CREATIVE-COVERS-COVERAGE-001, CREATIVE-VIEWER-FORMATS-001, CREATIVE-SYNC-MEDIA-001, CONTENT-FORMAT-COMPARISON-001 and
+REPORT-WEBSITE-GAP-READING-001 stay IMPLEMENTED_NOT_VERIFIED; each carries what was read and what is missing. Nothing is
+claimed for X, LinkedIn, ChatGPT or Google images, or the TikTok rows that returned nothing.
+
+## Active pull requests (open on GitHub 2026-11-08)
 
 | PR | Branch | Title |
 |---|---|---|
-| [#965](https://github.com/digitalalharbi/CampaignsHub/pull/965) | `fix/openai-account-currency` | fix(money): a ChatGPT Ads account billed in riyals is converted, not read as dollars (Owner P0 2026-11-05, head of the queue) |
-| [#963](https://github.com/digitalalharbi/CampaignsHub/pull/963) | `sec/shared-download-password` | fix(security): a password-protected report link hands over no file without the password |
-| [#964](https://github.com/digitalalharbi/CampaignsHub/pull/964) | `fix/shared-download-password-gate` | the same defect as #963, opened by a side session; redundant, to be closed once #963 lands |
-| [#934](https://github.com/digitalalharbi/CampaignsHub/pull/934) | `fix/ga4-platform-google-client` | config(ga4): one Google client for sign-in, Ads and GA4 |
-| [#930](https://github.com/digitalalharbi/CampaignsHub/pull/930) | `feat/meta-multi-app` | HOLD — Owner approval required |
-| [#927](https://github.com/digitalalharbi/CampaignsHub/pull/927) | `feat/integrations-center-clean` | superseded by `feat/integrations-center-2` in the queue |
-| [#916](https://github.com/digitalalharbi/CampaignsHub/pull/916) | `feat/pricing-addons` | feat(pricing): add-ons marketplace |
-| [#905](https://github.com/digitalalharbi/CampaignsHub/pull/905) | `docs/gateways-superadmin` | docs: payment console, workspace creation, access recovery |
+| [#964](https://github.com/digitalalharbi/CampaignsHub/pull/964) | `fix/shared-download-password-gate` | password-link files behind the password (redundant with #963 per the 2026-11-05 note; close with the Owner's word) |
+| [#934](https://github.com/digitalalharbi/CampaignsHub/pull/934) | `fix/ga4-platform-google-client` | one Google client for sign-in, Ads and GA4 |
+| [#930](https://github.com/digitalalharbi/CampaignsHub/pull/930) | `feat/meta-multi-app` | HOLD — Owner approval required, not for the Lander |
+| [#927](https://github.com/digitalalharbi/CampaignsHub/pull/927) | `feat/integrations-center-clean` | superseded in the queue by later integrations work |
+| [#916](https://github.com/digitalalharbi/CampaignsHub/pull/916) | `feat/pricing-addons` | add-ons marketplace |
+| [#905](https://github.com/digitalalharbi/CampaignsHub/pull/905) | `docs/gateways-superadmin` | payment console, workspace creation, access recovery |
 
-Pushed branches waiting their turn (no PR until the Lander reaches them): `fix/report-filters-functional`,
-`fix/report-duplicate-draft`, `feat/report-version-history`, `perf/live-last-confirmed`,
-`perf/sync-isolation-2`, `feat/meta-diagnostics`, `feat/store-attribution-depth`,
-`feat/registration-and-switches`, `feat/email-test-send`, `feat/integrations-center-2`, the pricing
-chain, `ux/type-scale-migration`, `ci/webkit-engine-evidence`.
-
-Throwaway branches on origin used for read-only Production reads, never to be merged:
-`tmp/iso-audit`, `tmp/gpt-fx-facts`, `tmp/gpt-fx-facts2`, `tmp/gpt-fx-facts3`.
+Throwaway `tmp/*` branches on origin are read-only evidence branches; never merge or delete them. The Lander queue lives
+in `~/Developer/ch-scripts/lander/` (outside the repo).
 
 The queue order is a product decision and lives in `docs/RESUME_STATE.md`, not here. CI on each PR
 is the authority:
@@ -107,10 +118,23 @@ Provider and credential state is [`docs/INTEGRATION_CREDENTIALS_CHECKLIST.md`](I
 - **Never reuse another session's worktree.** Dozens of `~/Developer/ch-*` worktrees exist and
   several hold uncommitted work; cut a fresh one from the latest `origin/main` instead.
 
+## Owner-only items still open
+
+- TikTok Asset Library permission re-grant (26 rows returned no data).
+- Google Cloud steps for the GA4 sign-in client: Analytics Admin and Data APIs enabled, redirect
+  `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback`, scope `analytics.readonly`, test users added.
+- The Owner enabling his own digests; approval for `notifications:enrol-members --apply`; the 2FA decision.
+- WhatsApp through Twilio: business sender, templates, secrets.
+- Meta #930 stays on HOLD. Try Google sign-in.
+
+Follow-ups (code): conversion rate above 100% in the demo format cards; LinkedIn sponsored-post media needs
+`r_organization_social`; X API v2 media; dynamic Snapchat collection tiles have no file by design; read the Arabic view of
+the Website tab on a real link.
+
 ## Safe next actions
 
 1. `git fetch origin`, then read `docs/RESUME_STATE.md` and the permanent requirements file.
-2. Take the next item in the queue that document names, on a fresh branch from `origin/main`.
+2. Take the next item on a fresh branch from `origin/main`; never reuse another session's worktree.
 3. Keep this file's *Last verified commit* and *Active pull requests* current at each milestone.
 
 ## GA4 attribution match (branch `feat/ga4-attribution-match`, stacked on `feat/ga4-store-analytics`, no PR)
