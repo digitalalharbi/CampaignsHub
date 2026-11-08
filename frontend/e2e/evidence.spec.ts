@@ -1,4 +1,4 @@
-import { test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { signIn } from './helpers'
 
 /**
@@ -59,7 +59,7 @@ for (const [name, account, path] of SURFACES) {
         await page.addInitScript((value) => localStorage.setItem('campaign-hub-theme', value), theme)
         await signIn(page, account, 'password')
         // signIn only clicks submit; going straight on races the POST and lands back at /login.
-        await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+        await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
         await page.goto(path)
         await page.waitForLoadState('networkidle').catch(() => undefined)
         await page.waitForTimeout(1500)
