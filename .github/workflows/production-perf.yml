@@ -84,6 +84,7 @@ jobs:
             set -Eeuo pipefail
             cd /opt/campaignshub
             echo "── host"; uptime; nproc; free -m; df -h / | tail -1
+            set +e
             echo "== FACTS-AVAIL (read-only)"
             echo "-- load/nproc/mem"; cat /proc/loadavg; nproc; free -m
             echo "-- vmstat 1x5"; vmstat 1 5 2>/dev/null || true
@@ -94,6 +95,10 @@ jobs:
             echo "-- listeners on 80/443"; ss -ltnH 2>/dev/null | awk '$4 ~ /:(80|443)$/ {print $1,$2,$3,$4}' || true
             echo "-- conntrack"; cat /proc/sys/net/netfilter/nf_conntrack_count /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo "no conntrack"
             echo "-- dmesg conntrack/oom/drop (count)"; (dmesg 2>/dev/null | grep -ciE "nf_conntrack: table full|out of memory|oom-kill") || true
+            echo "-- dmesg by kind (count, last-seen line without payload)"; for k in "nf_conntrack: table full" "Out of memory" "oom-kill" "Killed process" "TCP: request_sock" "possible SYN flooding" "dropping packet"; do n=$(dmesg -T 2>/dev/null | grep -c "$k"); echo "$k: $n  last: $(dmesg -T 2>/dev/null | grep "$k" | tail -1 | cut -c1-60)"; done
+            echo "-- dmesg oom victims (process names only)"; dmesg -T 2>/dev/null | grep -oE "Killed process [0-9]+ \([^)]*\)" | sed 's/[0-9]\+ //' | sort | uniq -c | sort -rn | head
+            echo "-- crash-looping containers: exit code + oom, last start/finish"; for c in vps-app-1 vps-queue-1 platform-queue-1 handover-queue-1 leadflow-production-horizon-1; do docker inspect -f '{{.Name}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} err={{.State.Error}} restartpolicy={{.HostConfig.RestartPolicy.Name}} finished={{.State.FinishedAt}}' $c 2>/dev/null; done
+            echo "-- memory by process (top 8, comm only)"; ps -eo comm,rss --sort=-rss | head -9
             echo "-- TCP listen overflows/drops"; nstat -az TcpExtListenOverflows TcpExtListenDrops TcpExtTCPTimeouts TcpRetransSegs TcpOutSegs 2>/dev/null || netstat -s 2>/dev/null | grep -iE "overflow|listen queue|retransmit|SYNs to LISTEN" || true
             echo "-- proxy containers"
             PROXIES=$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy|nginx|traefik|proxy|frontend/ {print $1}')
