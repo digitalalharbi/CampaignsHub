@@ -155,6 +155,10 @@ final class XConnector extends ApiAdvertisingConnector
         );
 
         $ads = [];
+        $tweets = $this->tweetsById($tokens, $adAccountId, array_values(array_filter(array_map(
+            static fn ($p): ?string => is_array($p) && isset($p['tweet_id']) ? (string) $p['tweet_id'] : null,
+            (array) ($body['data'] ?? []),
+        ))));
 
         foreach ((array) ($body['data'] ?? []) as $p) {
             if (($p['id'] ?? null) === null) {
@@ -178,16 +182,81 @@ final class XConnector extends ApiAdvertisingConnector
                     default => null,
                 },
                 'destination_url' => null,
-                'creative' => $tweetId === null ? null : [
+                'creative' => $tweetId === null ? null : ($tweets[$tweetId] ?? [
                     'external_id' => $tweetId,
                     'name' => "Tweet {$tweetId}",
                     'format' => 'text',
-                ],
+                ]),
                 'raw' => (array) $p,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * CREATIVE-SYNC-MEDIA-001 — the promoted tweets' own words and picture, through the Ads API itself.
+     *
+     * `GET /12/accounts/:account_id/tweets?tweet_ids=…&tweet_type=PUBLISHED` (docs.x.com/x-ads-api/creatives)
+     * answers on the host and with the OAuth 1.0a signing this connector already uses, so no second
+     * credential and no new scope: `full_text`, `card_uri` and `entities`. A photo is read from
+     * `entities.media[].media_url_https` where the answer carries one. The Ads API documents NO video file or
+     * `media_keys` resolution on this read (that is the X API v2 `expansions=attachments.media_keys`, a
+     * different host and credential this product does not hold), so a tweet's film is shown by its poster
+     * frame only when that field is present, and never as a file.
+     *
+     * A refused read leaves the old minimal creative: the tweet id, as before.
+     *
+     * @param  list<string>  $tweetIds
+     * @return array<string, array<string, mixed>>  keyed by tweet id
+     */
+    private function tweetsById(OAuthTokens $tokens, string $adAccountId, array $tweetIds): array
+    {
+        $out = [];
+
+        foreach (array_chunk(array_values(array_unique($tweetIds)), self::ENTITIES_PER_CALL) as $chunk) {
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/tweets"), [
+                    'tweet_ids' => implode(',', $chunk),
+                    'tweet_type' => 'PUBLISHED',
+                    'trim_user' => 'true',
+                ]), 'tweets');
+            } catch (\Throwable) {
+                continue;
+            }
+
+            foreach ((array) ($body['data'] ?? []) as $t) {
+                $id = is_array($t) ? (string) ($t['id_str'] ?? $t['id'] ?? '') : '';
+
+                if ($id === '') {
+                    continue;
+                }
+
+                $text = is_string($t['full_text'] ?? null) && trim($t['full_text']) !== '' ? trim($t['full_text']) : (is_string($t['text'] ?? null) && trim($t['text']) !== '' ? trim($t['text']) : null);
+                $media = (array) (($t['extended_entities']['media'] ?? null) ?: ($t['entities']['media'] ?? []));
+                $first = is_array($media[0] ?? null) ? $media[0] : [];
+                $still = is_string($first['media_url_https'] ?? null) && str_starts_with($first['media_url_https'], 'https://') ? $first['media_url_https'] : null;
+                $isFilm = in_array($first['type'] ?? null, ['video', 'animated_gif'], true);
+
+                $out[$id] = array_filter([
+                    'external_id' => $id,
+                    'name' => "Tweet {$id}",
+                    'headline' => null,
+                    'body' => $text,
+                    // A photo is an image; a film is named a film but only its poster frame is stored.
+                    'format' => $still === null ? ($text === null ? 'text' : 'text_card') : ($isFilm ? 'video' : 'image'),
+                    'thumbnail_url' => $still,
+                    'asset_url' => $isFilm ? null : $still,
+                    'preview_url' => null,
+                    'raw' => array_filter([
+                        'card_uri' => is_string($t['card_uri'] ?? null) ? $t['card_uri'] : null,
+                        'media_type' => is_string($first['type'] ?? null) ? $first['type'] : null,
+                    ], static fn ($v) => $v !== null),
+                ], static fn ($v) => $v !== null && $v !== []);
+            }
+        }
+
+        return $out;
     }
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array

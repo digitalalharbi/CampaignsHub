@@ -230,15 +230,59 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                     'REJECTED' => 'rejected',
                     default => null,
                 },
-                'destination_url' => null,
+                'destination_url' => $this->textAd($c)['landing_page'] ?? null,
                 // The creative IS the ad here, so a separate creative row would be the same thing
-                // twice under two names.
-                'creative' => null,
+                // twice under two names. CREATIVE-SYNC-MEDIA-001: a Text Ad states its own words inside
+                // the creative (readable with r_ads); a sponsored post's picture lives behind the post
+                // URN in `content.reference`, which the Posts and Images APIs only give to
+                // `r_organization_social` — a scope this connector does not hold and does not invent.
+                'creative' => $this->creativeFace($id, $c),
                 'raw' => (array) $c,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * A Text Ad's words, from `content.textAd`.
+     *
+     * @param  array<string,mixed>  $creative
+     * @return array{headline: ?string, description: ?string, landing_page: ?string}
+     */
+    private function textAd(array $creative): array
+    {
+        $ad = (array) ($creative['content']['textAd'] ?? []);
+        $str = static fn (string $k): ?string => is_string($ad[$k] ?? null) && trim($ad[$k]) !== '' ? trim($ad[$k]) : null;
+
+        return ['headline' => $str('headline'), 'description' => $str('description'), 'landing_page' => $str('landingPage')];
+    }
+
+    /**
+     * CREATIVE-SYNC-MEDIA-001 — the creative's face where the creatives response itself carries one.
+     *
+     * Only a Text Ad does; everything else is null (never a made-up card), and the post reference is kept
+     * in the retained payload so the gap can be named.
+     *
+     * @param  array<string,mixed>  $creative
+     * @return array<string,mixed>|null
+     */
+    private function creativeFace(string $id, array $creative): ?array
+    {
+        $text = $this->textAd($creative);
+
+        if ($text['headline'] === null && $text['description'] === null) {
+            return null;
+        }
+
+        return array_filter([
+            'external_id' => $id,
+            'name' => $text['headline'],
+            'headline' => $text['headline'],
+            'body' => $text['description'],
+            'format' => 'text_card',
+            'destination_url' => $text['landing_page'],
+        ], static fn ($v) => $v !== null);
     }
 
     /** `urn:li:sponsoredCreative:123` → `"123"`, and anything else → null. */
