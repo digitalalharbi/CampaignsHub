@@ -141,6 +141,15 @@ jobs:
           # The scripts the renderer shells out to must be IN the image, not just in the repo.
           run 'test -f scripts/report-print.mjs && test -f scripts/fix-arabic-textlayer.py'
 
+      # CREATIVE-VIDEO-FRAME-COVER-001 — the cover fallback spawns ffmpeg (and busybox `nice`). Ask the image,
+      # then take a real frame from a generated clip, over the same argument shape the extractor uses.
+      - name: ffmpeg exists in the image and can take a frame
+        run: |
+          set -euo pipefail
+          run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
+          echo "ffmpeg: $(run 'ffmpeg -version | head -1')"
+          run 'nice -n 10 ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=duration=1:size=320x240:rate=10 -ss 0.5 -frames:v 1 -vf "scale=min(640\,iw):-2" -q:v 4 -f image2pipe -c:v mjpeg pipe:1 | head -c 3 | od -An -tx1 | grep -q "ff d8 ff"'
+
 
   # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
   #

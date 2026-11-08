@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Jobs\CacheCreativeCoverJob;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Campaigns\Services\CoverSourceRefresher;
+use App\Domains\Campaigns\Services\VideoFrameExtractor;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +22,8 @@ use Illuminate\Support\Facades\DB;
  * prints, per platform, how many creatives there are, how many have a provider still, how many we already
  * hold a copy of, how many would be queued now, how many are backing off after a failure (and why), and
  * how many hold no link yet but can be asked for one (`recoverable`, CREATIVE-COVERS-COVERAGE-001), and how
- * many the platform gives no still for. With `--execute` it queues one capture per creative that is
+ * many the platform gives no still for, and `via_video_frame` — how many have no copy yet and a film ffmpeg can take
+ * a frame from (CREATIVE-VIDEO-FRAME-COVER-001, `cover_source = video_frame`). With `--execute` it queues one capture per creative that is
  * due, spaced `--per-minute` apart so a backfill of thousands is a steady trickle, not a burst.
  *
  * The CDN fetch itself is not an API call. When a stored link has lapsed, the capture asks the platform for
@@ -36,6 +38,7 @@ final class BackfillCreativeCoversCommand extends Command
         {--provider= : Only this platform (meta, tiktok, snapchat, …)}
         {--limit=2000 : At most this many captures queued in one run}
         {--per-minute=120 : Captures released per minute}
+        {--frames-per-minute=6 : Of those, captures that run ffmpeg on a film (CREATIVE-VIDEO-FRAME-COVER-001), released per minute}
         {--execute : Queue the captures; without it this is a dry run}';
 
     protected $description = 'Report (dry run) or queue cover captures for creatives whose cached cover is missing or stale.';
@@ -57,13 +60,21 @@ final class BackfillCreativeCoversCommand extends Command
             return self::SUCCESS;
         }
 
+        $framesPerMinute = max(1, (int) $this->option('frames-per-minute'));
         $queued = 0;
+        $frames = 0;
         foreach ($due->cursor() as $creative) {
             // The SQL above narrows; the model's own rule decides, so the two cannot disagree about a row.
             if (! CoverCache::wanted($creative)) {
                 continue;
             }
-            CacheCreativeCoverJob::dispatch((string) $creative->getKey())->delay(Carbon::now()->addSeconds(intdiv($queued, $perMinute) * 60));
+            // A capture that can only end in ffmpeg is paced on its own, much slower, clock.
+            $delay = intdiv($queued, $perMinute);
+            if (CoverCache::frameOnly($creative)) {
+                $delay = max($delay, intdiv($frames, $framesPerMinute));
+                $frames++;
+            }
+            CacheCreativeCoverJob::dispatch((string) $creative->getKey())->delay(Carbon::now()->addSeconds($delay * 60));
             $queued++;
         }
 
@@ -83,7 +94,9 @@ final class BackfillCreativeCoversCommand extends Command
                     ->where(fn (Builder $l) => $l->where('thumbnail_url', 'like', 'https://%')->orWhere('asset_url', 'like', 'https://%'))
                     ->where(fn (Builder $l) => $l->whereNull('cover_path')->orWhereNull('cover_cached_at')->orWhereColumn('source_updated_at', '>', 'cover_cached_at')))
                 // CREATIVE-COVERS-COVERAGE-001 — no link at all, and a platform that can name one (CoverSourceRefresher::recoverable).
-                ->orWhere(fn (Builder $w) => $w->whereRaw(self::RECOVERABLE)))
+                ->orWhere(fn (Builder $w) => $w->whereRaw(self::RECOVERABLE))
+                // CREATIVE-VIDEO-FRAME-COVER-001 — no still link, a playable film on a known CDN: its own frame.
+                ->orWhere(fn (Builder $w) => $w->whereRaw(self::frameOnlySql())))
             ->where(fn (Builder $q) => $q->whereNull('cover_next_attempt_at')->orWhere('cover_next_attempt_at', '<=', Carbon::now()));
     }
 
@@ -97,13 +110,28 @@ final class BackfillCreativeCoversCommand extends Command
           OR (provider = 'meta' AND (raw->'media_refs'->>'image_hash' IS NOT NULL OR raw->'media_refs'->>'video_id' IS NOT NULL))
           OR (provider = 'snapchat' AND COALESCE(format, '') NOT LIKE '%dynamic%' AND COALESCE(format, '') <> 'catalog')))";
 
+    /** CREATIVE-VIDEO-FRAME-COVER-001 — a film on a known provider CDN (https), as SQL. Narrows only; the model decides. */
+    private static function videoSql(): string
+    {
+        $hosts = implode('|', array_map(static fn (string $h): string => preg_quote($h, '/'), VideoFrameExtractor::hosts()));
+
+        return "(COALESCE(video_url, '') ~* '^https://([a-z0-9-]+\\.)*({$hosts})([^a-z0-9.-]|$)')";
+    }
+
+    /** No still link at all and no copy yet, but a film we may frame. */
+    private static function frameOnlySql(): string
+    {
+        return "(cover_path IS NULL AND is_demo = false AND COALESCE(thumbnail_url, '') NOT LIKE 'https://%' AND COALESCE(asset_url, '') NOT LIKE 'https://%' AND ".self::videoSql().')';
+    }
+
     private function report(?string $provider): void
     {
         $now = Carbon::now()->toDateTimeString();
         // COALESCE: a NULL link makes LIKE answer NULL, and NOT NULL is still NULL — «no source» would count as nothing.
         $source = "(COALESCE(thumbnail_url, '') LIKE 'https://%' OR COALESCE(asset_url, '') LIKE 'https://%')";
         $stale = '(cover_path IS NULL OR cover_cached_at IS NULL OR source_updated_at > cover_cached_at)';
-        $wanted = "(({$source} AND {$stale}) OR ".self::RECOVERABLE.')';
+        $frameOnly = self::frameOnlySql();
+        $wanted = "(({$source} AND {$stale}) OR ".self::RECOVERABLE." OR {$frameOnly})";
 
         $rows = DB::table('external_creatives')
             ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
@@ -113,14 +141,16 @@ final class BackfillCreativeCoversCommand extends Command
             ->selectRaw("SUM(CASE WHEN {$wanted} AND (cover_next_attempt_at IS NULL OR cover_next_attempt_at <= ?) THEN 1 ELSE 0 END) AS due", [$now])
             ->selectRaw("SUM(CASE WHEN {$wanted} AND cover_next_attempt_at > ? THEN 1 ELSE 0 END) AS backing_off", [$now])
             ->selectRaw('SUM(CASE WHEN '.self::RECOVERABLE.' THEN 1 ELSE 0 END) AS recoverable')
-            ->selectRaw("SUM(CASE WHEN NOT {$source} AND cover_path IS NULL AND NOT ".self::RECOVERABLE.' THEN 1 ELSE 0 END) AS provider_gives_none')
+            // Every creative with no copy yet and a framable film: the ones ffmpeg can cover, whether the still is absent or dead.
+            ->selectRaw('SUM(CASE WHEN cover_path IS NULL AND is_demo = false AND '.self::videoSql().' THEN 1 ELSE 0 END) AS via_video_frame')
+            ->selectRaw("SUM(CASE WHEN NOT {$source} AND cover_path IS NULL AND NOT ".self::RECOVERABLE." AND NOT {$frameOnly} THEN 1 ELSE 0 END) AS provider_gives_none")
             ->groupBy('provider')
             ->orderBy('provider')
             ->get();
 
         $this->table(
-            ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'provider_gives_none'],
-            $rows->map(fn ($r): array => [$r->provider, (int) $r->creatives, (int) $r->with_source, (int) $r->cached, (int) $r->due, (int) $r->backing_off, (int) $r->recoverable, (int) $r->provider_gives_none])->all(),
+            ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'via_video_frame', 'provider_gives_none'],
+            $rows->map(fn ($r): array => [$r->provider, (int) $r->creatives, (int) $r->with_source, (int) $r->cached, (int) $r->due, (int) $r->backing_off, (int) $r->recoverable, (int) $r->via_video_frame, (int) $r->provider_gives_none])->all(),
         );
 
         $reasons = DB::table('external_creatives')

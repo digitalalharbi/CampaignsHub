@@ -286,8 +286,8 @@ final class CreativeCoversCoverageTest extends TestCase
 
         $this->artisan('creatives:backfill-covers', ['--provider' => 'tiktok'])
             ->expectsTable(
-                ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'provider_gives_none'],
-                [['tiktok', 3, 0, 0, 2, 0, 2, 1]],
+                ['provider', 'creatives', 'with_source', 'cached', 'due', 'backing_off', 'recoverable', 'via_video_frame', 'provider_gives_none'],
+                [['tiktok', 3, 0, 0, 2, 0, 2, 0, 1]],
             )
             ->assertSuccessful();
     }
