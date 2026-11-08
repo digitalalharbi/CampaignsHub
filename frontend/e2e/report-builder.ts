@@ -11,7 +11,11 @@ import { API_HEADERS } from './helpers'
  *
  * Returns the ids the caller needs to address THIS report unambiguously.
  */
-export async function buildGeneratedClientReport(page: Page, name: string): Promise<{ projectId: string; reportId: string }> {
+export async function buildGeneratedClientReport(
+  page: Page,
+  name: string,
+  options: { project?: RegExp } = {},
+): Promise<{ projectId: string; reportId: string }> {
   await page.goto('/reports')
 
   const clientSelect = page.getByLabel(/^العميل$|^Client$/)
@@ -50,9 +54,28 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
     await expect(clientSelect).toHaveValue(clientValue)
 
     // The options arrive with the per-client refetch, so read until they do.
+    /*
+     * `options.project` — a spec whose assertions depend on WHICH project it reports on says so.
+     *
+     * «The first client that has a project» is not a choice, it is whatever `GET /client-workspaces`
+     * happens to return first: that list is `latest()`, the demo seed creates every client workspace
+     * within a second or two, and the order of rows with an equal `created_at` is the database's to
+     * decide. So a run that landed on the all-sales demo store and a run that landed on Q3 Launch
+     * (awareness + traffic + sales, therefore a mixed report with no revenue or ROAS column by design)
+     * were both correct, and a spec asserting sales columns passed or failed on a coin it never saw.
+     * It looked like a time-of-day flake because the failures clustered; they cluster by seed speed.
+     */
+    const wanted = options.project
     const readOptions = () =>
-      projectSelect.locator('option').evaluateAll((os) =>
-        os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
+      projectSelect.locator('option').evaluateAll(
+        (os, pattern) => {
+          const re = pattern ? new RegExp(pattern.source, pattern.flags) : null
+          return os
+            .map((o) => ({ value: (o as HTMLOptionElement).value, label: (o as HTMLOptionElement).text }))
+            .filter((o) => o.value && (re === null || re.test(o.label)))
+            .map((o) => o.value)
+        },
+        wanted ? { source: wanted.source, flags: wanted.flags } : null,
       )
 
     let values: string[] = []
@@ -93,7 +116,12 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
     }
   }
 
-  expect(projectId, 'no reachable client has a project the switcher will hold').not.toBe('')
+  expect(
+    projectId,
+    options.project
+      ? `no reachable client has a project named ${options.project} that the switcher will hold`
+      : 'no reachable client has a project the switcher will hold',
+  ).not.toBe('')
 
   // The page reloads its reports for the chosen project; the builder is only offered once it has one.
   await expect(page.getByRole('button', { name: /تقرير محفوظ|Saved report/ })).toBeEnabled({ timeout: 20_000 })
