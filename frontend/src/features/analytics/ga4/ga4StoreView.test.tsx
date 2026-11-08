@@ -171,7 +171,7 @@ describe('a breakdown that runs over the visits (REPORT-WEBSITE-TOTALS-001)', ()
 
   it('says it in Arabic too', () => {
     renderWithProviders(<Ga4Acquisition ar channels={null} devices={devices} devicesMeta={meta} funnel={[]} />)
-    expect(screen.getByTestId('ga4-devices-over')).toHaveTextContent('عن الزيارات (تقارير Google تُحدَّث في أوقات مختلفة)')
+    expect(screen.getByTestId('ga4-devices-over')).toHaveTextContent('عن الزيارات (التقارير تُحدَّث في أوقات مختلفة)')
     expect(screen.getByTestId('ga4-devices')).toHaveTextContent('مجموع التقسيم')
   })
 })

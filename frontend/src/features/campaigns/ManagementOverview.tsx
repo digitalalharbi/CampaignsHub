@@ -78,7 +78,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             </div>
           </Panel>
         </div>
-        <ChartCard title={ar ? 'من أين جاءت النتائج' : 'Where the results came from'}>
+        <ChartCard title={ar ? 'مصادر النتائج' : 'Sources of results'}>
           {platforms.isPending ? (
             <div className="h-[200px] animate-pulse rounded-xl bg-surface-secondary" />
           ) : results.length === 0 ? (

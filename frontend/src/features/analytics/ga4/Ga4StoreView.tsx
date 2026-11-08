@@ -273,7 +273,7 @@ function Donut({ testId, title, slices, labels, ar, meta }: { testId: string; ti
               {meta.days_total > 0 && meta.days_covered < meta.days_total && <Badge tone="neutral"><Num>{`${meta.days_covered}/${meta.days_total}`}</Num> {ar ? 'يوم' : 'days'}</Badge>}
               {over > 0 && (
                 <Badge tone="neutral" data-testid={`${testId}-over`}>
-                  <Num>{`+${num(over)}`}</Num> {ar ? 'عن الزيارات (تقارير Google تُحدَّث في أوقات مختلفة)' : 'over visits (Google updates its reports at different times)'}
+                  <Num>{`+${num(over)}`}</Num> {ar ? 'عن الزيارات (التقارير تُحدَّث في أوقات مختلفة)' : 'over visits (reports refresh at different times)'}
                 </Badge>
               )}
             </div>
