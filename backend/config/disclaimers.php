@@ -30,8 +30,8 @@ return [
     'sections' => [
         // Full disclaimer — interactive reports, client-shared reports, PDF, final report preview.
         'full' => [
-            'ar' => 'ملاحظة توضيحية: توفر لوحة التقارير تصورًا تفاعليًا لمؤشرات الأداء بهدف دعم المتابعة والتحسين المستمر. وقد تختلف النتائج الظاهرة بحسب الفترة الزمنية، والمنصة، ومصدر البيانات، ونموذج الإسناد، ومعايير العرض المختارة؛ لذلك يجب قراءة المؤشرات في سياق أهداف الحملة، ومرحلة التعلّم، وتحديثات المحتوى والجمهور والميزانية، ومعايير الأداء المعتمدة لكل منصة. تُدار الحملات وتُحسّن وفق منهجية قائمة على الأداء والبيانات المتاحة، ولا تمثل المؤشرات الحالية ضمانًا لنتائج مستقبلية ثابتة.',
-            'en' => 'Important Notice: This reporting dashboard provides an interactive view of performance indicators to support ongoing monitoring and optimization. Reported results may vary depending on the selected date range, advertising platform, data source, attribution model, and display criteria. Metrics should therefore be interpreted in the context of the campaign objectives, learning phase, content, audience and budget updates, and the performance standards applied by each platform. Campaigns are managed and optimized using a performance-based, data-informed approach, and current indicators do not guarantee consistent future results.',
+            'ar' => 'لكل جهة قياس — المنصات الإعلانية، والمتجر أو الموقع، والمؤثرون، وكل قناة — طريقة احتساب وتوقيت تحديث خاص بها، فيختلف الرقم من مصدر إلى آخر وتُقرأ النتائج في صورتها الكاملة. وتتأثر النتائج كذلك بطبيعة المنتج والتسعير، والعروض والخصومات، وجودة المحتوى، وسلوك العملاء، ومستوى المنافسة، وتكاليف المنصات، وقد تتغير الأرقام بعد اكتمال معالجة البيانات. لذلك لا تمثل المؤشرات ضمانًا لنتائج مستقبلية.',
+            'en' => 'Each measurement source — the advertising platforms, the store or website, influencers and every other channel — has its own way of counting and its own update timing, so a figure differs from one source to another and results are read as a whole. Results are also affected by the nature of the product and its pricing, offers and discounts, content quality, customer behaviour, the level of competition and platform costs, and figures may change once data processing completes. The indicators are therefore not a guarantee of future results.',
         ],
 
         // Short disclaimer — dashboard, analytics, charts, live report links, platform pages.
@@ -55,8 +55,8 @@ return [
         // Objective-specific addenda (shown on matching objective reports only).
         'objectives' => [
             'sales' => [
-                'ar' => 'قد تختلف المبيعات والإيرادات بين المنصة والمتجر أو مصدر التحويل نتيجة اختلاف نوافذ الإسناد ومعالجة الطلبات والإلغاءات والاستردادات.',
-                'en' => 'Sales and revenue may differ between the platform and the store or conversion source due to differing attribution windows, order processing, cancellations, and refunds.',
+                'ar' => 'قد تختلف المبيعات والإيرادات بين المنصة والمتجر أو الموقع ومصدر التحويل، وكذلك بين ما تسجله المنصات وما يسجله المؤثرون وبقية القنوات، نتيجة اختلاف نوافذ الإسناد ومعالجة الطلبات والإلغاءات والاستردادات.',
+                'en' => 'Sales and revenue may differ between the platform, the store or website and the conversion source, and also between what the platforms record and what influencers and the other channels record, due to differing attribution windows, order processing, cancellations and refunds.',
             ],
             'awareness' => [
                 'ar' => 'أرقام الوصول تخص كل منصة على حدة، ولا يمثل مجموع الوصول بين المنصات وصولًا فريدًا للأفراد.',

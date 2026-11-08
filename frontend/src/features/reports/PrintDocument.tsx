@@ -1,4 +1,4 @@
-import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, reportFooterItems } from './reportFooter'
 import { carries } from './chosenFigures'
 import { selectColumns } from './reportColumns'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -968,6 +968,7 @@ export function PrintDocument({
 
       <footer className="doc-footnote" data-testid="print-document-footer">
         <p>{REPORT_NOTE.en}</p>
+        <p data-testid="print-document-note-full">{REPORT_NOTE_MORE.en}</p>
         <p>
           {reportFooterItems({
             updatedAt: typeof data.generated_at === 'string' ? data.generated_at : null,
