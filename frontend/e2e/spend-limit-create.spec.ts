@@ -10,7 +10,7 @@ import { signIn } from './helpers'
  */
 test('an operator creates a spend limit and the page prices it', async ({ page }) => {
   await signIn(page, 'advertiser@campaignshub.io', 'password')
-  await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+  await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
   await page.goto('/app/spend-limits')
 
   await expect(page.getByTestId('spend-limits-enforcement')).toBeVisible({ timeout: 30_000 })
