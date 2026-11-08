@@ -27,8 +27,29 @@ const JOURNEYS = [
   { key: 'services', url: /\/services$/, marker: (p: Page) => p.getByTestId('service-categories') },
 ] as const
 
+/**
+ * GATE-WK-SETTLE-001 — the homepage is not clickable until the content it is drawn from has arrived.
+ *
+ * The page paints its cards, then `GET /public/pages/home` and `GET /public/catalog/…` answer and the
+ * content is re-rendered. A click that straddles that answer lands on a node which is replaced between
+ * mouse-down and mouse-up, so no `click` is dispatched and the URL never changes. The trace of a failed
+ * run (CPU-loaded local WebKit, `--trace retain-on-failure`) shows exactly that: the click ran from
+ * 1938 ms to 2077 ms and the catalogue answered at 1963 ms. Playwright's stability check cannot see it —
+ * the card is where it was; it is the node that changes.
+ */
+async function settle(page: Page, navigate: () => Promise<unknown>) {
+  const answered = Promise.all([
+    page.waitForResponse((r) => r.url().includes('/api/v1/public/pages/home')),
+    page.waitForResponse((r) => r.url().includes('/api/v1/public/catalog/')),
+  ])
+  await navigate()
+  await answered
+  // Two frames: the answers have arrived, and React has committed what they changed.
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))))
+}
+
 async function home(page: Page) {
-  await page.goto('/')
+  await settle(page, () => page.goto('/'))
   // VISIBLE, not merely attached: the section is far down a long page, and asserting only that it is
   // in the DOM says nothing about whether it has finished laying out.
   await expect(page.getByTestId('closing-journeys')).toBeVisible()
@@ -153,7 +174,7 @@ test.describe('homepage → catalogue → intake → saved request', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
   test('the services journey ends in a stored request that carries the chosen service', async ({ page }) => {
-    await page.goto('/')
+    await settle(page, () => page.goto('/'))
 
     // 1) The closing card opens the catalogue (this is the card that used to bounce to the top).
     const card = page.getByTestId('closing-journey-services')

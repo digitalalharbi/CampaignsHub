@@ -70,6 +70,17 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * tests all run there.
    */
   E2E_RELAX_RATE_LIMITS: 'true',
+  /*
+   * GATE-WK-CPU-001 — password hashing at the cost PHPUnit already uses (`phpunit.xml`: 4).
+   *
+   * `backend/.env` says 12, and every sign-in, registration, code check and reset hashes at it. On an idle machine that is
+   * 0.5 s for `POST /auth/register`; with a browser, two Vite servers, a queue worker and a print Chromium sharing the
+   * runner it is 4-5 s (CI: register 4 s, verify-email 5 s, login 2-3 s, all in the failing tests), and a spec that asserts
+   * after Playwright's 5 s default fails on a request that was merely queued behind the CPU. Locally, six busy loops on an
+   * eight-core Mac turned `login-paths.spec.ts:81` into 7 failures in 8 runs. The cost is a production work factor; nothing
+   * in the gate asserts it.
+   */
+  BCRYPT_ROUNDS: '4',
   // The mobile gate already issues a challenge on entry. E2E has no SMS inbox, so it immediately
   // resends to retrieve the local-only dev code; deployed environments retain the 60-second default.
   REGISTRATION_MOBILE_RESEND_COOLDOWN_SECONDS: '0',
