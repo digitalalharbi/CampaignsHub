@@ -9,6 +9,7 @@ use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
+use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
@@ -104,6 +105,11 @@ final class MailGallery
                 'totals' => array_replace(self::digest()['totals'], ['projects' => 1]),
             ]), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
 
+            // EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests: one project with a block per platform, and the portfolio of all of them.
+            'digest-project' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][0], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'project'),
+            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project'),
+            'digest-portfolio' => new OperationalDigestMail(OperationalDigestModel::portfolio(self::operationalDigest(), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio'),
+
             /*
              * The alerts as they are actually sent — MAIL-013.
              *
@@ -116,33 +122,37 @@ final class MailGallery
                 items: [
                     [
                         'severity' => 'critical',
-                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                        'title' => $ar ? 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة' : '“Summer” is spending ahead of plan',
-                        'detail' => $ar
-                            ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
-                            : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
+                        'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
+                        'title' => $ar ? 'ميزانية ميتا قاربت النفاد' : 'The Meta budget is nearly used up',
+                        'detail' => $ar ? 'استهلكت الحملة نسبة كبيرة من ميزانيتها قبل منتصف الفترة.' : 'The campaign has used a large share of its budget before the middle of the period.',
+                        'numbers' => $ar ? 'المصروف 8,000.00 / 10,000.00 (80%)' : 'Spent 8,000.00 / 10,000.00 (80%)',
                         // The figures as the pace rule writes them, read by the same reader the real mail uses.
-                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], $ar),
+                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'USD'], $ar),
                         'action' => AlertEventMailer::action('budget_risk', $ar),
-                        'url' => Frontend::origin().'/app/alerts?event=demo-1',
+                        'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign',
+                        'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                        'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'Summer sale — retargeting 2026',
                     ],
                     [
                         'severity' => 'warning',
-                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                        'title' => $ar ? 'تراجع معدل النقر' : 'Click-through rate is falling',
-                        'detail' => $ar
-                            ? 'تراجع معدل النقر 30% إلى 1.20%، وقد يشير إلى بداية ضعف أداء المحتوى.'
-                            : 'Click-through rate fell 30% to 1.20%, which can be the first sign of creative wearing out.',
+                        'context' => $ar ? 'متجر تجريبي · سناب شات · المبيعات' : 'Demo store · Snapchat · Sales',
+                        'title' => $ar ? 'تكلفة النتيجة ارتفعت على سناب شات' : 'Cost per result rose on Snapchat',
+                        'detail' => $ar ? 'الحملة تدفع أكثر مقابل كل نتيجة مقارنة بالفترة السابقة.' : 'The campaign pays more for each result than in the previous period.',
+                        'numbers' => $ar ? 'قبل 61.00 ← الآن 88.72 (آخر 7 أيام) · حد التنبيه 25%' : 'Before 61.00 → Now 88.72 (last 7 days) · alert at 25%',
+                        'action' => $ar ? 'راجع المحتوى والجمهور، وابدأ بالأضعف أداءً.' : 'Review content and audience, starting with the weakest.',
+                        'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign-2',
+                        'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                        'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'Bundle carousel',
                     ],
                     [
                         'severity' => 'critical',
-                        'context' => $ar ? 'عميل تجريبي' : 'Demo client',
-                        'title' => $ar ? 'تعذّرت آخر مزامنة لبيانات سناب شات' : 'The Snapchat sync could not complete',
-                        'detail' => $ar
-                            ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، فقد تكون بعض المؤشرات غير مكتملة.'
-                            : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
+                        'context' => $ar ? 'عيادات النخبة' : 'Elite Clinics',
+                        'title' => $ar ? 'توقفت مزامنة بيانات تيك توك' : 'TikTok data sync has stopped',
+                        'detail' => $ar ? 'آخر محاولة فشلت، فأرقام التقارير قد تكون ناقصة.' : 'The last attempt failed, so report figures may be incomplete.',
+                        'numbers' => $ar ? 'آخر أرقام بتاريخ '.AlertEventText::ltr('2026-08-04') : 'Last figures dated 2026-08-04',
                         'action' => AlertEventMailer::action('sync_failed', $ar),
-                        'url' => Frontend::origin().'/app/alerts?event=demo-3',
+                        'url' => Frontend::origin().'/app/projects/demo-project/integrations',
+                        'button' => $ar ? 'افتح صفحة الربط' : 'Open the connections page',
                     ],
                 ],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
@@ -153,11 +163,14 @@ final class MailGallery
             'alerts-one' => new AlertBundleMail(
                 items: [[
                     'severity' => 'warning',
-                    'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                    'title' => $ar ? 'ارتفاع معدل التكرار' : 'Frequency is climbing',
-                    'detail' => $ar
-                        ? 'يشاهد الشخص الإعلان 6 مرات في المتوسط؛ نوصي بتوسيع الجمهور أو تحديث المحتوى.'
-                        : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
+                    'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
+                    'title' => $ar ? 'العائد على الإنفاق تراجع على ميتا' : 'Return on ad spend fell on Meta',
+                    'detail' => $ar ? 'كل ريال إعلان يعيد قيمة أقل من الفترة السابقة.' : 'Each unit of ad spend returns less than in the previous period.',
+                    'numbers' => $ar ? 'قبل 4.56× ← الآن 3.10× (آخر 7 أيام) · حد التنبيه 25%' : 'Before 4.56× → Now 3.10× (last 7 days) · alert at 25%',
+                    'action' => $ar ? 'راجع الإعلانات الأضعف وقرّر إيقافها أو تجديدها.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign',
+                    'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                    'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'White Friday — prospecting',
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
             ),
@@ -610,5 +623,102 @@ final class MailGallery
                 'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
             ]],
         ];
+    }
+
+    /**
+     * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests' fixtures: the portfolio above, with every platform's own rows.
+     *
+     * A hand-built payload shaped exactly like `DailyDigest::buildRange()` (the keys it adds are the live report's `byProvider()`
+     * rows), so a preview renders on an empty machine. Three unalike projects — a store on four platforms, a lead-generation
+     * client on two, a brand launch on two (X among them: a platform is a row, not code) — and the awkward cases on purpose:
+     * a platform that sent no reach, a budget off plan, a source that stopped syncing.
+     *
+     * @return array<string,mixed>
+     */
+    public static function operationalDigest(bool $weekly = true): array
+    {
+        $d = self::digest($weekly);
+        $days = ['2026-07-31', '2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06'];
+        $spark = static fn (array $vals): array => array_map(static fn (string $date, ?float $v): array => ['date' => $date, 'spend' => $v], $days, $vals);
+        $row = static fn (string $provider, array $f): array => ['provider' => $provider, 'spend_withheld_rows' => 0, 'revenue_withheld_rows' => 0] + $f;
+
+        $d['projects'][0]['totals'] += ['purchases' => 263, 'roas' => 4.14];
+        $d['projects'][0]['previous'] += ['purchases' => 300, 'roas' => 4.38];
+        $d['projects'][0]['change'] += ['purchases' => -0.12, 'roas' => -0.055];
+        $d['projects'][0] += [
+            'currency' => 'USD',
+            'series' => $spark([2900.0, 3500.0, 3100.0, 3800.0, 3000.0, 3700.0, 3333.18]),
+            'platform_rows' => [
+                $row('meta', ['spend' => 10100.0, 'purchases' => 118, 'revenue' => 44200.0, 'roas' => 4.38, 'impressions' => 300000, 'clicks' => 7000, 'ctr' => 0.0233]),
+                $row('snapchat', ['spend' => 6200.0, 'purchases' => 82, 'revenue' => 31500.0, 'roas' => 5.08, 'impressions' => 220000, 'clicks' => 5100, 'ctr' => 0.0232]),
+                $row('google', ['spend' => 4733.18, 'purchases' => 41, 'revenue' => 14100.0, 'roas' => 2.98, 'impressions' => 120000, 'clicks' => 2600, 'ctr' => 0.0217]),
+                $row('tiktok', ['spend' => 2300.0, 'purchases' => 22, 'revenue' => 6700.0, 'roas' => 2.91, 'impressions' => 55281, 'clicks' => 919, 'ctr' => 0.0166]),
+            ],
+            'platform_previous' => [
+                $row('meta', ['spend' => 9000.0, 'purchases' => 120, 'revenue' => 41000.0, 'roas' => 4.56]),
+                $row('snapchat', ['spend' => 5500.0, 'purchases' => 70, 'revenue' => 26000.0, 'roas' => 4.73]),
+                $row('google', ['spend' => 4500.0, 'purchases' => 50, 'revenue' => 17500.0, 'roas' => 3.89]),
+                $row('tiktok', ['spend' => 2000.0, 'purchases' => 60, 'revenue' => 7500.0, 'roas' => 3.75]),
+            ],
+            'platform_reported' => [],
+            'platform_series' => [
+                'meta' => $spark([1300.0, 1500.0, 1400.0, 1700.0, 1350.0, 1450.0, 1400.0]),
+                'snapchat' => $spark([800.0, 900.0, 850.0, 1000.0, 880.0, 920.0, 850.0]),
+                'google' => $spark([500.0, 800.0, 600.0, 700.0, 550.0, 900.0, 683.18]),
+                'tiktok' => $spark([300.0, 300.0, 250.0, 400.0, 220.0, 430.0, 400.0]),
+            ],
+            'budget_rows' => [
+                ['provider' => 'meta', 'pace' => 1.67, 'spent' => 8000.0, 'budget' => 10000.0],
+                ['provider' => 'snapchat', 'pace' => 1.0, 'spent' => 6200.0, 'budget' => 7000.0],
+            ],
+        ];
+        $d['projects'][0]['observations'] = [
+            ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'metric' => 'pace', 'value' => '1.67×', 'change' => null, 'scope' => ['type' => 'platform', 'name' => 'ميتا'], 'title' => '', 'detail' => ''],
+            ['id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'metric' => 'cpa', 'value' => '88.72 USD', 'change' => 0.27, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+
+        $d['projects'][1] += [
+            'currency' => 'USD',
+            'series' => $spark([1700.0, 1800.0, 1750.0, 1900.0, 1650.0, 1850.0, 1850.0]),
+            'platform_rows' => [
+                $row('meta', ['spend' => 6100.0, 'leads' => 85, 'cpl' => 71.76, 'clicks' => 4400, 'impressions' => 200000]),
+                $row('tiktok', ['spend' => 2400.0, 'leads' => 10, 'cpl' => 240.0, 'clicks' => 1800, 'impressions' => 90000]),
+            ],
+            'platform_previous' => [
+                $row('meta', ['spend' => 5900.0, 'leads' => 92, 'cpl' => 64.13]),
+                $row('tiktok', ['spend' => 2200.0, 'leads' => 18, 'cpl' => 122.2]),
+            ],
+            'platform_reported' => [],
+            'platform_series' => ['meta' => $spark([850.0, 900.0, 870.0, 910.0, 840.0, 870.0, 860.0]), 'tiktok' => $spark([300.0, 350.0, 330.0, 360.0, 320.0, 380.0, 360.0])],
+            'budget_rows' => [['provider' => 'tiktok', 'pace' => 0.44, 'spent' => 2400.0, 'budget' => 9000.0]],
+        ];
+        $d['projects'][1]['totals'] += ['leads' => 95, 'cpl' => 131.58];
+        $d['projects'][1]['previous'] += ['leads' => 110, 'cpl' => 98.18];
+        $d['projects'][1]['change'] += ['leads' => -0.136, 'cpl' => 0.34];
+        $d['projects'][1]['observations'] = [
+            ['id' => 'c', 'kind' => 'rising_cost', 'severity' => 'warning', 'metric' => 'cpl', 'value' => '131.58 USD', 'change' => 0.34, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+            ['id' => 'e', 'kind' => 'stale_data', 'severity' => 'critical', 'metric' => null, 'value' => null, 'change' => null, 'scope' => ['type' => 'data', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+        $d['projects'][1]['freshness']['sync_failed'] = true;
+        $d['projects'][1]['freshness']['failing'] = [['name' => 'TikTok', 'provider' => 'tiktok']];
+
+        $d['projects'][2] += [
+            'currency' => 'USD',
+            'series' => $spark([800.0, 850.0, 900.0, 880.0, 870.0, 900.0, 800.0]),
+            'platform_rows' => [
+                $row('tiktok', ['spend' => 3400.0, 'impressions' => 1100000, 'reach' => 520000, 'cpm' => 3.09]),
+                // X sent no reach: the cell says so instead of printing 0.
+                $row('x', ['spend' => 900.0, 'impressions' => 880400, 'reach' => null, 'cpm' => 1.02]),
+            ],
+            'platform_previous' => [$row('tiktok', ['spend' => 2500.0, 'impressions' => 700000, 'reach' => 400000, 'cpm' => 3.57]), $row('x', ['spend' => 600.0, 'impressions' => 500000, 'reach' => null, 'cpm' => 1.2])],
+            'platform_reported' => ['x' => ['reach' => false]],
+            'platform_series' => ['tiktok' => $spark([480.0, 500.0, 520.0, 490.0, 470.0, 520.0, 420.0]), 'x' => $spark([120.0, 130.0, 140.0, null, 130.0, 140.0, 140.0])],
+            'budget_rows' => [],
+        ];
+        $d['projects'][2]['observations'] = [
+            ['id' => 'f', 'kind' => 'period_comparison', 'severity' => 'positive', 'metric' => 'cpm', 'value' => '3.03 USD', 'change' => -0.14, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+
+        return $d;
     }
 }

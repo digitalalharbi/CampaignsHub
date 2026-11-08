@@ -424,6 +424,10 @@ final class AlertEvaluator
         $this->outbox[] = [
             'event_id' => (string) $event->id,
             'notification_type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            // EMAIL-DIGESTS-OPERATIONAL-001 — what the finding is ABOUT, so the mail can say it plainly and link to the exact page.
+            'rule_type' => (string) $rule->type,
+            'entity_type' => (string) ($b['entity_type'] ?? $event->entity_type ?? ''),
+            'entity_id' => (string) ($b['entity_id'] ?? $event->entity_id ?? ''),
             'severity' => $severity,
             'title' => (string) $b['title'],
             'title_ar' => $b['context']['title_ar'] ?? $b['title_ar'] ?? null,

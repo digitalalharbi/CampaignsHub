@@ -43,9 +43,9 @@ final class AlertBundleMail extends Mailable
     use OffersUnsubscribe, Queueable, SerializesModels;
 
     /**
-     * @param  list<array{severity: string, title: string, detail: string, context: string}>  $items
-     *                                                                                                ordered as the sweep found them: project by project, and inside a project as
-     *                                                                                                `ReportObservations` ranked them, so the most serious is first
+     * @param  list<array{severity: string, title: string, detail: string, context: string, numbers?: string, action?: string, url?: string, button?: string, secondary?: string, figures?: array|null}>  $items
+     *                                                                                                                                                                                                            ordered as the sweep found them: project by project, and inside a project as
+     *                                                                                                                                                                                                            `ReportObservations` ranked them, so the most serious is first
      */
     public function __construct(
         public readonly array $items,
@@ -92,8 +92,9 @@ final class AlertBundleMail extends Mailable
             'intro' => $ar
                 ? 'ظهرت هذه التنبيهات في آخر فحص، وكل منها يحتاج قرارًا اليوم.'
                 : 'These came up in the last sweep, and each needs a decision today.',
-            'actionLabel' => $ar ? 'فتح في كامبينز هب' : 'Open in CampaignsHub',
-            'actionUrl' => Frontend::origin().'/app/dashboard',
+            // EMAIL-DIGESTS-OPERATIONAL-001 — the one button below the cards lands on the alerts page inside the system.
+            'actionLabel' => $ar ? 'عرض كل التنبيهات داخل النظام' : 'See all alerts in the system',
+            'actionUrl' => Frontend::origin().'/app/alerts',
         ];
 
         return new Content(view: 'mail.layout', with: $body + [

@@ -11,10 +11,9 @@ use App\Domains\Notifications\Services\MailSendGate;
 use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Services\TransactionalMailer;
-use App\Domains\Notifications\Support\AlertFigures;
+use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Models\User;
-use App\Support\Frontend;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -166,17 +165,8 @@ final class AlertEventMailer
         $ar = $locale === 'ar';
         try {
             $sent = Mail::to($user->email)->send((new AlertBundleMail(
-                items: array_map(static fn (array $i): array => [
-                    'severity' => (string) $i['severity'],
-                    'title' => (string) (($ar ? ($i['title_ar'] ?? null) : null) ?? $i['title']),
-                    'detail' => (string) (($ar ? ($i['detail_ar'] ?? null) : null) ?? $i['detail']),
-                    'context' => (string) ($i['project_name'] ?? ''),
-                    // EMAIL-PERF-DASHBOARDS-001 — one lead figure and a strip, read from the event's context; null keeps the sentence alone.
-                    'figures' => AlertFigures::from((array) ($i['context'] ?? []), $ar),
-                    // EMAIL-DECISION-REPORT-001 — an action-required card: what to decide, and the one place to do it.
-                    'action' => self::action((string) ($i['notification_type'] ?? ''), $ar),
-                    'url' => (string) ($i['url'] ?? Frontend::origin().'/app/alerts?event='.rawurlencode((string) ($i['event_id'] ?? ''))),
-                ], $claimed),
+                // EMAIL-DIGESTS-OPERATIONAL-001 — what happened, the numbers, where, one next step and the page inside the system; never the stored English or a campaign name as the headline.
+                items: array_map(static fn (array $i): array => AlertEventText::compose($i, $ar), $claimed),
                 lang: $locale,
                 recipientName: (string) $user->name,
             ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, MailUnsubscribes::ALERTS, (int) $user->getKey())));
