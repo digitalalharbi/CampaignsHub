@@ -86,7 +86,7 @@ final class NoGa4WordInUserVisibleStringsTest extends TestCase
                     if (str_starts_with($trim, '//') || str_starts_with($trim, '#')) {
                         continue;
                     }
-                    if (preg_match('/Google Analytics|جوجل أناليتكس|analytics\.google\.com/u', $line) === 1) {
+                    if (preg_match('/Google Analytics|جوجل أناليتكس|analytics\.google\.com|Google[’\']?s?\s+(reports?|updates?|restates?|data|tag|search console)|(تقارير|بيانات|تحديثات)\s+(Google|جوجل|غوغل)/iu', $line) === 1) {
                         $offences[] = substr($path, strlen(base_path()) + 1).':'.($n + 1);
                     }
                 }

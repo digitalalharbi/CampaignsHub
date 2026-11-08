@@ -358,6 +358,10 @@ function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: 
 
 /* ─────────────────────────────── Results split ─────────────────────────────── */
 
+/** Plain panel title: «مصادر الزيارات» for clicks, «مصادر <النتيجة>» for any other result. */
+export const splitTitle = (isClicks: boolean, resultName: string, ar: boolean) =>
+  isClicks ? (ar ? 'مصادر الزيارات' : 'Traffic sources') : ar ? `مصادر ${resultName}` : `Sources of ${resultName.toLowerCase()}`
+
 function ResultsSplit({ payload, ar, source, wide, selected, onSelect }: { payload: LivePayload; ar: boolean; source: ResultSource; wide: boolean; selected: string | null; onSelect: (p: string | null) => void }) {
   const rows = (payload.platforms ?? []).flatMap((p) => {
     const value = Number(source.of(p) ?? 0)
@@ -367,7 +371,7 @@ function ResultsSplit({ payload, ar, source, wide, selected, onSelect }: { paylo
   const resultName = source.name
 
   return (
-    <Panel title={ar ? `من أين جاءت ${resultName}` : `Where the ${resultName.toLowerCase()} came from`} testid="exec-results-split" className={wide ? 'lg:col-span-12' : 'lg:col-span-4'}>
+    <Panel title={splitTitle(source.key === 'clicks', resultName, ar)} testid="exec-results-split" className={wide ? 'lg:col-span-12' : 'lg:col-span-4'}>
       {total <= 0 ? (
         <p className="flex h-[200px] items-center justify-center text-center text-sm text-text-muted">
           {ar ? 'لم تُسجَّل نتائج موزّعة على المنصات في هذه الفترة' : 'No results by platform were recorded in this period'}
