@@ -188,6 +188,7 @@ export function ReportAdDetail({
                   className="max-h-full max-w-full"
                   fit="contain"
                   testid="report-ad-detail-poster"
+                  textScale="stage"
                   forClient
                   provider={ad.provider ?? null}
                   onMeasured={onMeasured}

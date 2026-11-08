@@ -33,6 +33,7 @@ export function AdPoster({
   provider = null,
   onMeasured,
   eager = false,
+  textScale = 'tile',
 }: {
   preview: CreativePreview | null | undefined
   name: string
@@ -89,6 +90,12 @@ export function AdPoster({
   onMeasured?: (width: number, height: number) => void
   /** A viewer the reader opened on purpose: the one image must load now, not when a 0×0 box scrolls into view. */
   eager?: boolean
+  /**
+   * CREATIVE-VIEWER-FORMATS-001 — how large a chat card's own words are drawn. A grid tile clamps them;
+   * a viewer the reader opened draws the whole card at reading size (it opened to a thumbnail-sized
+   * card floating in an empty stage).
+   */
+  textScale?: 'tile' | 'stage'
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(preview, ar)
@@ -124,6 +131,24 @@ export function AdPoster({
     if (copy && (copy.headline || copy.body)) {
       const key = provider ? canonicalPlatform(provider) : null
       const color = key ? platformColor(key) : 'var(--brand-600)'
+
+      if (textScale === 'stage') {
+        return (
+          <span
+            data-testid={testid ? `${testid}-absent` : undefined}
+            data-absence={reason}
+            data-cover="text-card"
+            title={absenceLabel(reading, ar)}
+            className="relative flex w-full max-w-md flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-surface p-5 text-start shadow-sm"
+          >
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: color }} />
+            {key ? <span className="flex items-center gap-1.5 text-xs font-semibold text-text-muted"><ProviderMark provider={key} size={16} />{providerLabel(key, ar ? 'ar' : 'en')}</span> : null}
+            {copy.headline && <span className="text-lg font-bold leading-snug text-text-primary">{copy.headline}</span>}
+            {copy.body && <span className="text-sm leading-relaxed text-text-secondary">{copy.body}</span>}
+            <span className="text-xs font-semibold text-text-muted">{ar ? 'نص الإعلان — الصورة غير متاحة' : 'Ad text — image not available'}</span>
+          </span>
+        )
+      }
 
       return (
         <span
