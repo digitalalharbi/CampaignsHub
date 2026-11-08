@@ -1,4 +1,11 @@
-# CURRENT STATE — 2026-11-05 (evening) — reconciliation adopted; #962, #963, #965, #966 on main; #968 at the Lander head
+# CURRENT STATE — 2026-11-08 — main at 1769c5307 (#989), deployed; covers and viewer formats read on one real link
+
+- **Landed since 2026-11-05:** #973, #975, #976, #978, #979, #980, #981, #982, #983, #984, #985, #986, #989 (list and evidence in `docs/PROJECT_STATE.md`). Deploy Production run 42456226278 succeeded on `1769c5307`.
+- **Production read 2026-11-08 (read-only, one real link):** Meta 13/13 covers (was 0); TikTok 175 of 269 with our copy, 57 by first frame, 37 unavailable (26 Asset Library no data, 9 Spark nothing, 2 Spark no identity); Snapchat 657 of 658; Google 3 text ads; ChatGPT Ads 11 chat cards as text; Website tab English view reads the gap with no source named. Rows CREATIVE-PREVIEWS-001, CREATIVE-COVERS-COVERAGE-001, CREATIVE-VIEWER-FORMATS-001, CREATIVE-SYNC-MEDIA-001, CONTENT-FORMAT-COMPARISON-001, REPORT-WEBSITE-GAP-READING-001 stay IMPLEMENTED_NOT_VERIFIED, with the evidence and the gap written in each row. Not claimed: X, LinkedIn, ChatGPT or Google images, TikTok rows that returned nothing, the Arabic Website tab.
+- **Waiting on the Owner:** TikTok Asset Library re-grant; Google Cloud steps for the GA4 sign-in client (Analytics APIs, redirect `https://api.campaignshub.io/api/v1/oauth/measurement/ga4/callback`, `analytics.readonly`, test users); enabling his own digests; approval for `notifications:enrol-members --apply`; the 2FA decision; WhatsApp via Twilio (sender, templates, secrets); Meta #930 (HOLD); trying Google sign-in.
+- **Safe next actions:** read the Arabic Website tab on a real link; fix conversion rate above 100% in the demo format cards; LinkedIn media needs `r_organization_social`, X needs API v2 media (Owner/access); re-read TikTok after the Asset Library re-grant. Do not touch the Lander queue from a docs branch.
+
+## Earlier state — 2026-11-05 (evening)
 
 - **Governing index:** `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md`. Per-item record: matrix section `Cumulative execution record 2026-11-05`, rows EXEC-REC-001 to 018. No second inventory, no competing branches.
 - **Order:** security, money, isolation and integrations, filters and Duplicate, Smart Code and email, integrations UI, GA4 and the rest.
