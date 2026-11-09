@@ -55,6 +55,16 @@ final class AlertEventText
                 ? MailDeepLinks::integrations($projectId)
                 : ($projectId !== null && $say['link'] === 'analytics' ? MailDeepLinks::analytics($projectId, 'performance') : MailDeepLinks::alerts((string) ($item['event_id'] ?? ''))));
 
+        // OPERATIONAL-INTELLIGENCE-P1-001 — the priority closes the context line; thin evidence replaces the recommendation.
+        $priority = (string) ($item['priority'] ?? '');
+        $thin = ! $recovered && ($item['insufficient'] ?? false) === true;
+        if ($thin) {
+            $say['action'] = $ar ? 'بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.' : 'Insufficient data — no action is recommended until the evidence is complete.';
+        }
+        if ($priority !== '' && ! $recovered) {
+            $where[] = $priority;
+        }
+
         return [
             'severity' => (string) $item['severity'],
             'title' => $say['headline'],
@@ -83,6 +93,16 @@ final class AlertEventText
         $name = trim(preg_replace('/\s+/u', ' ', $name) ?? $name);
 
         return mb_strlen($name) > self::NAME_LIMIT ? rtrim(mb_substr($name, 0, self::NAME_LIMIT - 1)).'…' : $name;
+    }
+
+    /**
+     * OPERATIONAL-INTELLIGENCE-P1-001 — the same plain wording, for a caller that is not the mail.
+     *
+     * @return array{headline: string, text: string, numbers: string, action: string, link: string}
+     */
+    public static function plain(string $type, array $ctx, bool $ar, string $platform = ''): array
+    {
+        return self::say($type, $ctx, $ar, $platform);
     }
 
     /** @return array{headline: string, text: string, numbers: string, action: string, link: string} */
