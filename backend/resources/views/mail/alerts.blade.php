@@ -14,8 +14,7 @@
 
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
-    <div style="font-size:15px; color:#5b6b68; margin:0 0 6px;">{{ $greeting }}</div>
-    <div style="font-size:14px; color:#3d4742; line-height:1.8; margin:0 0 12px;">{{ $intro }}</div>
+    @php($compact = count($items) >= 3)
     {{-- EMAIL-DECISION-REPORT-001 — how many need a decision, by severity, before the cards: the portfolio-health strip of an alert mail. --}}
     @php($bySeverity = array_count_values(array_map(static fn (array $i): string => (string) ($i['severity'] ?? 'info'), $items)))
     @if (count($items) > 1)
@@ -45,7 +44,7 @@
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
                style="background-color:{{ $background }}; border-radius:12px; margin-bottom:12px;">
             <tr>
-                <td style="padding:16px 18px; border-{{ $startSide }}:4px solid {{ $colour }}; border-radius:12px;">
+                <td style="padding:{{ $compact ? 12 : 16 }}px 18px; border-{{ $startSide }}:4px solid {{ $colour }}; border-radius:12px;">
                     @if ($item['context'] !== '')
                         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $item['context'] }}</div>
                     @endif
@@ -73,8 +72,13 @@
                             </table>
                         @endif
                     @endif
-                    <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $item['detail'] }}</div>
-                    @if (! empty($item['numbers']))
+                    @if (! empty($item['viz']))
+                        @include('mail.digest._viz', ['viz' => $item['viz']])
+                    @endif
+                    @if (! $compact && $item['detail'] !== '')
+                        <div style="font-size:13px; color:#3d4742; line-height:1.7; padding-top:8px;">{{ $item['detail'] }}</div>
+                    @endif
+                    @if (! empty($item['numbers']) && empty($item['viz']))
                         {{-- EMAIL-DIGESTS-OPERATIONAL-001 — the numbers as a line of their own: before → now, and the threshold that fired. --}}
                         <div data-block="numbers" style="font-size:13px; font-weight:700; color:#0b1a16; padding-top:4px; direction:{{ $dir }}; unicode-bidi:plaintext;">{{ $item['numbers'] }}</div>
                     @endif

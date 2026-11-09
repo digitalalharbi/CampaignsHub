@@ -82,7 +82,9 @@ final class OperationalDigestMail extends Mailable
 
         $preheader = $project
             ? implode(' · ', array_filter([$m['status']['reason'] ?? '', ($m['kpis'][0]['label'] ?? '').' '.($m['kpis'][0]['value'] ?? '')]))
-            : ($ar ? 'كل مشاريعك: ما يحتاج قرارًا أولًا، ثم أرقام كل منصة.' : 'All your projects: what needs a decision first, then every platform.');
+            : ($ar
+                ? "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} من {$m['coverage']['total']} مفحوصة"
+                : "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} of {$m['coverage']['total']} checked");
 
         $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader);
         $t = $this->copy($ar);
@@ -118,8 +120,6 @@ final class OperationalDigestMail extends Mailable
 
         return $ar ? [
             'kind_note' => $kindNote,
-            'intro_project' => 'هذا ملخص مشروعك بكل منصاته. لا تحتاج للدخول إلى أي منصة لتعرف أين وصلت الأمور.',
-            'intro_portfolio' => 'هذا ملخص كل مشاريعك، مرتبة من الأكثر احتياجًا لانتباهك.',
             'needs' => 'ما يحتاج قرارًا',
             'nothing' => 'لا شيء يحتاج قرارًا الآن.',
             'summary' => 'الملخص العام',
@@ -149,8 +149,6 @@ final class OperationalDigestMail extends Mailable
             'sync_note' => 'بعض المصادر لم تتحدث، فقد تكون الأرقام ناقصة.',
         ] : [
             'kind_note' => $kindNote,
-            'intro_project' => 'Your project across every platform. You do not need to open any platform to know where things stand.',
-            'intro_portfolio' => 'All your projects, ordered by what needs your attention first.',
             'needs' => 'Needs a decision',
             'nothing' => 'Nothing needs a decision right now.',
             'summary' => 'Overall summary',

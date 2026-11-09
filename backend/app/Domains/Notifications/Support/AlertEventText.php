@@ -139,7 +139,7 @@ final class AlertEventText
                     'headline' => $ar ? "ميزانية {$who} قاربت النفاد" : "The {$who} budget is nearly used up",
                     'text' => $ar ? 'استهلكت الحملة نسبة كبيرة من ميزانيتها.' : 'The campaign has used a large share of its budget.',
                     'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'المصروف ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
-                        .(isset($ctx['ratio']) ? ' ('.$num((float) $ctx['ratio'] * 100, 0).'%)' : '') : '',
+                        .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
                     'action' => $ar ? 'قرار اليوم: أبقِ الميزانية أو عدّلها أو أوقف ما لا يؤدي.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
                     'link' => 'campaign',
                 ];
@@ -191,7 +191,7 @@ final class AlertEventText
             case 'token_expiry':
                 return [
                     'headline' => isset($ctx['expires_at']) ? ($ar ? "ينتهي ربط {$who} قريبًا" : "The {$who} connection expires soon") : ($ar ? "ربط {$who} مرفوض ومتوقف" : "The {$who} connection was refused and has stopped"),
-                    'text' => $ar ? 'بعد الانتهاء تتوقف البيانات عن الوصول.' : 'After that, data stops arriving.',
+                    'text' => isset($ctx['expires_at']) ? ($ar ? 'بعد الانتهاء تتوقف البيانات عن الوصول.' : 'After that, data stops arriving.') : ($ar ? 'البيانات متوقفة الآن حتى تعيد الربط.' : 'Data is stopped until you reconnect.'),
                     'numbers' => isset($ctx['expires_at']) ? ($ar ? 'ينتهي في ' : 'Expires on ').self::ltr(substr((string) $ctx['expires_at'], 0, 10)) : '',
                     'action' => $ar ? 'جدّد الربط قبل انقطاع البيانات.' : 'Renew the connection before the data stops.',
                     'link' => 'integrations',
@@ -204,6 +204,16 @@ final class AlertEventText
                     'action' => $ar ? 'افتح الحملة وتحقق من الميزانية والمحتوى في ذلك اليوم.' : 'Open the campaign and check the budget and content for that day.',
                     'link' => 'campaign',
                 ];
+        }
+
+        // DIGESTS-VISUAL-V2-001 — website, lead, tracking, launch, performance, security and the sample have their own words.
+        $own = AlertRuleCopy::say($type, $ctx, $ar);
+        if ($own !== null) {
+            return $own;
+        }
+        // An event that carries its own Arabic title and message (the rule wrote them) is said with those, never with a generic line.
+        if ($ar && is_string($ctx['title_ar'] ?? null) && $ctx['title_ar'] !== '') {
+            return ['headline' => $ctx['title_ar'], 'text' => (string) ($ctx['message_ar'] ?? ''), 'numbers' => '', 'action' => 'افتح التنبيه واتخذ قرارًا.', 'link' => 'alerts'];
         }
 
         // A rule type this composer does not know: a generic plain headline, never the stored English.
@@ -241,7 +251,7 @@ final class AlertEventText
 
         return ($ar ? 'قبل ' : 'Before ').$fmt($was).' ← '.($ar ? 'الآن ' : 'Now ').$fmt($now)
             .($days > 0 ? ($ar ? " (آخر {$days} أيام)" : " (last {$days} days)") : '')
-            .($thr !== null ? ($ar ? ' · حد التنبيه '.rtrim(rtrim(number_format($thr, 1), '0'), '.').'%' : ' · alert at '.rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : '');
+            .($thr !== null ? ($ar ? ' · حد التنبيه '.self::ltr(rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : ' · alert at '.rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : '');
     }
 
     private static function anomaly(array $ctx, bool $ar): string
