@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Alerts\Http\Controllers;
 
 use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Alerts\Models\AlertEventDecision;
 use App\Domains\Alerts\Models\AlertRule;
+use App\Domains\Alerts\Services\AlertDecisions;
 use App\Domains\Alerts\Services\AlertEvaluator;
+use App\Domains\Alerts\Services\AlertImpact;
+use App\Domains\Alerts\Services\AttentionBoard;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -334,7 +338,7 @@ final class AlertController extends Controller
             ->get();
 
         return ApiResponse::success(
-            $this->triageOrder(clone $query)->limit(self::EVENT_PAGE_SIZE)->get()->all(),
+            $this->anatomised($this->triageOrder(clone $query)->limit(self::EVENT_PAGE_SIZE)->get()->all()),
             'Alert events.',
             [
                 'total' => (int) $counts->sum('n'),
@@ -352,6 +356,20 @@ final class AlertController extends Controller
     }
 
     /**
+     * @param  list<AlertEvent>  $events
+     * @return list<AlertEvent>
+     */
+    private function anatomised(array $events): array
+    {
+        $board = app(AttentionBoard::class);
+        foreach ($events as $event) {
+            $board->anatomised($event);
+        }
+
+        return $events;
+    }
+
+    /**
      * Status, then severity, then recency, then id.
      *
      * Written as CASE expressions rather than a stored rank column because the rank is a reading
@@ -361,6 +379,11 @@ final class AlertController extends Controller
      * An unknown status or severity sorts LAST rather than first. A value this application does not
      * recognise is not evidence of urgency, and putting it at the top of a triage queue would let a
      * bad write push real alerts off the screen.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
      */
     private function triageOrder(Builder $query): Builder
     {
@@ -376,7 +399,10 @@ final class AlertController extends Controller
         abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
         $this->assertReaches($request, $alertEvent);
 
-        return ApiResponse::success($evaluator->resolve($alertEvent), 'Alert resolved.');
+        $resolved = $evaluator->resolve($alertEvent);
+        app(AlertDecisions::class)->lifecycle($resolved, $request->user(), 'resolve');
+
+        return ApiResponse::success($resolved, 'Alert resolved.');
     }
 
     public function snooze(Request $request, AlertEvent $alertEvent, AlertEvaluator $evaluator): JsonResponse
@@ -385,10 +411,93 @@ final class AlertController extends Controller
         $this->assertReaches($request, $alertEvent);
         $data = $request->validate(['minutes' => ['required', 'integer', 'min:5', 'max:20160']]);
 
+        $snoozed = $evaluator->snooze($alertEvent, Carbon::now()->addMinutes($data['minutes']));
+        app(AlertDecisions::class)->lifecycle($snoozed, $request->user(), 'snooze', $data['minutes'].' min');
+
+        return ApiResponse::success($snoozed, 'Alert snoozed.');
+    }
+
+    /**
+     * OPERATIONAL-INTELLIGENCE-P1-001 — the exception-first board: status matrix + ranked «needs your decision» list.
+     * Same reach and project narrowing as the ledger (a project outside the reader's reach is a 404).
+     */
+    public function attention(Request $request, AttentionBoard $board): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.view'), 403);
+        $project = $request->string('project')->toString();
+        $reach = $this->reach($request->user());
+        abort_if($project !== '' && $reach !== null && ! in_array($project, $reach, true), 404);
+
+        return ApiResponse::success($board->build($reach, $project === '' ? null : $project), 'Attention board.');
+    }
+
+    /** One alert with its anatomy, decision log, impact result and the members who may own it. */
+    public function show(Request $request, AlertEvent $alertEvent, AttentionBoard $board, AlertImpact $impact, AlertDecisions $decisions): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.view'), 403);
+        $this->assertReaches($request, $alertEvent);
+        $board->anatomised($alertEvent);
+
+        $log = AlertEventDecision::query()->where('alert_event_id', $alertEvent->id)->orderBy('seq')->get();
+        $names = User::query()->whereIn('id', $log->pluck('user_id')->merge($log->pluck('to_owner_id'))->merge($log->pluck('from_owner_id'))->push($alertEvent->owner_id)->filter()->unique()->all())->pluck('name', 'id');
+        $canManage = (bool) $request->user()->hasPermission('alerts.manage');
+
+        return ApiResponse::success([
+            'event' => $alertEvent,
+            'owner' => $alertEvent->owner_id === null ? null : ['id' => (int) $alertEvent->owner_id, 'name' => (string) ($names[$alertEvent->owner_id] ?? '')],
+            'log' => $log->map(fn (AlertEventDecision $d): array => [
+                'id' => (string) $d->id, 'kind' => $d->kind, 'by' => $names[$d->user_id] ?? null, 'at' => $d->created_at?->toIso8601String(),
+                'from_status' => $d->from_status, 'to_status' => $d->to_status, 'action_tag' => $d->action_tag, 'note' => $d->note,
+                'from_owner' => $names[$d->from_owner_id] ?? null, 'to_owner' => $names[$d->to_owner_id] ?? null,
+            ])->all(),
+            'impact' => $impact->measure($alertEvent),
+            'assignees' => $canManage ? $decisions->candidates($alertEvent) : [],
+            'action_tags' => AlertDecisions::ACTION_TAGS,
+        ], 'Alert.');
+    }
+
+    public function decide(Request $request, AlertEvent $alertEvent, AlertDecisions $decisions): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReaches($request, $alertEvent);
+        $data = $request->validate([
+            'status' => ['required', 'string', 'in:'.implode(',', AlertDecisions::STATUSES)],
+            'reason' => ['required_if:status,dismissed', 'nullable', 'string', 'min:3', 'max:500'],
+            'action_tag' => ['nullable', 'string', 'in:'.implode(',', AlertDecisions::ACTION_TAGS)],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
         return ApiResponse::success(
-            $evaluator->snooze($alertEvent, Carbon::now()->addMinutes($data['minutes'])),
-            'Alert snoozed.',
+            $decisions->setStatus($alertEvent, $request->user(), $data['status'], $data['reason'] ?? null, $data['action_tag'] ?? null, $data['note'] ?? null),
+            'Decision recorded.',
         );
+    }
+
+    public function assign(Request $request, AlertEvent $alertEvent, AlertDecisions $decisions): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReaches($request, $alertEvent);
+        $data = $request->validate(['owner_id' => ['present', 'nullable', 'integer'], 'note' => ['nullable', 'string', 'max:500']]);
+
+        if ($data['owner_id'] !== null) {
+            // A member of THIS tenant whose own reach contains the alert's project — anyone else is "not found", never assigned.
+            $candidate = User::query()->inTenant((string) $alertEvent->tenant_id)->whereKey($data['owner_id'])->first();
+            if ($candidate === null || ! $decisions->mayOwn($alertEvent, $candidate)) {
+                throw ValidationException::withMessages(['owner_id' => 'The selected owner cannot take this alert.']);
+            }
+        }
+
+        return ApiResponse::success($decisions->assign($alertEvent, $request->user(), $data['owner_id'] === null ? null : (int) $data['owner_id'], $data['note'] ?? null), 'Owner set.');
+    }
+
+    public function note(Request $request, AlertEvent $alertEvent, AlertDecisions $decisions): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReaches($request, $alertEvent);
+        $data = $request->validate(['note' => ['required', 'string', 'min:1', 'max:500']]);
+        $decisions->note($alertEvent, $request->user(), $data['note']);
+
+        return ApiResponse::success(null, 'Note added.', status: 201);
     }
 
     /** An event of a project outside the reader's reach does not exist for them. */
