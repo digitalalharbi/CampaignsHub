@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
+use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
@@ -84,6 +85,7 @@ final class AlertBundleMail extends Mailable
                 static fn (array $item): string => $item['title'],
                 array_slice($this->items, 0, 3),
             )),
+            footerNote: MailDisclaimer::note($this->lang),
         ) + [
             'items' => $this->items,
             'greeting' => $ar

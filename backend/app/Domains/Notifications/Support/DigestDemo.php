@@ -130,6 +130,39 @@ final class DigestDemo
         $previous = ['spend' => $totalPrev, 'conversions' => $convPrev] + [$result[1] => $totalPrev > 0 ? round($totalPrev / max(1, $convPrev), 2) : null];
         $change = static fn (float $a, float $b): ?float => $b > 0 ? round(($a - $b) / $b, 4) : null;
 
+        // DIGESTS-OBJECTIVE-KPIS-001 — every fourth project is MIXED: its last two platforms carry an awareness campaign, the rest the project's own objective.
+        $groups = [];
+        if ($rows !== []) {
+            $mixed = $i % 4 === 0 && count($rows) >= 3;
+            $mainRows = $mixed ? array_slice($rows, 0, count($rows) - 2) : $rows;
+            $mainPrev = $mixed ? array_slice($prev, 0, count($rows) - 2) : $prev;
+            $sum = static fn (array $r, string $k): float => array_sum(array_map(static fn (array $x): float => (float) ($x[$k] ?? 0), $r));
+            $tot = static function (array $r) use ($result, $sum): array {
+                $spend = $sum($r, 'spend');
+                $res = $sum($r, $result[0]);
+                $base = ['spend' => $spend, $result[0] => $res, 'impressions' => $sum($r, 'impressions'), 'clicks' => $sum($r, 'clicks')];
+                if ($result[0] === 'purchases') {
+                    $base += ['revenue' => $spend * 3.4, 'roas' => 3.4, 'cpa' => $res > 0 ? round($spend / $res, 2) : null, 'aov' => 210.0];
+                }
+                if ($result[0] === 'leads') {
+                    $base += ['cpl' => $res > 0 ? round($spend / $res, 2) : null, 'qualified_leads' => (int) round($res * 0.4)];
+                }
+                if ($result[0] === 'clicks') {
+                    $base += ['ctr' => 0.02, 'cpc' => 1.3, 'landing_page_views' => (int) round($res * 0.8)];
+                }
+
+                return $base;
+            };
+            $groups[] = ['objective' => $objective, 'campaigns' => 3, 'totals' => $tot($mainRows), 'previous' => $tot($mainPrev), 'reported' => [], 'platform_rows' => $mainRows, 'platform_previous' => $mainPrev, 'platform_reported' => [],
+                'funnel' => $objective === 'sales' ? [['stage' => 'impressions', 'count' => 900000, 'step_rate' => null], ['stage' => 'clicks', 'count' => 21000, 'step_rate' => 0.023], ['stage' => 'purchases', 'count' => 640, 'step_rate' => 0.03]] : []];
+            if ($mixed) {
+                $awRows = array_map(static fn (array $r): array => ['provider' => $r['provider'], 'spend' => $r['spend'], 'spend_withheld_rows' => 0, 'impressions' => 600000, 'reach' => 210000, 'frequency' => 2.9, 'cpm' => 4.6], array_slice($rows, -2));
+                $awPrev = array_map(static fn (array $r): array => $r + ['impressions' => 560000, 'cpm' => 4.2], array_map(static fn (array $r): array => ['provider' => $r['provider'], 'spend' => $r['spend'] * 0.95, 'spend_withheld_rows' => 0], array_slice($rows, -2)));
+                $groups[] = ['objective' => 'awareness', 'campaigns' => 2, 'totals' => ['spend' => $sum($awRows, 'spend'), 'impressions' => 1200000, 'reach' => 420000, 'frequency' => 2.9, 'cpm' => 4.6], 'previous' => ['spend' => $sum($awPrev, 'spend'), 'impressions' => 1100000, 'cpm' => 4.2],
+                    'reported' => [], 'platform_rows' => $awRows, 'platform_previous' => $awPrev, 'platform_reported' => [], 'funnel' => []];
+            }
+        }
+
         return [
             'project_id' => sprintf('00000000-0000-4000-8000-%012d', $i + 1),
             'project_name' => $name,
@@ -145,6 +178,7 @@ final class DigestDemo
             'platform_series' => $series,
             'budget_rows' => $budget,
             'series' => array_map(static fn (string $d, int $j): array => ['date' => $d, 'spend' => $total > 0 ? round($total / 7 * (0.85 + (($j + $i) % 5) * 0.08), 2) : null], $days, array_keys($days)),
+            'groups' => $groups,
             'funnel' => [],
             'creatives' => null,
             'follow_up' => null,

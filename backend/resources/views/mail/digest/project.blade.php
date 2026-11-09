@@ -55,57 +55,24 @@
     @endif
 
     {{-- The money, with its shape: the week's bars carry weekday initials, the last bar is the strong one. --}}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:6px 0 12px;">
-        <tr><td style="padding:2px 14px 12px;">
-            @include('mail.digest._figures', ['figures' => $m['kpis'], 'big' => true])
-            @if ($m['yesterday'])<div style="font-size:12px; color:#5b6b68; padding-top:8px;" dir="auto">{{ $m['yesterday'] }}</div>@endif
-            @include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 28, 'labels' => $weekly])
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:6px 0 10px;">
+        <tr><td style="padding:2px 12px 10px;">
+            @include('mail.digest._figures', ['figures' => $m['kpis'], 'per' => 3, 'big' => true])
+            @include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 22, 'labels' => $weekly])
         </td></tr>
     </table>
 
-    {{-- Each platform in one compact row: state, name, share of spend, the objective's figures; weekly adds its own 7-day bars. --}}
-    <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:6px 0 6px;">{{ $t['platforms'] }}</div>
-    @forelse ($m['platforms'] as $pf)
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="platform" data-provider="{{ $pf['provider'] }}" data-state="{{ $pf['state'] }}" style="border:1px solid #e4e0d6; border-radius:10px; margin-bottom:8px;">
-            <tr>
-                <td width="34" valign="top" style="padding:10px 0 0; text-align:center;">@include('mail.digest._chip', ['state' => $pf['state'], 'size' => 22])</td>
-                <td style="padding:8px 8px 8px 0;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-                        <td style="font-size:14px; font-weight:800; color:#0b1a16;">{{ $pf['name'] }}</td>
-                        @if ($pf['pacing'])
-                            <td style="text-align:{{ $endSide }}; white-space:nowrap; font-size:11px; font-weight:700; color:{{ $tone[$pf['pacing']['tone']] }};">{{ $pf['pacing']['label'] }}</td>
-                        @endif
-                    </tr></table>
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:4px;"><tr>
-                        <td dir="ltr" style="background-color:#eeeae0; border-radius:4px;">
-                            <table role="presentation" width="{{ max(2, $pf['share']) }}%" cellpadding="0" cellspacing="0" border="0"><tr><td height="6" bgcolor="#0d8a6f" style="background-color:#0d8a6f; height:6px; line-height:6px; font-size:1px; border-radius:4px;">&nbsp;</td></tr></table>
-                        </td>
-                        <td width="40" style="padding-{{ $startSide }}:6px; font-size:11px; font-weight:700; color:#5b6b68; white-space:nowrap;" dir="ltr">{{ $pf['share'] }}%</td>
-                    </tr></table>
-                    @include('mail.digest._figures', ['figures' => $pf['figures'], 'big' => false])
-                    @if ($weekly)
-                        @include('mail.digest._spark', ['bars' => $pf['spark'], 'colour' => '#0d8a6f', 'height' => 20, 'labels' => false])
-                    @endif
-                </td>
-            </tr>
-        </table>
-    @empty
-        <div style="font-size:13px; color:#5b6b68; margin-bottom:10px;">{{ $t['no_platforms'] }}</div>
-    @endforelse
-
-    @if ($m['funnel'])
-        <div style="font-size:12px; font-weight:700; color:#5b6b68; letter-spacing:0.4px; margin:14px 0 6px;">{{ $t['funnel'] }}</div>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="funnel" style="font-size:12px; margin-bottom:10px;">
-            @foreach ($m['funnel'] as $s)
-                <tr>
-                    <td width="30%" style="padding:3px 0; color:#0b1a16;">{{ $s['label'] }}</td>
-                    <td style="padding:3px 6px;">
-                        <table role="presentation" width="{{ $s['width'] }}%" cellpadding="0" cellspacing="0" border="0"><tr><td height="8" style="background-color:#0d8a6f; height:8px; line-height:8px; font-size:1px; border-radius:4px;">&nbsp;</td></tr></table>
-                    </td>
-                    <td width="30%" style="padding:3px 0; text-align:{{ $endSide }}; color:#0b1a16; white-space:nowrap;" dir="ltr">{{ $s['count'] }}@if ($s['step']) <span style="color:#8b9a97;">({{ $s['step'] }})</span>@endif</td>
-                </tr>
-            @endforeach
-        </table>
+    {{-- One block PER OBJECTIVE: its own tiles, its platforms with the objective's own figure, its funnel. Unlike objectives are never averaged. --}}
+    @foreach ($m['groups'] as $g)
+        @include('mail.digest._group', ['g' => $g])
+    @endforeach
+    @if (! $m['groups'])
+        @forelse ($m['platforms'] as $pf)
+            <div style="font-size:12px; font-weight:800; margin:4px 0;">{{ $pf['name'] }}</div>
+            @include('mail.digest._figures', ['figures' => $pf['figures'], 'per' => 3, 'big' => false])
+        @empty
+            <div style="font-size:13px; color:#5b6b68; margin-bottom:10px;">{{ $t['no_platforms'] }}</div>
+        @endforelse
     @endif
 
     @if ($m['content'] && ($m['content']['top'] || $m['content']['weak']))
@@ -143,5 +110,4 @@
 
     @include('mail.partials.button', ['href' => $m['links']['report'], 'label' => $t['open_report']])
 
-    <div style="font-size:11px; color:#8b9a97; line-height:1.7; margin-top:18px;">{{ $t['unit_note'] }}</div>
 </div>

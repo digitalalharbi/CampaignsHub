@@ -19,8 +19,8 @@
                 <td style="padding:0 {{ $loop->last ? 0 : 4 }}px 0 {{ $loop->first ? 0 : 0 }}px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
                         <td align="center" bgcolor="{{ $S::CELL[$k] }}" data-count="{{ $k }}" style="background-color:{{ $S::CELL[$k] }}; border-radius:10px; padding:8px 2px;">
-                            <div style="font-size:24px; line-height:1.1; font-weight:800; color:{{ $S::INK[$k] }};" dir="ltr">{{ $m['health'][$k] }}</div>
-                            <div style="font-size:11px; font-weight:700; color:{{ $S::INK[$k] }};">{{ $S::GLYPH[$k] }} {{ $S::label($k, $ar) }}</div>
+                            <div style="font-size:11px; line-height:1.3; font-weight:700; color:{{ $S::INK[$k] }}; text-align:center;">{{ $S::GLYPH[$k] }} {{ $S::label($k, $ar) }}</div>
+                            <div style="font-size:22px; line-height:1.2; font-weight:800; color:{{ $S::INK[$k] }}; text-align:center;" dir="ltr">{{ $m['health'][$k] }}</div>
                         </td>
                     </tr></table>
                 </td>
@@ -42,13 +42,25 @@
         </tr>
     </table>
 
-    {{-- 3. The money, one line each, with the week's shape. --}}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:14px;">
-        <tr><td style="padding:2px 14px 12px;">
-            @include('mail.digest._figures', ['figures' => $m['kpis'], 'big' => true])
-            @include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 34 : 20, 'labels' => $weekly])
-        </td></tr>
+    {{-- 3. The money (the one figure every objective shares), then ONE tile row per objective — never a figure across unlike objectives. --}}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="margin-bottom:8px; table-layout:fixed;">
+        <tr>
+            <td width="34%" valign="top">@include('mail.digest._figures', ['figures' => $m['kpis'], 'per' => 1, 'big' => true])</td>
+            <td width="66%" valign="bottom" style="padding-{{ $startSide === 'right' ? 'right' : 'left' }}:8px;">@include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 30, 'labels' => $weekly])</td>
+        </tr>
     </table>
+    @foreach ($m['groups'] as $g)
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="group" data-objective="{{ $g['objective'] }}" style="border:1px solid #e4e0d6; border-radius:12px; margin-bottom:8px;">
+            <tr><td style="padding:8px 12px 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                    <td><span data-chip="objective" style="display:inline-block; padding:2px 10px; border-radius:999px; font-size:11px; font-weight:800; background-color:#e8f5f1; color:#0a6b57;">{{ $g['label'] }}</span>
+                        <span style="font-size:11px; color:#8b9a97;" dir="ltr">· {{ $g['projects'] }}</span></td>
+                    <td style="text-align:{{ $endSide }}; font-size:12px; font-weight:800; white-space:nowrap;" dir="ltr">{{ $g['spend']['value'] }} <span style="font-size:11px; color:{{ $g['spend']['colour'] }};">{{ $g['spend']['change'] }}</span></td>
+                </tr></table>
+                @include('mail.digest._figures', ['figures' => $g['kpis'], 'per' => max(1, count($g['kpis'])), 'big' => false])
+            </td></tr>
+        </table>
+    @endforeach
 
     {{-- 4. WHO needs a decision — one list for the whole portfolio, in global priority order. --}}
     <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
@@ -128,5 +140,4 @@
     @endif
 
     @include('mail.partials.button', ['href' => $m['links']['dashboard'], 'label' => $ar ? 'افتح لوحة المتابعة' : 'Open the dashboard'])
-    <div style="font-size:11px; color:#8b9a97; line-height:1.7; margin-top:14px;">{{ $t['unit_note'] }}</div>
 </div>

@@ -31,36 +31,52 @@ final class OperationalDigestModel
     /** @var array<string, array{0: string, 1: string, 2: string, 3?: bool}> key → [ar, en, kind, lowerIsBetter] */
     private const FIG = [
         'spend' => ['الإنفاق', 'Spend', 'money'],
-        'purchases' => ['الطلبات', 'Orders', 'count'],
-        'revenue' => ['قيمة الطلبات', 'Order value', 'money'],
-        'roas' => ['العائد على الإنفاق', 'Return on ad spend', 'ratio'],
+        'purchases' => ['المشتريات', 'Purchases', 'count'],
+        'revenue' => ['الإيرادات', 'Revenue', 'money'],
+        'roas' => ['العائد على الإنفاق', 'ROAS', 'ratio'],
         'leads' => ['العملاء المحتملون', 'Leads', 'count'],
-        'cpl' => ['تكلفة العميل المحتمل', 'Cost per lead', 'money', true],
+        'cpl' => ['تكلفة العميل المحتمل', 'CPL', 'money', true],
         'clicks' => ['النقرات', 'Clicks', 'count'],
-        'cpc' => ['تكلفة النقرة', 'Cost per click', 'money', true],
+        'cpc' => ['تكلفة النقرة', 'CPC', 'money', true],
         'impressions' => ['الظهور', 'Impressions', 'count'],
         'reach' => ['الوصول', 'Reach', 'count'],
-        'cpm' => ['تكلفة الألف ظهور', 'Cost per 1,000', 'money', true],
+        'cpm' => ['تكلفة الألف ظهور', 'CPM', 'money', true],
         'installs' => ['التثبيتات', 'Installs', 'count'],
-        'cpi' => ['تكلفة التثبيت', 'Cost per install', 'money', true],
+        'cpi' => ['تكلفة التثبيت', 'CPI', 'money', true],
         'engagements' => ['التفاعلات', 'Engagements', 'count'],
         'engagement_rate' => ['معدل التفاعل', 'Engagement rate', 'percent'],
         'video_views' => ['مشاهدات الفيديو', 'Video views', 'count'],
         'video_completion_rate' => ['معدل الإكمال', 'Completion rate', 'percent'],
-        'ctr' => ['معدل النقر', 'Click-through rate', 'percent'],
-        'conversions' => ['النتائج', 'Results', 'count'],
-        'cpa' => ['تكلفة النتيجة', 'Cost per result', 'money', true],
+        'ctr' => ['نسبة النقر', 'CTR', 'percent'],
+        'conversions' => ['تحويلات المنصة', 'Platform conversions', 'count'],
+        'cpa' => ['تكلفة تحويل المنصة', 'Cost per platform conversion', 'money', true],
+        'frequency' => ['التكرار', 'Frequency', 'decimal'],
+        'aov' => ['متوسط الطلب', 'Average order', 'money'],
+        'landing_page_views' => ['زيارات الصفحة', 'Landing page views', 'count'],
+        'conversion_rate' => ['معدل التحويل', 'Conversion rate', 'percent'],
+        'qualified_leads' => ['عملاء مؤهلون', 'Qualified leads', 'count'],
     ];
 
     /** What each objective is judged on, per platform, after spend. The first is the project's headline figure. */
     public const BY_OBJECTIVE = [
-        'sales' => ['purchases', 'revenue', 'roas'],
-        'leads' => ['leads', 'cpl'],
-        'traffic' => ['clicks', 'cpc'],
-        'awareness' => ['impressions', 'reach', 'cpm'],
+        'sales' => ['purchases', 'revenue', 'roas', 'cpa', 'aov'],
+        'leads' => ['leads', 'cpl', 'qualified_leads'],
+        'traffic' => ['clicks', 'ctr', 'cpc', 'landing_page_views'],
+        'awareness' => ['reach', 'impressions', 'frequency', 'cpm'],
         'app_installs' => ['installs', 'cpi'],
         'engagement' => ['engagements', 'engagement_rate'],
-        'video' => ['video_views', 'video_completion_rate'],
+        'video' => ['video_views', 'video_completion_rate', 'cpm'],
+    ];
+
+    /** Figures that ADD UP across projects (counts and money); a ratio is recomputed from the sums, never averaged; reach, frequency and rates are not rolled up. */
+    private const ROLL_UP = [
+        'sales' => ['purchases', 'revenue', 'roas', 'cpa'],
+        'leads' => ['leads', 'cpl'],
+        'traffic' => ['clicks', 'ctr', 'cpc'],
+        'awareness' => ['impressions', 'cpm'],
+        'app_installs' => ['installs', 'cpi'],
+        'engagement' => ['engagements'],
+        'video' => ['video_views', 'cpm'],
     ];
 
     private const FALLBACK = ['impressions', 'clicks', 'ctr'];
@@ -94,8 +110,8 @@ final class OperationalDigestModel
     public static function statusLabel(string $tone, bool $ar): string
     {
         return match ($tone) {
-            'bad' => $ar ? 'خطر' : 'At risk',
-            'warn' => $ar ? 'انتباه' : 'Watch',
+            'bad' => $ar ? 'مشكلة' : 'Problem',
+            'warn' => $ar ? 'مراقبة' : 'Watch',
             'good' => $ar ? 'ممتاز' : 'Excellent',
             default => $ar ? 'مستقر' : 'Steady',
         };
@@ -152,8 +168,29 @@ final class OperationalDigestModel
         }
 
         $name = (string) ($block['project_name'] ?? '');
-        // DIGESTS-VISUAL-V2-001 — one cell per platform the project has (figures or a source), judged by `DigestStatus`.
-        $cells = self::cells($block, $rows, $prevByProvider, $budgetBy, $sources, $objective, $p, $ar, $id, $name, $days);
+        // DIGESTS-OBJECTIVE-KPIS-001 — a project is judged PER OBJECTIVE GROUP: an awareness group is never «a problem» for a low ROAS.
+        $groupsIn = array_values(array_filter((array) ($block['groups'] ?? []), 'is_array'));
+        $mixed = count($groupsIn) > 1;
+        $groups = [];
+        $cellSets = [];
+        if ($groupsIn === []) {
+            // No group breakdown (an older payload): the project is one group, its own objective.
+            $cellSets[] = self::cells($block, $rows, $prevByProvider, $budgetBy, $sources, $objective, $p, $ar, $id, $name, $days, null);
+        }
+        foreach ($groupsIn as $g) {
+            $go = (string) ($g['objective'] ?? 'custom');
+            $gRows = array_values(array_filter((array) ($g['platform_rows'] ?? []), 'is_array'));
+            usort($gRows, static fn (array $a, array $b): int => ((float) ($b['spend'] ?? 0) <=> (float) ($a['spend'] ?? 0)) ?: $rank($a) <=> $rank($b));
+            $gPrev = [];
+            foreach ((array) ($g['platform_previous'] ?? []) as $r) {
+                $gPrev[(string) ($r['provider'] ?? '')] = (array) $r;
+            }
+            $gBlock = array_merge($block, ['platform_reported' => (array) ($g['platform_reported'] ?? []), 'reported' => (array) ($g['reported'] ?? [])]);
+            $gCells = self::cells($gBlock, $gRows, $gPrev, $budgetBy, $sources, $go, $p, $ar, $id, $name, $days, $mixed ? self::objectiveLabel($go, $ar) : null);
+            $cellSets[] = $gCells;
+            $groups[] = self::group($g, $go, $gRows, $gPrev, $gCells, $p, $ar);
+        }
+        $cells = self::mergeCells($cellSets);
         $stateOf = array_column($cells, 'state', 'provider');
         $platforms = array_map(static fn (array $pf): array => $pf + ['state' => $stateOf[AdPlatforms::canonical($pf['provider'])] ?? 'none'], $platforms);
         $issues = array_merge(
@@ -180,8 +217,11 @@ final class OperationalDigestModel
             'cells' => array_map(static fn (array $c): array => array_diff_key($c, ['issue' => 1]), $cells),
             'issues' => $issues,
             'fresh' => ! in_array((string) ($freshness['state'] ?? ''), ['stale', 'sync_failed', 'no_data'], true) && ! ($freshness['sync_failed'] ?? false),
-            'headline' => self::figures([$headlineKey], $totals, $previous, $reported, $p, $ar)[0],
-            'kpis' => self::figures(['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
+            // Unlike objectives are never averaged: a mixed project's own tile row is the money alone; each group has its own row.
+            'mixed' => $mixed,
+            'groups' => $groups,
+            'headline' => self::figures([$mixed ? 'spend' : $headlineKey], $totals, $previous, $reported, $p, $ar)[0],
+            'kpis' => self::figures($mixed ? ['spend'] : ['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
             'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($block['series'] ?? [])), array_column((array) ($block['series'] ?? []), 'date'), $ar),
             'yesterday' => self::lastDay((array) ($block['series'] ?? []), $p, $ar),
             'changes' => self::changes($block, $p, $ar),
@@ -231,19 +271,16 @@ final class OperationalDigestModel
         $t = (array) ($digest['totals'] ?? []);
         $change = (array) ($t['change'] ?? []);
         $mk = static fn (string $key, string $kind2, ?float $value, ?float $delta, bool $lower = false) => [
+            'key' => $key,
             'label' => self::FIG[$key][$ar ? 0 : 1] ?? $key,
             'missing' => $value === null,
             'value' => $value === null ? ($ar ? 'لا بيانات' : 'No data') : ($kind2 === 'money' ? $p->headline($value) : number_format($value)),
             'change' => $p->change($delta),
             'colour' => $key === 'spend' ? '#8b9a97' : $p->changeColour($delta, $lower),
         ];
-        $kpis = [
-            $mk('spend', 'money', isset($t['spend']) ? (float) $t['spend'] : null, $change['spend'] ?? null),
-            $mk('conversions', 'count', isset($t['conversions']) ? (float) $t['conversions'] : null, $change['conversions'] ?? null),
-        ];
-        if ((float) ($t['revenue'] ?? 0) > 0) {
-            $kpis[] = $mk('revenue', 'money', (float) $t['revenue'], $change['revenue'] ?? null);
-        }
+        // Money is the only figure every objective shares; results are NEVER summed across unlike objectives — each group has its own tile row.
+        $kpis = [$mk('spend', 'money', isset($t['spend']) ? (float) $t['spend'] : null, $change['spend'] ?? null)];
+        $groups = self::portfolioGroups($projects, $p, $ar);
 
         // All platforms, summed across projects — the stacked mix bar.
         $mix = [];
@@ -277,6 +314,7 @@ final class OperationalDigestModel
             'projects_total' => count($projects),
             'need_attention' => $health['bad'] + $health['watch'],
             'kpis' => $kpis,
+            'groups' => $groups,
             'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($t['series'] ?? [])), array_column((array) ($t['series'] ?? []), 'date'), $ar),
             'health' => $health,
             'heatmap' => self::heatmap($projects, $ar),
@@ -291,6 +329,58 @@ final class OperationalDigestModel
             'links' => ['alerts' => MailDeepLinks::alerts(), 'dashboard' => MailDeepLinks::dashboard()],
             'raw' => ['totals' => $t],
         ];
+    }
+
+    /**
+     * One tile row per OBJECTIVE across every project: the additive figures are summed within the objective, a ratio is recomputed
+     * from those sums, and what cannot be rolled up (reach, frequency, rates) is not shown. Never a figure across unlike objectives.
+     *
+     * @param  list<array<string,mixed>>  $projects
+     * @return list<array<string,mixed>>
+     */
+    private static function portfolioGroups(array $projects, DigestPresenter $p, bool $ar): array
+    {
+        $add = ['spend', 'impressions', 'clicks', 'purchases', 'revenue', 'leads', 'installs', 'engagements', 'video_views'];
+        $roll = [];
+        foreach ($projects as $pr) {
+            $gs = $pr['groups'] !== [] ? $pr['groups'] : [['objective' => $pr['objective'], 'raw' => ['totals' => $pr['raw']['totals'], 'previous' => $pr['raw']['previous']]]];
+            foreach ($gs as $g) {
+                $o = (string) $g['objective'];
+                $roll[$o]['projects'][(string) $pr['id']] = true;
+                foreach (['now' => 'totals', 'prev' => 'previous'] as $side => $src) {
+                    foreach ($add as $k) {
+                        $v = $g['raw'][$src][$k] ?? null;
+                        $roll[$o][$side][$k] = ($roll[$o][$side][$k] ?? null) === null && ! is_numeric($v) ? null : (float) ($roll[$o][$side][$k] ?? 0) + (is_numeric($v) ? (float) $v : 0.0);
+                    }
+                }
+            }
+        }
+        $ratios = static function (array $x): array {
+            $d = static fn (?float $n, ?float $den, float $mul = 1.0): ?float => $n !== null && $den !== null && $den > 0 ? round($n / $den * $mul, 4) : null;
+
+            return $x + [
+                'roas' => $d($x['revenue'] ?? null, $x['spend'] ?? null), 'cpa' => $d($x['spend'] ?? null, $x['purchases'] ?? null), 'cpl' => $d($x['spend'] ?? null, $x['leads'] ?? null),
+                'cpm' => $d($x['spend'] ?? null, $x['impressions'] ?? null, 1000.0), 'cpc' => $d($x['spend'] ?? null, $x['clicks'] ?? null), 'ctr' => $d($x['clicks'] ?? null, $x['impressions'] ?? null),
+                'cpi' => $d($x['spend'] ?? null, $x['installs'] ?? null),
+            ];
+        };
+        $order = ['sales', 'leads', 'traffic', 'awareness', 'video', 'app_installs', 'engagement', 'custom'];
+        uksort($roll, static fn (string $a, string $b): int => (array_search($a, $order, true) === false ? 99 : array_search($a, $order, true)) <=> (array_search($b, $order, true) === false ? 99 : array_search($b, $order, true)));
+
+        $out = [];
+        foreach ($roll as $o => $r) {
+            $keys = self::ROLL_UP[$o] ?? ['impressions', 'clicks', 'ctr'];
+            $out[] = [
+                'objective' => $o,
+                'label' => self::objectiveLabel($o, $ar),
+                'projects' => count($r['projects']),
+                // The objective's own figures, at most three (one tile row); the objective's spend is its own first tile.
+                'spend' => self::figures(['spend'], $ratios($r['now'] ?? []), $ratios($r['prev'] ?? []), [], $p, $ar)[0],
+                'kpis' => self::figures(array_slice($keys, 0, 3), $ratios($r['now'] ?? []), $ratios($r['prev'] ?? []), [], $p, $ar),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -419,6 +509,7 @@ final class OperationalDigestModel
                     'money' => $p->money((float) $value),
                     'percent' => $p->percent((float) $value),
                     'ratio' => $p->ratio((float) $value),
+                    'decimal' => number_format((float) $value, 1),
                     default => number_format((float) $value),
                 },
                 'missing' => $missing,
@@ -513,7 +604,7 @@ final class OperationalDigestModel
         $out = [];
         foreach (['spend' => ['الإنفاق', 'Spend'], 'conversions' => ['النتائج', 'Results'], 'roas' => ['العائد على الإنفاق', 'Return on ad spend'], 'cpa' => ['تكلفة النتيجة', 'Cost per result']] as $key => $names) {
             if (isset($c[$key]) && abs((float) $c[$key]) >= 0.05) {
-                $out[] = $names[$ar ? 0 : 1].' '.($c[$key] > 0 ? ($ar ? 'ارتفع' : 'rose') : ($ar ? 'انخفض' : 'fell')).' '.number_format(abs((float) $c[$key]) * 100, 0).'% '.($ar ? 'مقارنة ' : 'against ').$versus;
+                $out[] = $names[$ar ? 0 : 1].' '.($c[$key] > 0 ? ($ar ? 'زاد' : 'rose') : ($ar ? 'نزل' : 'fell')).' '.number_format(abs((float) $c[$key]) * 100, 0).'% '.($ar ? 'عن ' : 'against ').$versus;
             }
         }
 
@@ -615,9 +706,9 @@ final class OperationalDigestModel
             'reason' => $top !== null
                 ? trim(($top['platform'] !== '' ? $top['platform'].': ' : '').$top['headline'])
                 : match (true) {
-                    $state === 'none' => $ar ? 'لم تصل أرقام في هذه الفترة' : 'No figures arrived in this period',
-                    $tone === 'good' => $ar ? 'الأداء يتحسن عن الفترة السابقة' : 'Performance is improving on the previous period',
-                    default => $ar ? 'لا شيء يحتاج قرارًا الآن' : 'Nothing needs a decision now',
+                    $state === 'none' => $ar ? 'ما وصلت أرقام في هذه الفترة' : 'No figures arrived in this period',
+                    $tone === 'good' => $ar ? 'الأداء أحسن من الفترة اللي قبلها' : 'Performance is improving on the previous period',
+                    default => $ar ? 'ما في شيء يحتاج قرار' : 'Nothing needs a decision now',
                 },
         ];
     }
@@ -651,7 +742,7 @@ final class OperationalDigestModel
      * @param  list<array<string,mixed>>  $rows
      * @return list<array<string,mixed>> in the canonical platform order; `issue` is the ranked item or null
      */
-    private static function cells(array $block, array $rows, array $prevByProvider, array $budgetBy, array $sources, string $objective, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $days): array
+    private static function cells(array $block, array $rows, array $prevByProvider, array $budgetBy, array $sources, string $objective, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $days, ?string $groupLabel): array
     {
         $byProvider = [];
         foreach ($rows as $r) {
@@ -697,6 +788,7 @@ final class OperationalDigestModel
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
                 $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine);
+                $issue['objective'] = $groupLabel;
             }
             $cells[] = [
                 'provider' => $key,
@@ -709,6 +801,72 @@ final class OperationalDigestModel
         }
 
         return $cells;
+    }
+
+    /**
+     * One objective group of a project: its own tile row, its platforms (spend and the objective's headline figure), its funnel.
+     *
+     * @param  array<string,mixed>  $g
+     * @param  list<array<string,mixed>>  $rows
+     * @param  list<array<string,mixed>>|array<string,array<string,mixed>>  $prev
+     * @param  list<array<string,mixed>>  $cells
+     * @return array<string,mixed>
+     */
+    private static function group(array $g, string $objective, array $rows, array $prev, array $cells, DigestPresenter $p, bool $ar): array
+    {
+        $keys = self::BY_OBJECTIVE[$objective] ?? self::FALLBACK;
+        $head = self::HEADLINE[$objective] ?? 'ctr';
+        $reported = (array) ($g['reported'] ?? []);
+        $sum = array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows));
+        $stateOf = array_column($cells, 'state', 'provider');
+        $platforms = [];
+        foreach ($rows as $row) {
+            $provider = (string) ($row['provider'] ?? '');
+            $platforms[] = [
+                'provider' => $provider,
+                'name' => AdPlatforms::name($provider, $ar ? 'ar' : 'en'),
+                'state' => $stateOf[AdPlatforms::canonical($provider)] ?? 'none',
+                'share' => $sum > 0 ? (int) round(((float) ($row['spend'] ?? 0)) / $sum * 100) : 0,
+                // The platform row shows the objective's primary figure, and only that: ROAS never appears on an awareness row.
+                'figures' => self::figures(['spend', $head], $row, (array) ($prev[$provider] ?? []), (array) ((($g['platform_reported'] ?? [])[$provider] ?? null) ?? $reported), $p, $ar),
+            ];
+        }
+        $states = array_column($cells, 'state');
+
+        return [
+            'objective' => $objective,
+            'label' => self::objectiveLabel($objective, $ar),
+            'campaigns' => (int) ($g['campaigns'] ?? 0),
+            'state' => in_array('bad', $states, true) ? 'bad' : (in_array('watch', $states, true) ? 'watch' : (array_filter($states, static fn (string $x): bool => $x !== 'none') === [] ? 'none' : 'ok')),
+            'kpis' => self::figures(['spend', ...$keys], (array) ($g['totals'] ?? []), (array) ($g['previous'] ?? []), $reported, $p, $ar),
+            'raw' => ['totals' => (array) ($g['totals'] ?? []), 'previous' => (array) ($g['previous'] ?? [])],
+            'headline_key' => $head,
+            'platforms' => $platforms,
+            'funnel' => self::funnel((array) ($g['funnel'] ?? []), $ar),
+        ];
+    }
+
+    /**
+     * The worst verdict per platform across the groups: the same platform can carry an awareness and a sales campaign.
+     *
+     * @param  list<list<array<string,mixed>>>  $sets
+     * @return list<array<string,mixed>>
+     */
+    private static function mergeCells(array $sets): array
+    {
+        $by = [];
+        foreach ($sets as $cells) {
+            foreach ($cells as $c) {
+                $k = $c['provider'];
+                if (! isset($by[$k]) || DigestStatus::STATE_RANK[$c['state']] < DigestStatus::STATE_RANK[$by[$k]['state']]
+                    || ($c['state'] === $by[$k]['state'] && ($c['issue'] ?? null) !== null && ($by[$k]['issue'] ?? null) === null)) {
+                    $by[$k] = $c;
+                }
+            }
+        }
+        uksort($by, static fn (string $a, string $b): int => AdPlatforms::rank($a) <=> AdPlatforms::rank($b));
+
+        return array_values($by);
     }
 
     /**
@@ -756,6 +914,7 @@ final class OperationalDigestModel
             'money' => $p->money((float) $v),
             'percent' => $p->percent((float) $v),
             'ratio' => $p->ratio((float) $v),
+            'decimal' => number_format((float) $v, 1),
             default => number_format((float) $v),
         };
         $pct = static fn (float $r): string => AlertEventText::ltr(number_format(abs($r) * 100, 0).'%');
@@ -765,27 +924,27 @@ final class OperationalDigestModel
 
         switch ($reason) {
             case 'sync_failed':
-                $headline = $ar ? 'توقفت المزامنة' : 'Sync stopped';
+                $headline = $ar ? 'المزامنة متوقفة' : 'Sync stopped';
                 break;
             case 'alert_bad':
             case 'alert_watch':
-                $headline = $reason === 'alert_bad' ? ($ar ? 'تنبيه مفتوح يحتاج قرارًا' : 'An open alert needs a decision') : ($ar ? 'تنبيه مفتوح للمتابعة' : 'An open alert to follow');
+                $headline = $reason === 'alert_bad' ? ($ar ? 'تنبيه مفتوح، قرّر فيه' : 'An open alert needs a decision') : ($ar ? 'تنبيه مفتوح للمتابعة' : 'An open alert to follow');
                 break;
             case 'stale':
                 $headline = $ar ? 'البيانات متأخرة' : 'Data is out of date';
                 break;
             case 'no_results':
-                $headline = $ar ? 'إنفاق بلا نتائج' : 'Spend with no results';
-                $figure = ($ar ? 'الإنفاق ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
+                $headline = $ar ? 'صرف بدون نتائج' : 'Spend with no results';
+                $figure = ($ar ? 'صرف ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
                 break;
             case 'pace_hot':
             case 'pace_slow':
                 $pace = (float) ($budget['pace'] ?? 0);
                 $used = (int) round(min(1.0, (float) ($budget['spent'] ?? 0) / max(0.0001, (float) ($budget['budget'] ?? 1))) * 100);
                 $expected = $pace > 0 ? (int) round(min(100, $used / $pace)) : 0;
-                $headline = $reason === 'pace_hot' ? ($ar ? 'ينفق أسرع من الخطة' : 'Spending ahead of plan') : ($ar ? 'ينفق أبطأ من الخطة' : 'Spending behind plan');
+                $headline = $reason === 'pace_hot' ? ($ar ? 'الصرف أسرع من الخطة' : 'Spending ahead of plan') : ($ar ? 'الصرف أبطأ من الخطة' : 'Spending behind plan');
                 // Both bars are shares of the BUDGET, so «used» and «plan» are comparable and no second percentage can contradict the first.
-                $figure = ($ar ? 'صُرف ' : 'Spent ').AlertEventText::ltr($used.'%').' · '.($ar ? 'المخطط ' : 'planned ').AlertEventText::ltr($expected.'%');
+                $figure = ($ar ? 'انصرف ' : 'Spent ').AlertEventText::ltr($used.'%').' · '.($ar ? 'المخطط ' : 'planned ').AlertEventText::ltr($expected.'%');
                 $viz = ['type' => 'pace', 'used' => $used, 'plan' => $expected, 'used_label' => ($ar ? 'صُرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($expected.'%')];
                 break;
             case 'worse':
@@ -796,7 +955,7 @@ final class OperationalDigestModel
                 $label = self::FIG[$key][$ar ? 0 : 1] ?? $key;
                 $up = $now > $was;
                 $fem = in_array($key, ['cpl', 'cpa', 'cpc', 'cpm', 'cpi', 'revenue', 'purchases', 'conversions', 'clicks', 'installs', 'engagements', 'video_views'], true);
-                $verb = $ar ? ($up ? ($fem ? 'ارتفعت' : 'ارتفع') : ($fem ? 'تراجعت' : 'تراجع')) : ($up ? 'rose' : 'fell');
+                $verb = $ar ? ($up ? ($fem ? 'زادت' : 'زاد') : ($fem ? 'نزلت' : 'نزل')) : ($up ? 'rose' : 'fell');
                 $headline = $label.' '.$verb.' '.$pct($was > 0 ? ($now - $was) / $was : 0);
                 $figure = $fmt($key, $was).' ← '.$fmt($key, $now);
                 $max = max($now, $was, 0.0001);
@@ -806,6 +965,8 @@ final class OperationalDigestModel
 
         // Priority, severity and recency, as the board ranks: the worst open alert on the cell when there is one; else a metric finding is P1 when it is a problem and P3 when it is a watch.
         $meta = self::rankOf($verdict['state'], $alerts);
+        // The objective's own figure for this platform, for the card's leading edge: big value, small metric name, delta.
+        $fig = self::figures([$headlineKey], $row, $prev, [], $p, $ar)[0] ?? null;
 
         return $meta + [
             'kind' => 'cell',
@@ -817,10 +978,11 @@ final class OperationalDigestModel
             'platform' => $platform,
             'headline' => $headline,
             'figure' => $figure,
+            'fig' => $fig,
             'viz' => $viz,
             'at_stake' => (float) ($row['spend'] ?? 0),
             'order' => $order,
-            'url' => in_array($reason, ['sync_failed', 'stale'], true) ? MailDeepLinks::integrations($projectId) : (str_starts_with($reason, 'alert_') ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId, $days)),
+            'url' => in_array($reason, ['sync_failed', 'stale'], true) ? MailDeepLinks::integrations($projectId) : (str_starts_with($reason, 'alert_') ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId, $days, $provider)),
             'button' => in_array($reason, ['sync_failed', 'stale'], true) ? ($ar ? 'افتح الربط' : 'Open connection') : (str_starts_with($reason, 'alert_') ? ($ar ? 'افتح التنبيهات' : 'Open alerts') : ($ar ? 'افتح المنصة' : 'Open platform')),
         ];
     }
@@ -864,7 +1026,7 @@ final class OperationalDigestModel
         if (($block['freshness']['sync_failed'] ?? false) === true && ! in_array('failed', $sources, true)) {
             $out[] = self::rankOf('bad', []) + [
                 'kind' => 'project', 'state' => 'bad', 'reason' => 'sync_failed', 'project_id' => $projectId, 'project' => $projectName,
-                'provider' => '', 'platform' => '', 'headline' => $ar ? 'توقفت المزامنة' : 'Sync stopped', 'figure' => $ar ? 'الأرقام قد تكون ناقصة' : 'Figures may be incomplete',
+                'provider' => '', 'platform' => '', 'headline' => $ar ? 'المزامنة متوقفة' : 'Sync stopped', 'figure' => $ar ? 'الأرقام ممكن تكون ناقصة' : 'Figures may be incomplete',
                 'viz' => null, 'at_stake' => $spend, 'order' => 99, 'url' => MailDeepLinks::integrations($projectId), 'button' => $ar ? 'افتح الربط' : 'Open connection',
             ];
         }
@@ -893,7 +1055,7 @@ final class OperationalDigestModel
             if (abs($d) < 0.05) {
                 continue;
             }
-            $line = ['name' => $pr['name'], 'text' => $pr['headline']['label'].' '.($d > 0 ? ($ar ? 'ارتفع' : 'rose') : ($ar ? 'انخفض' : 'fell')).' '.number_format(abs($d) * 100, 0).'% '.($ar ? 'وصار ' : 'to ').$pr['headline']['value'], 'score' => (string) $score];
+            $line = ['name' => $pr['name'], 'text' => $pr['headline']['label'].' '.($d > 0 ? ($ar ? 'زاد' : 'rose') : ($ar ? 'نزل' : 'fell')).' '.number_format(abs($d) * 100, 0).'% '.($ar ? 'وصار ' : 'to ').$pr['headline']['value'], 'score' => (string) $score];
             if ($score > 0 && ($best === null || $score > (float) $best['score'])) {
                 $best = $line;
             }
