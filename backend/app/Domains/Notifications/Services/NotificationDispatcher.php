@@ -112,6 +112,9 @@ final class NotificationDispatcher
             'action_url' => $p['action_url'] ?? null,
             'status' => 'unread',
             'dedup_key' => $dedupKey,
+            // DIGESTS-VISUAL-V2-001 — the Arabic wording, when the producer wrote it, so the bell is not English under an Arabic title.
+            'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : null,
+            'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : null,
         ]);
 
         // In-app is delivered immediately (a passive inbox is not silenced by quiet hours).

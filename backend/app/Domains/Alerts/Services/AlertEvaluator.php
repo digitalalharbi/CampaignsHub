@@ -450,6 +450,8 @@ final class AlertEvaluator
             'severity' => $rule->severity === 'critical' ? 'error' : ($rule->severity === 'info' ? 'info' : 'warning'),
             'title' => $b['title'],
             'message' => $b['message'],
+            // DIGESTS-VISUAL-V2-001 — the bell's Arabic: the rule's own when it wrote one, else the mail's wording of the same finding.
+            ...$this->bellArabic($rule, $b),
             'source' => 'alerts',
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
@@ -464,6 +466,20 @@ final class AlertEvaluator
         ]);
 
         return $n?->id !== null ? (string) $n->id : null;
+    }
+
+    /**
+     * @param  array<string,mixed>  $b
+     * @return array{title_ar: string, message_ar: string}
+     */
+    private function bellArabic(AlertRule $rule, array $b): array
+    {
+        $c = \App\Domains\Notifications\Support\AlertEventText::compose([
+            'rule_type' => (string) $rule->type, 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
+            'project_id' => $b['project_id'] ?? $rule->project_id, 'project_name' => '', 'entity_type' => '', 'entity_id' => '', 'event_id' => '', 'triggered_at' => '',
+        ], true);
+
+        return ['title_ar' => (string) ($b['title_ar'] ?? $c['title']), 'message_ar' => trim($c['numbers'] !== '' ? $c['numbers'] : $c['detail'])];
     }
 
     /** Open a follow-up task for the breach (create-task capability). */
