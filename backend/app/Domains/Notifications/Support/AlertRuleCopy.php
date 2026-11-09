@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Support\AdPlatforms;
+
 /**
  * DIGESTS-VISUAL-V2-001 — the wording of every alert rule `AlertEventText` had no case for.
  *
@@ -48,7 +50,7 @@ final class AlertRuleCopy
                 return $line($ar ? 'متوسط السلة '.($up ? 'ارتفع ' : 'انخفض ').$p($change ?? 0) : 'Basket size '.($up ? 'rose ' : 'fell ').$p($change ?? 0), $ar ? 'تغيّر ملحوظ في قيمة الطلب الواحد.' : 'A notable move in the value of one order.', $moved,
                     $ar ? 'راجع العروض والأسعار التي تغيّرت.' : 'Review the offers and prices that changed.');
             case 'ga4_attribution_gap':
-                $who = isset($ctx['platform']) && $ctx['platform'] !== '' ? \App\Support\AdPlatforms::name((string) $ctx['platform'], $ar ? 'ar' : 'en') : ($ar ? 'منصة' : 'A platform');
+                $who = isset($ctx['platform']) && $ctx['platform'] !== '' ? AdPlatforms::name((string) $ctx['platform'], $ar ? 'ar' : 'en') : ($ar ? 'منصة' : 'A platform');
 
                 return $line($ar ? "{$who} تدّعي أكثر مما سجّله الموقع" : "{$who} claims more than the website recorded", $ar ? 'تحويلات المنصة تفوق ما نسبه الموقع لها.' : 'The platform’s conversions exceed what the website credited to it.',
                     ($ar ? 'الفرق ' : 'Gap ').$p(((float) ($ctx['share'] ?? 0)) * 100), $ar ? 'تحقق من وسوم الروابط ومن موافقة الزوار.' : 'Check link tags and visitor consent.');

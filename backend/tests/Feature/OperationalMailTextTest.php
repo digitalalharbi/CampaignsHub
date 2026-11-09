@@ -106,8 +106,10 @@ final class OperationalMailTextTest extends TestCase
         $this->assertNotFalse($risk);
         $this->assertNotFalse($good);
         $this->assertLessThan($good, strpos($html, 'data-block="portfolio-row"'));
-        $firstRow = substr($html, (int) strpos($html, 'data-block="portfolio-row"'), 900);
-        $this->assertStringContainsString('خطر', $firstRow);
+        $firstRow = substr($html, (int) strpos($html, 'data-block="portfolio-row"'), 2500);
+        // DIGESTS-VISUAL-V2-001 — the row says it as a state and a ✕ chip, not as a word: the worst project is the first row of the matrix.
+        $this->assertStringContainsString('data-state="bad"', $firstRow);
+        $this->assertStringContainsString('✕', $firstRow);
     }
 
     public function test_each_finding_kind_is_plain_in_both_languages(): void

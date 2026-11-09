@@ -28,6 +28,7 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
+use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -474,7 +475,7 @@ final class AlertEvaluator
      */
     private function bellArabic(AlertRule $rule, array $b): array
     {
-        $c = \App\Domains\Notifications\Support\AlertEventText::compose([
+        $c = AlertEventText::compose([
             'rule_type' => (string) $rule->type, 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
             'project_id' => $b['project_id'] ?? $rule->project_id, 'project_name' => '', 'entity_type' => '', 'entity_id' => '', 'event_id' => '', 'triggered_at' => '',
         ], true);

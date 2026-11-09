@@ -15,7 +15,7 @@ final class NotificationResource extends JsonResource
     public function toArray(Request $request): array
     {
         // An Arabic reader gets the Arabic wording where there is one; everyone else, and every older row, reads what was stored.
-        $ar = ($request->user()?->locale ?? 'ar') !== 'en';
+        $ar = ($request->user()->locale ?? 'ar') !== 'en';
 
         return [
             'id' => $this->id,

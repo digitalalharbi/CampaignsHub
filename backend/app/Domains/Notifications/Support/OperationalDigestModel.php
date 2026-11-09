@@ -680,6 +680,7 @@ final class OperationalDigestModel
             $reportedFor = (array) ((($block['platform_reported'] ?? [])[$raw] ?? null) ?? ($block['reported'] ?? []));
             $budget = $budgetCanon[$key] ?? null;
             $verdict = DigestStatus::cell([
+                'alert' => self::alertFor($key, (array) ($block['open_alerts'] ?? [])),
                 'source' => $sources[$key] ?? null,
                 'spend' => $row['spend'] ?? null,
                 'spend_withheld' => (int) ($row['spend_withheld_rows'] ?? 0) > 0,
@@ -710,6 +711,32 @@ final class OperationalDigestModel
         return $cells;
     }
 
+    /**
+     * The in-app board's rule for a cell: an open warning/critical alert → bad; an open info alert or a snoozed one → watch.
+     * An alert naming a platform marks that column; one naming none (campaign- or project-level) marks every column.
+     *
+     * @param  list<array<string,mixed>>  $alerts
+     */
+    private static function alertFor(string $provider, array $alerts): ?string
+    {
+        $out = null;
+        foreach ($alerts as $a) {
+            $named = (string) ($a['provider'] ?? '');
+            if ($named !== '' && $named !== 'ga4' && AdPlatforms::canonical($named) !== $provider) {
+                continue;
+            }
+            if ($named === 'ga4') {
+                continue; // the website's own alerts are not a platform's
+            }
+            if (! ($a['snoozed'] ?? false) && in_array($a['severity'] ?? '', ['critical', 'warning'], true)) {
+                return 'bad';
+            }
+            $out = 'watch';
+        }
+
+        return $out;
+    }
+
     /** @return array<string,mixed> */
     private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days): array
     {
@@ -729,6 +756,10 @@ final class OperationalDigestModel
         switch ($reason) {
             case 'sync_failed':
                 $headline = $ar ? 'توقفت المزامنة' : 'Sync stopped';
+                break;
+            case 'alert_bad':
+            case 'alert_watch':
+                $headline = $reason === 'alert_bad' ? ($ar ? 'تنبيه مفتوح يحتاج قرارًا' : 'An open alert needs a decision') : ($ar ? 'تنبيه مفتوح للمتابعة' : 'An open alert to follow');
                 break;
             case 'stale':
                 $headline = $ar ? 'البيانات متأخرة' : 'Data is out of date';
@@ -776,8 +807,8 @@ final class OperationalDigestModel
             'viz' => $viz,
             'at_stake' => (float) ($row['spend'] ?? 0),
             'order' => $order,
-            'url' => in_array($reason, ['sync_failed', 'stale'], true) ? MailDeepLinks::integrations($projectId) : MailDeepLinks::platforms($projectId, $days),
-            'button' => in_array($reason, ['sync_failed', 'stale'], true) ? ($ar ? 'افتح الربط' : 'Open connection') : ($ar ? 'افتح المنصة' : 'Open platform'),
+            'url' => in_array($reason, ['sync_failed', 'stale'], true) ? MailDeepLinks::integrations($projectId) : (str_starts_with($reason, 'alert_') ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId, $days)),
+            'button' => in_array($reason, ['sync_failed', 'stale'], true) ? ($ar ? 'افتح الربط' : 'Open connection') : (str_starts_with($reason, 'alert_') ? ($ar ? 'افتح التنبيهات' : 'Open alerts') : ($ar ? 'افتح المنصة' : 'Open platform')),
         ];
     }
 

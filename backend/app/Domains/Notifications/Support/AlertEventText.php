@@ -193,7 +193,7 @@ final class AlertEventText
         }
         // An event that carries its own Arabic title and message (the rule wrote them) is said with those, never with a generic line.
         if ($ar && is_string($ctx['title_ar'] ?? null) && $ctx['title_ar'] !== '') {
-            return ['headline' => $ctx['title_ar'], 'text' => (string) ($ctx['message_ar'] ?? ''), 'numbers' => '', 'action' => $ar ? 'افتح التنبيه واتخذ قرارًا.' : 'Open the alert and decide.', 'link' => 'alerts'];
+            return ['headline' => $ctx['title_ar'], 'text' => (string) ($ctx['message_ar'] ?? ''), 'numbers' => '', 'action' => 'افتح التنبيه واتخذ قرارًا.', 'link' => 'alerts'];
         }
 
         // A rule type this composer does not know: a generic plain headline, never the stored English.

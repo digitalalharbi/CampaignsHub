@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -397,6 +398,8 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
+            'open_alerts' => $this->openAlerts($projectId),
             /*
              * EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
              *
@@ -648,6 +651,27 @@ final class DailyDigest
         }
 
         return array_slice($out, 0, 5);
+    }
+
+    /**
+     * Open (or still-snoozed) alert events of the project: provider (when the event names one), severity and whether it is snoozed.
+     *
+     * @return list<array{provider: string, severity: string, snoozed: bool}>
+     */
+    private function openAlerts(string $projectId): array
+    {
+        $now = Carbon::now();
+
+        return AlertEvent::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereIn('status', ['open', 'snoozed'])
+            ->limit(200)
+            ->get(['status', 'severity', 'context', 'snoozed_until'])
+            ->map(static fn ($e): array => [
+                'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
+                'severity' => (string) $e->severity,
+                'snoozed' => $e->status === 'snoozed' && ($e->snoozed_until === null || $e->snoozed_until->greaterThan($now)),
+            ])->all();
     }
 
     /**

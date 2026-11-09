@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Models\User;
@@ -175,7 +176,7 @@ final class SendDailyDigests extends Command
         if (($chosen['per_project'] ?? false) !== true || ! (bool) config('mail.operational_digests')) {
             return;
         }
-        foreach (app(\App\Domains\Notifications\Services\DigestScope::class)->projectIdsFor($user, $tenantId) as $projectId) {
+        foreach (app(DigestScope::class)->projectIdsFor($user, $tenantId) as $projectId) {
             $key = DigestDispatcher::projectKey((string) $projectId);
             $state = $kind === 'daily'
                 ? $dispatcher->sendDaily($user, $tenantId, $day, $locale, $audience, $key)

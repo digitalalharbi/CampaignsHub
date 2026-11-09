@@ -119,7 +119,7 @@ final class NotificationPreferenceController extends Controller
             'available_channels' => $this->availableChannels(),
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false, 'per_project' => false],
+            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'per_project' => false, 'recommendations' => false],
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',

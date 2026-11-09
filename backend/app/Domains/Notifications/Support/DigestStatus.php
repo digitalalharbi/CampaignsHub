@@ -30,6 +30,7 @@ namespace App\Domains\Notifications\Support;
  * 6. budget pace below {@see PACE_SLOW}× ........................ watch (`pace_slow`)
  * 7. the headline figure worsened ≥ {@see WORSE_WATCH} ............ watch (`worse`)
  * 8. the results fell ≥ {@see FALL_WATCH} against the previous window . watch (`results_down`)
+ * 8b. an OPEN alert on the platform (warning/critical → bad, info or snoozed → watch) — the in-app board's own rule, so mail and screen agree
  * 9. no spend figure and no failure ............................ none  (`no_data`)
  * 10. otherwise ................................................ ok
  *
@@ -61,8 +62,8 @@ final class DigestStatus
     /** Lower is more urgent. Inside one state, a stopped sync outranks a slow budget. */
     public const WEIGHT = [
         'sync_failed' => 0, 'no_results' => 1, 'pace_hot' => 2, 'worse' => 3,
-        'project_critical' => 4,
-        'stale' => 5, 'pace_slow' => 6, 'results_down' => 7, 'project_warning' => 8,
+        'alert_bad' => 3.5, 'project_critical' => 4,
+        'stale' => 5, 'pace_slow' => 6, 'results_down' => 7, 'alert_watch' => 6.5, 'project_warning' => 8,
         'no_data' => 9,
     ];
 
@@ -89,7 +90,7 @@ final class DigestStatus
     }
 
     /**
-     * @param  array{spend?: mixed, spend_withheld?: bool, results?: mixed, results_reported?: bool, results_key?: string, results_prev?: mixed,
+     * @param  array{alert?: ?string, spend?: mixed, spend_withheld?: bool, results?: mixed, results_reported?: bool, results_key?: string, results_prev?: mixed,
      *     headline_now?: mixed, headline_prev?: mixed, headline_lower_is_better?: bool, pace?: mixed, source?: ?string}  $in
      * @return array{state: string, reason: ?string, severity: float}
      */
@@ -125,6 +126,13 @@ final class DigestStatus
         }
         if ($results !== null && $resultsPrev !== null && $resultsPrev > 0 && ($results - $resultsPrev) / $resultsPrev <= -self::FALL_WATCH) {
             return ['state' => 'watch', 'reason' => 'results_down', 'severity' => ($resultsPrev - $results) / $resultsPrev];
+        }
+        // The in-app board's rule (OPERATIONAL-INTELLIGENCE-P1-001): an open warning/critical alert → problem; an open info alert or a snoozed one → watch.
+        if (($in['alert'] ?? null) === 'bad') {
+            return ['state' => 'bad', 'reason' => 'alert_bad', 'severity' => 1.0];
+        }
+        if (($in['alert'] ?? null) === 'watch') {
+            return ['state' => 'watch', 'reason' => 'alert_watch', 'severity' => 0.5];
         }
         if ($spend === null) {
             return ['state' => 'none', 'reason' => 'no_data', 'severity' => 0.0];
@@ -174,6 +182,6 @@ final class DigestStatus
         }
         $d = ((float) $now - (float) $was) / abs((float) $was);
 
-        return (($in['headline_lower_is_better'] ?? false) ? $d : -$d);
+        return ($in['headline_lower_is_better'] ?? false) ? $d : -$d;
     }
 }
