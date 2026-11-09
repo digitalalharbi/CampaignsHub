@@ -54,26 +54,16 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-KARAM2 $(date -u +%FT%TZ)"
+            echo "== FACTS-KARAM3 $(date -u +%FT%TZ)"
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At' <<'SQL'
             BEGIN READ ONLY;
-            \echo -- campaigns of openai/google accounts
-            select left((select jsonb_object_agg(k,v) from jsonb_each(to_jsonb(t)) e(k,v) where k !~* 'token|secret|credential|password|payload|encrypted|raw|metadata|meta')::text,700), left(raw::text,500) from external_campaigns t where external_account_id in ('ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b','c9b4c316-a35e-4192-86a0-e6801c4c2c32','84ce2f9a-2cac-4240-b25e-68a52dde7d3a');
-            \echo -- raw payloads (provider bodies) per account/resource, latest 3 each
-            select provider, resource, window_start, window_end, normalised_rows, fetched_at, left(payload::text,500) from integration_raw_payloads where external_account_id in ('ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b','c9b4c316-a35e-4192-86a0-e6801c4c2c32','84ce2f9a-2cac-4240-b25e-68a52dde7d3a') order by fetched_at desc limit 14;
-            \echo -- openai runs by day/status/reading
-            select date_trunc('day',created_at)::date d, status, meta->>'no_data_reading' r, count(*), max(meta->>'last_delivery_date') from metric_sync_runs where provider='openai_ads' and project_id='c073e9c6-c70a-4276-87da-85338530b137' group by 1,2,3 order by 1 desc;
-            \echo -- google daily metrics
-            select metric_key, metric_date, original_currency, value, original_amount, converted_amount from daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='google' order by metric_date, metric_key limit 40;
-            \echo -- google run summary
-            select left((select jsonb_object_agg(k,v) from jsonb_each(to_jsonb(t)) e(k,v) where k !~* 'token|secret|credential|password|payload|encrypted|raw|metadata|meta')::text,300), meta->>'no_data_reading', meta->>'currency_withheld', left(meta::text,900) from metric_sync_runs t where provider='google' and project_id='c073e9c6-c70a-4276-87da-85338530b137';
-            \echo -- old google account runs ever
-            select count(*), max(created_at) from metric_sync_runs where external_account_id='84ce2f9a-2cac-4240-b25e-68a52dde7d3a';
-            \echo -- binding old google
-            select id, is_active, sync_enabled, updated_at from project_integration_bindings where id='21082e97-84af-454d-9d01-5b37cebee0f4';
-            \echo -- openai connection extra
-            select status, last_error, token_expires_at, last_successful_sync_at, last_health_check_at, left(coalesce(scopes::text,''),100) from provider_connections where id='d76a0440-c972-4dc5-91f3-3703ba8ea95c';
+            \echo -- openai raw payloads by resource
+            select resource, count(*), min(fetched_at), max(fetched_at), sum(normalised_rows) from integration_raw_payloads where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' group by 1;
+            \echo -- openai latest bodies
+            select resource, window_start, window_end, fetched_at, left(payload::text,420) from integration_raw_payloads where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' order by fetched_at desc limit 6;
+            \echo -- openai ad sets/ads stored
+            select (select count(*) from external_ad_sets s join external_campaigns c on c.id=s.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b') ad_sets, (select count(*) from external_ads a join external_campaigns c on c.id=a.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b') ads;
             ROLLBACK;
             SQL
-            echo "== END FACTS-KARAM2"
+            echo "== END FACTS-KARAM3"
             exit 0
