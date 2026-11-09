@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { readMetricValue, type MetricValue } from '@/lib/metricValue'
-import { money, moneyExact, moneyFromTotals, ratio, wholeMoney } from '@/features/analytics/format'
+import { liveMoneyFromTotals, money, moneyExact, ratio, wholeMoney } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
@@ -126,7 +126,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     // PARTIAL-WITHHELD-001 — a client link is the one place the reader has no other view, so money
     // goes through the contract: partial/mixed ⇒ «—», withheld ⇒ the original in its own currency,
     // never the coalesced 0 or the converted subset.
-    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
+    spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
     impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
     ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
@@ -148,7 +148,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(stageCount(p, 'add_to_cart')) },
     checkout: { ar: 'بدء الدفع', en: 'Checkout', format: (_t, p, _m, count) => count(stageCount(p, 'checkout')) },
     purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
-    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(moneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
+    revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
     // NASEL 2026-10-29 — Results and their cost as the link DEFINED them (`results`), never the platform's generic conversion.
     results: { ar: 'النتائج', en: 'Results', format: (_t, p, _m, count) => (p.results?.configured !== true || p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.total)) },

@@ -93,7 +93,7 @@ final class ChosenFigures
         'platforms' => ['platforms', 'platform_drilldowns', 'attention'],
         'accounts' => ['accounts'],
         'content' => ['ads', 'ads_roster', 'ads_weakest', 'ads_groups', 'ads_platform_groups', 'top_creatives', 'worst_creatives', 'creatives', 'content_formats'],
-        'days' => ['timeseries', 'platform_series'],
+        'days' => ['timeseries', 'daily_rows', 'platform_series'],
     ];
 
     /**

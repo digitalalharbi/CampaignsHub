@@ -1,4 +1,4 @@
-import { compact, moneyExact, moneyFromTotals, percent, ratio } from '@/features/analytics/format'
+import { compact, liveMoneyFromTotals, moneyExact, moneyFromTotals, percent, ratio } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { TrendPill } from '@/features/analytics/components'
 import type { Locale } from '@/stores/ui'
@@ -50,7 +50,7 @@ export function ReportPlatformSummary({
   }
 
   const totals = platform as MoneyTotals
-  const spend = moneyFromTotals(totals, 'spend', ar, currency)
+  const spend = liveMoneyFromTotals(totals, 'spend', ar, currency)
   /*
    * Two readings of revenue, and the difference is the point.
    *

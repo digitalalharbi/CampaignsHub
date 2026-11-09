@@ -3,7 +3,7 @@ import { numberFormatter } from '@/lib/numerals'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
-import { compact, moneyExact, moneyFromTotals, percent } from '@/features/analytics/format'
+import { compact, liveMoneyFromTotals, moneyExact, percent } from '@/features/analytics/format'
 import { formatMoneyReading, moneyState, readCostPer, type MoneyTotals } from '@/lib/money/contract'
 import { mixedResultsNote } from './reportMetrics'
 import { spendHiddenByLink } from './live/liveMetrics'
@@ -60,7 +60,7 @@ function moneyHelpers(ar: boolean, currency: string) {
   }
 
   /** The money contract's reading, so a withheld or mixed amount is «—» and never this currency. */
-  const spendOf = (row: Record<string, unknown>) => moneyFromTotals(row as MoneyTotals, 'spend', ar, currency)
+  const spendOf = (row: Record<string, unknown>) => liveMoneyFromTotals(row as MoneyTotals, 'spend', ar, currency)
 
   /*
    * What a spend cell SORTS by. The reading decides first: a figure the page refused to print — a
