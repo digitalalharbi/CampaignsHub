@@ -1,4 +1,5 @@
 import { AdPoster } from '@/features/content/AdPoster'
+import { PendingConversionChip } from './PendingConversionChip'
 import { numberFormatter } from '@/lib/numerals'
 import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderName } from '@/components/ProviderMark'
@@ -12,7 +13,7 @@ import { LayoutGrid, Rows3 } from 'lucide-react'
 import { ReportContentTable } from './ReportContentTable'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
-import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { metricState } from '@/features/content/metrics'
 
 /**
@@ -560,6 +561,7 @@ function AdCard({
           <div key={f.label} className="rounded-lg bg-surface-secondary p-1.5">
             <dt className="text-[10px] font-semibold text-text-muted">{f.label}</dt>
             <dd className="tnum text-xs font-bold text-text-primary"><Num>{f.value}</Num></dd>
+            {f.pending !== undefined && f.pending !== null && <PendingConversionChip currency={f.pending || null} ar={ar} />}
           </div>
         ))}
       </dl>
@@ -593,8 +595,8 @@ function AdCard({
  * filling the ones the platform never measured with «—» is how a report teaches a client that half
  * its numbers are missing; these are the three that exist, in the order that answers «did it work».
  */
-export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string }[] {
-  const out: { label: string; value: string }[] = []
+export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string; pending?: string | null }[] {
+  const out: { label: string; value: string; pending?: string | null }[] = []
   // `numberFormatter`, not `toLocaleString`: the same text, through one formatter per shape rather than one per figure (PERF-RENDER-001).
   const n = (v: number | null | undefined, digits = 0) =>
     v === null || v === undefined ? null : numberFormatter('en-US', { maximumFractionDigits: digits }).format(v)
@@ -617,15 +619,21 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    * returned «0» for the coerced zero the builder used to send.
    */
   const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
-  const spendText = formatMoneyReading(spendReading, (value, unit) => {
+  /*
+   * LIVE-LINK-PARTIAL-MONEY-001 — an ad with one converted day and one day still awaiting a rate printed «—» (Google, Karam
+   * Al-Nakheel, 2026-11-09). Both amounts are real: print each in its own unit, and name the currency that is pending.
+   */
+  const spendParts = moneyParts(ad as MoneyTotals, 'spend')
+  const fmtCash = (value: number | null | undefined, unit?: string) => {
     const text = n(value, 0)
 
     return text === null ? '—' : (unit ? `${text} ${unit}` : text)
-  })
+  }
+  const spendText = spendParts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(spendParts, currency ?? null, fmtCash)
 
   // CLIENT-REPORT-FRAMING-001 — the client summary states what content achieved, never what it cost.
   if (spendReading.kind !== 'absent' && !opts.resultsOnly) {
-    out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText })
+    out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText, pending: spendParts === null ? null : spendParts.originalCurrency ?? '' })
   }
 
   /*

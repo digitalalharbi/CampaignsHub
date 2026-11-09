@@ -1,4 +1,4 @@
-import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { formatMoneyParts, formatMoneyReading, moneyParts, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import { formatFixed, formatNumber, numberFormatter } from '@/lib/numerals'
 
 /**
@@ -260,6 +260,25 @@ export function moneyFromTotals(
  */
 export function rowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
   return formatMoneyReading(readMoney(row, key, currency, true), money)
+}
+
+/**
+ * LIVE-LINK-PARTIAL-MONEY-001 — `rowMoney` for a client link: a partial scope prints both of its amounts instead of «—».
+ * Operator surfaces keep `rowMoney` (fail closed); only the shared link, which has no other view, uses this.
+ */
+export function liveRowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
+  const parts = moneyParts(row, key)
+
+  return parts === null ? rowMoney(row, key, currency) : formatMoneyParts(parts, currency, money)
+}
+
+/** `moneyFromTotals` for a client link — see `liveRowMoney`. The note stays, so the card can say what is pending. */
+export function liveMoneyFromTotals(totals: MoneyTotals, key: 'spend' | 'revenue', ar: boolean, reportingCurrency: string | null = null): MoneyReading {
+  const parts = moneyParts(totals, key)
+  if (parts === null) return moneyFromTotals(totals, key, ar, reportingCurrency)
+  const r = readMoney(totals, key, reportingCurrency, ar)
+
+  return { text: formatMoneyParts(parts, reportingCurrency, money), withheld: true, note: r.note, exact: null }
 }
 
 export function rowCostPer(

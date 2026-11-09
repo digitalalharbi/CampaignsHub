@@ -7,7 +7,7 @@ import { providerLabel, objectiveLabel } from '@/features/campaigns/labels'
 import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
-import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -114,11 +114,14 @@ export function ReportAdDetail({
    */
   const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
   if (spendReading.kind !== 'absent') {
-    add(ar ? 'الإنفاق' : 'Spend', formatMoneyReading(spendReading, (value, unit) => {
+    const fmtCash = (value: number | null | undefined, unit?: string) => {
       const text = n(value, 0)
 
       return text === null ? '—' : (unit ? `${text} ${unit}` : text)
-    }))
+    }
+    // LIVE-LINK-PARTIAL-MONEY-001 — a partly converted spend prints both amounts, never a dash.
+    const parts = moneyParts(ad as MoneyTotals, 'spend')
+    add(ar ? 'الإنفاق' : 'Spend', parts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(parts, currency ?? null, fmtCash))
   }
   add(ar ? 'الظهور' : 'Impressions', n(ad.impressions))
   add(ar ? 'النقرات' : 'Clicks', n(ad.clicks))

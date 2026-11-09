@@ -361,6 +361,48 @@ final class LiveReportShareTest extends TestCase
     }
 
     /**
+     * LIVE-LINK-DAILY-LOG-001 — «السجل اليومي» is DAYS whatever the chart's grain is.
+     *
+     * Owner 2026-11-09: the ledger had collapsed to one row on a link whose window ran past a year, because it was drawn from
+     * `timeseries`, which is bucketed to the grain. The ledger travels as its own `daily_rows`, one per day, only when the trend
+     * is not already daily — and it leaves the payload with its own switch.
+     */
+    public function test_the_daily_ledger_is_days_even_when_the_trend_is_bucketed_to_a_month(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->report->tenant_id);
+        app(ProjectContext::class)->setProjectId((string) $this->project->id);
+        foreach (['2026-03-02', '2026-03-03', '2026-03-09'] as $day) {
+            $this->metric($this->shared->id, 'spend', 10, $day);
+        }
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        $token = $this->liveLink(['earliest' => '2026-01-01', 'latest' => '2027-01-01']);
+        $this->report->forceFill(['config' => array_merge((array) $this->report->config, ['period_mode' => 'rolling'])])->save();
+
+        $data = $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk()->json('data');
+
+        $this->assertSame('month', $data['period']['grain']);
+        $this->assertSame(['2026-03-01', '2026-07-01'], array_column($data['timeseries'], 'date'), 'the trend stays one point per month');
+        $this->assertSame(['2026-03-02', '2026-03-03', '2026-03-09', '2026-07-10'], array_column($data['daily_rows'], 'date'), 'the ledger is one row per day');
+        $this->assertSame(10.0, (float) $data['daily_rows'][0]['spend']);
+
+        // A link that hides spend publishes no spend in the ledger either: the new key is on the same money lists as `timeseries`.
+        [, $hidden] = app(ShareService::class)->create($this->report, [
+            'hide_spend' => true,
+            'scope' => ['project_id' => $this->project->id, 'campaign_ids' => [$this->shared->id], 'providers' => ['meta'], 'earliest' => '2026-01-01', 'latest' => '2027-01-01'],
+        ], null);
+        $body = $this->getJson("/api/v1/reports/shared/{$hidden}/live")->assertOk()->json('data');
+        $this->assertNotEmpty($body['daily_rows']);
+        foreach ($body['daily_rows'] as $row) {
+            $this->assertNull($row['spend'] ?? null, 'the ledger published spend on a link that hides it');
+        }
+        foreach ($body['timeseries'] as $row) {
+            $this->assertNull($row['spend'] ?? null);
+        }
+    }
+
+    /**
      * REPORT-PERIOD-001 — the link's period KIND decides the window and its comparison.
      */
     public function test_a_weekly_link_is_the_iso_week_and_says_what_it_is_compared_with(): void

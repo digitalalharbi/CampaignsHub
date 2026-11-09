@@ -6,9 +6,10 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
-import { rowMoney } from '@/features/analytics/format'
+import { liveRowMoney } from '@/features/analytics/format'
 import { canonicalPlatform } from '@/lib/platforms'
-import { type MoneyTotals } from '@/lib/money/contract'
+import { moneyParts, type MoneyTotals } from '@/lib/money/contract'
+import { PendingConversionChip } from '../PendingConversionChip'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import type { LivePayload } from '../api'
@@ -435,6 +436,11 @@ export function PlatformsView({
   const ar = locale === 'ar'
   const platforms = platformsOf(whole)
   const wholeRows = whole.platforms ?? []
+  /*
+   * LIVE-LINK-IDLE-PLATFORM-001 — a platform the link carries but that has sent no figures yet (a freshly linked ChatGPT account)
+   * is a card that says so, not an absence: the reader is told it is connected and has nothing to report, not left to wonder.
+   */
+  const idle = (whole.available?.providers ?? []).map((p) => canonicalPlatform(p)).filter((p, i, all) => !platforms.includes(p) && all.indexOf(p) === i)
   const totalSpend = wholeRows.reduce((a, p) => a + Number(p.spend ?? 0), 0)
   const totalResults = wholeRows.reduce((a, p) => a + Number(p.conversions ?? 0), 0)
   const words = resultWords(whole, ar)
@@ -450,6 +456,15 @@ export function PlatformsView({
   return (
     <div data-testid="live-mode-platforms" className="flex flex-col gap-5">
       <div role="tablist" aria-label={ar ? 'المنصات' : 'Platforms'} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {idle.map((p) => (
+          <div key={p} data-testid={`live-platform-idle-${p}`} className="min-w-0 overflow-hidden rounded-2xl border border-dashed border-border bg-surface">
+            <span className="block h-1.5" style={{ background: platformColor(p) }} aria-hidden />
+            <span className="flex flex-col gap-1 p-3">
+              <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
+              <span className="inline-flex w-fit rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">{ar ? 'لا صرف بعد' : 'No spend yet'}</span>
+            </span>
+          </div>
+        ))}
         {platforms.map((p) => {
           const row = wholeRows.find((r) => canonicalPlatform(r.provider) === p)
           const share = totalSpend > 0 && row ? Number(row.spend ?? 0) / totalSpend : null
@@ -470,9 +485,12 @@ export function PlatformsView({
                 <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
                 {/* REPORT-FILTERS-FUNCTIONAL-001 — a row that carries no spend (not chosen) prints no line of it. */}
                 {!(row && !('spend' in row)) && (
-                <span className="tnum truncate text-lg font-extrabold text-text-primary">
-                  <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
+                <span className="tnum break-words text-lg font-extrabold text-text-primary">
+                  <Num>{row ? liveRowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
+                )}
+                {row && moneyParts(row as unknown as MoneyTotals, 'spend') !== null && (
+                  <PendingConversionChip currency={moneyParts(row as unknown as MoneyTotals, 'spend')?.originalCurrency ?? null} ar={ar} />
                 )}
                 <span className="tnum truncate text-xs text-text-secondary">
                   {/* RESULT-EVENTS-001 — the platform's DEFINED result under the link's own name; never its generic conversion (TikTok's 1,126 were page views). */}

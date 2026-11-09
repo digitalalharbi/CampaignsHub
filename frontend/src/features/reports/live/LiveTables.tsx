@@ -1,5 +1,6 @@
 import { ProviderName } from '@/components/ProviderMark'
-import { compact, percent } from '@/features/analytics/format'
+import { compact, liveRowMoney, percent } from '@/features/analytics/format'
+import { moneyState, type MoneyTotals } from '@/lib/money/contract'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { ChartCard } from '@/features/analytics/charts'
 import type { LivePayload } from '../api'
@@ -62,6 +63,8 @@ export function TablesView({
   const cost = words.cost
   const dash = '—'
 
+  /* LIVE-LINK-DAILY-LOG-001 — the ledger is days, whatever grain the chart was bucketed to. */
+  const days = ((payload.daily_rows ?? []).length > 0 ? payload.daily_rows : payload.timeseries ?? []) as Row[]
   const platforms = (payload.platforms ?? []) as Row[]
   const accounts = ((payload as { accounts?: Row[] }).accounts ?? []) as Row[]
   // The roster nests each creative's figures under `metrics`; the ranked lists carry them at the top level.
@@ -100,7 +103,13 @@ export function TablesView({
     }
   }
   const sortIndex = (keys: string[], preferred: string): number => Math.max(0, keys.indexOf(preferred))
-  const spendCol = <T,>(read: (item: T) => Row): Col<T> | null => (money ? { key: 'spend', head: ar ? 'الإنفاق' : 'Spend', cell: (x) => moneyCell(num(read(x), 'spend')), value: (x) => num(read(x), 'spend') } : null)
+  // LIVE-LINK-PARTIAL-MONEY-001 — a row whose spend is partly or wholly awaiting a rate prints its amounts in their own units, never «—».
+  const spendCell = (row: Row) => {
+    const state = moneyState(row as MoneyTotals, 'spend').state
+
+    return state === 'partial' || state === 'complete_withheld' ? liveRowMoney(row as MoneyTotals, 'spend', payload.currency ?? null) : moneyCell(num(row, 'spend'))
+  }
+  const spendCol = <T,>(read: (item: T) => Row): Col<T> | null => (money ? { key: 'spend', head: ar ? 'الإنفاق' : 'Spend', cell: (x) => spendCell(read(x)), value: (x) => num(read(x), 'spend') } : null)
   const metricCol = <T,>(key: string, head: string, field: string, read: (item: T) => Row): Col<T> => ({ key, head, cell: (x) => compact(num(read(x), field)), value: (x) => num(read(x), field) })
   /*
    * NASEL 2026-10-29 — with Results configured, every table reads them from the one resolver: a platform's configured events and their cost
@@ -113,6 +122,14 @@ export function TablesView({
   // RESULT-EVENTS-001 — Results columns exist only where an event is defined, and then read the resolver; nothing else stands in for them.
   const configuredResults = <T,>(_field: (item: T) => Row, verified: (item: T) => number | null | undefined): Col<T> | null =>
     configured ? resultsCol<T>(verified) : null
+
+  const dayTable = build<Row>('days', [
+    { key: 'day', head: ar ? 'اليوم' : 'Day', cell: (d) => String(d.date ?? ''), value: (d) => String(d.date ?? '') },
+    metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (d) => d),
+    metricCol('clicks', ar ? 'النقرات' : 'Clicks', 'clicks', (d) => d),
+    metricCol('results', ar ? 'تحويلات المنصات' : 'Platform conversions', 'conversions', (d) => d),
+    spendCol<Row>((d) => d),
+  ], days)
 
   const platTable = build<Row>('platforms', [
     { key: 'name', head: ar ? 'المنصة' : 'Platform', cell: (p) => <ProviderName provider={String(p.provider ?? '')} locale={locale} size={16} />, value: (p) => String(p.provider ?? '') },
@@ -174,6 +191,13 @@ export function TablesView({
 
       {/* REPORT-COMPOSITION-CONTROL-001 — the daily record is its own component, off for a new client report. REPORT-WEBSITE-TAB-001 — drawn as the interactive chart; the rows stay in the CSV / XLSX download. */}
       {sectionShown(payload, 'daily_records') && <DailyMeasureChart payload={payload} reader={reader} ar={ar} />}
+
+      {/* LIVE-LINK-DAILY-LOG-001 — «السجل اليومي» is back as a table (it had become the chart alone): one row a day, eight to a page, newest first. */}
+      {sectionShown(payload, 'daily_records') && (
+        <Block ar={ar} title={ar ? 'السجل اليومي' : 'Daily log'} testid="tables-days" empty={days.length === 0}>
+          <MetricTable pageSize={8} head={dayTable.head} rows={dayTable.rows} values={dayTable.values} initialSort={{ column: 0, dir: 'desc' }} />
+        </Block>
+      )}
 
       {sectionShown(payload, 'content_performance') && (
         <Block ar={ar} title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>

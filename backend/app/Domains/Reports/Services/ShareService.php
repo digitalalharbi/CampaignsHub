@@ -357,7 +357,7 @@ final class ShareService
                 $stripMoney($data[$scalars]);
             }
         }
-        foreach (['platforms', 'campaigns', 'timeseries', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
+        foreach (['platforms', 'campaigns', 'timeseries', 'daily_rows', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($data[$section]) && is_array($data[$section])) {
                 foreach ($data[$section] as &$row) {
                     if (is_array($row)) {
@@ -697,7 +697,7 @@ final class ShareService
          * enumerated rather than walked precisely so that adding a section is a decision somebody
          * makes here, and this is that decision.
          */
-        foreach (['timeseries', 'platforms', 'accounts', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
+        foreach (['timeseries', 'daily_rows', 'platforms', 'accounts', 'campaigns', 'ad_sets', 'budget', ...self::CREATIVE_SECTIONS] as $section) {
             if (! empty($payload[$section]) && is_array($payload[$section])) {
                 $payload[$section] = array_map(
                     function ($row) use ($strip) {

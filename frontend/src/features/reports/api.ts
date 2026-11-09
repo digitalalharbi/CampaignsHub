@@ -645,6 +645,8 @@ export interface LivePayload {
   timeseries: Array<Record<string, unknown>>
   /** REPORT-WEBSITE-TAB-001 — the same days per platform, for the interactive daily chart; money keys redacted exactly as `timeseries`'s are. */
   platform_series?: Record<string, Array<Record<string, unknown>>>
+  /** LIVE-LINK-DAILY-LOG-001 — one row per DAY for the ledger when `timeseries` is bucketed to weeks or months; absent when `timeseries` is already daily. */
+  daily_rows?: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty on a client payload, and typed that way.

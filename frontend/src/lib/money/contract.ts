@@ -466,6 +466,43 @@ export function readRoas(totals: MoneyTotals, ar: boolean): { kind: MoneyReading
 }
 
 /**
+ * LIVE-LINK-PARTIAL-MONEY-001 — the two halves of a PARTIAL scope, for a surface whose reader has no other view.
+ *
+ * `readMoney` fails a partial scope closed to «—» (there is no single total, and that stays true for every operator
+ * surface and every sum). A client link, however, printed a dash for Google ads whose spend was real: one day converted,
+ * the next still waiting for an EUR rate. «Withheld is not zero» also means «withheld is not blank» — the reader is
+ * given both amounts, each in its own unit, and is told one of them awaits conversion. Never a sum.
+ */
+export type MoneyParts = { converted: number; original: number; originalCurrency: string | null }
+
+export function moneyParts(totals: MoneyTotals, key: 'spend' | 'revenue'): MoneyParts | null {
+  const s = moneyState(totals, key)
+
+  return s.state === 'partial' && s.converted !== null
+    ? { converted: s.converted, original: s.original, originalCurrency: s.originalCurrency }
+    : null
+}
+
+/** «16.46 USD + 15.82 EUR» — two amounts in two units, joined by a plus sign that is NOT arithmetic. */
+export function formatMoneyParts(
+  parts: MoneyParts,
+  reportingCurrency: string | null,
+  compactFormat: (n: number | null | undefined, currency?: string) => string,
+): string {
+  const original = numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parts.original)
+
+  return `${compactFormat(parts.converted, reportingCurrency ?? undefined)} + ${`${original} ${parts.originalCurrency ?? ''}`.trim()}`
+}
+
+/** The chip's words: «بانتظار تحويل اليورو» for EUR, the code itself for any other currency. */
+export function pendingConversionLabel(currency: string | null, ar: boolean): string {
+  const code = (currency ?? '').toUpperCase()
+  if (ar) return code === 'EUR' ? 'بانتظار تحويل اليورو' : code === '' ? 'بانتظار سعر الصرف' : `بانتظار تحويل ${code}`
+
+  return code === '' ? 'Awaiting FX rate' : `Awaiting ${code} conversion`
+}
+
+/**
  * The TEXT of a reading — so two surfaces cannot print the same figure differently.
  *
  * Delegating the rules but not the rendering still left `4.1K USD` on one screen and
