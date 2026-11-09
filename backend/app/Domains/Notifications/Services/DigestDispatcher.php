@@ -8,6 +8,7 @@ use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\OperationalDigestModel;
@@ -88,12 +89,12 @@ final class DigestDispatcher
      *
      * @return string the state written to the ledger
      */
-    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency'): string
+    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null): string
     {
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
-        return $this->send($user, $tenantId, 'daily', $day->toDateString(), $start, $end, $locale, $audience);
+        return $this->send($user, $tenantId, 'daily', $day->toDateString().self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onlyProject: $onlyProject);
     }
 
     /**
@@ -103,12 +104,12 @@ final class DigestDispatcher
      * week converges on the same row and the same unique-index guarantee. Everything else is the
      * daily path: same builder, same scope, same honest states.
      */
-    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency'): string
+    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null): string
     {
         $end = $weekEnd->copy()->endOfDay();
         $start = $end->copy()->subDays(6)->startOfDay();
 
-        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW'), $start, $end, $locale, $audience);
+        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW').self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onlyProject: $onlyProject);
     }
 
     /**
@@ -213,6 +214,9 @@ final class DigestDispatcher
             return 'no_longer_wanted';
         }
 
+        // A per-project digest carries its project in the period key; the retry must narrow to it again, never widen to the portfolio.
+        $only = str_contains((string) $row->period_key, '~') ? substr((string) $row->period_key, (int) strpos((string) $row->period_key, '~') + 1) : null;
+
         return $this->send(
             $user,
             (string) $row->tenant_id,
@@ -222,6 +226,7 @@ final class DigestDispatcher
             Carbon::parse((string) $row->window_to),
             (string) ($preference->locale ?? 'ar'),
             $preference->client_workspace_id !== null ? 'client' : 'agency',
+            onlyProject: $only,
         );
     }
 
@@ -236,6 +241,7 @@ final class DigestDispatcher
         string $locale,
         string $audience = 'agency',
         bool $onDemand = false,
+        ?string $onlyProject = null,
     ): string {
         /*
          * NOTIFICATION-ENROLMENT-001 — an on-demand send is its OWN ledger row.
@@ -265,6 +271,10 @@ final class DigestDispatcher
             $this->tenants->setTenantId($tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
+            // DIGESTS-VISUAL-V2-001 — a per-project digest narrows to ONE project of the reader's own scope; it can never widen it.
+            if ($onlyProject !== null) {
+                $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
+            }
             // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
             // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
             if ($audience === 'agency' && ProjectCapability::exists('money.view')) {
@@ -331,7 +341,7 @@ final class DigestDispatcher
              * payload, so the scope, the permissions and the figures were already decided above.
              */
             $mailable = $audience === 'agency' && (bool) config('mail.operational_digests')
-                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind)
+                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind, $onlyProject !== null)
                 : new DailyDigestMail(
                     $digest,
                     $locale,
@@ -368,15 +378,36 @@ final class DigestDispatcher
     /**
      * @param  array<string,mixed>  $digest  the payload of `DailyDigest::buildRange()`
      */
-    private function operationalMail(array $digest, string $locale, string $name, string $kind): OperationalDigestMail
+    private function operationalMail(array $digest, string $locale, string $name, string $kind, bool $perProject = false): OperationalDigestMail
     {
         $projects = array_values((array) ($digest['projects'] ?? []));
 
-        if (count($projects) === 1) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7)), $locale, $name, $kind, 'project');
+        if (count($projects) === 1 || ($perProject && $projects !== [])) {
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7)), $locale, $name, $kind, 'project', self::periodLabel($digest));
         }
 
-        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio');
+        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest));
+    }
+
+    /** The twelve hex characters that name a project inside a ledger period key (the column is 24 wide). */
+    public static function projectKey(string $projectId): string
+    {
+        return substr(str_replace('-', '', $projectId), 0, 12);
+    }
+
+    private static function projectSuffix(?string $onlyProject): string
+    {
+        return $onlyProject === null ? '' : '~'.$onlyProject;
+    }
+
+    /** «2026-11-03 – 2026-11-09», each date isolated left-to-right so an Arabic line does not print it backwards. */
+    private static function periodLabel(array $digest): ?string
+    {
+        if (! isset($digest['date'], $digest['to_date'])) {
+            return null;
+        }
+
+        return AlertEventText::ltr((string) $digest['date']).' – '.AlertEventText::ltr((string) $digest['to_date']);
     }
 
     /**

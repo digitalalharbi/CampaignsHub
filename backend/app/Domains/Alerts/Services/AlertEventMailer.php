@@ -11,7 +11,7 @@ use App\Domains\Notifications\Services\MailSendGate;
 use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Services\TransactionalMailer;
-use App\Domains\Notifications\Support\AlertEventText;
+use App\Domains\Notifications\Support\AlertMailItem;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -166,7 +166,7 @@ final class AlertEventMailer
         try {
             $sent = Mail::to($user->email)->send((new AlertBundleMail(
                 // EMAIL-DIGESTS-OPERATIONAL-001 — what happened, the numbers, where, one next step and the page inside the system; never the stored English or a campaign name as the headline.
-                items: array_map(static fn (array $i): array => AlertEventText::compose($i, $ar), $claimed),
+                items: AlertMailItem::rank(array_map(static fn (array $i): array => AlertMailItem::build($i, $ar), $claimed)),
                 lang: $locale,
                 recipientName: (string) $user->name,
             ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, MailUnsubscribes::ALERTS, (int) $user->getKey())));
