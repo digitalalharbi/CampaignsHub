@@ -50,12 +50,17 @@ test.describe('the website tab of a live link', () => {
     await expect(page.getByTestId('report-ga4-overview')).toBeVisible()
   })
 
-  test('the daily table is an interactive chart: metric chips, platform toggles, a donut total and a keyboard readout', async ({ page }) => {
+  test('the daily measurement is an interactive chart, and the daily log stays a paged table beside it: metric chips, platform toggles, a donut total and a keyboard readout', async ({ page }) => {
     test.setTimeout(120_000)
     await page.goto(`/r/${LIVE_TOKEN}?view=tables`)
     const chart = page.getByTestId('daily-chart')
     await expect(chart).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByTestId('tables-days')).toHaveCount(0)
+    // LIVE-LINK-DAILY-LOG-001 — the chart did not replace the ledger: «السجل اليومي» is a table of days, eight rows to a page.
+    const log = page.getByTestId('tables-days')
+    await expect(log).toHaveCount(1)
+    const logRows = await log.getByRole('row').count()
+    expect(logRows, 'the daily log has a header and at least one day').toBeGreaterThan(1)
+    expect(logRows, 'the daily log pages at eight rows').toBeLessThanOrEqual(9)
 
     const before = await page.getByTestId('daily-area').boundingBox()
     await page.getByTestId('daily-metric-clicks').click()

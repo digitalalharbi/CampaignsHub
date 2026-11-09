@@ -6,6 +6,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import { figuresFor, type ReportAd } from '../ReportAdsSection'
+import { PendingConversionChip } from '../PendingConversionChip'
 import type { RosterRow } from '../ReportCreativeRoster'
 import { ReportAdDetail } from '../ReportAdDetail'
 import { fetchLiveContent, type LiveContentPayload } from '../api'
@@ -98,6 +99,7 @@ export const ContentTile = memo(function ContentTile({
             <div key={f.label} className="flex min-w-0 items-baseline justify-between gap-2 rounded-lg bg-surface-secondary px-2 py-1 sm:block sm:px-1 sm:py-1.5">
               <dt className="truncate text-[10px] font-semibold text-text-muted">{f.label}</dt>
               <dd className="tnum whitespace-nowrap text-[11px] font-bold leading-tight text-text-primary"><Num>{f.value}</Num></dd>
+              {f.pending !== undefined && f.pending !== null && <PendingConversionChip currency={f.pending || null} ar={ar} />}
             </div>
           ))}
         </dl>

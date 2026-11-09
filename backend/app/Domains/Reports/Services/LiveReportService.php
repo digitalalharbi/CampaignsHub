@@ -991,6 +991,16 @@ final class LiveReportService
                 ? $engine->timeseries($to->copy()->subDays(6), $to)
                 : ReportPeriod::bucket($engine->timeseries($from, $to), $window['grain']),
             /*
+             * LIVE-LINK-DAILY-LOG-001 — «السجل اليومي» is DAYS, whatever the chart's grain is.
+             *
+             * `timeseries` is bucketed to the window's grain (a week or a month for a long range) because a chart of 370 daily points is
+             * unreadable. The ledger is a table, paged by the page: it is always one row per day. Sent only when the trend is not already
+             * daily (then `timeseries` IS the daily rows), and only for the last 400 days — a ledger is a record of recent days, not an archive.
+             */
+            ...($window['kind'] !== 'daily' && $window['grain'] !== 'day'
+                ? ['daily_rows' => $engine->timeseries(max($from->copy(), $to->copy()->subDays(399)), $to)]
+                : []),
+            /*
              * REPORT-WEBSITE-TAB-001 — the daily figures per platform, for the interactive measurement chart that replaced the
              * daily table. Same scope, same grain as `timeseries`; money keys are redacted by `HiddenMoney` like every other series.
              */
