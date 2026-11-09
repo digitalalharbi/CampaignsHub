@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Reports\Services\ReportObjectiveLens;
+
 /**
  * DIGESTS-VISUAL-V2-001 — one alert, as the mail draws it: the words of `AlertEventText`, the PROBLEM drawn, one button.
  *
@@ -27,7 +30,15 @@ final class AlertMailItem
         $projectId = isset($item['project_id']) && $item['project_id'] !== '' ? (string) $item['project_id'] : null;
         $recovered = str_starts_with((string) ($item['triggered_at'] ?? ''), 'recovered:');
 
-        $viz = $recovered ? null : self::viz($type, $ctx, $ar);
+        // DIGESTS-OBJECTIVE-KPIS-001 — the alert speaks the campaign's OBJECTIVE: a cost per lead on a lead campaign, a cost per order on a sales one,
+        // and a return-on-spend alert on a campaign that was never bought for sales says so instead of judging it on ROAS.
+        if (($item['entity_type'] ?? '') === UnifiedCampaign::class && ($item['entity_id'] ?? '') !== '' && ! $recovered) {
+            $campaign = UnifiedCampaign::withoutGlobalScopes()->find((string) $item['entity_id']);
+            $group = $campaign === null ? null : ReportObjectiveLens::groupOf((string) $campaign->objective);
+            $c = self::forObjective($c, $type, $group, $ar);
+        }
+
+        $viz = $recovered || ! empty($c['no_viz']) ? null : self::viz($type, $ctx, $ar);
         $target = self::target($type, $projectId, $ar);
         if ($target !== null && ! $recovered && ($c['secondary'] ?? '') === '') {
             $c['url'] = $target[0];
@@ -39,6 +50,34 @@ final class AlertMailItem
         $c['context'] = str_ireplace(['Google Analytics 4', 'Google Analytics', 'GA4'], $ar ? 'الموقع' : 'Website', (string) $c['context']);
 
         return array_merge($c, ['viz' => $viz, 'figures' => null, 'rule' => $type]);
+    }
+
+    /**
+     * @param  array<string,mixed>  $c
+     * @return array<string,mixed>
+     */
+    public static function forObjective(array $c, string $type, ?string $group, bool $ar): array
+    {
+        if ($group === null) {
+            return $c;
+        }
+        $names = [
+            'leads' => ['تكلفة العميل', 'Cost per lead'], 'sales' => ['تكلفة الطلب', 'Cost per order'], 'app_installs' => ['تكلفة التثبيت', 'Cost per install'],
+        ];
+        if ($type === 'cpa_increase' && isset($names[$group])) {
+            $c['title'] = str_replace($ar ? 'تكلفة النتيجة' : 'Cost per result', $names[$group][$ar ? 0 : 1], (string) $c['title']);
+        }
+        if ($type === 'roas_drop' && $group !== 'sales') {
+            $own = ['awareness' => ['الوصول والظهور وتكلفة الألف', 'reach, impressions and CPM'], 'traffic' => ['النقرات وتكلفة النقرة', 'clicks and cost per click'], 'leads' => ['العملاء وتكلفة العميل', 'leads and cost per lead'],
+                'video' => ['المشاهدات ومعدل الإكمال', 'views and completion rate'], 'app_installs' => ['التثبيتات وتكلفة التثبيت', 'installs and cost per install']][$group] ?? null;
+            if ($own !== null) {
+                $c['detail'] = $ar ? 'هدف هذي الحملة مو المبيعات، فالعائد مو مقياسها.' : 'This campaign is not bought for sales, so return is not its measure.';
+                $c['action'] = ($ar ? 'قيّمها على: ' : 'Judge it on: ').$own[$ar ? 0 : 1];
+                $c['no_viz'] = true; // the return bars would judge it on the very figure it was not bought for
+            }
+        }
+
+        return $c;
     }
 
     /**
@@ -67,7 +106,7 @@ final class AlertMailItem
             $used = (int) round(min(1.0, (float) $ctx['spend'] / (float) $ctx['budget']) * 100);
             $plan = (int) round(min(100, $used / (float) $ctx['ratio']));
 
-            return ['type' => 'pace', 'used' => $used, 'plan' => $plan, 'used_label' => ($ar ? 'صُرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($plan.'%')];
+            return ['type' => 'pace', 'used' => $used, 'plan' => $plan, 'used_label' => ($ar ? 'انصرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($plan.'%')];
         }
         if ($type === 'budget_risk' && isset($ctx['consumed'], $ctx['limit']) && (float) $ctx['limit'] > 0) {
             $used = (int) round(min(1.0, (float) $ctx['consumed'] / (float) $ctx['limit']) * 100);
@@ -93,10 +132,10 @@ final class AlertMailItem
         if (in_array($type, ['ga4_unmatched_spend', 'ga4_attribution_gap'], true) && isset($ctx['share'])) {
             $s = (int) round(min(1.0, (float) $ctx['share']) * 100);
 
-            return ['type' => 'pace', 'used' => $s, 'plan' => 0, 'used_label' => ($ar ? 'بلا قياس' : 'Unmeasured').' '.AlertEventText::ltr($s.'%'), 'plan_label' => ($ar ? 'المقيس' : 'Measured').' '.AlertEventText::ltr((100 - $s).'%'), 'plan_value' => 100 - $s];
+            return ['type' => 'pace', 'used' => $s, 'plan' => 0, 'used_label' => ($ar ? 'بدون قياس' : 'Unmeasured').' '.AlertEventText::ltr($s.'%'), 'plan_label' => ($ar ? 'المقيس' : 'Measured').' '.AlertEventText::ltr((100 - $s).'%'), 'plan_value' => 100 - $s];
         }
         if (isset($ctx['spend'], $ctx['days']) && $type === 'no_results') {
-            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الإنفاق' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? 'النتائج' : 'Results').' 0'];
+            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الصرف' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? 'النتائج' : 'Results').' 0'];
         }
 
         return null;
@@ -116,10 +155,10 @@ final class AlertMailItem
         $p = $projectId === null ? '' : '?project='.rawurlencode($projectId);
 
         return match (true) {
-            in_array($type, ['lead_unassigned'], true) => [MailLinks::to('/app/leads'.$p), $ar ? 'افتح العملاء المحتملين' : 'Open the leads'],
+            in_array($type, ['lead_unassigned'], true) => [MailLinks::to('/app/leads'.$p), $ar ? 'افتح العملاء' : 'Open the leads'],
             in_array($type, ['lead_no_contact', 'lead_follow_up_overdue'], true) => [MailLinks::to('/app/leads/workspace'.$p), $ar ? 'افتح المتابعات' : 'Open follow-ups'],
-            in_array($type, ['tracking_health', 'ga4_tracking_loss', 'ga4_unmatched_spend'], true) => [MailLinks::to('/app/forms'.$p), $ar ? 'افتح صحة التتبع' : 'Open tracking health'],
-            $type === 'launch_advance' => [MailLinks::to('/app/launch'.$p), $ar ? 'افتح صفحة الإطلاق' : 'Open the launch page'],
+            in_array($type, ['tracking_health', 'ga4_tracking_loss', 'ga4_unmatched_spend'], true) => [MailLinks::to('/app/forms'.$p), $ar ? 'افتح التتبع' : 'Open tracking health'],
+            $type === 'launch_advance' => [MailLinks::to('/app/launch'.$p), $ar ? 'افتح الإطلاق' : 'Open the launch page'],
             str_starts_with($type, 'ga4_') && $projectId !== null => [MailDeepLinks::analytics($projectId, 'performance'), $ar ? 'افتح الأداء' : 'Open performance'],
             $type === 'report_failed' => [MailLinks::to('/app/reports'), $ar ? 'افتح التقارير' : 'Open reports'],
             default => null,

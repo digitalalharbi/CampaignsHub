@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
@@ -86,7 +87,7 @@ final class OperationalDigestMail extends Mailable
                 ? "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} من {$m['coverage']['total']} مفحوصة"
                 : "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} of {$m['coverage']['total']} checked");
 
-        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader);
+        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader, footerNote: MailDisclaimer::note($this->lang, $this->copy($ar)['unit_note']));
         $t = $this->copy($ar);
         $shell['t'] = array_merge($shell['t'], $t);
 

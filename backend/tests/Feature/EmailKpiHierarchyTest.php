@@ -60,7 +60,7 @@ final class EmailKpiHierarchyTest extends TestCase
 
         // EMAIL-DIGESTS-OPERATIONAL-001 — every finding now names its next step.
         $this->assertSame(3, substr_count($html, 'data-block="action"'), 'every finding carries the decision it asks for');
-        $this->assertStringContainsString('قرار اليوم: أبقِ الميزانية', $html);
+        $this->assertStringContainsString('قرّر اليوم: أبقِ الميزانية', $html);
         $this->assertStringContainsString('أعد ربط المصدر', $html);
         // EMAIL-DIGESTS-OPERATIONAL-001 — the button lands on the exact page: the campaign, or the connections page for a sync.
         $this->assertMatchesRegularExpression('#href="[^"]+/app/campaigns/demo-project/demo-campaign"#', $html);

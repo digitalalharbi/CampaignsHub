@@ -81,32 +81,32 @@ final class PlainFindings
 
                 return [
                     'tone' => $tone,
-                    'headline' => $ar ? "{$label} ".($rose ? 'ارتفع' : 'انخفض')." {$pct}" : ucfirst($label).' '.($rose ? 'rose' : 'fell')." {$pct}",
-                    'text' => $ar ? "صار {$value} مقابل الفترة السابقة." : "Now {$value} against the previous period.",
+                    'headline' => $ar ? "{$label} ".($rose ? 'زاد' : 'نزل')." {$pct}" : ucfirst($label).' '.($rose ? 'rose' : 'fell')." {$pct}",
+                    'text' => $ar ? "صار {$value} مقابل الفترة اللي قبلها." : "Now {$value} against the previous period.",
                     'action' => $good
-                        ? ($ar ? 'افتح المنصات وحدّد ما تغيّر ثم ثبّته.' : 'Open the platforms, find what changed, and keep it.')
-                        : ($ar ? 'افتح المنصات وابدأ بالأضعف.' : 'Open the platforms and start with the weakest.'),
+                        ? ($ar ? 'شوف وش اللي تغيّر ← ثبّته.' : 'Open the platforms, find what changed, and keep it.')
+                        : ($ar ? 'ابدأ بالأضعف ← ثم الباقي.' : 'Open the platforms and start with the weakest.'),
                 ];
             case 'rising_cost':
                 return [
                     'tone' => 'warn',
-                    'headline' => $ar ? "{$label} ارتفعت {$pct}" : ucfirst($label)." rose {$pct}",
-                    'text' => $ar ? "صارت {$value}. قد يكون السبب منافسة أعلى أو ضعف المحتوى." : "Now {$value}. Often higher competition or tired content.",
-                    'action' => $ar ? 'قارن المنصات وراجع المحتوى الأضعف.' : 'Compare the platforms and review the weakest content.',
+                    'headline' => $ar ? "{$label} زادت {$pct}" : ucfirst($label)." rose {$pct}",
+                    'text' => $ar ? "صارت {$value}. غالبًا منافسة أعلى أو محتوى تعب." : "Now {$value}. Often higher competition or tired content.",
+                    'action' => $ar ? 'قارن المنصات ثم المحتوى الأضعف.' : 'Compare the platforms and review the weakest content.',
                 ];
             case 'falling_rate':
                 return [
                     'tone' => 'warn',
-                    'headline' => $ar ? "{$label} تراجع {$pct}" : ucfirst($label)." fell {$pct}",
-                    'text' => $ar ? "صار {$value}. قد يعني أن المحتوى بدأ يفقد أثره." : "Now {$value}. The content may be wearing out.",
-                    'action' => $ar ? 'راجع أداء المحتوى وجدّد الأضعف.' : 'Review content performance and refresh the weakest.',
+                    'headline' => $ar ? "{$label} نزل {$pct}" : ucfirst($label)." fell {$pct}",
+                    'text' => $ar ? "صار {$value}. ممكن المحتوى بدأ يخف أثره." : "Now {$value}. The content may be wearing out.",
+                    'action' => $ar ? 'راجع المحتوى ← جدّد الأضعف.' : 'Review content performance and refresh the weakest.',
                 ];
             case 'frequency_saturation':
                 return [
                     'tone' => 'warn',
-                    'headline' => $ar ? 'الجمهور يرى إعلانك مرات كثيرة' : 'People are seeing your ads too often',
-                    'text' => $ar ? ($value !== '' ? "متوسط التكرار {$value}." : 'التكرار مرتفع.') : ($value !== '' ? "Average frequency {$value}." : 'Frequency is high.'),
-                    'action' => $ar ? 'وسّع الجمهور أو حدّث المحتوى.' : 'Widen the audience or refresh the content.',
+                    'headline' => $ar ? 'الجمهور شاف إعلانك مرات كثيرة' : 'People are seeing your ads too often',
+                    'text' => $ar ? ($value !== '' ? "التكرار {$value}." : 'التكرار عالي.') : ($value !== '' ? "Average frequency {$value}." : 'Frequency is high.'),
+                    'action' => $ar ? 'وسّع الجمهور ← أو غيّر المحتوى.' : 'Widen the audience or refresh the content.',
                 ];
             case 'budget_pace':
                 $fast = $severity === 'critical';
@@ -114,47 +114,47 @@ final class PlainFindings
 
                 return [
                     'tone' => $tone,
-                    'headline' => $ar ? "الإنفاق على {$who} ".($fast ? 'أسرع من الخطة' : 'أبطأ من الخطة') : "Spend on {$who} is ".($fast ? 'ahead of plan' : 'behind plan'),
-                    'text' => $ar ? "وصل إلى {$value} من المتوقع حتى الآن." : "At {$value} of what was expected by now.",
+                    'headline' => $ar ? "الصرف على {$who} ".($fast ? 'أسرع من الخطة' : 'أبطأ من الخطة') : "Spend on {$who} is ".($fast ? 'ahead of plan' : 'behind plan'),
+                    'text' => $ar ? "وصل {$value} من المتوقع لين الحين." : "At {$value} of what was expected by now.",
                     'action' => $fast
-                        ? ($ar ? 'قرّر اليوم: أبقِ الميزانية أو عدّلها.' : 'Decide today: keep the budget or adjust it.')
-                        : ($ar ? 'تأكد من أن الحملات تعمل وأن الميزانية ستُستهلك.' : 'Check the campaigns are running and the budget will be used.'),
+                        ? ($ar ? 'قرّر اليوم: أبقِ الميزانية ← أو عدّلها.' : 'Decide today: keep the budget or adjust it.')
+                        : ($ar ? 'تأكد إن الحملات شغالة ← والميزانية بتنصرف.' : 'Check the campaigns are running and the budget will be used.'),
                 ];
             case 'internal_spend_limit':
                 return [
                     'tone' => $tone,
-                    'headline' => $ar ? 'اقترب الإنفاق من الحد الذي وضعتَه' : 'Spend is close to the limit you set',
+                    'headline' => $ar ? 'اقترب الصرف من الحد اللي حطّيته' : 'Spend is close to the limit you set',
                     'text' => $ar ? (string) ($note['detail'] ?? '') : 'The internal spend limit for this project has been passed.',
                     'action' => $ar ? 'راجع الحد في صفحة الميزانية.' : 'Review the limit on the budget page.',
                 ];
             case 'reallocation':
                 return [
                     'tone' => 'good',
-                    'headline' => $ar ? (string) ($note['title'] ?? 'فرصة لتوزيع الميزانية') : 'Budget could work harder elsewhere',
+                    'headline' => $ar ? (string) ($note['title'] ?? 'فرصة توزّع بها الميزانية أحسن') : 'Budget could work harder elsewhere',
                     'text' => $ar ? (string) ($note['detail'] ?? '') : 'One platform delivers results at a clearly lower cost than another.',
-                    'action' => $ar ? 'افتح المنصات وقارن قبل أي نقل.' : 'Open the platforms and compare before moving anything.',
+                    'action' => $ar ? 'قارن المنصات ← ثم انقل.' : 'Open the platforms and compare before moving anything.',
                 ];
             case 'data_gap':
                 return [
                     'tone' => 'neutral',
-                    'headline' => $ar ? 'بعض الأرقام لم تصل بعد' : 'Some figures have not arrived',
-                    'text' => $ar ? 'منصة لم ترسل بعض المؤشرات لهذه الفترة، فلا تعدّها صفرًا.' : 'A platform did not send some metrics for this period. Do not read them as zero.',
-                    'action' => $ar ? 'تحقق من الربط إن استمر الأمر.' : 'Check the connection if it continues.',
+                    'headline' => $ar ? 'بعض الأرقام ما وصلت' : 'Some figures have not arrived',
+                    'text' => $ar ? 'منصة ما أرسلت بعض المؤشرات، فلا تحسبها صفر.' : 'A platform did not send some metrics for this period. Do not read them as zero.',
+                    'action' => $ar ? 'تحقق من الربط لو استمر.' : 'Check the connection if it continues.',
                 ];
             case 'stale_data':
                 return [
                     'tone' => $tone,
-                    'headline' => $severity === 'critical' ? ($ar ? 'توقفت مزامنة البيانات' : 'Data sync has stopped') : ($ar ? 'البيانات لم تتحدث مؤخرًا' : 'Data has not refreshed lately'),
-                    'text' => $ar ? 'الأرقام قد تكون ناقصة حتى تعود المزامنة.' : 'Figures may be incomplete until syncing resumes.',
-                    'action' => $ar ? 'افتح صفحة الربط وأعد ربط المصدر.' : 'Open the connections page and reconnect the source.',
+                    'headline' => $severity === 'critical' ? ($ar ? 'المزامنة متوقفة' : 'Data sync has stopped') : ($ar ? 'البيانات ما تحدّثت من فترة' : 'Data has not refreshed lately'),
+                    'text' => $ar ? 'الأرقام ممكن تكون ناقصة لين ترجع المزامنة.' : 'Figures may be incomplete until syncing resumes.',
+                    'action' => $ar ? 'افتح الربط ← أعد ربط المصدر.' : 'Open the connections page and reconnect the source.',
                 ];
         }
 
         return [
             'tone' => $tone,
-            'headline' => $ar ? 'ملاحظة تحتاج مراجعتك' : 'A finding needs your review',
+            'headline' => $ar ? 'ملاحظة للمتابعة' : 'A finding needs your review',
             'text' => $ar ? (string) ($note['detail'] ?? '') : '',
-            'action' => $ar ? 'افتح التقرير وراجعها.' : 'Open the report and review it.',
+            'action' => $ar ? 'افتح التقرير وشوفها.' : 'Open the report and review it.',
         ];
     }
 }
