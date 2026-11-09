@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Rates;
 
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Models\CurrencyRate;
+use App\Domains\Metrics\Services\RetroConvertWithheldMoney;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -290,7 +291,7 @@ final class CurrencyRateFeed
      */
     public function record(string $base, string $quote, float $rate, Carbon $date, string $source): CurrencyRate
     {
-        return CurrencyRate::updateOrCreate(
+        $row = CurrencyRate::updateOrCreate(
             [
                 'base_currency' => strtoupper($base),
                 'quote_currency' => strtoupper($quote),
@@ -298,6 +299,16 @@ final class CurrencyRateFeed
             ],
             ['rate' => $rate, 'source' => $source],
         );
+
+        /*
+         * FX-RETRO-001 — a rate that has just appeared (or been corrected) converts the figures that
+         * were withheld for want of it. A re-recorded identical quote is a no-op: nothing new to apply.
+         */
+        if ($row->wasRecentlyCreated || $row->wasChanged('rate')) {
+            (new RetroConvertWithheldMoney)->forPair($base, $quote);
+        }
+
+        return $row;
     }
 
     private function earlier(?string $current, mixed $candidate): ?string
