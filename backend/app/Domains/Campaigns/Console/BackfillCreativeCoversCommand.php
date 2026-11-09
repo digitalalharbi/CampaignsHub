@@ -97,7 +97,14 @@ final class BackfillCreativeCoversCommand extends Command
                 ->orWhere(fn (Builder $w) => $w->whereRaw(self::RECOVERABLE))
                 // CREATIVE-VIDEO-FRAME-COVER-001 — no still link, a playable film on a known CDN: its own frame.
                 ->orWhere(fn (Builder $w) => $w->whereRaw(self::frameOnlySql())))
-            ->where(fn (Builder $q) => $q->whereNull('cover_next_attempt_at')->orWhere('cover_next_attempt_at', '<=', Carbon::now()));
+            ->where(fn (Builder $q) => $q->whereNull('cover_next_attempt_at')->orWhere('cover_next_attempt_at', '<=', Carbon::now())
+                ->orWhereRaw(self::staleNoneSql()));
+    }
+
+    /** The SQL face of {@see CoverCache::backingOff()}'s exception: the old «provider gave none» verdict on a film we can frame. */
+    private static function staleNoneSql(): string
+    {
+        return "(cover_path IS NULL AND COALESCE(cover_error, '') = '".CoverCache::STALE_NONE_VERDICT."' AND ".self::videoSql().')';
     }
 
     /**
@@ -132,14 +139,15 @@ final class BackfillCreativeCoversCommand extends Command
         $stale = '(cover_path IS NULL OR cover_cached_at IS NULL OR source_updated_at > cover_cached_at)';
         $frameOnly = self::frameOnlySql();
         $wanted = "(({$source} AND {$stale}) OR ".self::RECOVERABLE." OR {$frameOnly})";
+        $staleNone = self::staleNoneSql();
 
         $rows = DB::table('external_creatives')
             ->when($provider !== null, fn ($q) => $q->where('provider', $provider))
             ->selectRaw('provider, COUNT(*) AS creatives')
             ->selectRaw("SUM(CASE WHEN {$source} THEN 1 ELSE 0 END) AS with_source")
             ->selectRaw('SUM(CASE WHEN cover_path IS NOT NULL THEN 1 ELSE 0 END) AS cached')
-            ->selectRaw("SUM(CASE WHEN {$wanted} AND (cover_next_attempt_at IS NULL OR cover_next_attempt_at <= ?) THEN 1 ELSE 0 END) AS due", [$now])
-            ->selectRaw("SUM(CASE WHEN {$wanted} AND cover_next_attempt_at > ? THEN 1 ELSE 0 END) AS backing_off", [$now])
+            ->selectRaw("SUM(CASE WHEN {$wanted} AND (cover_next_attempt_at IS NULL OR cover_next_attempt_at <= ? OR {$staleNone}) THEN 1 ELSE 0 END) AS due", [$now])
+            ->selectRaw("SUM(CASE WHEN {$wanted} AND cover_next_attempt_at > ? AND NOT {$staleNone} THEN 1 ELSE 0 END) AS backing_off", [$now])
             ->selectRaw('SUM(CASE WHEN '.self::RECOVERABLE.' THEN 1 ELSE 0 END) AS recoverable')
             // Every creative with no copy yet and a framable film: the ones ffmpeg can cover, whether the still is absent or dead.
             ->selectRaw('SUM(CASE WHEN cover_path IS NULL AND is_demo = false AND '.self::videoSql().' THEN 1 ELSE 0 END) AS via_video_frame')

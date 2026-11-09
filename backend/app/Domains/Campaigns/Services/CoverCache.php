@@ -60,6 +60,9 @@ final class CoverCache
 
     public const SOURCE_VIDEO_FRAME = 'video_frame';
 
+    /** The reason a capture records when the platform named no still and nothing else could be tried. */
+    public const STALE_NONE_VERDICT = 'provider_gave_none';
+
     private const MAX_BYTES = 5 * 1024 * 1024;
 
     private const TYPES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'image/avif' => 'avif'];
@@ -99,7 +102,7 @@ final class CoverCache
             // CREATIVE-COVERS-COVERAGE-001 — no link yet, but the platform can name one: ask it, at the backoff's pace.
             // CREATIVE-VIDEO-FRAME-COVER-001 — or the creative holds a playable film, whose own frame is the cover.
             return $creative->cover_path === null && (CoverSourceRefresher::recoverable($creative) || self::videoSourceOf($creative) !== null)
-                && ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture());
+                && ! self::backingOff($creative);
         }
 
         // A frame we took stands in until the platform's own still is copied; a still link that has appeared since is tried.
@@ -107,7 +110,24 @@ final class CoverCache
             || $creative->cover_source === self::SOURCE_VIDEO_FRAME
             || ($creative->source_updated_at !== null && $creative->source_updated_at->greaterThan($creative->cover_cached_at));
 
-        return $stale && ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture());
+        return $stale && ! self::backingOff($creative);
+    }
+
+    /**
+     * Whether the failure back-off still holds this creative back.
+     *
+     * One exception, CREATIVE-VIDEO-FRAME-COVER-001: `provider_gave_none` is the verdict of a pipeline that had no
+     * frame to try. Production 2026-11-09 held 900 TikTok and 48 Snapchat films with that reason and a back-off of up
+     * to 16 hours, written before the frame fallback shipped, so the hourly run found nothing due. A film we can frame
+     * overrides it. After a frame is tried the reason is a `frame_*` / `video_expired` word, so this cannot repeat.
+     */
+    public static function backingOff(ExternalCreative $creative): bool
+    {
+        if ($creative->cover_next_attempt_at === null || ! $creative->cover_next_attempt_at->isFuture()) {
+            return false;
+        }
+
+        return ! ($creative->cover_path === null && $creative->cover_error === self::STALE_NONE_VERDICT && self::videoSourceOf($creative) !== null);
     }
 
     public static function sourceOf(ExternalCreative $creative): ?string
@@ -193,7 +213,7 @@ final class CoverCache
              */
             $source = $this->renew($creative);
             $renewed = true;
-            $reason = $source === null ? 'provider_gave_none' : null;
+            $reason = $source === null ? self::STALE_NONE_VERDICT : null;
         } elseif ($source !== null && self::lapsed($source)) {
             $source = $this->renew($creative);
             $renewed = true;

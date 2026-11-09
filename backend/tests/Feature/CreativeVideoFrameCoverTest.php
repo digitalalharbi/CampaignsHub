@@ -249,6 +249,34 @@ final class CreativeVideoFrameCoverTest extends TestCase
         Queue::assertPushed(CacheCreativeCoverJob::class, 2);
     }
 
+    /**
+     * Production 2026-11-09 00:50: 900 TikTok and 48 Snapchat films carried `provider_gave_none` with a back-off of up
+     * to 16 hours, written by the pipeline BEFORE a frame could be tried. The hourly run found `due = 0` and queued
+     * nothing, so #996 changed nothing for them. «The platform gave none» is the old verdict; a film we can frame
+     * overrides it — and once a frame has been tried the reason changes, so the ordinary back-off applies again.
+     */
+    public function test_a_back_off_written_before_frames_existed_does_not_hold_a_film_back(): void
+    {
+        Queue::fake();
+        $stale = $this->creative(['external_creative_id' => 'old', 'cover_state' => 'failed', 'cover_error' => 'provider_gave_none',
+            'cover_attempts' => 4, 'cover_next_attempt_at' => now()->addHours(9)]);
+        $realFailure = $this->creative(['external_creative_id' => 'real', 'cover_state' => 'failed', 'cover_error' => 'frame_ffmpeg_failed',
+            'cover_attempts' => 2, 'cover_next_attempt_at' => now()->addHours(1)]);
+        $noFilm = $this->creative(['external_creative_id' => 'nofilm', 'video_url' => 'https://elsewhere.example/f.mp4', 'cover_state' => 'failed',
+            'cover_error' => 'provider_gave_none', 'cover_attempts' => 4, 'cover_next_attempt_at' => now()->addHours(9)]);
+
+        $this->assertTrue(CoverCache::wanted($stale->refresh()), 'the old verdict does not outrank a film we can frame');
+        $this->assertFalse(CoverCache::wanted($realFailure->refresh()), 'a recorded frame failure still backs off');
+        $this->assertFalse(CoverCache::wanted($noFilm->refresh()), 'no framable film: the old back-off stands');
+
+        Artisan::call('creatives:backfill-covers');
+        $this->assertMatchesRegularExpression('/\|\s*tiktok\s*\|\s*3\s*\|\s*0\s*\|\s*0\s*\|\s*1\s*\|\s*1\s*\|/', Artisan::output(), 'dry run: 1 due, 1 backing off (the real failure; the no-film row is not wanted at all)');
+
+        Artisan::call('creatives:backfill-covers', ['--execute' => true]);
+        Queue::assertPushed(CacheCreativeCoverJob::class, 1);
+        Queue::assertPushed(CacheCreativeCoverJob::class, fn ($job): bool => $job->creativeId === (string) $stale->getKey());
+    }
+
     /** Real ffmpeg, a real file: guarded, run locally with ffmpeg on PATH. */
     public function test_real_ffmpeg_takes_a_jpeg_frame_from_a_generated_clip(): void
     {
