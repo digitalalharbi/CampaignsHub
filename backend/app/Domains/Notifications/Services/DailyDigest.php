@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Alerts\Services\AttentionBoard;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -654,24 +655,32 @@ final class DailyDigest
     }
 
     /**
-     * Open (or still-snoozed) alert events of the project: provider (when the event names one), severity and whether it is snoozed.
+     * Open (or still-snoozed) alert events of the project, with the board's own priority (`AttentionBoard::anatomised`, derived on read
+     * for an event written before the anatomy existed): provider when the event names one, priority, severity, snoozed, when it fired.
      *
-     * @return list<array{provider: string, severity: string, snoozed: bool}>
+     * @return list<array{provider: string, priority: string, severity: string, snoozed: bool, fired: int}>
      */
     private function openAlerts(string $projectId): array
     {
         $now = Carbon::now();
+        $board = app(AttentionBoard::class);
 
         return AlertEvent::withoutGlobalScopes()
             ->where('project_id', $projectId)
             ->whereIn('status', ['open', 'snoozed'])
             ->limit(200)
-            ->get(['status', 'severity', 'context', 'snoozed_until'])
-            ->map(static fn ($e): array => [
-                'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
-                'severity' => (string) $e->severity,
-                'snoozed' => $e->status === 'snoozed' && ($e->snoozed_until === null || $e->snoozed_until->greaterThan($now)),
-            ])->all();
+            ->get()
+            ->map(static function ($e) use ($board, $now): array {
+                $e = $board->anatomised($e);
+
+                return [
+                    'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
+                    'priority' => (string) ($e->priority ?? 'P3'),
+                    'severity' => (string) $e->severity,
+                    'snoozed' => $e->status === 'snoozed' && ($e->snoozed_until === null || $e->snoozed_until->greaterThan($now)),
+                    'fired' => (int) ($e->last_triggered_at?->getTimestamp() ?? 0),
+                ];
+            })->all();
     }
 
     /**

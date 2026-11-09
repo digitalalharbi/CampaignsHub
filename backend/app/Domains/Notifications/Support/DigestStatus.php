@@ -30,7 +30,8 @@ namespace App\Domains\Notifications\Support;
  * 6. budget pace below {@see PACE_SLOW}× ........................ watch (`pace_slow`)
  * 7. the headline figure worsened ≥ {@see WORSE_WATCH} ............ watch (`worse`)
  * 8. the results fell ≥ {@see FALL_WATCH} against the previous window . watch (`results_down`)
- * 8b. an OPEN alert on the platform (warning/critical → bad, info or snoozed → watch) — the in-app board's own rule, so mail and screen agree
+ * 0.  an OPEN P1/P2 alert on the platform → bad (`alert_bad`), tested first; an open P3 or snoozed one → watch (`alert_watch`) only when
+ *      the cell has figures — the in-app board's own rule ({@see alertState}), so mail and screen agree
  * 9. no spend figure and no failure ............................ none  (`no_data`)
  * 10. otherwise ................................................ ok
  *
@@ -44,7 +45,7 @@ namespace App\Domains\Notifications\Support;
  *
  * ## Global priority — what needs the Owner NOW, across every project
  *
- * Issues sort by (state: bad before watch) → (reason weight, {@see WEIGHT}) → (money at stake, descending)
+ * Issues sort as the in-app board sorts: priority P1 → P3 → severity (critical first) → newest, then (reason weight, {@see WEIGHT}) → (money at stake, descending)
  * → project name → canonical platform order. One list for the whole portfolio, never a list per project.
  */
 final class DigestStatus
@@ -78,6 +79,28 @@ final class DigestStatus
 
     /** @var array<string,int> */
     public const STATE_RANK = ['bad' => 0, 'watch' => 1, 'ok' => 2, 'none' => 3];
+
+    /** P1 before P2 before P3; an event with no priority is read as P3 (thin evidence), as the board reads it. */
+    public const PRIORITY_RANK = ['P1' => 0, 'P2' => 1, 'P3' => 2];
+
+    /**
+     * The board's cell rule over the open alert events that touch a cell: an open (not snoozed) P1/P2 → `bad`; any other
+     * open or snoozed event (P3, or snoozed) → `watch`; none → null.
+     *
+     * @param  list<array{priority?: ?string, snoozed?: bool}>  $alerts
+     */
+    public static function alertState(array $alerts): ?string
+    {
+        $out = null;
+        foreach ($alerts as $a) {
+            if (! ($a['snoozed'] ?? false) && in_array($a['priority'] ?? 'P3', ['P1', 'P2'], true)) {
+                return 'bad';
+            }
+            $out = 'watch';
+        }
+
+        return $out;
+    }
 
     public static function label(string $state, bool $ar): string
     {
@@ -127,15 +150,16 @@ final class DigestStatus
         if ($results !== null && $resultsPrev !== null && $resultsPrev > 0 && ($results - $resultsPrev) / $resultsPrev <= -self::FALL_WATCH) {
             return ['state' => 'watch', 'reason' => 'results_down', 'severity' => ($resultsPrev - $results) / $resultsPrev];
         }
-        // The in-app board's rule (OPERATIONAL-INTELLIGENCE-P1-001): an open warning/critical alert → problem; an open info alert or a snoozed one → watch.
+        // The in-app board's rule (AttentionBoard): an open P1/P2 alert on the cell → problem — before anything else the metrics say.
         if (($in['alert'] ?? null) === 'bad') {
             return ['state' => 'bad', 'reason' => 'alert_bad', 'severity' => 1.0];
         }
-        if (($in['alert'] ?? null) === 'watch') {
-            return ['state' => 'watch', 'reason' => 'alert_watch', 'severity' => 0.5];
-        }
         if ($spend === null) {
             return ['state' => 'none', 'reason' => 'no_data', 'severity' => 0.0];
+        }
+        // …and, as on the board, «no data» outranks an open P3 or snoozed alert (watch), which outranks healthy.
+        if (($in['alert'] ?? null) === 'watch') {
+            return ['state' => 'watch', 'reason' => 'alert_watch', 'severity' => 0.5];
         }
 
         return ['state' => 'ok', 'reason' => null, 'severity' => 0.0];
@@ -165,7 +189,11 @@ final class DigestStatus
      */
     public static function compare(array $a, array $b): int
     {
+        // The board's order: priority P1 → P3, then severity (critical first), then newest — then ours (reason, money, name).
         return (self::STATE_RANK[$a['state']] <=> self::STATE_RANK[$b['state']])
+            ?: ((self::PRIORITY_RANK[$a['priority'] ?? 'P3'] ?? 2) <=> (self::PRIORITY_RANK[$b['priority'] ?? 'P3'] ?? 2))
+            ?: ((int) ($a['sev'] ?? 1) <=> (int) ($b['sev'] ?? 1))
+            ?: ((int) ($b['fired'] ?? 0) <=> (int) ($a['fired'] ?? 0))
             ?: ((self::WEIGHT[$a['reason']] ?? 99) <=> (self::WEIGHT[$b['reason']] ?? 99))
             ?: ((float) $b['at_stake'] <=> (float) $a['at_stake'])
             ?: strcmp((string) $a['project'], (string) $b['project'])

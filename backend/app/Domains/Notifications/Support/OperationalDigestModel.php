@@ -680,7 +680,7 @@ final class OperationalDigestModel
             $reportedFor = (array) ((($block['platform_reported'] ?? [])[$raw] ?? null) ?? ($block['reported'] ?? []));
             $budget = $budgetCanon[$key] ?? null;
             $verdict = DigestStatus::cell([
-                'alert' => self::alertFor($key, (array) ($block['open_alerts'] ?? [])),
+                'alert' => DigestStatus::alertState($mine = self::alertsOn($key, (array) ($block['open_alerts'] ?? []))),
                 'source' => $sources[$key] ?? null,
                 'spend' => $row['spend'] ?? null,
                 'spend_withheld' => (int) ($row['spend_withheld_rows'] ?? 0) > 0,
@@ -696,7 +696,7 @@ final class OperationalDigestModel
             $name = AdPlatforms::name($key, $ar ? 'ar' : 'en');
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
-                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days);
+                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine);
             }
             $cells[] = [
                 'provider' => $key,
@@ -712,33 +712,43 @@ final class OperationalDigestModel
     }
 
     /**
-     * The in-app board's rule for a cell: an open warning/critical alert → bad; an open info alert or a snoozed one → watch.
-     * An alert naming a platform marks that column; one naming none (campaign- or project-level) marks every column.
+     * The alerts that touch this platform's cell: those naming it, plus those naming none (campaign- or project-level, which mark
+     * every cell, as on the board). The website's own alerts (`ga4`) are not a platform's.
      *
      * @param  list<array<string,mixed>>  $alerts
+     * @return list<array<string,mixed>>
      */
-    private static function alertFor(string $provider, array $alerts): ?string
+    private static function alertsOn(string $provider, array $alerts): array
     {
-        $out = null;
-        foreach ($alerts as $a) {
+        return array_values(array_filter($alerts, static function (array $a) use ($provider): bool {
             $named = (string) ($a['provider'] ?? '');
-            if ($named !== '' && $named !== 'ga4' && AdPlatforms::canonical($named) !== $provider) {
-                continue;
+
+            return $named === '' || ($named !== 'ga4' && AdPlatforms::canonical($named) === $provider);
+        }));
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $alerts
+     * @return array{priority: string, sev: int, fired: int}
+     */
+    private static function rankOf(string $state, array $alerts): array
+    {
+        $best = null;
+        foreach ($alerts as $a) {
+            $key = [DigestStatus::PRIORITY_RANK[$a['priority'] ?? 'P3'] ?? 2, $a['severity'] === 'critical' ? 0 : 1, -(int) ($a['fired'] ?? 0)];
+            if ($best === null || $key < $best[0]) {
+                $best = [$key, $a];
             }
-            if ($named === 'ga4') {
-                continue; // the website's own alerts are not a platform's
-            }
-            if (! ($a['snoozed'] ?? false) && in_array($a['severity'] ?? '', ['critical', 'warning'], true)) {
-                return 'bad';
-            }
-            $out = 'watch';
+        }
+        if ($best !== null && ! ($best[1]['snoozed'] ?? false)) {
+            return ['priority' => (string) ($best[1]['priority'] ?? 'P3'), 'sev' => $best[0][1], 'fired' => (int) ($best[1]['fired'] ?? 0)];
         }
 
-        return $out;
+        return ['priority' => $state === 'bad' ? 'P1' : 'P3', 'sev' => $state === 'bad' ? 0 : 1, 'fired' => 0];
     }
 
     /** @return array<string,mixed> */
-    private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days): array
+    private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days, array $alerts = []): array
     {
         $reason = (string) $verdict['reason'];
         $label = self::FIG[$headlineKey][$ar ? 0 : 1] ?? $headlineKey;
@@ -794,7 +804,10 @@ final class OperationalDigestModel
                 break;
         }
 
-        return [
+        // Priority, severity and recency, as the board ranks: the worst open alert on the cell when there is one; else a metric finding is P1 when it is a problem and P3 when it is a watch.
+        $meta = self::rankOf($verdict['state'], $alerts);
+
+        return $meta + [
             'kind' => 'cell',
             'state' => $verdict['state'],
             'reason' => $reason,
@@ -830,7 +843,7 @@ final class OperationalDigestModel
                 continue;
             }
             $say = PlainFindings::say($note, $ar);
-            $out[] = [
+            $out[] = self::rankOf($note['severity'] === 'critical' ? 'bad' : 'watch', []) + [
                 'kind' => 'project',
                 'state' => $note['severity'] === 'critical' ? 'bad' : 'watch',
                 'reason' => $note['severity'] === 'critical' ? 'project_critical' : 'project_warning',
@@ -849,7 +862,7 @@ final class OperationalDigestModel
         }
         // A sync reported as failed with no platform named still has to reach the Owner.
         if (($block['freshness']['sync_failed'] ?? false) === true && ! in_array('failed', $sources, true)) {
-            $out[] = [
+            $out[] = self::rankOf('bad', []) + [
                 'kind' => 'project', 'state' => 'bad', 'reason' => 'sync_failed', 'project_id' => $projectId, 'project' => $projectName,
                 'provider' => '', 'platform' => '', 'headline' => $ar ? 'توقفت المزامنة' : 'Sync stopped', 'figure' => $ar ? 'الأرقام قد تكون ناقصة' : 'Figures may be incomplete',
                 'viz' => null, 'at_stake' => $spend, 'order' => 99, 'url' => MailDeepLinks::integrations($projectId), 'button' => $ar ? 'افتح الربط' : 'Open connection',

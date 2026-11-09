@@ -37,8 +37,10 @@ final class DigestsVisualV2Test extends TestCase
             'cost FALLING is not worse' => [['spend' => 500, 'headline_now' => 60, 'headline_prev' => 100, 'headline_lower_is_better' => true], 'ok', null],
             'stale' => [['spend' => 500, 'source' => 'stale'], 'watch', 'stale'],
             'results -35%' => [['spend' => 500, 'results' => 65, 'results_prev' => 100], 'watch', 'results_down'],
-            'open warning alert' => [['spend' => 500, 'alert' => 'bad'], 'bad', 'alert_bad'],
-            'open info / snoozed alert' => [['spend' => 500, 'alert' => 'watch'], 'watch', 'alert_watch'],
+            'open P1/P2 alert' => [['spend' => 500, 'alert' => 'bad'], 'bad', 'alert_bad'],
+            'open P1/P2 alert marks even a cell with no data' => [['spend' => null, 'alert' => 'bad'], 'bad', 'alert_bad'],
+            'no data outranks an open P3 alert (the board does the same)' => [['spend' => null, 'alert' => 'watch'], 'none', 'no_data'],
+            'open P3 / snoozed alert' => [['spend' => 500, 'alert' => 'watch'], 'watch', 'alert_watch'],
             'no spend figure is no data, never zero' => [['spend' => null], 'none', 'no_data'],
             'spend withheld is no data' => [['spend' => 900, 'spend_withheld' => true], 'none', 'no_data'],
             'all fine' => [['spend' => 500, 'pace' => 1.0, 'headline_now' => 100, 'headline_prev' => 100, 'headline_lower_is_better' => true], 'ok', null],
@@ -52,6 +54,15 @@ final class DigestsVisualV2Test extends TestCase
         $r = DigestStatus::cell($in);
         $this->assertSame($state, $r['state']);
         $this->assertSame($reason, $r['reason']);
+    }
+
+    public function test_the_alert_overlay_is_the_boards_rule(): void
+    {
+        $this->assertSame('bad', DigestStatus::alertState([['priority' => 'P2', 'snoozed' => false]]));
+        $this->assertSame('watch', DigestStatus::alertState([['priority' => 'P1', 'snoozed' => true]]), 'a snoozed P1 is a watch');
+        $this->assertSame('watch', DigestStatus::alertState([['priority' => 'P3', 'snoozed' => false]]));
+        $this->assertSame('bad', DigestStatus::alertState([['priority' => 'P3'], ['priority' => 'P2']]));
+        $this->assertNull(DigestStatus::alertState([]));
     }
 
     public function test_the_project_is_its_worst_cell_and_none_only_when_nothing_has_figures(): void
