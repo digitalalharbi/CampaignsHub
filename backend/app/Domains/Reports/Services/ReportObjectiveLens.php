@@ -148,6 +148,17 @@ final class ReportObjectiveLens
         return $revenue > 0 ? self::SALES : ($conversions > 0 ? self::LEADS : self::TRAFFIC);
     }
 
+    /**
+     * DIGESTS-OBJECTIVE-KPIS-001 — the report objective a stored campaign objective belongs to (sales, leads, traffic, awareness, video, app_installs).
+     * The same mapping `infer()` uses; exposed so a digest can group a mixed project's campaigns without a second catalog.
+     */
+    public static function groupOf(string $objective): ?string
+    {
+        $case = CampaignObjective::tryFrom($objective);
+
+        return $case === null ? null : self::reportObjectiveOf($case);
+    }
+
     private static function reportObjectiveOf(CampaignObjective $objective): string
     {
         return match ($objective) {

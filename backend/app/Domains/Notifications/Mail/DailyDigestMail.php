@@ -11,6 +11,7 @@ use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
@@ -237,6 +238,7 @@ final class DailyDigestMail extends Mailable
                     default => $ar ? 'آخر 7 أيام عبر مشاريعك ومنصاتك.' : 'The last 7 days across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
+                'footerNote' => MailDisclaimer::note($this->lang),
                 'scopeNote' => $this->scopeNote($ar),
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).

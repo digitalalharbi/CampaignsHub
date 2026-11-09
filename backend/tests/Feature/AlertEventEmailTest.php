@@ -114,7 +114,7 @@ final class AlertEventEmailTest extends TestCase
                 && count($m->items) === 2
                 && $m->lang === 'ar'
                 && $m->items[0]['severity'] === 'warning'
-                && str_contains((string) $m->items[0]['title'], 'توقفت مزامنة')
+                && str_contains((string) $m->items[0]['title'], 'متوقفة')
                 && str_starts_with((string) $m->items[0]['context'], 'Ramadan Push');
         });
         $this->assertSame(2, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'sent')->count());
@@ -155,7 +155,7 @@ final class AlertEventEmailTest extends TestCase
 
         Mail::assertSent(AlertBundleMail::class, 2);
         Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
-            return count($m->items) === 1 && $m->items[0]['severity'] === 'info' && $m->items[0]['title'] === 'عادت الحالة إلى طبيعتها';
+            return count($m->items) === 1 && $m->items[0]['severity'] === 'info' && $m->items[0]['title'] === 'رجعت الأمور طبيعية';
         });
 
         // Switched off for email: a new failure raises an event and an in-app notification, but no mail.

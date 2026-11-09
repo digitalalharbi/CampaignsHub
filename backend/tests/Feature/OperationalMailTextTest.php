@@ -152,7 +152,7 @@ final class OperationalMailTextTest extends TestCase
         ];
 
         $ar = AlertEventText::compose($item, true);
-        $this->assertSame('تكلفة النتيجة ارتفعت على سناب شات', $ar['title']);
+        $this->assertSame('تكلفة النتيجة زادت على سناب شات', $ar['title']);
         $this->assertStringNotContainsString('Ramadan', $ar['title'].$ar['detail'].$ar['action'].$ar['numbers']);
         $this->assertSame('كرم النخيل · سناب شات · المبيعات', $ar['context']);
         $this->assertStringContainsString('61.00', $ar['numbers']);
