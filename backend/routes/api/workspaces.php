@@ -62,6 +62,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     Route::get('alerts/rules', [AlertController::class, 'rules'])->name('alerts.rules.index');
     Route::post('alerts/rules', [AlertController::class, 'storeRule'])->name('alerts.rules.store');
     Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
+    Route::get('alerts/attention', [AlertController::class, 'attention'])->name('alerts.attention');
+    Route::get('alerts/events/{alertEvent}', [AlertController::class, 'show'])->name('alerts.events.show');
+    Route::post('alerts/events/{alertEvent}/decision', [AlertController::class, 'decide'])->name('alerts.events.decision');
+    Route::post('alerts/events/{alertEvent}/assign', [AlertController::class, 'assign'])->name('alerts.events.assign');
+    Route::post('alerts/events/{alertEvent}/note', [AlertController::class, 'note'])->name('alerts.events.note');
     Route::post('alerts/events/{alertEvent}/resolve', [AlertController::class, 'resolve'])->name('alerts.events.resolve');
     Route::post('alerts/events/{alertEvent}/snooze', [AlertController::class, 'snooze'])->name('alerts.events.snooze');
 

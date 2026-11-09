@@ -21,6 +21,7 @@ final class AlertEvent extends Model
         'tenant_id', 'project_id', 'rule_id', 'type', 'entity_type', 'entity_id', 'dedup_key',
         'status', 'severity', 'context', 'notification_id', 'task_id',
         'last_triggered_at', 'snoozed_until', 'resolved_at',
+        'priority', 'evidence', 'anatomy', 'decision_status', 'decision_reason', 'action_tag', 'owner_id', 'decided_at', 'impact_baseline',
     ];
 
     protected $casts = [
@@ -28,5 +29,9 @@ final class AlertEvent extends Model
         'last_triggered_at' => 'datetime',
         'snoozed_until' => 'datetime',
         'resolved_at' => 'datetime',
+        'evidence' => 'array',
+        'anatomy' => 'array',
+        'impact_baseline' => 'array',
+        'decided_at' => 'datetime',
     ];
 }
