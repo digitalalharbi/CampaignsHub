@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -195,6 +196,19 @@ final class DailyDigest
             $blocks,
         )) > 0;
 
+        /*
+         * DIGESTS-VISUAL-V2-001 — a portfolio where NOTHING arrived is itself the finding, when the operational digest is on.
+         *
+         * «No activity → no email» is right for a daily summary of money, and exactly wrong for the Owner who replaced his
+         * morning review of every account with this mail: thirty silent projects are the day's worst news. So with
+         * `mail.operational_digests` on, a source that stopped syncing or went stale makes the day sendable.
+         */
+        $silentButBroken = (bool) config('mail.operational_digests') && array_filter(
+            $blocks,
+            static fn (array $b): bool => ($b['freshness']['sync_failed'] ?? false) === true || in_array($b['freshness']['state'] ?? '', ['stale', 'sync_failed'], true),
+        ) !== [];
+        $anyLeads = $anyLeads || $silentButBroken;
+
         return [
             'sendable' => $anySpend || $anyLeads,
             'reason' => $anySpend || $anyLeads ? null : 'no_activity',
@@ -384,6 +398,8 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
+            'open_alerts' => $this->openAlerts($projectId),
             /*
              * EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
              *
@@ -638,6 +654,27 @@ final class DailyDigest
     }
 
     /**
+     * Open (or still-snoozed) alert events of the project: provider (when the event names one), severity and whether it is snoozed.
+     *
+     * @return list<array{provider: string, severity: string, snoozed: bool}>
+     */
+    private function openAlerts(string $projectId): array
+    {
+        $now = Carbon::now();
+
+        return AlertEvent::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereIn('status', ['open', 'snoozed'])
+            ->limit(200)
+            ->get(['status', 'severity', 'context', 'snoozed_until'])
+            ->map(static fn ($e): array => [
+                'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
+                'severity' => (string) $e->severity,
+                'snoozed' => $e->status === 'snoozed' && ($e->snoozed_until === null || $e->snoozed_until->greaterThan($now)),
+            ])->all();
+    }
+
+    /**
      * How old the figures are, and whether anything failed.
      *
      * A digest that quotes yesterday's spend from a source that stopped syncing three days ago is
@@ -660,6 +697,11 @@ final class DailyDigest
             'last_sync_at' => $state['last_sync_at'] ?? null,
             'missing_days' => $state['missing_days'] ?? null,
             'sync_failed' => (bool) ($state['sync_failed'] ?? false),
+            // DIGESTS-VISUAL-V2-001 — every ad platform the project has and its source state: a platform that sent no figures still gets its cell.
+            'sources' => array_values(array_map(
+                static fn (array $s): array => ['provider' => (string) ($s['provider'] ?? ''), 'kind' => (string) ($s['kind'] ?? ''), 'state' => (string) ($s['state'] ?? '')],
+                array_filter($state['sources'] ?? [], static fn (array $s): bool => ($s['kind'] ?? '') === 'ad_platform'),
+            )),
             'failing' => array_values(array_filter(
                 array_map(
                     static fn (array $s): ?array => ($s['state'] ?? null) === 'failed'

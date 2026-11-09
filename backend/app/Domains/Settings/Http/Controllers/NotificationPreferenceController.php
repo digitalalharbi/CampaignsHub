@@ -119,7 +119,7 @@ final class NotificationPreferenceController extends Controller
             'available_channels' => $this->availableChannels(),
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false],
+            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'per_project' => false, 'recommendations' => false],
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -230,6 +230,8 @@ final class NotificationPreferenceController extends Controller
              * only when it actually arrives.
              */
             'digests.recommendations' => ['boolean'],
+            // DIGESTS-VISUAL-V2-001 — one digest per project, in addition to the portfolio one. Off unless chosen.
+            'digests.per_project' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *

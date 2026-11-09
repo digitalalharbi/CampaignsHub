@@ -228,4 +228,25 @@ final class OperationalDigestReconciliationTest extends TestCase
         $this->assertStringNotContainsString('SECRET-OTHER-CLIENT', $html);
         $this->assertCount(1, $digest['projects']);
     }
+
+    /**
+     * DIGESTS-VISUAL-V2-001 — the heatmap, the coverage and the ranked list are built from the SAME payload, so every figure still
+     * reconciles with the live report's totals, and every project (here a quiet one beside a busy one) appears in the matrix exactly once.
+     */
+    public function test_the_matrix_and_the_totals_still_reconcile_and_every_project_is_in_the_matrix_once(): void
+    {
+        $busy = $this->seedProject('Busy', 'sales', ['meta' => ['spend' => 100.0, 'impressions' => 5000.0, 'clicks' => 80.0], 'snapchat' => ['spend' => 60.0, 'impressions' => 3000.0, 'clicks' => 40.0]]);
+        $quiet = $this->seedProject('Quiet', 'sales', []);
+        $digest = app(DailyDigest::class)->buildRange($this->operator, (string) $this->tenant->getKey(), [(string) $busy['project']->getKey(), (string) $quiet['project']->getKey()], Carbon::parse(self::FROM)->startOfDay(), Carbon::parse(self::TO)->endOfDay());
+
+        $model = OperationalDigestModel::portfolio($digest, 'ar', 'daily');
+        $ids = array_column($model['heatmap']['rows'], 'id');
+        $this->assertCount(2, $ids);
+        $this->assertSame(array_values(array_unique($ids)), $ids, 'each project once');
+        $this->assertEqualsCanonicalizing(array_column($digest['projects'], 'project_id'), $ids);
+
+        $projectSpend = array_sum(array_map(static fn (array $p): float => (float) ($p['raw']['totals']['spend'] ?? 0), $model['projects']));
+        $this->assertEqualsWithDelta((float) $digest['totals']['spend'], $projectSpend, 0.01, 'the matrix rows sum to the portfolio total');
+        $this->assertSame(2, $model['coverage']['total']);
+    }
 }
