@@ -26,7 +26,14 @@ test('export → download → the XLSX and CSV a person receives are real files 
    */
   test.setTimeout(420_000)
 
-  const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`)
+  /*
+   * The all-sales demo store, by name — the columns asserted below are the SALES template's.
+   *
+   * Taking «the first project» also reaches Q3 Launch, which spans awareness, traffic and sales and is
+   * therefore a mixed report (spend, CTR, share — no revenue, no ROAS) by design. Which one came first
+   * was the order of equal `created_at` rows, i.e. luck; see `buildGeneratedClientReport`.
+   */
+  const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`, { project: /متجر تجريبي|Demo Store/ })
 
   const reportUrl = `/api/v1/projects/${projectId}/reports/${reportId}`
   type ExportRow = { format: string; status: string; token: string | null; is_demo?: boolean; error?: string | null }
