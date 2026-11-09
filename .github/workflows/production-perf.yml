@@ -54,16 +54,18 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-KARAM3 $(date -u +%FT%TZ)"
+            echo "== FACTS-KARAM4 $(date -u +%FT%TZ)"
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At' <<'SQL'
             BEGIN READ ONLY;
-            \echo -- openai raw payloads by resource
-            select resource, count(*), min(fetched_at), max(fetched_at), sum(normalised_rows) from integration_raw_payloads where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' group by 1;
-            \echo -- openai latest bodies
-            select resource, window_start, window_end, fetched_at, left(payload::text,420) from integration_raw_payloads where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' order by fetched_at desc limit 6;
-            \echo -- openai ad sets/ads stored
-            select (select count(*) from external_ad_sets s join external_campaigns c on c.id=s.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b') ad_sets, (select count(*) from external_ads a join external_campaigns c on c.id=a.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b') ads;
+            \echo -- openai ad set
+            select left((select jsonb_object_agg(k,v) from jsonb_each(to_jsonb(s)) e(k,v) where k !~* 'token|secret|raw|targeting|tenant|project|created|updated')::text,500) from external_ad_sets s join external_campaigns c on c.id=s.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b';
+            \echo -- openai ads status
+            select a.status, a.review_status, count(*) from external_ads a join external_campaigns c on c.id=a.external_campaign_id where c.external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' group by 1,2;
+            \echo -- openai campaign status raw
+            select left(raw::text,900) from external_campaigns where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b';
+            \echo -- openai structure payload ad_groups body
+            select left(payload::text,700) from integration_raw_payloads where external_account_id='ae3333b2-7fc9-4f6b-b2a0-aca4c09ac15b' and resource='structure' order by fetched_at desc limit 4;
             ROLLBACK;
             SQL
-            echo "== END FACTS-KARAM3"
+            echo "== END FACTS-KARAM4"
             exit 0
