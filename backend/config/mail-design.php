@@ -60,6 +60,10 @@ return [
         'header_bg' => '#0b1a16',
         'header_ink' => '#f7f5f0',
         'accent' => '#e8a33d',
+        // The series colours of a stacked bar (the same set `MailChart::COLOURS` draws), so a platform mix reads the way the charts do.
+        'series_blue' => '#3d6bd8',
+        'series_violet' => '#8b5cf6',
+        'series_teal' => '#0b7285',
     ],
 
     /*

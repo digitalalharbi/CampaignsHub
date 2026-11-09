@@ -158,6 +158,7 @@ import { FormatComparisonPanel } from './FormatComparisonPanel'
 import { creativeDialogFigures, type DialogFigure } from '@/features/content/creativeDialogFigures'
 import { metricLabel } from '@/features/content/metrics'
 import { CreativeComparison, CreativeTrend } from '@/features/content/CreativeTrend'
+import { useProjectFromUrl } from '@/features/projects/useProjectFromUrl'
 import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersion, nextLevel, parentFor, rememberName, subscribeNames,
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
@@ -300,6 +301,8 @@ const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: stri
 
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
+  /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
+  useProjectFromUrl()
   const { currentProjectId, setCurrentProjectId } = useProject()
   const portalBase = usePortalBase()
   /*

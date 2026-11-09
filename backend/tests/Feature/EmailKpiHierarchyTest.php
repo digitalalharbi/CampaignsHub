@@ -50,7 +50,7 @@ final class EmailKpiHierarchyTest extends TestCase
         // Three findings; only the budget-pace one carries figures.
         $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead"'));
         $this->assertStringContainsString('167%', $html);
-        $this->assertStringContainsString('10,000.00 SAR', $html);
+        $this->assertStringContainsString('10,000.00 USD', $html);
     }
 
     /** EMAIL-DECISION-REPORT-001 — an alert is an action-required card: the decision it asks for, and the one place to take it. */
@@ -58,10 +58,13 @@ final class EmailKpiHierarchyTest extends TestCase
     {
         $html = (string) MailGallery::render('alerts-bundle', 'ar');
 
-        $this->assertSame(2, substr_count($html, 'data-block="action"'), 'the two findings with a decision carry it; the third has none');
+        // EMAIL-DIGESTS-OPERATIONAL-001 — every finding now names its next step.
+        $this->assertSame(3, substr_count($html, 'data-block="action"'), 'every finding carries the decision it asks for');
         $this->assertStringContainsString('قرار اليوم: أبقِ الميزانية', $html);
         $this->assertStringContainsString('أعد ربط المصدر', $html);
-        $this->assertMatchesRegularExpression('#href="[^"]+/app/alerts\?event=demo-1"#', $html, 'the button lands on the alert itself (OPS-LINK-001 deep link)');
+        // EMAIL-DIGESTS-OPERATIONAL-001 — the button lands on the exact page: the campaign, or the connections page for a sync.
+        $this->assertMatchesRegularExpression('#href="[^"]+/app/campaigns/demo-project/demo-campaign"#', $html);
+        $this->assertMatchesRegularExpression('#href="[^"]+/app/projects/demo-project/integrations"#', $html);
         $this->assertStringContainsString('data-block="severity-strip"', $html);
         $this->assertMatchesRegularExpression('#2 حرج#', $html);
         $this->assertMatchesRegularExpression('#1 تحذير#', $html);

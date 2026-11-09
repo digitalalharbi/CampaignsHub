@@ -6,10 +6,13 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\PlainFindings;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -195,11 +198,20 @@ final class AlertDispatcher
                         continue;
                     }
 
+                    // EMAIL-DIGESTS-OPERATIONAL-001 — the finding in plain words, with its next step and the page inside the system.
+                    $say = PlainFindings::say($note, $locale === 'ar');
+                    $projectId = (string) ($block['project_id'] ?? '');
+                    $platformName = str_starts_with((string) ($note['id'] ?? ''), 'budget:')
+                        ? AdPlatforms::name(substr((string) $note['id'], 7), $locale === 'ar' ? 'ar' : 'en')
+                        : (string) (($note['scope']['name'] ?? '') ?: '');
                     $eligible[] = [
                         'severity' => (string) $note['severity'],
-                        'title' => (string) $note['title'],
-                        'detail' => (string) $note['detail'],
-                        'context' => (string) ($block['project_name'] ?? ''),
+                        'title' => $say['headline'],
+                        'detail' => $say['text'],
+                        'context' => implode(' · ', array_values(array_filter([(string) ($block['project_name'] ?? ''), $platformName]))),
+                        'action' => $say['action'],
+                        'url' => $projectId === '' ? MailDeepLinks::alerts() : (($note['kind'] ?? '') === 'stale_data' ? MailDeepLinks::integrations($projectId) : MailDeepLinks::platforms($projectId)),
+                        'button' => ($note['kind'] ?? '') === 'stale_data' ? ($locale === 'ar' ? 'افتح صفحة الربط' : 'Open the connections page') : ($locale === 'ar' ? 'افتح المنصات داخل النظام' : 'Open the platforms'),
                         'period_key' => $this->periodKey($block, $note, $day),
                     ];
                 }
@@ -276,12 +288,7 @@ final class AlertDispatcher
         try {
             $sent = Mail::to($user->email)->send((new AlertBundleMail(
                 items: array_map(
-                    static fn (array $item): array => [
-                        'severity' => $item['severity'],
-                        'title' => $item['title'],
-                        'detail' => $item['detail'],
-                        'context' => $item['context'],
-                    ],
+                    static fn (array $item): array => array_diff_key($item, ['period_key' => true]),
                     $claimed,
                 ),
                 lang: $locale,

@@ -6,9 +6,11 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
+use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\OperationalDigestModel;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -320,14 +322,26 @@ final class DigestDispatcher
                 return $this->finish($user, $ledgerKind, $ledgerKey, $refusal, $refusal);
             }
 
-            $sent = Mail::to($user->email)->send((new DailyDigestMail(
-                $digest,
-                $locale,
-                (string) $user->name,
-                $kind,
-                is_string($identity['name'] ?? null) ? $identity['name'] : null,
-                $audience,
-            ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
+            /*
+             * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digest, for a reader who may see the money.
+             *
+             * Behind `mail.operational_digests` (off by default). A client or a member whose membership
+             * withholds the money keeps the layout that carries none. One project in scope is a project
+             * digest; more is the portfolio digest. Either way it is built from the SAME `$digest`
+             * payload, so the scope, the permissions and the figures were already decided above.
+             */
+            $mailable = $audience === 'agency' && (bool) config('mail.operational_digests')
+                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind)
+                : new DailyDigestMail(
+                    $digest,
+                    $locale,
+                    (string) $user->name,
+                    $kind,
+                    is_string($identity['name'] ?? null) ? $identity['name'] : null,
+                    $audience,
+                );
+
+            $sent = Mail::to($user->email)->send($mailable->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
 
             return $this->finish($user, $ledgerKind, $ledgerKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
@@ -349,6 +363,20 @@ final class DigestDispatcher
         } finally {
             $this->tenants->forget();
         }
+    }
+
+    /**
+     * @param  array<string,mixed>  $digest  the payload of `DailyDigest::buildRange()`
+     */
+    private function operationalMail(array $digest, string $locale, string $name, string $kind): OperationalDigestMail
+    {
+        $projects = array_values((array) ($digest['projects'] ?? []));
+
+        if (count($projects) === 1) {
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7)), $locale, $name, $kind, 'project');
+        }
+
+        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio');
     }
 
     /**

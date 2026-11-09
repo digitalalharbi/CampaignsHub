@@ -125,6 +125,19 @@ return [
     */
     'alert_repeats_per_day' => (int) env('MAIL_ALERT_REPEATS_PER_DAY', 3),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Operational digests (EMAIL-DIGESTS-OPERATIONAL-001)
+    |--------------------------------------------------------------------------
+    |
+    | When on, a recipient who has ALREADY enabled a daily, weekly or monthly digest receives the
+    | operational digest — one project, or all their projects, with a block per platform — instead of
+    | the older decision-report layout. It changes what the scheduled send CONTAINS, never who receives
+    | one: `notification_preferences` and the digest ledger decide that exactly as before. Off by
+    | default so merging changes nothing in an inbox until the Owner turns it on.
+    */
+    'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', true),
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

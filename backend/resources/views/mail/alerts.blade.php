@@ -74,14 +74,22 @@
                         @endif
                     @endif
                     <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $item['detail'] }}</div>
+                    @if (! empty($item['numbers']))
+                        {{-- EMAIL-DIGESTS-OPERATIONAL-001 — the numbers as a line of their own: before → now, and the threshold that fired. --}}
+                        <div data-block="numbers" style="font-size:13px; font-weight:700; color:#0b1a16; padding-top:4px; direction:{{ $dir }}; unicode-bidi:plaintext;">{{ $item['numbers'] }}</div>
+                    @endif
                     @if (! empty($item['action']))
                         {{-- The decision this card asks for, and the one place to take it. --}}
                         <div data-block="action" style="font-size:13px; font-weight:700; color:#0b1a16; padding-top:10px;">{{ $item['action'] }}</div>
                     @endif
                     @if (! empty($item['url']))
                         <div style="padding-top:8px;">
-                            <a href="{{ $item['url'] }}" style="display:inline-block; background-color:#ffffff; color:{{ $colour }}; border:1px solid {{ $colour }}; font-size:12px; font-weight:700; text-decoration:none; padding:7px 14px; border-radius:8px;">{{ $dir === 'rtl' ? 'افتح التنبيه ←' : 'Open the alert →' }}</a>
+                            <a href="{{ $item['url'] }}" style="display:inline-block; background-color:#ffffff; color:{{ $colour }}; border:1px solid {{ $colour }}; font-size:12px; font-weight:700; text-decoration:none; padding:7px 14px; border-radius:8px;">{{ ($item['button'] ?? null) ? $item['button'].($dir === 'rtl' ? ' ←' : ' →') : ($dir === 'rtl' ? 'افتح التنبيه ←' : 'Open the alert →') }}</a>
                         </div>
+                    @endif
+                    @if (! empty($item['secondary']))
+                        {{-- The campaign's name, as stored and truncated: a secondary line, never the headline. --}}
+                        <div data-block="secondary" style="font-size:11px; color:#8b9a97; padding-top:8px; line-height:1.6; unicode-bidi:plaintext;">{{ $item['secondary'] }}</div>
                     @endif
                 </td>
             </tr>

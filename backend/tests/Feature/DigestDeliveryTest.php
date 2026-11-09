@@ -9,6 +9,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Notifications\Mail\DailyDigestMail;
+use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -60,6 +61,8 @@ final class DigestDeliveryTest extends TestCase
     {
         parent::setUp();
         Carbon::setTestNow(Carbon::parse(self::NOW, 'UTC'));
+        // These tests are about delivery mechanics and the older layout; the operational layout has its own test below.
+        config()->set('mail.operational_digests', false);
         $this->seed(PermissionSeeder::class);
 
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-digest-delivery', 'status' => 'active']);
@@ -159,6 +162,30 @@ final class DigestDeliveryTest extends TestCase
 
         Mail::assertSentCount(1);
         $this->assertSame(1, DB::table('digest_sends')->where('user_id', $this->user->id)->count());
+    }
+
+    /**
+     * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digest is on by default, can be switched off, and changes only WHAT is sent.
+     *
+     * Off (`MAIL_OPERATIONAL_DIGESTS=false`): the older layout. On (the default): one project in scope is the project digest. The ledger, the gate, the
+     * once-per-period claim and the recipient are the same in both — nothing new reaches anyone who had not enabled digests.
+     */
+    public function test_the_operational_digest_replaces_the_layout_only_when_switched_on(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $dispatcher = app(DigestDispatcher::class);
+
+        $this->assertTrue((bool) (require config_path('mail.php'))['operational_digests'], 'the operational digest is on unless the env var switches it off');
+        config()->set('mail.operational_digests', false);
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()));
+        Mail::assertSent(DailyDigestMail::class, 1);
+        Mail::assertNotSent(OperationalDigestMail::class);
+
+        config()->set('mail.operational_digests', true);
+        $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
+        Mail::assertSent(OperationalDigestMail::class, fn ($m): bool => $m->scope === 'project' && str_contains($m->render(), '/app/reports?project='.$this->project->id));
+        Mail::assertSent(DailyDigestMail::class, 1);
     }
 
     /** EMAIL-GAPS — the digest goes around `TransactionalMailer`, so it asks the gate itself, at the send. */

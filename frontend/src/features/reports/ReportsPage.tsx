@@ -1,4 +1,5 @@
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
+import { useProjectFromUrl } from '@/features/projects/useProjectFromUrl'
 import { ColumnPicker } from './ColumnPicker'
 import { DETAIL_LEVELS, formOf, levelSections, type DetailLevelKey } from './reportSetupCatalog'
 import { StatCard } from '@/components/ui/StatCard'
@@ -112,6 +113,8 @@ const statusLabel = (code: string, ar: boolean) =>
 
 export function ReportsPage() {
   const ar = useAr()
+  /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
+  useProjectFromUrl()
   const { currentProjectId } = useProject()
   const locale = useUi((s) => s.locale)
   const qc = useQueryClient()

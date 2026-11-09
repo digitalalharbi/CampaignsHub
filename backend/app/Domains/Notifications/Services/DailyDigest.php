@@ -324,6 +324,24 @@ final class DailyDigest
             'reported' => $reported,
             'change' => $this->change($current, $previous),
             'paths' => $this->byPath($campaigns),
+            /*
+             * EMAIL-DIGESTS-OPERATIONAL-001 — every platform's own figures, the window before it, and which
+             * keys each platform actually sent. These are the SAME `byProvider()` / `reportedKeysByProvider()`
+             * reads the live report's «platforms» section makes, passed through untouched: the operational
+             * digest's per-platform rows are this array, not a second computation.
+             */
+            'platform_rows' => $platforms,
+            'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
+            'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+            // The daily spend per platform (for the per-platform bars) and every platform's budget pacing — not only the ones off plan.
+            'platform_series' => array_map(
+                static fn (array $rows): array => array_values(array_map(
+                    static fn (array $point): array => ['date' => (string) $point['date'], 'spend' => is_numeric($point['spend'] ?? null) ? round((float) $point['spend'], 2) : null],
+                    $rows,
+                )),
+                $scoped->timeseriesByProvider($from, $to),
+            ),
+            'budget_rows' => $budget,
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
             // EMAIL-DECISION-REPORT-001 — the shape of the window and where the money went, for the email's charts.
