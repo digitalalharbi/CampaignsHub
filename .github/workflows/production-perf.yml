@@ -54,18 +54,21 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-KARAM5 $(date -u +%FT%TZ)"
+            echo "== FACTS-LIVELINK $(date -u +%FT%TZ)"
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At' <<'SQL'
             BEGIN READ ONLY;
+            \echo -- google entity rows by type and day
+            select entity_type, metric_date, count(*), sum(spend), sum(spend_original), count(*) filter (where spend is null) as spend_null, max(original_currency) from entity_daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='google' group by 1,2 order by 2,1;
+            \echo -- google daily_metrics spend by day
+            select metric_date, count(*), sum(value) filter (where metric_key='spend'), sum(original_amount) filter (where metric_key='spend'), count(*) filter (where metric_key='spend' and value is null) as spend_null from daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='google' group by 1 order by 1;
             \echo -- eur rates
-            select base_currency, quote_currency, rate, rate_date, source from currency_rates where base_currency='EUR' or quote_currency='EUR';
-            \echo -- google money rows now
-            select metric_date, metric_key, value, original_amount, exchange_rate, rate_date, rate_source, updated_at from daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='google' and original_currency='EUR' order by metric_date, metric_key, original_amount;
-            \echo -- last google runs
-            select status, started_at, finished_at, metrics_upserted from metric_sync_runs where provider='google' and project_id='c073e9c6-c70a-4276-87da-85338530b137' order by created_at desc limit 4;
+            select base_currency, quote_currency, rate, rate_date, source from currency_rates where base_currency='EUR' or quote_currency='EUR' order by rate_date;
+            \echo -- openai_ads rows
+            select 'daily_metrics', count(*), min(metric_date), max(metric_date) from daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='openai_ads';
+            select 'entity_daily_metrics', count(*), min(metric_date), max(metric_date) from entity_daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='openai_ads';
             \echo -- now
             select now();
             ROLLBACK;
             SQL
-            echo "== END FACTS-KARAM5"
+            echo "== END FACTS-LIVELINK"
             exit 0
