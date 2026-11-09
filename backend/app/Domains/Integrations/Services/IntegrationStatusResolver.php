@@ -9,6 +9,7 @@ use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Status\AccountEvidence;
 use App\Domains\Integrations\Status\AccountFacts;
 use App\Domains\Integrations\Status\ConnectionFacts;
 use App\Domains\Integrations\Status\StatusText;
@@ -235,8 +236,9 @@ final class IntegrationStatusResolver
      */
     public function forConnectionModel(ProviderConnection $c, Collection $chosen, int $discovered, array $syncEnabled, Collection $runs, ?Carbon $now = null): array
     {
+        $evidence = AccountEvidence::load((string) $c->tenant_id, $chosen->map(static fn (ExternalAccount $a): string => (string) $a->getKey())->values()->all());
         $facts = $chosen->map(fn (ExternalAccount $a): AccountFacts => AccountFacts::fromModel(
-            $a, AccountFacts::BINDING_ACTIVE, $syncEnabled[(string) $a->getKey()] ?? true, $runs->get((string) $a->getKey(), []),
+            $a, AccountFacts::BINDING_ACTIVE, $syncEnabled[(string) $a->getKey()] ?? true, $runs->get((string) $a->getKey(), []), $evidence[(string) $a->getKey()] ?? null,
         ))->values()->all();
 
         return $this->resolveConnection(ConnectionFacts::fromModel($c), $facts, $discovered, $now);
@@ -251,7 +253,9 @@ final class IntegrationStatusResolver
     {
         $conn = $c === null ? ConnectionFacts::missing((string) $a->provider) : ConnectionFacts::fromModel($c);
 
-        return $this->resolveAccount($conn, AccountFacts::fromModel($a, $binding, $syncEnabled, $runs->get((string) $a->getKey(), [])), $now);
+        $evidence = AccountEvidence::load((string) $a->tenant_id, [(string) $a->getKey()])[(string) $a->getKey()] ?? null;
+
+        return $this->resolveAccount($conn, AccountFacts::fromModel($a, $binding, $syncEnabled, $runs->get((string) $a->getKey(), []), $evidence), $now);
     }
 
     /**
@@ -539,8 +543,30 @@ final class IntegrationStatusResolver
             // The values exist or would — and are not shown. Never a zero, never «fresh».
             return $this->raw('withheld', $cat, self::ERROR_ACTIONS[$cat], as_of: $asOf, extra: $extra);
         }
+        /*
+         * KARAM-SYNC-HONESTY-001 — money stored and not convertible yet. The run that stored it ended `success`, and
+         * the account read «حديثة» beside a spend of nothing. The rows exist; the exchange rate does not; say so.
+         */
+        if ($bindingState === 'bound' && $a->withheldMoneyRows > 0) {
+            return $this->raw('withheld', 'rate_missing', 'record_fx_rate', as_of: $asOf, extra: $extra + [
+                'withheld_rows' => $a->withheldMoneyRows,
+                'withheld_currency' => $a->withheldCurrency,
+            ]);
+        }
         if ($cat === 'unmapped_rows' || $a->latestRunStatus === 'partial_mapping') {
             return $this->raw('partial', 'unmapped_rows', 'review_unmapped', as_of: $asOf, extra: $extra);
+        }
+        /*
+         * ChatGPT Ads: every sweep answered «no rows» and nothing said which kind of nothing. Two different facts, told apart
+         * only by what is stored: no ad group under the account's campaigns (it cannot deliver) versus a structure that is all
+         * there — ad groups and ads — while the provider's insights are still empty (it has not delivered). Never claimed
+         * unless the run found no rows AND no figure was ever stored.
+         */
+        if ($bindingState === 'bound' && $c->provider === 'openai_ads' && $a->latestRunStatus === 'no_data'
+            && $a->adSetCount !== null && $a->hasDelivery === false) {
+            $detail = $a->adSetCount === 0 ? 'no_ad_groups' : 'no_delivery_yet';
+
+            return $this->raw('partial', $detail, $a->adSetCount === 0 ? 'create_ad_groups' : 'await_first_delivery', as_of: $asOf, extra: $extra + ['ad_group_count' => $a->adSetCount, 'last_delivery_date' => null]);
         }
         if ($asOf === null) {
             return $this->raw('unknown', 'never_synced', $bindingState === 'bound' ? 'run_first_sync' : null, extra: $extra);
@@ -719,7 +745,7 @@ final class IntegrationStatusResolver
             }
             $out[$dim] = [
                 'state' => $r['state'],
-                ...StatusText::label($dim, $r['state']),
+                ...(StatusText::detailLabel($dim, $r['detail'], $extra) ?? StatusText::label($dim, $r['state'])),
                 'since' => $r['since']?->toIso8601String(),
                 'as_of' => $r['as_of']?->toIso8601String(),
                 'detail' => $r['detail'],

@@ -37,12 +37,23 @@ final class AccountFacts
         /** Start of a run still marked `running`, if any. Whether it is believable is the resolver's call. */
         public readonly ?CarbonInterface $openRunStartedAt = null,
         public readonly ?CarbonInterface $lastFailureAt = null,
+        /** FX-RETRO-001 — stored money rows waiting for an exchange rate (value NULL, original kept). */
+        public readonly int $withheldMoneyRows = 0,
+        /** The currency those rows are waiting to be converted FROM. */
+        public readonly ?string $withheldCurrency = null,
+        /** Ad sets / ad groups stored under this account; null when it was not asked. */
+        public readonly ?int $adSetCount = null,
+        /** Whether any non-demo metric row has ever been stored for it; null when it was not asked. */
+        public readonly ?bool $hasDelivery = null,
     ) {}
 
     /**
      * @param  Collection<int, mixed>|array<int, mixed>  $runs  this account's runs, newest first
      */
-    public static function fromModel(ExternalAccount $a, string $binding, bool $syncEnabled, Collection|array $runs = []): self
+    /**
+     * @param  array{withheld_rows?:int, withheld_currency?:?string, ad_sets?:int, has_delivery?:bool}|null  $evidence  from {@see AccountEvidence}
+     */
+    public static function fromModel(ExternalAccount $a, string $binding, bool $syncEnabled, Collection|array $runs = [], ?array $evidence = null): self
     {
         $runs = collect($runs);
         $open = $runs->first(static fn ($r): bool => $r->status === 'running');
@@ -61,6 +72,10 @@ final class AccountFacts
             latestRunAt: $finished?->started_at,
             openRunStartedAt: $open?->started_at,
             lastFailureAt: $failed === null ? null : ($failed->finished_at ?? $failed->started_at),
+            withheldMoneyRows: (int) ($evidence['withheld_rows'] ?? 0),
+            withheldCurrency: $evidence['withheld_currency'] ?? null,
+            adSetCount: isset($evidence['ad_sets']) ? (int) $evidence['ad_sets'] : null,
+            hasDelivery: isset($evidence['has_delivery']) ? (bool) $evidence['has_delivery'] : null,
         );
     }
 }

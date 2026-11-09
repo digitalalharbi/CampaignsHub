@@ -32,6 +32,9 @@ final class StatusText
         'resume_sync' => ['فعّل المزامنة لهذا الربط', 'Turn sync back on for this link'],
         'add_platform_credentials' => ['أضف بيانات اعتماد المنصة (إجراء للمشغّل)', 'Add the platform credentials (operator action)'],
         'fix_provider_prerequisite' => ['أصلح شرط المنصة الموضح ثم أعد الاكتشاف', 'Fix the provider prerequisite, then discover again'],
+        'record_fx_rate' => ['يسجّل المشغّل سعر الصرف فتظهر المبالغ تلقائيًا', 'The operator records the exchange rate; the amounts then appear by themselves'],
+        'create_ad_groups' => ['أضف مجموعة إعلانية وإعلانًا في المنصة وفعّلهما', 'Add and activate an ad group and an ad at the provider'],
+        'await_first_delivery' => ['لا إجراء في المنصة الآن؛ يظهر الرقم تلقائيًا عند أول صرف', 'Nothing to do at the provider; figures appear by themselves at first delivery'],
         'wait' => ['لا إجراء مطلوب الآن؛ ستكتمل المزامنة تلقائيًا', 'Nothing to do now; the sync will finish by itself'],
     ];
 
@@ -75,6 +78,54 @@ final class StatusText
             'error' => ['خطأ', 'Error'],
         ],
     ];
+
+    /** @var array<string, string> currency code => Arabic name, for the sentence that says what is being waited for */
+    private const CURRENCY_AR = [
+        'EUR' => 'اليورو', 'USD' => 'الدولار', 'GBP' => 'الجنيه الإسترليني', 'SAR' => 'الريال',
+        'AED' => 'الدرهم', 'KWD' => 'الدينار الكويتي', 'EGP' => 'الجنيه المصري', 'TRY' => 'الليرة',
+    ];
+
+    /**
+     * KARAM-SYNC-HONESTY-001 — a state's label when its DETAIL says something the state's word cannot.
+     *
+     * «محجوبة» is true of a figure waiting for an exchange rate and of one waiting for a currency, and the
+     * two are different things to do. The detail picks the sentence; the state keeps its tone.
+     *
+     * @param  array<string,mixed>  $extra
+     * @return array{label_ar:string,label_en:string}|null
+     */
+    public static function detailLabel(string $dimension, ?string $detail, array $extra = []): ?array
+    {
+        if ($dimension !== 'freshness') {
+            return null;
+        }
+
+        if ($detail === 'rate_missing') {
+            $code = strtoupper((string) ($extra['withheld_currency'] ?? ''));
+            $name = self::CURRENCY_AR[$code] ?? ($code !== '' ? $code : 'العملة');
+
+            return [
+                'label_ar' => "ينتظر سعر صرف {$name} — الإنفاق محجوب",
+                'label_en' => 'Waiting for an exchange rate'.($code !== '' ? " ({$code})" : '').' — spend withheld',
+            ];
+        }
+
+        if ($detail === 'no_ad_groups') {
+            return [
+                'label_ar' => 'الحملة بلا مجموعات إعلانية أو إعلانات — لا صرف بعد',
+                'label_en' => 'The campaign has no ad groups or ads — no delivery yet',
+            ];
+        }
+
+        if ($detail === 'no_delivery_yet') {
+            return [
+                'label_ar' => 'لا صرف بعد — المنصة لا تُرجع أرقامًا رغم اكتمال الحملة والإعلانات',
+                'label_en' => 'No delivery yet — the provider returns no figures although the campaign and ads are in place',
+            ];
+        }
+
+        return null;
+    }
 
     /** @return array{code:string,label_ar:string,label_en:string}|null */
     public static function action(?string $code): ?array
