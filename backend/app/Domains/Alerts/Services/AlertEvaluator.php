@@ -379,7 +379,7 @@ final class AlertEvaluator
                 'last_triggered_at' => $now,
                 'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
                 'status' => 'open',
-            ])->save();
+            ] + $this->anatomy($rule, $b))->save();
             $this->notify($rule, $b);
             $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
 
@@ -411,10 +411,21 @@ final class AlertEvaluator
             'notification_id' => $notification,
             'task_id' => $taskId,
             'last_triggered_at' => $now,
-        ]);
+        ] + $this->anatomy($rule, $b));
         $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
 
         return true;
+    }
+
+    /**
+     * OPERATIONAL-INTELLIGENCE-P1-001 — the finding's anatomy (priority, evidence, problem/impact/action), stored with it.
+     *
+     * @param  array<string,mixed>  $b
+     * @return array<string,mixed>
+     */
+    private function anatomy(AlertRule $rule, array $b): array
+    {
+        return AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), (string) ($b['severity'] ?? $rule->severity));
     }
 
     /** Raise the notification through the shared dispatcher; returns the notification id (or null if deduped). */
@@ -438,6 +449,9 @@ final class AlertEvaluator
             'triggered_at' => ($recovered ? 'recovered:' : '').$now->toIso8601String(),
             // EMAIL-PERF-DASHBOARDS-001 — the rule's own figures travel with the finding, so the email can lead with the number.
             'context' => (array) ($b['context'] ?? []),
+            // OPERATIONAL-INTELLIGENCE-P1-001 — priority and whether the evidence is thin, so the mail can say both in one line.
+            'priority' => $event->priority ?? AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), $severity)['priority'],
+            'insufficient' => ($event->evidence['sufficient'] ?? AlertAnatomy::evidence((string) $rule->type, (array) ($b['context'] ?? []))['sufficient']) !== true,
         ];
     }
 

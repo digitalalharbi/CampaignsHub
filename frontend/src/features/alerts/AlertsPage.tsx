@@ -1,6 +1,9 @@
 import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { StatCard } from '@/components/ui/StatCard'
 import { RulePresets } from './RulePresets'
+import { AttentionBoard } from './AttentionBoard'
+import { AlertDecisionDrawer } from './AlertDecisionDrawer'
+import { PRIORITY_TONE } from './decisionCopy'
 import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDER, type AlertCategory } from './alertTaxonomy'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -195,6 +198,8 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? null
   const scope = project === 'all' ? null : project
   const [filter, setFilter] = useState<EventFilter>('open')
+  /* OPERATIONAL-INTELLIGENCE-P1-001 — the alert whose decision drawer is open. */
+  const [drawerId, setDrawerId] = useState<string | null>(null)
   const [sev, setSev] = useState<'all' | AlertEvent['severity']>('all')
   const [type, setType] = useState<'all' | string>('all')
   /* ALERT-TAXONOMY-001 — the cut severity cannot make: WHAT kind of problem this is. */
@@ -290,6 +295,9 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* OPERATIONAL-INTELLIGENCE-P1-001 — exceptions first: what needs a decision, then the ledger. */}
+      <AttentionBoard locale={locale} projectId={scope} onOpen={setDrawerId} />
+      {drawerId && <AlertDecisionDrawer id={drawerId} locale={locale} onClose={() => setDrawerId(null)} />}
       {/*
         Summary — status of the alert ledger at a glance. Two columns on a phone: four cards at 343px
         pushed «Resolved» 3px past the edge (simplification-appearance, chromium phone). The base
@@ -481,6 +489,9 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                     <span title={c.source} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
                       {TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}
                     </span>
+                    {e.priority && (
+                      <span data-testid={`alert-priority-${e.id}`} className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${PRIORITY_TONE[e.priority]}`}>{e.priority}</span>
+                    )}
                     <span title={c.severity} data-testid={`alert-severity-${e.id}`} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${sevBadge[e.severity]}`}>
                       {sevLabel(e.severity, c)}
                     </span>
@@ -515,6 +526,12 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                   )}
                   <span className="text-[11px] text-text-muted">{c.triggered}: {fmt(e.last_triggered_at)}</span>
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" data-testid={`alert-details-${e.id}`} onClick={() => setDrawerId(e.id)}
+                  className="flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-700">
+                  {locale === 'ar' ? 'التفاصيل والقرار' : 'Details & decision'}
+                </button>
               </div>
               {filter !== 'resolved' && (
                 <div className="flex flex-wrap gap-2">
