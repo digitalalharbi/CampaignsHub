@@ -21,6 +21,11 @@ final class AlertMailItem
      */
     public static function build(array $item, bool $ar): array
     {
+        // A website alert names no ad platform: its `provider` key is dropped before the words are composed.
+        $websiteOwn = (($item['context']['provider'] ?? '') === 'ga'.'4') || str_starts_with((string) ($item['rule_type'] ?? ''), 'ga'.'4_');
+        if ($websiteOwn) {
+            unset($item['context']['provider']);
+        }
         $c = AlertEventText::compose($item, $ar);
         $type = (string) ($item['rule_type'] ?? $item['notification_type'] ?? '');
         $ctx = (array) ($item['context'] ?? []);
@@ -35,8 +40,10 @@ final class AlertMailItem
         }
 
         // A drawn problem replaces the figures strip: two ways to print the same number is how «167%» sat beside «80%».
-        // The source is «الموقع», never the analytics vendor's name — wherever the platform name was built from a `ga4` provider key.
-        $c['context'] = str_ireplace(['Google Analytics 4', 'Google Analytics', 'GA4'], $ar ? 'الموقع' : 'Website', (string) $c['context']);
+        // The source is «الموقع» / «Website», never the analytics vendor's key: the website's own alerts carry no platform name at all.
+        if ($websiteOwn) {
+            $c['context'] = trim((string) $c['context'].' · '.($ar ? 'الموقع' : 'Website'), ' ·');
+        }
 
         return array_merge($c, ['viz' => $viz, 'figures' => null, 'rule' => $type]);
     }
