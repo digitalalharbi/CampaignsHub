@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Models\User;
@@ -100,6 +101,7 @@ final class SendDailyDigests extends Command
                 $state = $dispatcher->sendDaily($user, $tenantId, $day->copy()->startOfDay(), $locale, $audience);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} daily: {$state}");
+                $this->perProject($dispatcher, $row, $user, $tenantId, 'daily', $day->copy()->startOfDay(), $locale, $audience, $sent, $skipped);
             }
 
             /*
@@ -113,6 +115,7 @@ final class SendDailyDigests extends Command
                 $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale, $audience);
                 $state === 'sent' ? $sent++ : $skipped++;
                 $this->line("{$user->email} weekly: {$state}");
+                $this->perProject($dispatcher, $row, $user, $tenantId, 'weekly', $day->copy()->endOfDay(), $locale, $audience, $sent, $skipped);
             }
 
             /*
@@ -161,6 +164,28 @@ final class SendDailyDigests extends Command
      *
      * @return list<string>
      */
+    /**
+     * DIGESTS-VISUAL-V2-001 — one digest PER PROJECT, after the portfolio one, only for a reader who turned `per_project` on.
+     *
+     * Off by default: thirty projects would be thirty extra mails a morning, which is a choice, not a default. Every one is its
+     * own ledger row (so an idempotent retry cannot double-send) and goes through the same gate, scope and unsubscribe as the portfolio.
+     */
+    private function perProject(DigestDispatcher $dispatcher, object $row, User $user, string $tenantId, string $kind, Carbon $day, string $locale, string $audience, int &$sent, int &$skipped): void
+    {
+        $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
+        if (($chosen['per_project'] ?? false) !== true || ! (bool) config('mail.operational_digests')) {
+            return;
+        }
+        foreach (app(DigestScope::class)->projectIdsFor($user, $tenantId) as $projectId) {
+            $key = DigestDispatcher::projectKey((string) $projectId);
+            $state = $kind === 'daily'
+                ? $dispatcher->sendDaily($user, $tenantId, $day, $locale, $audience, $key)
+                : $dispatcher->sendWeekly($user, $tenantId, $day, $locale, $audience, $key);
+            $state === 'sent' ? $sent++ : $skipped++;
+            $this->line("{$user->email} {$kind} project {$key}: {$state}");
+        }
+    }
+
     private function digests(object $row): array
     {
         $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);

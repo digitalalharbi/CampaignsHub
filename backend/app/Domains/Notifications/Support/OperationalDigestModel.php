@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Support\AdPlatforms;
+use Illuminate\Support\Carbon;
 
 /**
  * EMAIL-DIGESTS-OPERATIONAL-001 — what the operational digests say, as view models.
@@ -76,7 +77,14 @@ final class OperationalDigestModel
         'engagement' => ['التفاعل', 'Engagement'], 'video' => ['مشاهدات الفيديو', 'Video views'], 'custom' => ['أهداف متعددة', 'Mixed objectives'],
     ];
 
-    private const TONE_RANK = ['bad' => 0, 'warn' => 1, 'neutral' => 2, 'good' => 3];
+    /** Column headers of the heatmap: short enough for a phone. */
+    private const SHORT = [
+        'snapchat' => ['سناب', 'Snap'], 'tiktok' => ['تيك توك', 'TikTok'], 'meta' => ['ميتا', 'Meta'], 'google' => ['جوجل', 'Google'],
+        'x' => ['إكس', 'X'], 'linkedin' => ['لينكد', 'LinkedIn'], 'openai_ads' => ['AI', 'AI Ads'],
+    ];
+
+    /** How many ranked issues are drawn in full; the rest are counted on the «+N» line. */
+    public const TOP_ISSUES = 5;
 
     public static function objectiveLabel(string $objective, bool $ar): string
     {
@@ -109,9 +117,9 @@ final class OperationalDigestModel
         $totals = (array) ($block['totals'] ?? []);
         $previous = (array) ($block['previous'] ?? []);
         $reported = (array) ($block['reported'] ?? []);
+        $freshness = (array) ($block['freshness'] ?? []);
 
         $decisions = self::decisions($block, $lang, $id);
-        $status = self::status($block, $decisions, $ar);
 
         // The platform rows, biggest spend first. Share is of the platforms' own total so the bars add up.
         $rows = array_values(array_filter((array) ($block['platform_rows'] ?? []), 'is_array'));
@@ -127,6 +135,7 @@ final class OperationalDigestModel
             $budgetBy[(string) ($r['provider'] ?? '')] = (array) $r;
         }
         $sumSpend = array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows));
+        $sources = self::sources($block);
         $platforms = [];
         foreach ($rows as $row) {
             $provider = (string) ($row['provider'] ?? '');
@@ -136,11 +145,27 @@ final class OperationalDigestModel
                 'name' => AdPlatforms::name($provider, $ar ? 'ar' : 'en'),
                 'share' => $sumSpend > 0 ? (int) round(((float) ($row['spend'] ?? 0)) / $sumSpend * 100) : 0,
                 'figures' => self::figures(['spend', ...$keys], $row, $prevByProvider[$provider] ?? [], (array) (($block['platform_reported'] ?? [])[$provider] ?? $reported), $p, $ar),
-                'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, $series)),
+                'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, $series), array_column($series, 'date'), $ar),
                 'pacing' => self::pacing($budgetBy[$provider] ?? null, $ar),
                 'raw' => ['spend' => $row['spend'] ?? null] + array_intersect_key($row, array_flip($keys)),
             ];
         }
+
+        $name = (string) ($block['project_name'] ?? '');
+        // DIGESTS-VISUAL-V2-001 — one cell per platform the project has (figures or a source), judged by `DigestStatus`.
+        $cells = self::cells($block, $rows, $prevByProvider, $budgetBy, $sources, $objective, $p, $ar, $id, $name, $days);
+        $stateOf = array_column($cells, 'state', 'provider');
+        $platforms = array_map(static fn (array $pf): array => $pf + ['state' => $stateOf[AdPlatforms::canonical($pf['provider'])] ?? 'none'], $platforms);
+        $issues = array_merge(
+            array_values(array_filter(array_map(static fn (array $c): ?array => $c['issue'], $cells))),
+            self::projectFindings($block, $lang, $id, $name, (float) ($totals['spend'] ?? 0), $sources, $cells),
+        );
+        usort($issues, [DigestStatus::class, 'compare']);
+        $state = DigestStatus::project(
+            array_column($cells, 'state'),
+            array_map(static fn (array $i): string => $i['state'] === 'bad' ? 'critical' : 'warning', array_filter($issues, static fn (array $i): bool => $i['kind'] === 'project')),
+        );
+        $status = self::status($block, $decisions, $issues, $state, $ar);
 
         $headlineKey = self::HEADLINE[$objective] ?? 'ctr';
 
@@ -151,9 +176,13 @@ final class OperationalDigestModel
             'objective_label' => self::objectiveLabel($objective, $ar),
             'unit' => $block['currency'] ?? null,
             'status' => $status,
+            'state' => $state,
+            'cells' => array_map(static fn (array $c): array => array_diff_key($c, ['issue' => 1]), $cells),
+            'issues' => $issues,
+            'fresh' => ! in_array((string) ($freshness['state'] ?? ''), ['stale', 'sync_failed', 'no_data'], true) && ! ($freshness['sync_failed'] ?? false),
             'headline' => self::figures([$headlineKey], $totals, $previous, $reported, $p, $ar)[0],
             'kpis' => self::figures(['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
-            'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($block['series'] ?? []))),
+            'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($block['series'] ?? [])), array_column((array) ($block['series'] ?? []), 'date'), $ar),
             'yesterday' => self::lastDay((array) ($block['series'] ?? []), $p, $ar),
             'changes' => self::changes($block, $p, $ar),
             'platforms' => $platforms,
@@ -187,15 +216,16 @@ final class OperationalDigestModel
         $p = (new DigestPresenter($lang, $days))->forPayload($digest);
 
         $projects = array_map(static fn (array $b): array => self::project($b, $lang, $days), array_values((array) ($digest['projects'] ?? [])));
+        // Worst first by the ONE state rule, then by money, then by name — so the order is the same on every run.
         usort($projects, static function (array $a, array $b): int {
-            $by = self::TONE_RANK[$a['status']['tone']] <=> self::TONE_RANK[$b['status']['tone']];
-
-            return $by !== 0 ? $by : (float) ($b['raw']['totals']['spend'] ?? 0) <=> (float) ($a['raw']['totals']['spend'] ?? 0);
+            return (DigestStatus::STATE_RANK[$a['state']] <=> DigestStatus::STATE_RANK[$b['state']])
+                ?: ((float) ($b['raw']['totals']['spend'] ?? 0) <=> (float) ($a['raw']['totals']['spend'] ?? 0))
+                ?: strcmp((string) $a['name'], (string) $b['name']);
         });
 
-        $health = ['bad' => 0, 'warn' => 0, 'good' => 0, 'neutral' => 0];
+        $health = ['bad' => 0, 'watch' => 0, 'ok' => 0, 'none' => 0];
         foreach ($projects as $pr) {
-            $health[$pr['status']['tone']]++;
+            $health[$pr['state']]++;
         }
 
         $t = (array) ($digest['totals'] ?? []);
@@ -229,27 +259,133 @@ final class OperationalDigestModel
             ];
         }
 
-        // Decisions across the portfolio, worst project first, a few per project, never more than eight.
-        $decisions = [];
+        /*
+         * What needs the Owner NOW — ONE list across every project, in global priority order (`DigestStatus::compare`).
+         * Only the top `TOP_ISSUES` are drawn in full; the rest are counted on a «+N» line, and every one of them is
+         * still a ! or ✕ chip in the heatmap — nothing is dropped, nothing is hidden by project order.
+         */
+        $issues = [];
         foreach ($projects as $pr) {
-            foreach (array_slice($pr['decisions'], 0, 2) as $d) {
-                $decisions[] = $d + ['project' => $pr['name']];
+            foreach ($pr['issues'] as $i) {
+                $issues[] = $i;
             }
         }
+        usort($issues, [DigestStatus::class, 'compare']);
 
         return [
             'kind' => $kind,
             'projects_total' => count($projects),
-            'need_attention' => $health['bad'] + $health['warn'],
+            'need_attention' => $health['bad'] + $health['watch'],
             'kpis' => $kpis,
-            'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($t['series'] ?? []))),
+            'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($t['series'] ?? [])), array_column((array) ($t['series'] ?? []), 'date'), $ar),
             'health' => $health,
+            'heatmap' => self::heatmap($projects, $ar),
+            'coverage' => self::coverage($projects, $ar),
             'moves' => self::moves($projects, $ar),
+            'movers' => self::movers($projects, $ar),
             'mix' => $mix,
             'projects' => $projects,
-            'decisions' => array_slice($decisions, 0, 8),
+            'issues' => $issues,
+            'issues_shown' => array_slice($issues, 0, self::TOP_ISSUES),
+            'issues_more' => max(0, count($issues) - self::TOP_ISSUES),
             'links' => ['alerts' => MailDeepLinks::alerts(), 'dashboard' => MailDeepLinks::dashboard()],
             'raw' => ['totals' => $t],
+        ];
+    }
+
+    /**
+     * The project × platform matrix: every project once, every platform any of them has once, a state in each cell.
+     *
+     * @param  list<array<string,mixed>>  $projects
+     * @return array{columns: list<array<string,string>>, rows: list<array<string,mixed>>}
+     */
+    private static function heatmap(array $projects, bool $ar): array
+    {
+        $providers = [];
+        foreach ($projects as $pr) {
+            foreach ($pr['cells'] as $c) {
+                $providers[$c['provider']] = $c['short'];
+            }
+        }
+        uksort($providers, static fn (string $a, string $b): int => AdPlatforms::rank($a) <=> AdPlatforms::rank($b));
+        $rows = [];
+        foreach ($projects as $pr) {
+            $cells = array_column($pr['cells'], null, 'provider');
+            $rows[] = [
+                'id' => $pr['id'],
+                'name' => $pr['name'],
+                'state' => $pr['state'],
+                'url' => $pr['links']['report'],
+                'cells' => array_map(static fn (string $k): ?array => isset($cells[$k]) ? ['state' => $cells[$k]['state'], 'reason' => $cells[$k]['reason']] : null, array_keys($providers)),
+            ];
+        }
+
+        return ['columns' => array_map(static fn (string $k, string $short): array => ['provider' => $k, 'short' => $short], array_keys($providers), array_values($providers)), 'rows' => $rows];
+    }
+
+    /**
+     * «N of M projects were checked», and who was not. A project is CHECKED when its figures arrived and its sources are current;
+     * it is NOT when it has no figures, a stale source or a stopped sync — each named with its reason, never just counted.
+     *
+     * @param  list<array<string,mixed>>  $projects
+     * @return array{total: int, checked: int, unchecked: list<array<string,string>>}
+     */
+    private static function coverage(array $projects, bool $ar): array
+    {
+        $unchecked = [];
+        foreach ($projects as $pr) {
+            $reason = match (true) {
+                $pr['state'] === 'none' => 'none',
+                ($pr['freshness']['sync_failed'] ?? false) === true => 'failed',
+                ! $pr['fresh'] => 'stale',
+                default => null,
+            };
+            if ($reason !== null) {
+                $unchecked[] = [
+                    'id' => (string) $pr['id'],
+                    'name' => (string) $pr['name'],
+                    'reason' => $reason,
+                    'label' => match ($reason) {
+                        'none' => $ar ? 'لا بيانات' : 'No data',
+                        'failed' => $ar ? 'مزامنة متوقفة' : 'Sync stopped',
+                        default => $ar ? 'بيانات متأخرة' : 'Out of date',
+                    },
+                    'url' => MailDeepLinks::integrations((string) $pr['id']),
+                ];
+            }
+        }
+
+        return ['total' => count($projects), 'checked' => count($projects) - count($unchecked), 'unchecked' => $unchecked];
+    }
+
+    /**
+     * The weekly view's best and worst: up to three projects each, by the headline figure's own direction against the previous window.
+     *
+     * @param  list<array<string,mixed>>  $projects
+     * @return array{best: list<array<string,mixed>>, worst: list<array<string,mixed>>}
+     */
+    private static function movers(array $projects, bool $ar): array
+    {
+        $scored = [];
+        foreach ($projects as $pr) {
+            $key = self::HEADLINE[$pr['objective']] ?? 'ctr';
+            $now = $pr['raw']['totals'][$key] ?? null;
+            $was = $pr['raw']['previous'][$key] ?? null;
+            if (! is_numeric($now) || ! is_numeric($was) || (float) $was == 0.0) {
+                continue;
+            }
+            $d = ((float) $now - (float) $was) / abs((float) $was);
+            $score = (self::FIG[$key][3] ?? false) ? -$d : $d;
+            if (abs($d) < 0.05) {
+                continue;
+            }
+            $scored[] = ['name' => $pr['name'], 'label' => $pr['headline']['label'], 'value' => $pr['headline']['value'], 'change' => $pr['headline']['change'], 'score' => $score, 'good' => $score > 0];
+        }
+        usort($scored, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+
+        return [
+            'best' => array_slice(array_values(array_filter($scored, static fn (array $r): bool => $r['good'])), 0, 3),
+            'worst' => array_slice(array_reverse(array_values(array_filter($scored, static fn (array $r): bool => ! $r['good']))), 0, 3),
         ];
     }
 
@@ -298,19 +434,35 @@ final class OperationalDigestModel
      * Bars for a series: heights 6–40 (px) scaled to the largest value; a missing day is a flat stub, never a zero-height claim.
      *
      * @param  list<float|null>  $values
-     * @return list<array{h: int, missing: bool}>
+     * @param  list<string>  $dates  one per value; a weekday initial is printed under each bar
+     * @return list<array{h: int, missing: bool, label: string}>
      */
-    private static function bars(array $values): array
+    private static function bars(array $values, array $dates = [], bool $ar = true): array
     {
         $max = 0.0;
         foreach ($values as $v) {
             $max = max($max, (float) ($v ?? 0));
         }
+        $values = array_values($values);
+        $dates = array_values($dates);
 
-        return array_map(static fn ($v): array => [
-            'h' => $v === null ? 3 : ($max > 0 ? max(4, (int) round(((float) $v) / $max * 40)) : 4),
-            'missing' => $v === null,
-        ], $values);
+        return array_map(static function ($v, int $i) use ($max, $dates, $ar): array {
+            $label = '';
+            if (isset($dates[$i])) {
+                try {
+                    // A weekday initial under each bar: the week reads as a week without a caption.
+                    $label = mb_substr(Carbon::parse((string) $dates[$i])->locale($ar ? 'ar' : 'en')->isoFormat('dd'), 0, 2);
+                } catch (\Throwable) {
+                    $label = '';
+                }
+            }
+
+            return [
+                'h' => $v === null ? 3 : ($max > 0 ? max(4, (int) round(((float) $v) / $max * 40)) : 4),
+                'missing' => $v === null,
+                'label' => $label,
+            ];
+        }, $values, array_keys($values));
     }
 
     /** @param  array<string,mixed>|null  $row */
@@ -331,7 +483,7 @@ final class OperationalDigestModel
                 'warn' => $ar ? 'يُنفَق أبطأ من الخطة' : 'Spending behind plan',
                 default => $ar ? 'ضمن الخطة' : 'On plan',
             },
-            'label' => ($ar ? 'من الميزانية ' : 'of budget ').$used.'%',
+            'label' => ($ar ? 'من الميزانية ' : 'of budget ').AlertEventText::ltr($used.'%'),
         ];
     }
 
@@ -440,28 +592,284 @@ final class OperationalDigestModel
         return array_slice($out, 0, 5);
     }
 
-    /** @return array{tone: string, label: string, reason: string} */
-    private static function status(array $block, array $decisions, bool $ar): array
+    /**
+     * The project's verdict, from the ONE rule in `DigestStatus` (the state), with the plain reason of its top issue.
+     *
+     * @param  list<array<string,mixed>>  $issues  ranked
+     * @return array{tone: string, label: string, reason: string}
+     */
+    private static function status(array $block, array $decisions, array $issues, string $state, bool $ar): array
     {
-        $freshness = (array) ($block['freshness'] ?? []);
-        $notes = (array) ($block['observations'] ?? []);
-        $severities = array_column($notes, 'severity');
-
-        $tone = match (true) {
-            ($freshness['sync_failed'] ?? false) === true, in_array('critical', $severities, true) => 'bad',
-            in_array('warning', $severities, true) => 'warn',
-            in_array('positive', $severities, true) => 'good',
+        $positive = in_array('positive', array_column((array) ($block['observations'] ?? []), 'severity'), true);
+        $tone = match ($state) {
+            'bad' => 'bad',
+            'watch' => 'warn',
+            'ok' => $positive ? 'good' : 'neutral',
             default => 'neutral',
         };
+        $top = $issues[0] ?? null;
 
         return [
             'tone' => $tone,
-            'label' => self::statusLabel($tone, $ar),
-            'reason' => $decisions[0]['headline'] ?? match ($tone) {
-                'good' => $ar ? 'الأداء يتحسن عن الفترة السابقة' : 'Performance is improving on the previous period',
-                default => $ar ? 'لا شيء يحتاج قرارًا الآن' : 'Nothing needs a decision now',
-            },
+            'label' => $state === 'none' ? ($ar ? 'لا بيانات' : 'No data') : self::statusLabel($tone, $ar),
+            'reason' => $top !== null
+                ? trim(($top['platform'] !== '' ? $top['platform'].': ' : '').$top['headline'])
+                : match (true) {
+                    $state === 'none' => $ar ? 'لم تصل أرقام في هذه الفترة' : 'No figures arrived in this period',
+                    $tone === 'good' => $ar ? 'الأداء يتحسن عن الفترة السابقة' : 'Performance is improving on the previous period',
+                    default => $ar ? 'لا شيء يحتاج قرارًا الآن' : 'Nothing needs a decision now',
+                },
         ];
+    }
+
+    /**
+     * Every ad platform the project has, by canonical key → its source state (`failed` / `stale` / `fresh` / `partial`).
+     *
+     * @return array<string,string>
+     */
+    private static function sources(array $block): array
+    {
+        $out = [];
+        $f = (array) ($block['freshness'] ?? []);
+        foreach ((array) ($f['sources'] ?? []) as $s) {
+            if (($s['kind'] ?? 'ad_platform') === 'ad_platform' && ($s['provider'] ?? '') !== '') {
+                $out[AdPlatforms::canonical((string) $s['provider'])] = (string) ($s['state'] ?? 'fresh');
+            }
+        }
+        foreach ((array) ($f['failing'] ?? []) as $s) {
+            if (($s['provider'] ?? '') !== '') {
+                $out[AdPlatforms::canonical((string) $s['provider'])] = 'failed';
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * One cell per platform: from its figures, or only from its source when it sent none.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>> in the canonical platform order; `issue` is the ranked item or null
+     */
+    private static function cells(array $block, array $rows, array $prevByProvider, array $budgetBy, array $sources, string $objective, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $days): array
+    {
+        $byProvider = [];
+        foreach ($rows as $r) {
+            $byProvider[AdPlatforms::canonical((string) ($r['provider'] ?? ''))] = $r;
+        }
+        $keys = array_values(array_unique([...array_keys($byProvider), ...array_keys($sources)]));
+        usort($keys, static fn (string $a, string $b): int => AdPlatforms::rank($a) <=> AdPlatforms::rank($b));
+
+        $resultKey = in_array($objective, ['sales', 'leads', 'app_installs'], true) ? self::BY_OBJECTIVE[$objective][0] : null;
+        $headlineKey = self::HEADLINE[$objective] ?? 'ctr';
+        $lower = (bool) (self::FIG[$headlineKey][3] ?? false);
+        $prevCanon = [];
+        foreach ($prevByProvider as $k => $r) {
+            $prevCanon[AdPlatforms::canonical((string) $k)] = $r;
+        }
+        $budgetCanon = [];
+        foreach ($budgetBy as $k => $r) {
+            $budgetCanon[AdPlatforms::canonical((string) $k)] = $r;
+        }
+
+        $cells = [];
+        foreach ($keys as $order => $key) {
+            $row = $byProvider[$key] ?? [];
+            $prev = $prevCanon[$key] ?? [];
+            $raw = (string) ($row['provider'] ?? $key);
+            $reportedFor = (array) ((($block['platform_reported'] ?? [])[$raw] ?? null) ?? ($block['reported'] ?? []));
+            $budget = $budgetCanon[$key] ?? null;
+            $verdict = DigestStatus::cell([
+                'alert' => DigestStatus::alertState($mine = self::alertsOn($key, (array) ($block['open_alerts'] ?? []))),
+                'source' => $sources[$key] ?? null,
+                'spend' => $row['spend'] ?? null,
+                'spend_withheld' => (int) ($row['spend_withheld_rows'] ?? 0) > 0,
+                'results_key' => $resultKey,
+                'results' => $resultKey !== null ? ($row[$resultKey] ?? null) : null,
+                'results_prev' => $resultKey !== null ? ($prev[$resultKey] ?? null) : null,
+                'results_reported' => $resultKey !== null && ($reportedFor[$resultKey] ?? true) !== false,
+                'headline_now' => $row[$headlineKey] ?? null,
+                'headline_prev' => $prev[$headlineKey] ?? null,
+                'headline_lower_is_better' => $lower,
+                'pace' => $budget !== null && (float) ($budget['budget'] ?? 0) > 0 ? ($budget['pace'] ?? null) : null,
+            ]);
+            $name = AdPlatforms::name($key, $ar ? 'ar' : 'en');
+            $issue = null;
+            if (in_array($verdict['state'], ['bad', 'watch'], true)) {
+                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine);
+            }
+            $cells[] = [
+                'provider' => $key,
+                'name' => $name,
+                'short' => self::SHORT[$key][$ar ? 0 : 1] ?? $name,
+                'state' => $verdict['state'],
+                'reason' => $verdict['reason'],
+                'issue' => $issue,
+            ];
+        }
+
+        return $cells;
+    }
+
+    /**
+     * The alerts that touch this platform's cell: those naming it, plus those naming none (campaign- or project-level, which mark
+     * every cell, as on the board). The website's own alerts (`ga4`) are not a platform's.
+     *
+     * @param  list<array<string,mixed>>  $alerts
+     * @return list<array<string,mixed>>
+     */
+    private static function alertsOn(string $provider, array $alerts): array
+    {
+        return array_values(array_filter($alerts, static function (array $a) use ($provider): bool {
+            $named = (string) ($a['provider'] ?? '');
+
+            return $named === '' || ($named !== 'ga4' && AdPlatforms::canonical($named) === $provider);
+        }));
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $alerts
+     * @return array{priority: string, sev: int, fired: int}
+     */
+    private static function rankOf(string $state, array $alerts): array
+    {
+        $best = null;
+        foreach ($alerts as $a) {
+            $key = [DigestStatus::PRIORITY_RANK[$a['priority'] ?? 'P3'] ?? 2, $a['severity'] === 'critical' ? 0 : 1, -(int) ($a['fired'] ?? 0)];
+            if ($best === null || $key < $best[0]) {
+                $best = [$key, $a];
+            }
+        }
+        if ($best !== null && ! ($best[1]['snoozed'] ?? false)) {
+            return ['priority' => (string) ($best[1]['priority'] ?? 'P3'), 'sev' => $best[0][1], 'fired' => (int) ($best[1]['fired'] ?? 0)];
+        }
+
+        return ['priority' => $state === 'bad' ? 'P1' : 'P3', 'sev' => $state === 'bad' ? 0 : 1, 'fired' => 0];
+    }
+
+    /** @return array<string,mixed> */
+    private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days, array $alerts = []): array
+    {
+        $reason = (string) $verdict['reason'];
+        $label = self::FIG[$headlineKey][$ar ? 0 : 1] ?? $headlineKey;
+        $fmt = static fn (string $key, mixed $v): string => match (self::FIG[$key][2] ?? 'count') {
+            'money' => $p->money((float) $v),
+            'percent' => $p->percent((float) $v),
+            'ratio' => $p->ratio((float) $v),
+            default => number_format((float) $v),
+        };
+        $pct = static fn (float $r): string => AlertEventText::ltr(number_format(abs($r) * 100, 0).'%');
+        $viz = null;
+        $headline = '';
+        $figure = '';
+
+        switch ($reason) {
+            case 'sync_failed':
+                $headline = $ar ? 'توقفت المزامنة' : 'Sync stopped';
+                break;
+            case 'alert_bad':
+            case 'alert_watch':
+                $headline = $reason === 'alert_bad' ? ($ar ? 'تنبيه مفتوح يحتاج قرارًا' : 'An open alert needs a decision') : ($ar ? 'تنبيه مفتوح للمتابعة' : 'An open alert to follow');
+                break;
+            case 'stale':
+                $headline = $ar ? 'البيانات متأخرة' : 'Data is out of date';
+                break;
+            case 'no_results':
+                $headline = $ar ? 'إنفاق بلا نتائج' : 'Spend with no results';
+                $figure = ($ar ? 'الإنفاق ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
+                break;
+            case 'pace_hot':
+            case 'pace_slow':
+                $pace = (float) ($budget['pace'] ?? 0);
+                $used = (int) round(min(1.0, (float) ($budget['spent'] ?? 0) / max(0.0001, (float) ($budget['budget'] ?? 1))) * 100);
+                $expected = $pace > 0 ? (int) round(min(100, $used / $pace)) : 0;
+                $headline = $reason === 'pace_hot' ? ($ar ? 'ينفق أسرع من الخطة' : 'Spending ahead of plan') : ($ar ? 'ينفق أبطأ من الخطة' : 'Spending behind plan');
+                // Both bars are shares of the BUDGET, so «used» and «plan» are comparable and no second percentage can contradict the first.
+                $figure = ($ar ? 'صُرف ' : 'Spent ').AlertEventText::ltr($used.'%').' · '.($ar ? 'المخطط ' : 'planned ').AlertEventText::ltr($expected.'%');
+                $viz = ['type' => 'pace', 'used' => $used, 'plan' => $expected, 'used_label' => ($ar ? 'صُرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($expected.'%')];
+                break;
+            case 'worse':
+            case 'results_down':
+                $key = $reason === 'results_down' ? (string) $resultKey : $headlineKey;
+                $now = (float) ($row[$key] ?? 0);
+                $was = (float) ($prev[$key] ?? 0);
+                $label = self::FIG[$key][$ar ? 0 : 1] ?? $key;
+                $up = $now > $was;
+                $fem = in_array($key, ['cpl', 'cpa', 'cpc', 'cpm', 'cpi', 'revenue', 'purchases', 'conversions', 'clicks', 'installs', 'engagements', 'video_views'], true);
+                $verb = $ar ? ($up ? ($fem ? 'ارتفعت' : 'ارتفع') : ($fem ? 'تراجعت' : 'تراجع')) : ($up ? 'rose' : 'fell');
+                $headline = $label.' '.$verb.' '.$pct($was > 0 ? ($now - $was) / $was : 0);
+                $figure = $fmt($key, $was).' ← '.$fmt($key, $now);
+                $max = max($now, $was, 0.0001);
+                $viz = ['type' => 'before_now', 'before' => max(6, (int) round($was / $max * 100)), 'now' => max(6, (int) round($now / $max * 100)), 'before_label' => $fmt($key, $was), 'now_label' => $fmt($key, $now), 'key' => $key];
+                break;
+        }
+
+        // Priority, severity and recency, as the board ranks: the worst open alert on the cell when there is one; else a metric finding is P1 when it is a problem and P3 when it is a watch.
+        $meta = self::rankOf($verdict['state'], $alerts);
+
+        return $meta + [
+            'kind' => 'cell',
+            'state' => $verdict['state'],
+            'reason' => $reason,
+            'project_id' => $projectId,
+            'project' => $projectName,
+            'provider' => $provider,
+            'platform' => $platform,
+            'headline' => $headline,
+            'figure' => $figure,
+            'viz' => $viz,
+            'at_stake' => (float) ($row['spend'] ?? 0),
+            'order' => $order,
+            'url' => in_array($reason, ['sync_failed', 'stale'], true) ? MailDeepLinks::integrations($projectId) : (str_starts_with($reason, 'alert_') ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId, $days)),
+            'button' => in_array($reason, ['sync_failed', 'stale'], true) ? ($ar ? 'افتح الربط' : 'Open connection') : (str_starts_with($reason, 'alert_') ? ($ar ? 'افتح التنبيهات' : 'Open alerts') : ($ar ? 'افتح المنصة' : 'Open platform')),
+        ];
+    }
+
+    /**
+     * The findings that belong to the project as a whole (not one platform), as ranked issues.
+     * Platform-scoped findings (budget pace, stale data) are the cells' own and are not repeated here.
+     *
+     * @param  array<string,string>  $sources
+     * @param  list<array<string,mixed>>  $cells
+     * @return list<array<string,mixed>>
+     */
+    private static function projectFindings(array $block, string $lang, string $projectId, string $projectName, float $spend, array $sources, array $cells): array
+    {
+        $ar = $lang === 'ar';
+        $out = [];
+        foreach ((array) ($block['observations'] ?? []) as $note) {
+            $kind = (string) ($note['kind'] ?? '');
+            if (! in_array($note['severity'] ?? '', ['critical', 'warning'], true) || in_array($kind, ['budget_pace', 'stale_data', 'data_gap', 'reallocation'], true)) {
+                continue;
+            }
+            $say = PlainFindings::say($note, $ar);
+            $out[] = self::rankOf($note['severity'] === 'critical' ? 'bad' : 'watch', []) + [
+                'kind' => 'project',
+                'state' => $note['severity'] === 'critical' ? 'bad' : 'watch',
+                'reason' => $note['severity'] === 'critical' ? 'project_critical' : 'project_warning',
+                'project_id' => $projectId,
+                'project' => $projectName,
+                'provider' => '',
+                'platform' => '',
+                'headline' => $say['headline'],
+                'figure' => $say['text'],
+                'viz' => null,
+                'at_stake' => $spend,
+                'order' => 99,
+                'url' => MailDeepLinks::platforms($projectId),
+                'button' => $ar ? 'افتح المشروع' : 'Open project',
+            ];
+        }
+        // A sync reported as failed with no platform named still has to reach the Owner.
+        if (($block['freshness']['sync_failed'] ?? false) === true && ! in_array('failed', $sources, true)) {
+            $out[] = self::rankOf('bad', []) + [
+                'kind' => 'project', 'state' => 'bad', 'reason' => 'sync_failed', 'project_id' => $projectId, 'project' => $projectName,
+                'provider' => '', 'platform' => '', 'headline' => $ar ? 'توقفت المزامنة' : 'Sync stopped', 'figure' => $ar ? 'الأرقام قد تكون ناقصة' : 'Figures may be incomplete',
+                'viz' => null, 'at_stake' => $spend, 'order' => 99, 'url' => MailDeepLinks::integrations($projectId), 'button' => $ar ? 'افتح الربط' : 'Open connection',
+            ];
+        }
+
+        return $out;
     }
 
     /**
