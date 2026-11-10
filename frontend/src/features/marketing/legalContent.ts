@@ -23,8 +23,8 @@ const AR_DISCLAIMER =
 const EN_DISCLAIMER =
   'This page describes how the system actually behaves and is not legal advice. Have your counsel review it before relying on it commercially.'
 
-const AR_UPDATED = 'آخر تحديث: 12 أغسطس 2026'
-const EN_UPDATED = 'Last updated: 12 August 2026'
+const AR_UPDATED = 'آخر تحديث: 10 نوفمبر 2026'
+const EN_UPDATED = 'Last updated: 10 November 2026'
 
 const ar: LegalDoc[] = [
   {
@@ -65,6 +65,18 @@ const ar: LegalDoc[] = [
           'عند ربط متجر (سلة أو زد) نقرأ الطلبات والسلات المتروكة والمنتجات والعملاء بالقدر الذي يظهر في تقاريرك، مع الاحتفاظ بالمنطقة الزمنية للمتجر حتى يبقى يوم التاجر يومه.',
           'لا نكتب ولا ننشر ولا نغيّر أي شيء في حساباتك الإعلانية أو متجرك — الوصول للقراءة فقط.',
           'فك الربط من داخل النظام يوقف المزامنة فورًا ويُبطل الرموز المخزَّنة. ويحدث الشيء نفسه تلقائيًا عند تنفيذ طلب حذف موثَّق.',
+        ],
+      },
+      {
+        heading: 'بيانات المنصات المرتبطة: الاستخدام والمشاركة والحماية',
+        bullets: [
+          'ينطبق هذا القسم على كل منصة تربطها بحسابك: Google (Google Ads وGoogle Analytics) وMeta وTikTok وSnapchat وX وLinkedIn، والمتاجر (سلة وزد).',
+          'الاستخدام: نستخدم البيانات المستلمة من هذه المنصات فقط لعرض أداء حملاتك ونتائج موقعك ومتجرك داخل مساحة عملك، ولا نستخدمها لأي غرض آخر.',
+          'المشاركة: لا نبيع هذه البيانات ولا نشاركها أو ننقلها أو نفصح عنها لأي طرف ثالث أو معلن أو وسيط بيانات. تُتاح فقط لأعضاء مساحتك الذين تدعوهم، ولمزوّد الاستضافة الذي يشغّل خوادمنا ويعالجها بتعليماتنا فقط، وللجهات الرسمية عند وجود طلب نظامي ملزم.',
+          'لا نستخدم بيانات المنصات المرتبطة لتدريب نماذج الذكاء الاصطناعي أو التعلّم الآلي، ولا لبناء ملفات إعلانية أو تسويقية عن المستخدمين.',
+          'الحماية: تُنقل البيانات عبر اتصال مشفّر (HTTPS/TLS)، ورموز الوصول والتجديد مشفّرة عند التخزين، والوصول إلى أنظمة الإنتاج مقصور على المخوّلين مع تسجيل كل إجراء حساس، وبيانات كل عميل معزولة عن بيانات غيره.',
+          'الاحتفاظ والحذف: فك الربط يوقف المزامنة ويُبطل الرموز فورًا، وتُحذف البيانات المزامَنة خلال 30 يومًا. ويمكنك أيضًا سحب الإذن من إعدادات حسابك لدى المنصة نفسها، أو طلب الحذف عبر بريد التواصل أدناه.',
+          'Google: يلتزم كامبينز هب في استخدام المعلومات المستلمة من واجهات Google API ونقلها إلى أي تطبيق آخر بسياسة بيانات مستخدمي خدمات Google API (https://developers.google.com/terms/api-services-user-data-policy)، بما في ذلك متطلبات الاستخدام المحدود (Limited Use).',
         ],
       },
       {
@@ -411,6 +423,18 @@ const en: LegalDoc[] = [
           'When you connect a store (Salla or Zid) we read orders, abandoned carts, products and customers to the extent your reports show them, keeping the store’s timezone so a merchant’s day stays their own day.',
           'We never write, publish or change anything in your advertising accounts or your store. The access is read-only.',
           'Disconnecting inside the product stops the sync immediately and revokes the stored tokens. The same happens automatically when a verified deletion request is carried out.',
+        ],
+      },
+      {
+        heading: 'Connected platform data: use, sharing and protection',
+        bullets: [
+          'This section applies to every platform you connect: Google (Google Ads and Google Analytics), Meta, TikTok, Snapchat, X and LinkedIn, and stores (Salla and Zid).',
+          'Use: we use data received from these platforms only to show your own campaign, website and store performance inside your workspace, and for no other purpose.',
+          'Sharing: we do not sell this data and we do not share, transfer or disclose it to any third party, advertiser or data broker. It is available only to members of your workspace whom you invite, to our hosting provider, which runs our servers and processes data only on our instructions, and to authorities when a binding legal request requires it.',
+          'We do not use connected platform data to train artificial intelligence or machine-learning models, or to build advertising or marketing profiles of users.',
+          'Protection: data is transmitted over encrypted connections (HTTPS/TLS), access and refresh tokens are encrypted at rest, access to production systems is limited to authorized staff with every sensitive action logged, and each customer\'s data is isolated from every other customer.',
+          'Retention and deletion: disconnecting stops the sync and revokes the tokens immediately, and synced data is deleted within 30 days. You can also revoke access from your account settings on the platform itself, or request deletion through the contact email below.',
+          'Google: CampaignsHub\'s use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy (https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.',
         ],
       },
       {
