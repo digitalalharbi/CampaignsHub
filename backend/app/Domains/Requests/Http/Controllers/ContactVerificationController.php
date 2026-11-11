@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Http\Controllers;
 
 use App\Domains\Requests\Services\ContactVerificationService;
-use App\Domains\Requests\Services\PortalTenantResolver;
+use App\Domains\Requests\Services\RequestOwnerResolver;
 use App\Rules\PhoneNumberRule;
 use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +24,7 @@ final class ContactVerificationController
 
     public function __construct(
         private readonly ContactVerificationService $service,
-        private readonly PortalTenantResolver $portal,
+        private readonly RequestOwnerResolver $owners,
     ) {}
 
     /** POST /api/v1/requests/verify/start */
@@ -39,12 +39,19 @@ final class ContactVerificationController
         $destination = $this->normalize($data['channel'], $data['destination']);
         $this->assertShape($data['channel'], $destination);
 
-        $tenant = $this->portal->resolve($request);
+        /*
+         * PLATFORM-SERVICE-INBOX-001 — the same owner the intake will resolve, from the same host.
+         *
+         * A code is stamped with a workspace, and billed to it as SMS usage, only when the host is that workspace's own
+         * portal domain. An order on the official site is the platform's, and a host nobody owns is nobody's: both are
+         * stamped with no workspace. The old resolver's «default workspace» fallback is not reached in production.
+         */
+        $tenantId = $this->owners->resolve($request)?->tenant?->id;
         $result = $this->service->start(
             $data['channel'],
             $destination,
             $data['purpose'] ?? 'contact_verify',
-            $tenant ? (string) $tenant->id : null,
+            $tenantId === null ? null : (string) $tenantId,
             cooldownSeconds: self::RESEND_COOLDOWN,
             invalidatePrevious: true,
             ownerKey: $this->ownerKey($request),

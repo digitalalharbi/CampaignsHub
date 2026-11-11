@@ -81,7 +81,8 @@ final class BackfillClientPortalIdentities
     public function forProvenAddress(string $email): ?User
     {
         $address = Str::lower(trim($email));
-        $rows = ExternalRequest::query()->withoutGlobalScopes()
+        // PLATFORM-SERVICE-INBOX-001 — a service ordered from the platform itself names no workspace, so it grants nothing here.
+        $rows = ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()
             ->whereRaw('lower(contact_email) = ?', [$address])
             ->latest('created_at')
             ->get(['tenant_id', 'contact_phone', 'client_id']);
@@ -141,6 +142,7 @@ final class BackfillClientPortalIdentities
     {
         $rows = ExternalRequest::query()
             ->withoutGlobalScopes()
+            ->tenantOwned()
             ->whereNotNull('client_id')
             ->where(fn ($q) => $q->whereNotNull('contact_email')->orWhereNotNull('contact_phone'))
             ->get(['tenant_id', 'contact_email', 'contact_phone', 'client_id']);
@@ -283,6 +285,7 @@ final class BackfillClientPortalIdentities
     {
         $named = ExternalRequest::query()
             ->withoutGlobalScopes()
+            ->tenantOwned()
             ->where('tenant_id', $contact['tenant_id'])
             ->whereRaw('lower(contact_email) = ?', [$contact['email']])
             ->whereNotNull('contact_name')

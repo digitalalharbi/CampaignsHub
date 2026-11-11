@@ -123,7 +123,7 @@ final class PasswordResetService
      */
     private function requestContactSetup(string $email): string
     {
-        $named = ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$email])->exists();
+        $named = ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()->whereRaw('lower(contact_email) = ?', [$email])->exists();
         if (! $named) {
             return 'ignored';
         }
