@@ -25,12 +25,20 @@ final class MailDisclaimer
         $text = null;
         try {
             $tenant = app(TenantContext::class);
-            $r = app(DisclaimerResolver::class)->resolve($tenant->hasTenant() ? (string) $tenant->tenantId() : '', $clientId, $projectId);
-            if (($r['enabled']['operational'] ?? true) !== true) {
-                return trim((string) $also);
+            /*
+             * No tenant in hand → the system default, WITHOUT asking the database. Querying `disclaimers` with an empty
+             * tenant id is an invalid uuid in Postgres; the exception was caught here, but inside a request's transaction
+             * it had already aborted that transaction, and every later statement of the request failed (MailTestSendTest).
+             */
+            $tenantId = $tenant->hasTenant() ? (string) $tenant->tenantId() : '';
+            if ($tenantId !== '') {
+                $r = app(DisclaimerResolver::class)->resolve($tenantId, $clientId, $projectId);
+                if (($r['enabled']['operational'] ?? true) !== true) {
+                    return trim((string) $also);
+                }
+                $node = $r['sections']['operational'] ?? null;
+                $text = is_array($node) ? ($node[$locale] ?? $node['ar'] ?? null) : null;
             }
-            $node = $r['sections']['operational'] ?? null;
-            $text = is_array($node) ? ($node[$locale] ?? $node['ar'] ?? null) : null;
         } catch (Throwable) {
             $text = null;
         }
