@@ -81,7 +81,12 @@ final class MailFooterTest extends TestCase
         $this->assertMatchesRegularExpression('#<td class="ch-pad ch-ftr" dir="'.$dir.'" align="'.$align.'" bgcolor="\#faf8f3" style="padding:22px 24px 24px;[^"]*text-align:'.$align.'; direction:'.$dir.';"#', $html);
 
         $lines = $this->lines($html);
-        $this->assertSame($optional ? ['policies', 'manage', 'copyright', 'sender'] : ['policies', 'manage', 'note', 'copyright', 'sender'], array_keys($lines));
+        // DIGESTS-OBJECTIVE-KPIS-001 — an optional message that is a digest or an alert carries the compact operational note in the footer's own note cell.
+        $operational = $optional && array_key_exists('note', $lines);
+        $this->assertSame($optional && ! $operational ? ['policies', 'manage', 'copyright', 'sender'] : ['policies', 'manage', 'note', 'copyright', 'sender'], array_keys($lines));
+        if ($operational) {
+            $this->assertStringContainsString((string) config('disclaimers.sections.operational.'.$locale), self::text($lines['note']));
+        }
         foreach ($lines as $name => $cell) {
             $this->assertMatchesRegularExpression('#^<td data-footer-line="'.$name.'" dir="'.$dir.'" align="'.$align.'" style="text-align:'.$align.'; direction:'.$dir.';#', $cell, $name);
             // Readable on the cream ground: 12px or more, a line-height that lets Arabic breathe.
