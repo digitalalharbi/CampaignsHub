@@ -54,18 +54,55 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-KARAM5 $(date -u +%FT%TZ)"
-            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At' <<'SQL'
+            q() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | "' 2>&1 <<EOF
             BEGIN READ ONLY;
-            \echo -- eur rates
-            select base_currency, quote_currency, rate, rate_date, source from currency_rates where base_currency='EUR' or quote_currency='EUR';
-            \echo -- google money rows now
-            select metric_date, metric_key, value, original_amount, exchange_rate, rate_date, rate_source, updated_at from daily_metrics where project_id='c073e9c6-c70a-4276-87da-85338530b137' and provider='google' and original_currency='EUR' order by metric_date, metric_key, original_amount;
-            \echo -- last google runs
-            select status, started_at, finished_at, metrics_upserted from metric_sync_runs where provider='google' and project_id='c073e9c6-c70a-4276-87da-85338530b137' order by created_at desc limit 4;
-            \echo -- now
-            select now();
+            $1
             ROLLBACK;
-            SQL
-            echo "== END FACTS-KARAM5"
+            EOF
+            }
+            echo "== FACTS-MAP $(date -u +%FT%TZ)"
+            for t in registration_requests contact_messages support_tickets data_requests external_requests leads lead_form_submissions influencers influencer_nominations influencer_collaborations workspace_invitations tenant_addons integration_webhook_events report_shares tenants subscriptions subscription_plans client_notifications; do
+              cols=$(q "select string_agg(column_name,',' order by ordinal_position) from information_schema.columns where table_schema='public' and table_name='$t';" | grep -v -E '^(BEGIN|ROLLBACK)$')
+              echo "## TABLE $t"
+              echo "cols: $cols"
+              q "select 'total',count(*),min(created_at)::date,max(created_at)::date from $t;" | grep -v -E '^(BEGIN|ROLLBACK)$'
+              sc=""
+              for c in state status; do case ",$cols," in *",$c,"*) [ -z "$sc" ] && sc=$c;; esac; done
+              if [ -n "$sc" ]; then
+                echo "-- by $sc (count, oldest, newest)"
+                q "select $sc,count(*),min(created_at)::date,max(created_at)::date from $t group by 1 order by 2 desc;" | grep -v -E '^(BEGIN|ROLLBACK)$'
+                for a in assigned_to assigned_user_id assignee_id owner_id reviewed_by reviewer_id; do
+                  case ",$cols," in *",$a,"*) echo "-- by $sc: rows with $a null"; q "select $sc,count(*) filter (where $a is null),count(*) from $t group by 1 order by 3 desc;" | grep -v -E '^(BEGIN|ROLLBACK)$';; esac
+                done
+              fi
+              echo "-- weekly last 8w"
+              q "select date_trunc('week',created_at)::date,count(*) from $t where created_at > now()-interval '8 weeks' group by 1 order by 1;" | grep -v -E '^(BEGIN|ROLLBACK)$'
+            done
+            echo "## external_requests by request status key"
+            q "select rs.key,count(*),min(er.created_at)::date,max(er.created_at)::date,count(*) filter (where er.assigned_to is null),count(distinct er.tenant_id) from external_requests er join request_statuses rs on rs.id=er.status_id group by 1 order by 2 desc;"
+            echo "## external_requests by type"
+            q "select rt.key,count(*) from external_requests er join request_types rt on rt.id=er.type_id group by 1 order by 2 desc;"
+            echo "## external_requests is_demo / client linked / sla"
+            q "select is_demo,count(*),count(*) filter (where client_id is not null),count(*) filter (where sla_due_at is not null and sla_due_at<now()) from external_requests group by 1;"
+            echo "## portal tenants"
+            q "select count(*) filter (where portal_enabled),count(*) filter (where is_default_portal),count(*) filter (where portal_domain is not null),count(*) from tenants;"
+            echo "## subscriptions by plan and status"
+            q "select p.code,s.status,count(*) from subscriptions s join subscription_plans p on p.id=s.plan_id group by 1,2 order by 1,2;"
+            echo "## plans"
+            q "select code,is_active,count(*) from subscription_plans group by 1,2 order by 1;"
+            echo "## registrations by plan_code and state"
+            q "select plan_code,state,count(*),count(*) filter (where tenant_id is not null) from registration_requests group by 1,2 order by 1,2;"
+            echo "## registrations by account_type/requested_portal"
+            q "select account_type,requested_portal,count(*) from registration_requests group by 1,2 order by 3 desc;"
+            echo "## registration decisions"
+            q "select * from (select 'decisions' k,count(*) from registration_decisions) x;"
+            echo "## leads by provider/source/status"
+            q "select provider,source,status,count(*),count(*) filter (where assigned_to is null) from leads group by 1,2,3 order by 4 desc limit 30;"
+            echo "## webhook events by provider/status"
+            q "select provider,status,count(*),max(created_at)::date from integration_webhook_events group by 1,2 order by 3 desc limit 30;"
+            echo "## mail_deliveries by kind/status (8w)"
+            q "select kind,status,count(*) from mail_deliveries where created_at>now()-interval '8 weeks' group by 1,2 order by 3 desc limit 60;"
+            echo "## laravel notifications by type"
+            q "select type,count(*),count(*) filter (where read_at is null) from notifications group by 1 order by 2 desc limit 30;"
+            echo "== END FACTS-MAP"
             exit 0
