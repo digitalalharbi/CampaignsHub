@@ -109,6 +109,13 @@ final class MailGallery
             'digest-project' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][0], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'project'),
             'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project'),
             'digest-portfolio' => new OperationalDigestMail(OperationalDigestModel::portfolio(self::operationalDigest(), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio'),
+            // DIGESTS-CADENCE-BUDGETS-001 — the three rhythms of each: a project's monthly report, and «ملخص المشاريع» daily and monthly over thirty projects.
+            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
+            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', AlertEventText::ltr('2026-11-03').' – '.AlertEventText::ltr('2026-11-09')),
+            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', AlertEventText::ltr('2026-11-01').' – '.AlertEventText::ltr('2026-11-07')),
+            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
+            // Every alert family, one card each, built by the real `AlertMailItem::build()` from an alert outbox item.
+            ...self::alertTypes($locale),
 
             /*
              * The alerts as they are actually sent — MAIL-013.
@@ -125,7 +132,9 @@ final class MailGallery
                         'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
                         'title' => $ar ? 'ميزانية ميتا قاربت النفاد' : 'The Meta budget is nearly used up',
                         'detail' => $ar ? 'استهلكت الحملة نسبة كبيرة من ميزانيتها قبل منتصف الفترة.' : 'The campaign has used a large share of its budget before the middle of the period.',
-                        'numbers' => $ar ? 'المصروف 8,000.00 / 10,000.00 (80%)' : 'Spent 8,000.00 / 10,000.00 (80%)',
+                        'numbers' => $ar ? 'الإنفاق 8,000.00 / 10,000.00 (80%)' : 'Spent 8,000.00 / 10,000.00 (80%)',
+                        'rule' => 'budget_risk',
+                        'ctx' => ['spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'basis_class' => 'measured'],
                         // The figures as the pace rule writes them, read by the same reader the real mail uses.
                         'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'USD'], $ar),
                         'action' => AlertEventMailer::action('budget_risk', $ar),
@@ -139,7 +148,9 @@ final class MailGallery
                         'title' => $ar ? 'تكلفة النتيجة ارتفعت على سناب شات' : 'Cost per result rose on Snapchat',
                         'detail' => $ar ? 'الحملة تدفع أكثر مقابل كل نتيجة مقارنة بالفترة السابقة.' : 'The campaign pays more for each result than in the previous period.',
                         'numbers' => $ar ? 'قبل 61.00 ← الآن 88.72 (آخر 7 أيام) · حد التنبيه 25%' : 'Before 61.00 → Now 88.72 (last 7 days) · alert at 25%',
-                        'action' => $ar ? 'راجع المحتوى والجمهور، وابدأ بالأضعف أداءً.' : 'Review content and audience, starting with the weakest.',
+                        'action' => $ar ? 'راجع الجمهور ← ثم المحتوى ← ابدأ بالأقل أداءً.' : 'Review content and audience, starting with the weakest.',
+                        'rule' => 'cpa_increase',
+                        'ctx' => ['cpa_previous' => 61.0, 'cpa_current' => 88.72, 'threshold_pct' => 25],
                         'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign-2',
                         'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
                         'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'Bundle carousel',
@@ -150,6 +161,7 @@ final class MailGallery
                         'title' => $ar ? 'توقفت مزامنة بيانات تيك توك' : 'TikTok data sync has stopped',
                         'detail' => $ar ? 'آخر محاولة فشلت، فأرقام التقارير قد تكون ناقصة.' : 'The last attempt failed, so report figures may be incomplete.',
                         'numbers' => $ar ? 'آخر أرقام بتاريخ '.AlertEventText::ltr('2026-08-04') : 'Last figures dated 2026-08-04',
+                        'rule' => 'sync_failure',
                         'action' => AlertEventMailer::action('sync_failed', $ar),
                         'url' => Frontend::origin().'/app/projects/demo-project/integrations',
                         'button' => $ar ? 'افتح صفحة الربط' : 'Open the connections page',
@@ -167,7 +179,9 @@ final class MailGallery
                     'title' => $ar ? 'العائد على الإنفاق تراجع على ميتا' : 'Return on ad spend fell on Meta',
                     'detail' => $ar ? 'كل ريال إعلان يعيد قيمة أقل من الفترة السابقة.' : 'Each unit of ad spend returns less than in the previous period.',
                     'numbers' => $ar ? 'قبل 4.56× ← الآن 3.10× (آخر 7 أيام) · حد التنبيه 25%' : 'Before 4.56× → Now 3.10× (last 7 days) · alert at 25%',
-                    'action' => $ar ? 'راجع الإعلانات الأضعف وقرّر إيقافها أو تجديدها.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'action' => $ar ? 'افتح الأقل أداءً ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'rule' => 'roas_drop',
+                    'ctx' => ['roas_previous' => 4.56, 'roas_current' => 3.10, 'threshold_pct' => 25],
                     'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign',
                     'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
                     'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'White Friday — prospecting',
@@ -529,7 +543,7 @@ final class MailGallery
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
                         'title' => 'ارتفاع تكلفة النتيجة',
-                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR، ربما بسبب منافسة أعلى أو ضعف أداء المحتوى.',
+                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR، ربما بسبب منافسة أعلى أو محتوى تعب.',
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],
@@ -626,6 +640,34 @@ final class MailGallery
     }
 
     /**
+     * DIGESTS-CADENCE-BUDGETS-001 — one mail per alert family, as the alert engine would compose it, for review and PNG proof.
+     *
+     * @return array<string, Mailable>
+     */
+    public static function alertTypes(string $locale): array
+    {
+        $ar = $locale === 'ar';
+        $item = static fn (string $type, string $severity, array $ctx): array => [
+            'rule_type' => $type, 'severity' => $severity, 'context' => $ctx, 'project_id' => '00000000-0000-4000-8000-000000000001',
+            'project_name' => $ar ? 'متجر الندى' : 'Al Nada Store', 'event_id' => 'demo-'.$type, 'triggered_at' => '2026-11-09T05:40:00Z',
+        ];
+        $types = [
+            'alert-budget' => $item('budget_risk', 'critical', ['provider' => 'meta', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'basis_class' => 'measured', 'budget_currency' => 'SAR']),
+            'alert-roas' => $item('roas_drop', 'warning', ['provider' => 'snapchat', 'roas_previous' => 4.56, 'roas_current' => 3.10, 'threshold_pct' => 25]),
+            'alert-cpl' => $item('cpl_increase', 'warning', ['provider' => 'tiktok', 'cpl_previous' => 64.13, 'cpl_current' => 98.4, 'threshold_pct' => 25]),
+            'alert-sync' => $item('sync_failure', 'critical', ['provider' => 'tiktok', 'last_sync_at' => '2026-11-07T03:50:00Z']),
+            'alert-tracking' => $item('ga4_tracking_loss', 'critical', ['drop' => 0.62, 'previous' => 4200, 'sessions' => 1596]),
+            'alert-leads' => $item('lead_no_contact', 'warning', ['count' => 7, 'minutes' => 240]),
+            'alert-launch' => $item('launch_advance', 'positive', ['from' => 'Launch 1', 'to' => 'Launch 2']),
+            'alert-report-failed' => $item('report_failed', 'critical', []),
+            'alert-security' => $item('security', 'critical', []),
+            'alert-sample' => $item('sample_alert', 'info', []),
+        ];
+
+        return array_map(static fn (array $i): Mailable => new AlertBundleMail([AlertMailItem::build($i, $ar)], $locale, $ar ? 'محمد' : 'Mohammed'), $types);
+    }
+
+    /**
      * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests' fixtures: the portfolio above, with every platform's own rows.
      *
      * A hand-built payload shaped exactly like `DailyDigest::buildRange()` (the keys it adds are the live report's `byProvider()`
@@ -715,6 +757,12 @@ final class MailGallery
             'platform_series' => ['tiktok' => $spark([480.0, 500.0, 520.0, 490.0, 470.0, 520.0, 420.0]), 'x' => $spark([120.0, 130.0, 140.0, null, 130.0, 140.0, 140.0])],
             'budget_rows' => [],
         ];
+        // DIGESTS-CADENCE-BUDGETS-001 — each project's month: ahead of plan, behind plan, and one with no budget recorded.
+        $month = ['from' => '2026-08-01', 'to' => '2026-08-31', 'through' => '2026-08-06', 'elapsed' => 0.1935, 'withheld' => false, 'currencies' => 1, 'excluded' => 0, 'unmeasured' => 0, 'campaigns' => 4];
+        $d['projects'][0]['budget_month'] = ['budget' => 120000.0, 'spent' => 29333.18, 'remaining' => 90666.82, 'projected' => 151590.0, 'pace' => 1.2633, 'currency' => 'USD'] + $month;
+        $d['projects'][1]['budget_month'] = ['budget' => 60000.0, 'spent' => 9500.0, 'remaining' => 50500.0, 'projected' => 49090.0, 'pace' => 0.8182, 'currency' => 'USD'] + $month;
+        $d['projects'][2]['budget_month'] = ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 0] + $month;
+
         $d['projects'][2]['observations'] = [
             ['id' => 'f', 'kind' => 'period_comparison', 'severity' => 'positive', 'metric' => 'cpm', 'value' => '3.03 USD', 'change' => -0.14, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
         ];

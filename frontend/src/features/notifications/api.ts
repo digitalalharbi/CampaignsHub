@@ -13,6 +13,25 @@ export interface AppNotification {
   status: 'unread' | 'read' | 'snoozed' | 'resolved'
   read_at: string | null
   created_at: string | null
+  /**
+   * DIGESTS-CADENCE-BUDGETS-001 — the same grammar as the alert email: the digest state, the problem drawn, the next steps.
+   * Absent on an older server; `viz` null for a notification that is not an alert.
+   */
+  visual?: BellVisualData | null
+}
+
+export type BellState = 'ok' | 'watch' | 'bad' | 'none'
+
+export type BellViz =
+  | { type: 'before_now'; before: number; now: number; before_label: string; now_label: string }
+  | { type: 'pace'; used: number; plan: number; used_label: string; plan_label: string }
+  | { type: 'steps'; steps: { label: string; state: BellState }[] }
+  | { type: 'count'; n: number; blocks: number; more: boolean; label: string; state: BellState }
+
+export interface BellVisualData {
+  state: BellState
+  viz: BellViz | null
+  steps: string[]
 }
 
 export interface NotificationDeliveryRow {

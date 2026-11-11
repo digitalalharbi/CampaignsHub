@@ -71,7 +71,8 @@ final class MailPreviewsTest extends TestCase
         }
 
         // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
-        $this->assertCount(68, $files); // EMAIL-DIGESTS-OPERATIONAL-001 added digest-project, digest-project-leads and digest-portfolio in both languages; // LOGIN-004 added the Google link message in both languages; EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
+        // DIGESTS-CADENCE-BUDGETS-001 added the project monthly, «ملخص المشاريع» daily/weekly/monthly and ten alert families: 14 × 2.
+        $this->assertCount(96, $files); // EMAIL-DIGESTS-OPERATIONAL-001 added digest-project, digest-project-leads and digest-portfolio in both languages; // LOGIN-004 added the Google link message in both languages; EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
     }
 
     /**

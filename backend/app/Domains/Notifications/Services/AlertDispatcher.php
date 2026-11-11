@@ -212,6 +212,9 @@ final class AlertDispatcher
                         'action' => $say['action'],
                         'url' => $projectId === '' ? MailDeepLinks::alerts() : (($note['kind'] ?? '') === 'stale_data' ? MailDeepLinks::integrations($projectId) : MailDeepLinks::platforms($projectId)),
                         'button' => ($note['kind'] ?? '') === 'stale_data' ? ($locale === 'ar' ? 'افتح صفحة الربط' : 'Open the connections page') : ($locale === 'ar' ? 'افتح المنصات داخل النظام' : 'Open the platforms'),
+                        // DIGESTS-CADENCE-BUDGETS-001 — what the card draws: the finding's own movement, or the stages it is about.
+                        'rule' => (string) ($note['kind'] ?? ''),
+                        'viz' => self::findingViz($note, $locale === 'ar'),
                         'period_key' => $this->periodKey($block, $note, $day),
                     ];
                 }
@@ -225,6 +228,25 @@ final class AlertDispatcher
         } finally {
             $this->tenants->forget();
         }
+    }
+
+    /**
+     * The finding's movement as before → now bars, from the ratio it already carries — or null, and the card draws its stages.
+     *
+     * @param  array<string,mixed>  $note
+     * @return array<string,mixed>|null
+     */
+    private static function findingViz(array $note, bool $ar): ?array
+    {
+        $change = is_numeric($note['change'] ?? null) ? (float) $note['change'] : null;
+        if ($change === null || $change <= -1.0 || ! in_array((string) ($note['kind'] ?? ''), ['period_comparison', 'rising_cost', 'falling_rate'], true)) {
+            return null;
+        }
+        $now = 1.0 + $change;
+        $max = max(1.0, $now);
+
+        return ['type' => 'before_now', 'before' => max(6, (int) round(1.0 / $max * 100)), 'now' => max(6, (int) round($now / $max * 100)),
+            'before_label' => $ar ? 'الفترة السابقة' : 'previous period', 'now_label' => (string) ($note['value'] ?? ''), 'threshold' => null];
     }
 
     /**

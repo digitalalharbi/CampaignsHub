@@ -14,6 +14,7 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -357,6 +358,9 @@ final class DailyDigest
                 $scoped->timeseriesByProvider($from, $to),
             ),
             'budget_rows' => $budget,
+            // DIGESTS-CADENCE-BUDGETS-001 — the project's budget for the calendar month the window ends in: budget, spend to date,
+            // remaining and pace, by the ONE client/project roll-up rule (`ClientBudgetRollup`) over the campaigns' own pacing rows.
+            'budget_month' => $this->monthBudget($scoped, $to),
             // DIGESTS-OBJECTIVE-KPIS-001 — the same figures per OBJECTIVE group, so a project with awareness and sales campaigns never averages them.
             'groups' => $this->objectiveGroups($campaigns, $lens->value(), $from, $to, $prevFrom, $prevTo),
             'best_platform' => $this->pick($platforms, 'provider', best: true),
@@ -446,6 +450,33 @@ final class DailyDigest
         ]);
 
         return $block;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — budget, spend to date, remaining and pace for the calendar month `$to` falls in.
+     *
+     * The month, not the email's window: a budget is planned per month, and «pace» only means something against the share of
+     * the month that has passed. For the daily and weekly that is month-to-date as of the last reported day; for the monthly
+     * (whose window IS the finished month) it is the whole month. The arithmetic is `ClientBudgetRollup`'s — comparable rows
+     * only, one currency or no total, withheld spend never counted as zero — so the mail cannot disagree with the budgets screen.
+     *
+     * @return array<string,mixed>
+     */
+    private function monthBudget(MetricsAggregator $scoped, Carbon $to): array
+    {
+        $from = $to->copy()->startOfMonth()->startOfDay();
+        $end = $to->copy()->endOfMonth()->endOfDay();
+        $rows = $scoped->budgetPacing($from, $end, $to->copy()->startOfDay());
+        $roll = app(ClientBudgetRollup::class)->of($rows);
+        $elapsed = min(1.0, ((int) round($from->diffInDays($to->copy()->startOfDay())) + 1) / max(1, $from->daysInMonth));
+
+        return $roll + [
+            'from' => $from->toDateString(),
+            'to' => $end->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'withheld' => array_filter($rows, static fn (array $r): bool => (bool) ($r['spend_withheld'] ?? false)) !== [],
+        ];
     }
 
     /**

@@ -86,12 +86,16 @@ final class DigestScheduleDayTest extends TestCase
             : '');
     }
 
-    public function test_the_default_is_monday_so_no_existing_recipient_moves(): void
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — a NEW row's weekly lands on Sunday (the Owner's «Sunday 08:00 Riyadh»; the working week here
+     * starts on Sunday). Only the column default moved: a stored choice is never rewritten.
+     */
+    public function test_the_default_for_a_new_row_is_sunday(): void
     {
         $this->preference();
 
         $row = DB::table('notification_preferences')->where('user_id', $this->user->id)->first();
-        $this->assertSame(1, (int) $row->digest_weekday, 'ISO Monday — what isMonday() meant');
+        $this->assertSame(7, (int) $row->digest_weekday, 'ISO Sunday');
         $this->assertSame(1, (int) $row->digest_monthday);
     }
 
@@ -133,8 +137,9 @@ final class DigestScheduleDayTest extends TestCase
         $m = new \ReflectionMethod($cmd, 'weekday');
         $m->setAccessible(true);
 
-        $this->assertSame(1, $m->invoke($cmd, (object) ['digest_weekday' => 9]));
-        $this->assertSame(1, $m->invoke($cmd, (object) ['digest_weekday' => 0]));
+        $this->assertSame(7, $m->invoke($cmd, (object) ['digest_weekday' => 9]));
+        $this->assertSame(7, $m->invoke($cmd, (object) ['digest_weekday' => 0]));
+        $this->assertSame(1, $m->invoke($cmd, (object) ['digest_weekday' => 1]), 'a stored Monday stays Monday');
         $this->assertSame(7, $m->invoke($cmd, (object) ['digest_weekday' => 7]));
     }
 }

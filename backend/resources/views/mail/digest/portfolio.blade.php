@@ -9,8 +9,12 @@
 @php($ar = $dir === 'rtl')
 @php($S = \App\Domains\Notifications\Support\DigestStatus::class)
 @php($weekly = $kind === 'weekly')
+@php($monthly = $kind === 'monthly')
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
-    @include('mail.digest._head', ['title' => $weekly ? ($ar ? 'المحفظة · الأسبوع' : 'Portfolio · week') : ($ar ? 'المحفظة · اليوم' : 'Portfolio · today'), 'sub' => $periodLabel])
+    @include('mail.digest._head', ['title' => ($ar ? 'ملخص المشاريع · ' : 'Projects summary · ').($monthly ? ($ar ? 'الشهر' : 'month') : ($weekly ? ($ar ? 'الأسبوع' : 'week') : ($ar ? 'اليوم' : 'today'))), 'sub' => $periodLabel])
+
+    {{-- 0. DIGESTS-CADENCE-BUDGETS-001 — the money leads: budget, spend, remaining and pace per project, and the total. --}}
+    @include('mail.digest._budgets', ['bud' => $m['budgets']])
 
     {{-- 1. Four counts, as four tiles. The Owner's first question: how many are on fire? --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="counts" style="margin-bottom:8px; table-layout:fixed;">
@@ -46,7 +50,7 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="margin-bottom:8px; table-layout:fixed;">
         <tr>
             <td width="34%" valign="top">@include('mail.digest._figures', ['figures' => $m['kpis'], 'per' => 1, 'big' => true])</td>
-            <td width="66%" valign="bottom" style="padding-{{ $startSide === 'right' ? 'right' : 'left' }}:8px;">@include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 30, 'labels' => $weekly])</td>
+            <td width="66%" valign="bottom" style="padding-{{ $startSide === 'right' ? 'right' : 'left' }}:8px;">@include('mail.digest._spark', ['bars' => $monthly && $m['weeks'] ? $m['weeks'] : $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly || $monthly ? 40 : 30, 'labels' => $weekly || $monthly])</td>
         </tr>
     </table>
     @foreach ($m['groups'] as $g)
@@ -123,9 +127,9 @@
         </table>
     @endif
 
-    {{-- 7. Weekly only: who moved most against the previous week. --}}
-    @if ($weekly && ($m['movers']['best'] || $m['movers']['worst']))
-        <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:8px 0 6px;">{{ $ar ? 'الأفضل والأضعف مقارنة بالأسبوع السابق' : 'Best and weakest vs the previous week' }}</div>
+    {{-- 7. Weekly and monthly: who moved most against the previous week or month. --}}
+    @if (($weekly || $monthly) && ($m['movers']['best'] || $m['movers']['worst']))
+        <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:8px 0 6px;">{{ $monthly ? ($ar ? 'الأفضل والأقل مقارنة بالشهر السابق' : 'Best and weakest vs the previous month') : ($ar ? 'الأفضل والأقل مقارنة بالأسبوع السابق' : 'Best and weakest vs the previous week') }}</div>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="movers" style="margin-bottom:12px;">
             @foreach (['best' => 'ok', 'worst' => 'bad'] as $k => $c)
                 @foreach ($m['movers'][$k] as $r)

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CheckCheck } from 'lucide-react'
+import { BellVisual } from './BellVisual'
 import { listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from './api'
 import {
   bucketLabel,
@@ -171,6 +172,7 @@ export function NotificationCenter() {
                                     {n.message ?? n.title}
                                   </span>
                                 )}
+                                <BellVisual visual={n.visual} ar={ar} />
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
                                   {/*
                                     Scope, said rather than inferred. A notification is written for a

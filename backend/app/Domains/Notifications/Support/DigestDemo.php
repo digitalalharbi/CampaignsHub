@@ -27,26 +27,32 @@ final class DigestDemo
     /**
      * @return array<string,mixed> the payload `OperationalDigestModel::portfolio()` takes
      */
-    public static function payload(int $projects = 30, int $platforms = 6, bool $weekly = false): array
+    public static function payload(int $projects = 30, int $platforms = 6, bool $weekly = false, bool $monthly = false): array
     {
-        $days = ['2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09'];
+        // DIGESTS-CADENCE-BUDGETS-001 — the monthly fixture is October 2026 whole (sent on 1 November), plain calendar days.
+        $days = $monthly
+            ? array_map(static fn (int $d): string => sprintf('2026-10-%02d', $d), range(1, 31))
+            : ['2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09'];
         $blocks = [];
         for ($i = 0; $i < $projects; $i++) {
             $blocks[] = self::project($i, min($platforms, 6 - ($i % 3 === 2 ? 1 : 0) - ($i % 7 === 6 ? 1 : 0)), $days);
+            $blocks[$i]['budget_month'] = self::budgetMonth($i, (float) $blocks[$i]['totals']['spend'], $monthly);
         }
         $spend = array_sum(array_map(static fn (array $b): float => (float) $b['totals']['spend'], $blocks));
         $prev = array_sum(array_map(static fn (array $b): float => (float) $b['previous']['spend'], $blocks));
         $conv = array_sum(array_map(static fn (array $b): float => (float) ($b['totals']['conversions'] ?? 0), $blocks));
         $convPrev = array_sum(array_map(static fn (array $b): float => (float) ($b['previous']['conversions'] ?? 0), $blocks));
 
+        $n = count($days);
+
         return [
-            'sendable' => true, 'reason' => null, 'date' => $days[0], 'to_date' => $days[6], 'days' => 7, 'previous_date' => '2026-10-27', 'currency' => 'SAR',
+            'sendable' => true, 'reason' => null, 'date' => $days[0], 'to_date' => $days[$n - 1], 'days' => $n, 'previous_date' => $monthly ? '2026-09-01' : '2026-10-27', 'currency' => 'SAR',
             'projects' => $blocks,
             'totals' => [
                 'spend' => $spend, 'conversions' => $conv, 'revenue' => 0.0,
                 'change' => ['spend' => $prev > 0 ? round(($spend - $prev) / $prev, 4) : null, 'conversions' => $convPrev > 0 ? round(($conv - $convPrev) / $convPrev, 4) : null],
                 'platforms' => [],
-                'series' => array_map(static fn (string $d, int $k): array => ['date' => $d, 'spend' => round($spend / 7 * (0.85 + 0.05 * (($k * 3) % 5)), 2)], $days, array_keys($days)),
+                'series' => array_map(static fn (string $d, int $k): array => ['date' => $d, 'spend' => round($spend / $n * (0.85 + 0.05 * (($k * 3) % 5)), 2)], $days, array_keys($days)),
             ],
         ];
     }
@@ -108,7 +114,7 @@ final class DigestDemo
             if ($state !== 'failed') {
                 $rows[] = ['provider' => $provider, 'spend' => $spend, 'spend_withheld_rows' => 0, 'revenue_withheld_rows' => 0, $rKey => $results, $hKey => $head, 'impressions' => 90000 + $k * 1000, 'clicks' => 2000 + $k * 100, 'ctr' => 0.02];
                 $prev[] = ['provider' => $provider, 'spend' => $before, 'spend_withheld_rows' => 0, 'revenue_withheld_rows' => 0, $rKey => $resultsBefore, $hKey => $headBefore, 'impressions' => 88000, 'clicks' => 1900, 'ctr' => 0.02];
-                $series[$provider] = array_map(static fn (string $d, int $j): array => ['date' => $d, 'spend' => round($spend / 7 * (0.8 + (($j + $k + $i) % 5) * 0.1), 2)], $days, array_keys($days));
+                $series[$provider] = array_map(static fn (string $d, int $j): array => ['date' => $d, 'spend' => round($spend / count($days) * (0.8 + (($j + $k + $i) % 5) * 0.1), 2)], $days, array_keys($days));
                 $total += $spend;
                 $totalPrev += $before;
                 $conv += $results;
@@ -177,7 +183,7 @@ final class DigestDemo
             'platform_reported' => [],
             'platform_series' => $series,
             'budget_rows' => $budget,
-            'series' => array_map(static fn (string $d, int $j): array => ['date' => $d, 'spend' => $total > 0 ? round($total / 7 * (0.85 + (($j + $i) % 5) * 0.08), 2) : null], $days, array_keys($days)),
+            'series' => array_map(static fn (string $d, int $j): array => ['date' => $d, 'spend' => $total > 0 ? round($total / count($days) * (0.85 + (($j + $i) % 5) * 0.08), 2) : null], $days, array_keys($days)),
             'groups' => $groups,
             'funnel' => [],
             'creatives' => null,
@@ -188,5 +194,33 @@ final class DigestDemo
                 'last_sync_at' => '2026-11-09T05:00:00Z', 'missing_days' => 0, 'sync_failed' => $failing !== [], 'failing' => $failing, 'sources' => $sources,
             ],
         ];
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the month's budget block as `DailyDigest::monthBudget()` returns it, every case on purpose:
+     * ahead, on track, behind, over budget, no budget, a withheld spend and two budget currencies.
+     *
+     * @return array<string,mixed>
+     */
+    private static function budgetMonth(int $i, float $windowSpend, bool $monthly): array
+    {
+        $elapsed = $monthly ? 1.0 : 0.3; // 9 of 30 November days, or the whole of October
+        $base = ['from' => $monthly ? '2026-10-01' : '2026-11-01', 'to' => $monthly ? '2026-10-31' : '2026-11-30', 'through' => $monthly ? '2026-10-31' : '2026-11-09',
+            'elapsed' => $elapsed, 'withheld' => false, 'excluded' => 0, 'unmeasured' => 0, 'campaigns' => 3, 'currencies' => 1];
+        if ($i % 15 === 12 || $windowSpend <= 0.0) {
+            return ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 0, 'campaigns' => 0] + $base;
+        }
+        $spent = round($windowSpend * ($monthly ? 1.0 : 9 / 7), 2);
+        if ($i % 17 === 9) {
+            return ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 2] + $base;
+        }
+        $pace = [1.25, 1.0, 0.7, 1.05, 0.95, 1.4][$i % 6];
+        $budget = round($spent / $elapsed / $pace, -2);
+        if ($i % 13 === 7) {
+            return ['budget' => $budget, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => 'SAR', 'withheld' => true] + $base;
+        }
+        $projected = round($spent / $elapsed, 2);
+
+        return ['budget' => $budget, 'spent' => $spent, 'remaining' => round($budget - $spent, 2), 'projected' => $projected, 'pace' => round($projected / $budget, 4), 'currency' => 'SAR'] + $base;
     }
 }

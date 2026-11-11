@@ -85,21 +85,21 @@ final class PlainFindings
                     'text' => $ar ? "صار {$value} مقابل الفترة اللي قبلها." : "Now {$value} against the previous period.",
                     'action' => $good
                         ? ($ar ? 'شوف وش اللي تغيّر ← ثبّته.' : 'Open the platforms, find what changed, and keep it.')
-                        : ($ar ? 'ابدأ بالأضعف ← ثم الباقي.' : 'Open the platforms and start with the weakest.'),
+                        : ($ar ? 'ابدأ بالأقل أداءً ← ثم الباقي.' : 'Open the platforms and start with the weakest.'),
                 ];
             case 'rising_cost':
                 return [
                     'tone' => 'warn',
                     'headline' => $ar ? "{$label} زادت {$pct}" : ucfirst($label)." rose {$pct}",
                     'text' => $ar ? "صارت {$value}. غالبًا منافسة أعلى أو محتوى تعب." : "Now {$value}. Often higher competition or tired content.",
-                    'action' => $ar ? 'قارن المنصات ثم المحتوى الأضعف.' : 'Compare the platforms and review the weakest content.',
+                    'action' => $ar ? 'قارن المنصات ← ثم المحتوى الأقل أداءً.' : 'Compare the platforms and review the weakest content.',
                 ];
             case 'falling_rate':
                 return [
                     'tone' => 'warn',
                     'headline' => $ar ? "{$label} نزل {$pct}" : ucfirst($label)." fell {$pct}",
                     'text' => $ar ? "صار {$value}. ممكن المحتوى بدأ يخف أثره." : "Now {$value}. The content may be wearing out.",
-                    'action' => $ar ? 'راجع المحتوى ← جدّد الأضعف.' : 'Review content performance and refresh the weakest.',
+                    'action' => $ar ? 'راجع المحتوى ← جدّد الأقل أداءً.' : 'Review content performance and refresh the weakest.',
                 ];
             case 'frequency_saturation':
                 return [
@@ -123,7 +123,7 @@ final class PlainFindings
             case 'internal_spend_limit':
                 return [
                     'tone' => $tone,
-                    'headline' => $ar ? 'اقترب الصرف من الحد اللي حطّيته' : 'Spend is close to the limit you set',
+                    'headline' => $ar ? 'قرّبت تخلص ميزانية الحملات' : 'The campaigns’ budget is nearly used up',
                     'text' => $ar ? (string) ($note['detail'] ?? '') : 'The internal spend limit for this project has been passed.',
                     'action' => $ar ? 'راجع الحد في صفحة الميزانية.' : 'Review the limit on the budget page.',
                 ];

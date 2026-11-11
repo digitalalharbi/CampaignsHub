@@ -56,7 +56,13 @@ final class AlertMailItem
             $c['context'] = trim((string) $c['context'].' · '.($ar ? 'الموقع' : 'Website'), ' ·');
         }
 
-        return array_merge($c, ['viz' => $viz, 'figures' => null, 'rule' => $type]);
+        // DIGESTS-CADENCE-BUDGETS-001 — every card in the approved grammar: a lead count is drawn as blocks, and a finding with no
+        // figure to draw shows the stages it is about (`AlertVisual::present()`), never an empty card or a paragraph.
+        if ($viz === null && ! $recovered && str_starts_with($type, 'lead_') && is_numeric($ctx['count'] ?? null)) {
+            $viz = AlertVisual::count((int) $ctx['count'], $ar ? 'مهتم' : 'leads', 'watch');
+        }
+
+        return AlertVisual::present(array_merge($c, ['viz' => $viz, 'figures' => null, 'rule' => $recovered ? 'recovered' : $type, 'ctx' => $ctx]), $ar);
     }
 
     /**
@@ -113,13 +119,13 @@ final class AlertMailItem
             $used = (int) round(min(1.0, (float) $ctx['spend'] / (float) $ctx['budget']) * 100);
             $plan = (int) round(min(100, $used / (float) $ctx['ratio']));
 
-            return ['type' => 'pace', 'used' => $used, 'plan' => $plan, 'used_label' => ($ar ? 'انصرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($plan.'%')];
+            return ['type' => 'pace', 'used' => $used, 'plan' => $plan, 'used_label' => ($ar ? 'الإنفاق' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($plan.'%')];
         }
         if ($type === 'budget_risk' && isset($ctx['consumed'], $ctx['limit']) && (float) $ctx['limit'] > 0) {
             $used = (int) round(min(1.0, (float) $ctx['consumed'] / (float) $ctx['limit']) * 100);
             $cut = isset($ctx['threshold']) ? (int) round((float) $ctx['threshold'] > 1 ? (float) $ctx['threshold'] : (float) $ctx['threshold'] * 100) : 100;
 
-            return ['type' => 'pace', 'used' => $used, 'plan' => $cut, 'used_label' => ($ar ? 'المستهلك' : 'Used').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'العتبة' : 'Threshold').' '.AlertEventText::ltr($cut.'%')];
+            return ['type' => 'pace', 'used' => $used, 'plan' => $cut, 'used_label' => ($ar ? 'الإنفاق' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الحد' : 'Limit').' '.AlertEventText::ltr($cut.'%')];
         }
         foreach (['cpa', 'cpl', 'roas', 'ctr', 'cpc'] as $key) {
             if (isset($ctx[$key.'_previous'], $ctx[$key.'_current']) && is_numeric($ctx[$key.'_previous']) && is_numeric($ctx[$key.'_current'])) {
@@ -142,7 +148,7 @@ final class AlertMailItem
             return ['type' => 'pace', 'used' => $s, 'plan' => 0, 'used_label' => ($ar ? 'بدون قياس' : 'Unmeasured').' '.AlertEventText::ltr($s.'%'), 'plan_label' => ($ar ? 'المقيس' : 'Measured').' '.AlertEventText::ltr((100 - $s).'%'), 'plan_value' => 100 - $s];
         }
         if (isset($ctx['spend'], $ctx['days']) && $type === 'no_results') {
-            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الصرف' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? 'النتائج' : 'Results').' 0'];
+            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الإنفاق' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? 'النتائج' : 'Results').' 0'];
         }
 
         return null;
@@ -162,12 +168,18 @@ final class AlertMailItem
         $p = $projectId === null ? '' : '?project='.rawurlencode($projectId);
 
         return match (true) {
-            in_array($type, ['lead_unassigned'], true) => [MailLinks::to('/app/leads'.$p), $ar ? 'افتح العملاء' : 'Open the leads'],
+            in_array($type, ['lead_unassigned'], true) => [MailLinks::to('/app/leads'.$p), $ar ? 'افتح المهتمين' : 'Open the leads'],
             in_array($type, ['lead_no_contact', 'lead_follow_up_overdue'], true) => [MailLinks::to('/app/leads/workspace'.$p), $ar ? 'افتح المتابعات' : 'Open follow-ups'],
             in_array($type, ['tracking_health', 'ga4_tracking_loss', 'ga4_unmatched_spend'], true) => [MailLinks::to('/app/forms'.$p), $ar ? 'افتح التتبع' : 'Open tracking health'],
             $type === 'launch_advance' => [MailLinks::to('/app/launch'.$p), $ar ? 'افتح الإطلاق' : 'Open the launch page'],
             str_starts_with($type, 'ga4_') && $projectId !== null => [MailDeepLinks::analytics($projectId, 'performance'), $ar ? 'افتح الأداء' : 'Open performance'],
             $type === 'report_failed' => [MailLinks::to('/app/reports'), $ar ? 'افتح التقارير' : 'Open reports'],
+            in_array($type, ['security', 'sample_alert'], true) => [MailLinks::to($type === 'security' ? '/app/account/security' : '/app/account/notifications'), $type === 'security' ? ($ar ? 'افتح الأمان' : 'Open security') : ($ar ? 'افتح الإشعارات' : 'Open notifications')],
+            // DIGESTS-CADENCE-BUDGETS-001 — an alert about no single campaign still lands on its exact screen, never the generic alert page.
+            in_array($type, ['budget_risk'], true) && $projectId !== null => [MailDeepLinks::analytics($projectId, 'budget'), $ar ? 'افتح الميزانية' : 'Open the budget'],
+            in_array($type, ['cpa_increase', 'cpl_increase', 'roas_drop', 'no_results'], true) && $projectId !== null => [MailDeepLinks::platforms($projectId), $ar ? 'افتح المنصات' : 'Open the platforms'],
+            in_array($type, ['sync_failure', 'sync_outage', 'measurement_outage', 'token_expiry'], true) => [MailDeepLinks::integrations($projectId), $ar ? 'افتح الربط' : 'Open the connections page'],
+            in_array($type, ['performance', 'metric_anomaly'], true) && $projectId !== null => [MailDeepLinks::analytics($projectId, 'performance'), $ar ? 'افتح الأداء' : 'Open performance'],
             default => null,
         };
     }

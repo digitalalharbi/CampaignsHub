@@ -184,7 +184,7 @@ final class AlertEventMailer
     public static function action(string $type, bool $ar): string
     {
         return match ($type) {
-            'budget_risk' => $ar ? 'قرّر اليوم: أبقِ الميزانية ← أو عدّلها ← أو أوقف الضعيف.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
+            'budget_risk' => $ar ? 'أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
             'sync_failed' => $ar ? 'أعد ربط المصدر.' : 'Reconnect the source so the figures are complete.',
             'token_expiring' => $ar ? 'جدّد الربط قبل ما تنقطع البيانات.' : 'Renew the access before the data stops.',
             'sample_alert' => $ar ? 'تنبيه تجريبي عشان تتأكد إنه يوصلك. ما يحتاج منك شيء.' : 'This is a sample alert so you can see it arrives: no action is needed.',

@@ -174,7 +174,20 @@ export interface NotifPrefs {
    * The API defaults it to `false`: an absent preference is not consent to put a colleague's approved
    * judgement into somebody's inbox.
    */
-  digests: { daily: boolean; weekly: boolean; monthly: boolean; alerts: boolean; recommendations: boolean }
+  digests: {
+    daily: boolean
+    weekly: boolean
+    monthly: boolean
+    alerts: boolean
+    recommendations: boolean
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, on each rhythm. `per_project` is the daily one; the weekly and
+     * monthly follow it until set, which the server states (it always returns all three).
+     */
+    per_project?: boolean
+    per_project_weekly?: boolean
+    per_project_monthly?: boolean
+  }
   available_digests: string[]
   timezone: string
   locale: 'ar' | 'en'

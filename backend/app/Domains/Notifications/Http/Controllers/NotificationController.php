@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Http\Controllers;
 
+use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Resources\NotificationResource;
 use App\Domains\Projects\Models\Project;
@@ -60,6 +61,18 @@ final class NotificationController extends Controller
          */
         $total = (clone $query)->count();
         $rows = $query->limit(self::MAX_ROWS)->get();
+
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — the bell draws an alert the way its email does (chip, the problem drawn, the steps).
+         *
+         * The figures live on the alert event, not on the notification row; one read for the whole page, keyed by the
+         * notification that event raised, and only events of this tenant — the rows above were already bounded to the reader.
+         */
+        $events = AlertEvent::query()
+            ->whereIn('notification_id', $rows->pluck('id')->all())
+            ->get(['id', 'notification_id', 'type', 'severity', 'context'])
+            ->keyBy('notification_id');
+        $rows->each(static fn (AppNotification $n) => $n->setRelation('alertEvent', $events->get($n->id)));
 
         return ApiResponse::success(
             NotificationResource::collection($rows),
