@@ -149,6 +149,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gate-shard-${{ inputs.browser }}-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: ${{ runner.temp }}/gate-evidence/
           if-no-files-found: ignore
           retention-days: 7
@@ -171,6 +173,8 @@ jobs:
         with:
           # One name per shard: three browsers sharing «gate-artifacts» meant the second failing job's upload collided.
           name: gate-artifacts-${{ inputs.browser }}-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: |
             frontend/preview-connections.log
             frontend/test-results/

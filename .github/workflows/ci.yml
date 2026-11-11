@@ -131,6 +131,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-shard-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: ${{ runner.temp }}/backend-evidence/
           if-no-files-found: ignore
           retention-days: 7
@@ -317,6 +319,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gate-merged-chromium
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: ${{ runner.temp }}/gate-evidence/merged.json
           if-no-files-found: ignore
           retention-days: 7
@@ -347,6 +351,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gate-merged-firefox
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: ${{ runner.temp }}/gate-evidence/merged.json
           if-no-files-found: ignore
           retention-days: 7
@@ -377,6 +383,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gate-merged-webkit
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
           path: ${{ runner.temp }}/gate-evidence/merged.json
           if-no-files-found: ignore
           retention-days: 7

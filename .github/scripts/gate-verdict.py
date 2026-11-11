@@ -14,7 +14,11 @@ Fails unless:
      browser, once (the `setup` project is a dependency and runs in every shard, as it ran once per job before);
   3. every test of every shard finished `expected` or `skipped` (a `test.skip` the spec itself declares) — never
      `unexpected`, never `flaky` (retries are 0 by policy, so `flaky` would mean the config changed under us), and
-     never absent from its shard's run.
+     never absent from its shard's run;
+  4. every SKIPPED test is in this browser's baseline (`gate-allowed-skips.json`, the skips of the last green
+     pre-sharding run). A shard starts from the fresh seed rather than from the residue of the files before it, and
+     28 specs decide at runtime whether to `test.skip` — a test that used to run could otherwise turn into a skip and
+     still satisfy (2). A skip outside the baseline fails, naming the test; adding one is a visible edit in review.
 The shard JOB results (success / failure / cancelled / skipped) are checked by the workflow before this runs: a shard
 that did not succeed is red already, and a shard that was skipped or cancelled is never read as a pass.
 
@@ -31,8 +35,10 @@ from pathlib import Path
 def tests(report: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
 
-    def walk(suite: dict, titles: list[str]) -> None:
-        here = titles + ([suite['title']] if suite.get('title') and suite.get('type') != 'file' else [])
+    # The id is `[project] file:line:column › describe › … › title` — the same text the `list` reporter prints, which
+    # is what the skip baseline was read from. The top-level suite is the FILE, whose title is already in the id.
+    def walk(suite: dict, titles: list[str], top: bool = False) -> None:
+        here = titles + ([suite['title']] if suite.get('title') and not top else [])
         for spec in suite.get('specs', []):
             for t in spec.get('tests', []):
                 if t.get('projectName') == 'setup':
@@ -45,7 +51,7 @@ def tests(report: dict) -> dict[str, dict]:
             walk(child, here)
 
     for s in report.get('suites', []):
-        walk(s, [])
+        walk(s, [], top=True)
     return out
 
 
@@ -89,6 +95,15 @@ def main(browser: str, total: int, base: Path) -> None:
                     problems.append(f'shard {i}: {key} ended {status}')
                 merged.append({'test': key, 'shard': i, 'status': status})
             print(f'shard {i}/{total}: {len(run)} tests')
+
+        allowed = set(json.loads(Path(__file__).with_name('gate-allowed-skips.json').read_text()).get(browser, []))
+        skipped = {r['test'].split('] ', 1)[1] for r in merged if r['status'] == 'skipped'}
+        for t in sorted(skipped - allowed):
+            problems.append(f'{t} SKIPPED in {browser} but ran in the pre-sharding baseline — make it run, or add it to '
+                            f'.github/scripts/gate-allowed-skips.json in review')
+        for t in sorted(allowed - skipped):
+            print(f'::notice::{t} is in the {browser} skip baseline but ran this time')
+        print(f'{browser}: skipped {len(skipped)}; baseline {len(allowed)}; outside baseline {len(skipped - allowed)}')
 
         dropped = sorted(set(ref) - set(owner))
         extra = sorted(set(owner) - set(ref))
