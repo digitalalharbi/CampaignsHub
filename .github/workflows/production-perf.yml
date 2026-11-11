@@ -61,48 +61,27 @@ jobs:
             EOF
             }
             echo "== FACTS-MAP $(date -u +%FT%TZ)"
-            for t in registration_requests contact_messages support_tickets data_requests external_requests leads lead_form_submissions influencers influencer_nominations influencer_collaborations workspace_invitations tenant_addons integration_webhook_events report_shares tenants subscriptions subscription_plans client_notifications; do
-              cols=$(q "select string_agg(column_name,',' order by ordinal_position) from information_schema.columns where table_schema='public' and table_name='$t';" | grep -v -E '^(BEGIN|ROLLBACK)$')
-              echo "## TABLE $t"
-              echo "cols: $cols"
-              q "select 'total',count(*),min(created_at)::date,max(created_at)::date from $t;" | grep -v -E '^(BEGIN|ROLLBACK)$'
-              sc=""
-              for c in state status; do case ",$cols," in *",$c,"*) [ -z "$sc" ] && sc=$c;; esac; done
-              if [ -n "$sc" ]; then
-                echo "-- by $sc (count, oldest, newest)"
-                q "select $sc,count(*),min(created_at)::date,max(created_at)::date from $t group by 1 order by 2 desc;" | grep -v -E '^(BEGIN|ROLLBACK)$'
-                for a in assigned_to assigned_user_id assignee_id owner_id reviewed_by reviewer_id; do
-                  case ",$cols," in *",$a,"*) echo "-- by $sc: rows with $a null"; q "select $sc,count(*) filter (where $a is null),count(*) from $t group by 1 order by 3 desc;" | grep -v -E '^(BEGIN|ROLLBACK)$';; esac
-                done
-              fi
-              echo "-- weekly last 8w"
-              q "select date_trunc('week',created_at)::date,count(*) from $t where created_at > now()-interval '8 weeks' group by 1 order by 1;" | grep -v -E '^(BEGIN|ROLLBACK)$'
-            done
-            echo "## external_requests by request status key"
-            q "select rs.key,count(*),min(er.created_at)::date,max(er.created_at)::date,count(*) filter (where er.assigned_to is null),count(distinct er.tenant_id) from external_requests er join request_statuses rs on rs.id=er.status_id group by 1 order by 2 desc;"
-            echo "## external_requests by type"
-            q "select rt.key,count(*) from external_requests er join request_types rt on rt.id=er.type_id group by 1 order by 2 desc;"
-            echo "## external_requests is_demo / client linked / sla"
-            q "select is_demo,count(*),count(*) filter (where client_id is not null),count(*) filter (where sla_due_at is not null and sla_due_at<now()) from external_requests group by 1;"
-            echo "## portal tenants"
-            q "select count(*) filter (where portal_enabled),count(*) filter (where is_default_portal),count(*) filter (where portal_domain is not null),count(*) from tenants;"
-            echo "## subscriptions by plan and status"
-            q "select p.code,s.status,count(*) from subscriptions s join subscription_plans p on p.id=s.plan_id group by 1,2 order by 1,2;"
-            echo "## plans"
-            q "select code,is_active,count(*) from subscription_plans group by 1,2 order by 1;"
-            echo "## registrations by plan_code and state"
-            q "select plan_code,state,count(*),count(*) filter (where tenant_id is not null) from registration_requests group by 1,2 order by 1,2;"
-            echo "## registrations by account_type/requested_portal"
-            q "select account_type,requested_portal,count(*) from registration_requests group by 1,2 order by 3 desc;"
-            echo "## registration decisions"
-            q "select * from (select 'decisions' k,count(*) from registration_decisions) x;"
+            echo "## feature flags (names and boolean values only)"
+            grep -E '^FEATURE_' deploy/backend.production.env | sed -E 's/^([A-Z_0-9]+)=(true|false|1|0)$/\1=\2/; t; s/^([A-Z_0-9]+)=.*/\1=<non-boolean omitted>/'
+            echo "## tenants by account_type/plan/portal"
+            q "select account_type,subscription_plan,count(*),count(*) filter (where onboarding_completed_at is not null) from tenants group by 1,2 order by 3 desc;"
             echo "## leads by provider/source/status"
-            q "select provider,source,status,count(*),count(*) filter (where assigned_to is null) from leads group by 1,2,3 order by 4 desc limit 30;"
-            echo "## webhook events by provider/status"
-            q "select provider,status,count(*),max(created_at)::date from integration_webhook_events group by 1,2 order by 3 desc limit 30;"
-            echo "## mail_deliveries by kind/status (8w)"
-            q "select kind,status,count(*) from mail_deliveries where created_at>now()-interval '8 weeks' group by 1,2 order by 3 desc limit 60;"
-            echo "## laravel notifications by type"
-            q "select type,count(*),count(*) filter (where read_at is null) from notifications group by 1 order by 2 desc limit 30;"
+            q "select provider,source,status,count(*),count(*) filter (where owner_id is null) from leads group by 1,2,3 order by 4 desc limit 30;"
+            echo "## app notifications by type/source"
+            q "select source,type,count(*),count(*) filter (where read_at is null) from app_notifications group by 1,2 order by 3 desc limit 40;"
+            echo "## mail failures by week"
+            q "select date_trunc('week',created_at)::date,status,count(*) from mail_deliveries where created_at>now()-interval '8 weeks' group by 1,2 order by 1,2;"
+            echo "## mail failed reasons (error class only)"
+            q "select kind,left(coalesce(error_class,''),60),count(*) from mail_deliveries where status='failed' group by 1,2 order by 3 desc limit 15;"
+            echo "## invitations by portal/accepted"
+            q "select portal,(accepted_at is not null) accepted,delivery_status,count(*),min(created_at)::date from workspace_invitations group by 1,2,3 order by 4 desc;"
+            echo "## request types and statuses defined"
+            q "select 'types',count(*),count(*) filter (where is_active) from request_types union all select 'statuses',count(*),0 from request_statuses;"
+            echo "## clients and projects"
+            q "select 'client_workspaces',count(*) from client_workspaces union all select 'projects',count(*) from projects;"
+            echo "## lead forms by status"
+            q "select status,count(*) from lead_forms group by 1;"
+            echo "## registration to tenant conversion times (hours, buckets)"
+            q "select state,round(avg(extract(epoch from (state_changed_at-created_at))/3600)::numeric,1) from registration_requests group by 1;"
             echo "== END FACTS-MAP"
             exit 0
