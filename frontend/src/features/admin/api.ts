@@ -1703,3 +1703,66 @@ export function updateTaxEdition(id: string, body: { tax_treatment: string; pric
 export function fetchInvoiceReview(): Promise<{ checked: number; flagged: number; by_issue: Record<string, number>; rows: InvoiceReviewRow[] }> {
   return getData('/admin/tax/invoice-review')
 }
+
+/*
+ * PLATFORM-SERVICE-INBOX-001 — services ordered from the official CampaignsHub site.
+ *
+ * Platform-owned requests only. A subscriber's own requests are that subscriber's work and are not part of this
+ * payload under any filter; the server decides the owner at intake and this console never sees the rest.
+ */
+export interface ServiceRequestName { key: string; name_ar: string; name_en: string }
+
+export interface ServiceRequestRow {
+  id: string
+  reference: string
+  type: ServiceRequestName
+  status: ServiceRequestName & { is_terminal: boolean }
+  priority: string
+  company: string | null
+  contact_name: string | null
+  assignee: { id: number; name: string } | null
+  submitted_at: string | null
+  last_activity_at: string | null
+  sla_due_at: string | null
+  overdue: boolean
+  source: string
+}
+
+export interface ServiceRequestList {
+  requests: ServiceRequestRow[]
+  total: number
+  page: number
+  per_page: number
+  counts: { open: number; unassigned: number; overdue: number }
+  statuses: (ServiceRequestName & { is_terminal: boolean })[]
+  administrators: { id: number; name: string }[]
+}
+
+export interface ServiceRequestDetail extends ServiceRequestRow {
+  contact: { name: string | null; email: string | null; phone: string | null; company: string | null }
+  objective: string | null
+  budget: number | null
+  currency: string | null
+  services: string[]
+  next_statuses: string[]
+  activity: { type: string; from: string | null; to: string | null; message: string | null; actor_id: number | null; at: string | null }[]
+}
+
+export type ServiceRequestFilter = 'open' | 'unassigned' | 'all'
+
+export function fetchServiceRequests(filter: ServiceRequestFilter = 'open'): Promise<ServiceRequestList> {
+  const qs = filter === 'open' ? '?open=1' : filter === 'unassigned' ? '?open=1&unassigned=1' : '?include_archived=1'
+
+  return getData<ServiceRequestList>(`/admin/service-requests${qs}`)
+}
+
+export function fetchServiceRequest(id: string): Promise<{ request: ServiceRequestDetail }> {
+  return getData(`/admin/service-requests/${encodeURIComponent(id)}`)
+}
+
+export function updateServiceRequest(
+  id: string,
+  body: { status?: string; assigned_to?: number | null; reason?: string },
+): Promise<{ request: ServiceRequestDetail }> {
+  return patchData(`/admin/service-requests/${encodeURIComponent(id)}`, body)
+}
