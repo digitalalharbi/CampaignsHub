@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { AlarmClock, Inbox, UserRound, X } from 'lucide-react'
+import { AlarmClock, Download, Inbox, MessageSquare, Paperclip, UserRound, X } from 'lucide-react'
 import {
-  fetchServiceRequest, fetchServiceRequests, updateServiceRequest,
+  fetchServiceRequest, fetchServiceRequests, serviceRequestFileUrl, updateServiceRequest,
   type ServiceRequestFilter, type ServiceRequestList, type ServiceRequestRow,
 } from './api'
 import { Button } from '@/components/ui/Button'
+import { Pager } from '@/features/integrations/PageSizer'
 import { Num } from '@/components/ui/Num'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
@@ -36,6 +37,7 @@ const COPY = {
     contact: 'صاحب الطلب', goal: 'الهدف', budget: 'الميزانية', services: 'الخدمات', received: 'وصل', due: 'الموعد',
     pickOwner: 'المسؤول', moveTo: 'انقل إلى', save: 'احفظ', saved: 'انحفظ', close: 'أغلق', log: 'السجل',
     late: 'متأخر', created: 'وصل الطلب', assigned: 'تغيّر المسؤول',
+    messages: 'الردود', files: 'المرفقات', fromVisitor: 'صاحب الطلب', fromTeam: 'فريقنا', download: 'نزّل',
   },
   en: {
     title: 'Requests',
@@ -47,6 +49,7 @@ const COPY = {
     contact: 'Requester', goal: 'Goal', budget: 'Budget', services: 'Services', received: 'Received', due: 'Due',
     pickOwner: 'Owner', moveTo: 'Move to', save: 'Save', saved: 'Saved', close: 'Close', log: 'Log',
     late: 'Late', created: 'Request received', assigned: 'Owner changed',
+    messages: 'Replies', files: 'Attachments', fromVisitor: 'Requester', fromTeam: 'Our team', download: 'Download',
   },
 } as const
 
@@ -62,10 +65,12 @@ const TONE: Record<string, string> = {
 export function ServiceRequestsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const t: Copy = ar ? COPY.ar : COPY.en
-  const [filter, setFilter] = useState<ServiceRequestFilter>('open')
+  const [filter, setFilterState] = useState<ServiceRequestFilter>('open')
+  const [page, setPage] = useState(1)
   const [params, setParams] = useSearchParams()
   const openId = params.get('open')
-  const list = useQuery({ queryKey: ['admin', 'service-requests', filter], queryFn: () => fetchServiceRequests(filter) })
+  const list = useQuery({ queryKey: ['admin', 'service-requests', filter, page], queryFn: () => fetchServiceRequests(filter, page) })
+  const setFilter = (next: ServiceRequestFilter) => { setFilterState(next); setPage(1) }
 
   const open = (id: string | null) => {
     const next = new URLSearchParams(params)
@@ -115,6 +120,11 @@ export function ServiceRequestsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {list.data && list.data.last_page > 1 && (
+            <div className="mt-3 flex justify-end">
+              <Pager page={list.data.page} lastPage={list.data.last_page} onPage={setPage} ar={ar} testId="service-requests-pager" />
             </div>
           )}
         </section>
@@ -250,6 +260,39 @@ function Detail({ id, ar, t, list, onClose }: { id: string; ar: boolean; t: Copy
             {save.isSuccess && !changed && <span role="status" className="text-xs font-semibold text-success">{t.saved}</span>}
             {save.isError && <span role="alert" className="text-xs font-semibold text-danger">{toApiError(save.error).message}</span>}
           </div>
+
+          {r.messages.length > 0 && (
+            <>
+              <h2 className="mt-5 flex items-center gap-1.5 text-xs font-semibold text-text-muted"><MessageSquare size={14} aria-hidden />{t.messages}</h2>
+              <ol data-testid="service-request-messages" className="mt-1 space-y-2">
+                {r.messages.map((m) => (
+                  <li key={m.id} className={`rounded-lg px-3 py-2 text-sm ${m.from_visitor ? 'bg-surface-secondary' : 'border border-border'}`}>
+                    <span className="flex justify-between gap-3 text-xs text-text-muted">
+                      <span className="font-semibold">{m.from_visitor ? t.fromVisitor : t.fromTeam}</span>
+                      <Num>{fmtDateTime(m.at)}</Num>
+                    </span>
+                    <span className="mt-0.5 block whitespace-pre-line break-words text-text-primary">{m.body}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+
+          {r.files.length > 0 && (
+            <>
+              <h2 className="mt-5 flex items-center gap-1.5 text-xs font-semibold text-text-muted"><Paperclip size={14} aria-hidden />{t.files}</h2>
+              <ul data-testid="service-request-files" className="mt-1 space-y-1 text-sm">
+                {r.files.map((f) => (
+                  <li key={f.id} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-text-primary" dir="auto">{f.name}</span>
+                    <a href={serviceRequestFileUrl(r.id, f.id)} download className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-700 hover:underline">
+                      <Download size={12} aria-hidden />{t.download} <Num>{`${Math.max(1, Math.round(f.size / 1024)).toLocaleString('en-US')} KB`}</Num>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           <h2 className="mt-5 text-xs font-semibold text-text-muted">{t.log}</h2>
           <ol data-testid="service-request-activity" className="mt-1 space-y-1 text-xs text-text-secondary">

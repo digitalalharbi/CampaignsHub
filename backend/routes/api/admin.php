@@ -69,6 +69,8 @@ Route::middleware(['auth:sanctum', 'platform'])
          */
         Route::get('/service-requests', [PlatformServiceRequestController::class, 'index'])->name('service-requests.index');
         Route::get('/service-requests/{id}', [PlatformServiceRequestController::class, 'show'])->name('service-requests.show');
+        Route::get('/service-requests/{id}/files/{file}', [PlatformServiceRequestController::class, 'file'])
+            ->whereNumber('file')->middleware('throttle:60,1')->name('service-requests.file');
         Route::patch('/service-requests/{id}', [PlatformServiceRequestController::class, 'update'])
             ->middleware('throttle:60,1')->name('service-requests.update');
 

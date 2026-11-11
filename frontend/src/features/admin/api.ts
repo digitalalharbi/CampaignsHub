@@ -1733,6 +1733,7 @@ export interface ServiceRequestList {
   total: number
   page: number
   per_page: number
+  last_page: number
   counts: { open: number; unassigned: number; overdue: number }
   statuses: (ServiceRequestName & { is_terminal: boolean })[]
   administrators: { id: number; name: string }[]
@@ -1745,15 +1746,23 @@ export interface ServiceRequestDetail extends ServiceRequestRow {
   currency: string | null
   services: string[]
   next_statuses: string[]
+  /** The visitor's replies from the tracking page, and the team's client-visible replies. */
+  messages: { id: number; from_visitor: boolean; author: string | null; body: string; at: string | null }[]
+  files: { id: number; name: string; size: number; mime: string | null; at: string | null }[]
   activity: { type: string; from: string | null; to: string | null; message: string | null; actor_id: number | null; at: string | null }[]
 }
 
 export type ServiceRequestFilter = 'open' | 'unassigned' | 'all'
 
-export function fetchServiceRequests(filter: ServiceRequestFilter = 'open'): Promise<ServiceRequestList> {
-  const qs = filter === 'open' ? '?open=1' : filter === 'unassigned' ? '?open=1&unassigned=1' : '?include_archived=1'
+export function fetchServiceRequests(filter: ServiceRequestFilter = 'open', page = 1): Promise<ServiceRequestList> {
+  const qs = filter === 'open' ? 'open=1' : filter === 'unassigned' ? 'open=1&unassigned=1' : 'include_archived=1'
 
-  return getData<ServiceRequestList>(`/admin/service-requests${qs}`)
+  return getData<ServiceRequestList>(`/admin/service-requests?${qs}&page=${page}`)
+}
+
+/** Streamed by the server through the platform-owned request; the storage path never reaches the browser. */
+export function serviceRequestFileUrl(id: string, fileId: number): string {
+  return `/api/v1/admin/service-requests/${encodeURIComponent(id)}/files/${fileId}`
 }
 
 export function fetchServiceRequest(id: string): Promise<{ request: ServiceRequestDetail }> {

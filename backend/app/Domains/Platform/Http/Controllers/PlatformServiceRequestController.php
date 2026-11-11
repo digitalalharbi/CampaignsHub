@@ -6,7 +6,9 @@ namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
+use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\RequestSla;
 use App\Domains\Requests\Services\RequestStatusMachine;
@@ -16,8 +18,10 @@ use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * PLATFORM-SERVICE-INBOX-001 — «الطلبات» in the platform console: the services ordered from the official site.
@@ -59,6 +63,7 @@ final class PlatformServiceRequestController extends Controller
             'total' => $page->total(),
             'page' => $page->currentPage(),
             'per_page' => $page->perPage(),
+            'last_page' => $page->lastPage(),
             'counts' => [
                 'open' => $open()->count(),
                 'unassigned' => $open()->whereNull('assigned_to')->count(),
@@ -87,6 +92,26 @@ final class PlatformServiceRequestController extends Controller
                 'currency' => $req->currency,
                 'services' => $req->services ?? [],
                 'next_statuses' => $this->machine->allowedFrom($req->status->key),
+                /*
+                 * What the visitor sent after ordering: their replies from the tracking page, and the files they attached.
+                 * Internal notes are not a thing on a platform request yet, so only the client-visible thread is read.
+                 */
+                'messages' => $req->comments()->where('visibility', 'client')->orderBy('created_at')->orderBy('id')->limit(100)->get()
+                    ->map(fn (RequestComment $c): array => [
+                        'id' => (int) $c->id,
+                        'from_visitor' => $c->author_id === null && $c->author_label === 'Client',
+                        'author' => $c->author_label,
+                        'body' => $c->body,
+                        'at' => optional($c->created_at)->toIso8601String(),
+                    ])->all(),
+                'files' => $req->files()->orderBy('created_at')->orderBy('id')->limit(100)->get()
+                    ->map(fn (RequestFile $f): array => [
+                        'id' => (int) $f->id,
+                        'name' => $f->original_name,
+                        'size' => (int) $f->size,
+                        'mime' => $f->mime,
+                        'at' => optional($f->created_at)->toIso8601String(),
+                    ])->all(),
                 'activity' => $req->events()->orderByDesc('created_at')->orderByDesc('id')->limit(50)->get()
                     ->map(fn (RequestEvent $e): array => [
                         'type' => $e->type,
@@ -156,6 +181,25 @@ final class PlatformServiceRequestController extends Controller
         }
 
         return $this->show($id);
+    }
+
+    /**
+     * GET /admin/service-requests/{id}/files/{file} — one attachment of a platform request, streamed from the private disk.
+     *
+     * The file is looked up THROUGH the platform-owned request, so a file of a subscriber's request is not reachable here
+     * by guessing its id, and the storage path never leaves the server.
+     */
+    public function file(string $id, int $file): StreamedResponse
+    {
+        $req = $this->find($id);
+
+        /** @var RequestFile|null $record */
+        $record = $req->files()->whereKey($file)->first();
+        abort_if($record === null, 404);
+
+        $this->audit->log('platform.service_request.file_downloaded', 'external_request', (string) $req->id, null, ['file_id' => (int) $record->id]);
+
+        return Storage::disk($record->disk)->download($record->path, $record->original_name);
     }
 
     /** @return Builder<ExternalRequest> */

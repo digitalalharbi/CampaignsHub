@@ -26,7 +26,7 @@ async function verify(api: APIRequestContext, channel: 'sms' | 'email', destinat
   return id as string
 }
 
-async function order(host: string | null, company: string): Promise<{ status: number; reference: string | null }> {
+async function order(host: string | null, company: string, reply?: string): Promise<{ status: number; reference: string | null }> {
   const api = await playwrightRequest.newContext({
     baseURL: E2E_API_TARGET,
     extraHTTPHeaders: { Accept: 'application/json', ...(host ? { Host: host } : {}) },
@@ -43,6 +43,11 @@ async function order(host: string | null, company: string): Promise<{ status: nu
     },
   })
   const body = response.ok() ? await response.json() : null
+  if (reply && body?.data?.tracking_token) {
+    // The visitor answers from their tracking page, the only door they have after ordering.
+    const answered = await api.post(`/api/v1/requests/track/${body.data.tracking_token}/reply`, { data: { message: reply } })
+    expect(answered.ok(), `tracking reply: ${answered.status()}`).toBeTruthy()
+  }
   await api.dispose()
 
   return { status: response.status(), reference: body?.data?.reference ?? null }
@@ -53,7 +58,8 @@ test.describe('the platform console — service requests', () => {
 
   test('a service ordered on the official site is listed, owned and moved on by the platform owner', async ({ page }, testInfo) => {
     const company = `Platform Order ${testInfo.project.name} ${Date.now()}`
-    const mine = await order(OFFICIAL_HOST, company)
+    const reply = `Account id for ${testInfo.project.name}`
+    const mine = await order(OFFICIAL_HOST, company, reply)
     expect(mine.status, 'the official host must be accepted as the platform').toBe(201)
 
     // The same order on the development host is the local default workspace's, not the platform's.
@@ -75,6 +81,7 @@ test.describe('the platform console — service requests', () => {
     const detail = page.getByTestId('service-request-detail')
     await expect(detail).toContainText(mine.reference!)
     await expect(detail).toContainText('@example.test')
+    await expect(page.getByTestId('service-request-messages')).toContainText(reply)
 
     const owner = page.getByTestId('service-request-owner')
     await owner.selectOption({ index: 1 })
@@ -87,7 +94,8 @@ test.describe('the platform console — service requests', () => {
     await expect(page).toHaveURL(/open=/)
     await expect(page.getByTestId('service-request-status')).toHaveValue('under_review')
     await expect(page.getByTestId('service-request-owner')).not.toHaveValue('')
-    await expect(page.getByTestId('service-request-activity').locator('li')).toHaveCount(3)
+    // Received, the visitor's reply, the owner picked, the status moved.
+    await expect(page.getByTestId('service-request-activity').locator('li')).toHaveCount(4)
   })
 
   test('the screen is on the rail and holds together on a phone', async ({ page }) => {

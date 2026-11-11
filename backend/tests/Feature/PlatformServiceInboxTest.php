@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Requests\Models\ExternalRequest;
+use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Services\RequestOwnerResolver;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
@@ -17,7 +18,10 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\VerifiesContact;
 use Tests\TestCase;
@@ -252,6 +256,109 @@ final class PlatformServiceInboxTest extends TestCase
 
         $this->asAdmin()->patchJson('/api/v1/admin/service-requests/'.$mine->id, ['assigned_to' => $this->admin->id], $this->spa)->assertOk();
         $this->assertSame(0, (int) $attention()['service_requests_new']['count']);
+    }
+
+    /**
+     * The phone code for a platform order is the platform's cost, never a subscriber's.
+     *
+     * The verification step resolved its owner through the old resolver, which in production still fell back to the
+     * workspace flagged «default»: a code sent for a visitor ordering from the official site was stamped with that
+     * agency and billed to it as `sms_verifications` usage.
+     */
+    public function test_a_code_for_a_platform_order_is_stamped_with_no_workspace_and_bills_none(): void
+    {
+        config([
+            'services.twilio.account_sid' => 'AC_test', 'services.twilio.auth_token' => 'test-token',
+            'services.twilio.verify_service_sid' => 'VA_test', 'services.twilio.verify_channel' => 'sms',
+        ]);
+        Http::fake(fn () => Http::response(['status' => 'pending'], 201));
+        $tenantDomain = Tenant::create([
+            'name' => 'Own Domain', 'slug' => 'own-domain', 'status' => 'active',
+            'portal_enabled' => true, 'portal_domain' => 'requests.own-domain.test',
+        ]);
+
+        app()->detectEnvironment(fn () => 'production');
+        try {
+            app(TenantContext::class)->forget();
+            $this->postJson('http://campaignshub.io/api/v1/requests/verify/start', ['channel' => 'sms', 'destination' => '+966500000001'])
+                ->assertCreated();
+            $this->postJson('http://unknown-host.example/api/v1/requests/verify/start', ['channel' => 'sms', 'destination' => '+966500000002'])
+                ->assertCreated();
+            $this->postJson('http://requests.own-domain.test/api/v1/requests/verify/start', ['channel' => 'sms', 'destination' => '+966500000003'])
+                ->assertCreated();
+        } finally {
+            app()->detectEnvironment(fn () => 'testing');
+        }
+
+        $stamp = fn (string $to): ?string => DB::table('request_contact_verifications')->where('destination', $to)->value('tenant_id');
+        $this->assertNull($stamp('+966500000001'), 'a platform order was stamped with a workspace');
+        $this->assertNull($stamp('+966500000002'), 'a host nobody owns was stamped with a workspace');
+        $this->assertSame((string) $tenantDomain->id, (string) $stamp('+966500000003'));
+
+        $this->assertSame(0, DB::table('usage_events')->where('tenant_id', $this->agency->id)->count(), 'the default workspace was billed');
+        $this->assertSame(1, DB::table('usage_events')->where('tenant_id', $tenantDomain->id)->where('meter_code', 'sms_verifications')->count());
+    }
+
+    public function test_the_visitors_replies_and_files_reach_the_platform_owner_and_a_subscribers_file_does_not(): void
+    {
+        Storage::fake('local');
+        app(TenantContext::class)->forget();
+        $created = $this->postJson('http://campaignshub.io/api/v1/requests', $this->withVerifiedContact([
+            'type' => 'consulting', 'contact_name' => 'Visitor', 'contact_email' => 'replier@example.test', 'company_name' => 'Visitor Co',
+        ]))->assertCreated();
+        $mine = ExternalRequest::query()->platformOwned()->sole();
+
+        $this->postJson('/api/v1/requests/track/'.$created->json('data.tracking_token').'/reply', ['message' => 'Here is the account id you asked for.'])
+            ->assertSuccessful();
+        Storage::disk('local')->put('requests/'.$mine->id.'/brief.pdf', 'pdf-bytes');
+        $file = RequestFile::create([
+            'request_id' => $mine->id, 'disk' => 'local', 'path' => 'requests/'.$mine->id.'/brief.pdf',
+            'original_name' => 'brief.pdf', 'mime' => 'application/pdf', 'size' => 9, 'is_client_visible' => true,
+        ]);
+        $theirs = $this->order('localhost', 'agency-visitor@example.test');
+        Storage::disk('local')->put('requests/'.$theirs->id.'/secret.pdf', 'agency-bytes');
+        $foreign = RequestFile::create([
+            'request_id' => $theirs->id, 'disk' => 'local', 'path' => 'requests/'.$theirs->id.'/secret.pdf',
+            'original_name' => 'secret.pdf', 'mime' => 'application/pdf', 'size' => 12, 'is_client_visible' => true,
+        ]);
+
+        $detail = $this->asAdmin()->getJson('/api/v1/admin/service-requests/'.$mine->id, $this->spa)->assertOk();
+        $detail->assertJsonPath('data.request.messages.0.body', 'Here is the account id you asked for.')
+            ->assertJsonPath('data.request.messages.0.from_visitor', true)
+            ->assertJsonPath('data.request.files.0.name', 'brief.pdf')
+            ->assertJsonCount(1, 'data.request.files');
+        $this->assertStringNotContainsString('requests/', (string) json_encode($detail->json('data.request.files')), 'a storage path left the server');
+
+        $download = $this->asAdmin()->get('/api/v1/admin/service-requests/'.$mine->id.'/files/'.$file->id, $this->spa)->assertOk();
+        $this->assertSame('pdf-bytes', $download->streamedContent());
+
+        // A subscriber's file is not reachable through a platform request, nor through its own id.
+        $this->asAdmin()->get('/api/v1/admin/service-requests/'.$mine->id.'/files/'.$foreign->id, $this->spa)->assertNotFound();
+        $this->asAdmin()->get('/api/v1/admin/service-requests/'.$theirs->id.'/files/'.$foreign->id, $this->spa)->assertNotFound();
+        $this->asAgency()->get('/api/v1/admin/service-requests/'.$mine->id.'/files/'.$file->id)->assertForbidden();
+    }
+
+    public function test_the_inbox_pages_past_its_first_twenty_five(): void
+    {
+        $first = $this->order('campaignshub.io', 'first-of-many@example.test');
+        $row = DB::table('external_requests')->where('id', $first->id)->first();
+        for ($i = 1; $i <= 26; $i++) {
+            DB::table('external_requests')->insert([
+                ...(array) $row,
+                'id' => (string) Str::ulid(),
+                'reference' => 'REQ-2026-PG'.str_pad((string) $i, 4, '0', STR_PAD_LEFT),
+                'submitted_at' => now()->subMinutes($i),
+            ]);
+        }
+
+        $one = $this->inbox('?open=1')->assertOk();
+        $one->assertJsonPath('data.total', 27)->assertJsonPath('data.last_page', 2)->assertJsonCount(25, 'data.requests');
+        $two = $this->inbox('?open=1&page=2')->assertOk();
+        $two->assertJsonPath('data.page', 2)->assertJsonCount(2, 'data.requests');
+        $this->assertSame([], array_intersect(
+            array_column($one->json('data.requests'), 'id'),
+            array_column($two->json('data.requests'), 'id'),
+        ));
     }
 
     public function test_the_migration_is_additive_and_reads_every_earlier_request_as_its_tenants(): void
