@@ -84,6 +84,7 @@ final class DisclaimerResolver
             'full' => $pick('full'),
             'freshness' => $pick('freshness'),
             'methodology' => $pick('methodology'),
+            'operational' => $pick('operational'),
             'objective' => $objectiveText,
         ];
     }

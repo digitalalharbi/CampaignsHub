@@ -357,6 +357,8 @@ final class DailyDigest
                 $scoped->timeseriesByProvider($from, $to),
             ),
             'budget_rows' => $budget,
+            // DIGESTS-OBJECTIVE-KPIS-001 — the same figures per OBJECTIVE group, so a project with awareness and sales campaigns never averages them.
+            'groups' => $this->objectiveGroups($campaigns, $lens->value(), $from, $to, $prevFrom, $prevTo),
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
             // EMAIL-DECISION-REPORT-001 — the shape of the window and where the money went, for the email's charts.
@@ -652,6 +654,50 @@ final class DailyDigest
         }
 
         return array_slice($out, 0, 5);
+    }
+
+    /**
+     * The project's campaigns grouped by the report objective they were bought for, with each group's own figures.
+     *
+     * Every figure comes from `MetricsAggregator` narrowed to the group's campaigns — the engine the report link uses — so a group's
+     * ROAS is that group's revenue over that group's spend and an awareness group never has one. A campaign that spent nothing in the
+     * window does not found a group; one with no declared objective joins the project's own objective (or `custom` when that is mixed).
+     *
+     * @param  list<array<string,mixed>>  $campaigns  `byCampaign()` rows
+     * @return list<array<string,mixed>>
+     */
+    private function objectiveGroups(array $campaigns, string $projectObjective, Carbon $from, Carbon $to, Carbon $prevFrom, Carbon $prevTo): array
+    {
+        $ids = [];
+        foreach ($campaigns as $row) {
+            if ((float) ($row['spend'] ?? 0) <= 0 || ! isset($row['campaign_id'])) {
+                continue;
+            }
+            $key = ($row['objective_source'] ?? 'unset') === 'unset'
+                ? $projectObjective
+                : (ReportObjectiveLens::groupOf((string) ($row['objective'] ?? '')) ?? $projectObjective);
+            $ids[$key][] = (string) $row['campaign_id'];
+        }
+        $order = ['sales', 'leads', 'traffic', 'awareness', 'video', 'app_installs', 'engagement', 'custom'];
+        uksort($ids, static fn (string $a, string $b): int => (array_search($a, $order, true) === false ? 99 : array_search($a, $order, true)) <=> (array_search($b, $order, true) === false ? 99 : array_search($b, $order, true)));
+
+        $out = [];
+        foreach ($ids as $objective => $campaignIds) {
+            $scoped = $this->metrics->acrossProjects()->forCampaigns($campaignIds);
+            $out[] = [
+                'objective' => $objective,
+                'campaigns' => count($campaignIds),
+                'totals' => $scoped->totals($from, $to),
+                'previous' => $scoped->totals($prevFrom, $prevTo),
+                'reported' => $scoped->reportedKeys($from, $to),
+                'platform_rows' => $scoped->byProvider($from, $to),
+                'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
+                'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+                'funnel' => $scoped->funnel($from, $to)['stages'] ?? [],
+            ];
+        }
+
+        return $out;
     }
 
     /**

@@ -62,6 +62,7 @@ return [
         'accent' => '#e8a33d',
         // The series colours of a stacked bar (the same set `MailChart::COLOURS` draws), so a platform mix reads the way the charts do.
         // DIGESTS-VISUAL-V2-001 — the bars and tracks of the drawn digests: a soft bar, the problem bar, an empty track, a warning bar, a faint dot.
+        'good_ink' => '#0a6b57',   // ink on a good chip or an objective chip
         'bar_soft' => '#9ccfc0',
         'bar_bad' => '#c0392b',
         'bar_warn' => '#e0a23a',
