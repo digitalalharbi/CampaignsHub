@@ -148,21 +148,17 @@ final class NotificationPreferenceController extends Controller
     }
 
     /**
-     * DIGESTS-CADENCE-BUDGETS-001 — the digest switches as the screen shows them: every key present, and the per-project weekly and
-     * monthly following the daily per-project answer until the person sets them — exactly what `DigestSchedule::perProjectKinds()`
-     * sends, so the screen and the sweep cannot disagree.
+     * DIGESTS-CADENCE-BUDGETS-001 — the digest switches as the screen shows them: every key present, absent meaning off — exactly
+     * what `DigestSchedule::perProjectKinds()` sends, so the screen and the sweep cannot disagree.
      *
      * @param  array<string,mixed>  $stored
      * @return array<string,bool>
      */
     public static function digestsFor(array $stored): array
     {
-        $out = $stored + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'per_project' => false, 'recommendations' => false];
-        $kinds = DigestSchedule::perProjectKinds($stored);
-        $out['per_project_weekly'] = in_array('weekly', $kinds, true);
-        $out['per_project_monthly'] = in_array('monthly', $kinds, true);
-
-        return $out;
+        // One key order whatever order the row was written in, so reading the document back and saving it is an exact echo.
+        return array_replace(['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false,
+            'per_project' => false, 'per_project_weekly' => false, 'per_project_monthly' => false], $stored);
     }
 
     /**
@@ -360,6 +356,13 @@ final class NotificationPreferenceController extends Controller
 
         if (($data['digests']['alerts'] ?? false) === true) {
             $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::ALERTS);
+        }
+
+        // DIGESTS-CADENCE-BUDGETS-001 — the report per project has its own unsubscribe per rhythm, and switching it back on lifts it.
+        foreach (MailUnsubscribes::PROJECT_SCOPES as $scope => $key) {
+            if (($data['digests'][$key] ?? false) === true) {
+                $this->unsubscribes->restore($userId, $tenantId, $scope);
+            }
         }
     }
 

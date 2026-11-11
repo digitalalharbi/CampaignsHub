@@ -217,10 +217,18 @@ final class DigestDemo
         $pace = [1.25, 1.0, 0.7, 1.05, 0.95, 1.4][$i % 6];
         $budget = round($spent / $elapsed / $pace, -2);
         if ($i % 13 === 7) {
-            return ['budget' => $budget, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => 'SAR', 'withheld' => true] + $base;
+            // Budgets committed, no spend figure yet this month.
+            return ['budget' => $budget, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => 'SAR', 'unmeasured' => 2] + $base;
+        }
+        if ($i % 11 === 5) {
+            // Every budgeted campaign's spend is in another currency than its budget: budgets exist, no figure can be stated.
+            return ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 0,
+                'excluded' => 2, 'outside' => 2, 'outside_reasons' => ['currency_mismatch' => 2]] + $base;
         }
         $projected = round($spent / $elapsed, 2);
+        // Some projects carry one campaign left out of the figure (spend without an exchange rate), counted on the row.
+        $outside = $i % 7 === 3 ? ['excluded' => 1, 'outside' => 1, 'outside_reasons' => ['partial' => 1]] : [];
 
-        return ['budget' => $budget, 'spent' => $spent, 'remaining' => round($budget - $spent, 2), 'projected' => $projected, 'pace' => round($projected / $budget, 4), 'currency' => 'SAR'] + $base;
+        return $outside + ['budget' => $budget, 'spent' => $spent, 'remaining' => round($budget - $spent, 2), 'projected' => $projected, 'pace' => round($projected / $budget, 4), 'currency' => 'SAR'] + $base;
     }
 }

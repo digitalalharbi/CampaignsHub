@@ -19,6 +19,16 @@
             </tr></table>
             <div style="font-size:{{ $big ? 18 : 16 }}px; font-weight:800; color:#0b1a16; padding-top:6px; line-height:1.5;">{{ $c['title'] }}</div>
             @include('mail.digest._viz', ['viz' => $c['viz']])
+            {{-- The figures behind the drawing, small, under it: amounts with their currency, the limit, the date of the last figures. --}}
+            @if (! empty($c['figures']['lead']))
+                <div data-block="figures" style="font-size:12px; color:#3d4742; padding-top:4px; unicode-bidi:plaintext;">
+                    {{-- Beside a plan → spend drawing the pace ratio would print one finding twice («167%» beside «80%»); the amounts stay. --}}
+                    @php($withLead = ($c['viz']['type'] ?? null) !== 'pace')
+                    @if ($withLead)<span dir="ltr" style="font-weight:800;">{{ $c['figures']['lead']['value'] }}</span> {{ $c['figures']['lead']['label'] }}@endif @foreach ((array) ($c['figures']['strip'] ?? []) as $i => $f){{ $i > 0 || $withLead ? ' · ' : '' }}{{ $f['label'] }} <span dir="ltr" style="font-weight:700;">{{ $f['value'] }}</span>@endforeach
+                </div>
+            @elseif (($c['numbers'] ?? '') !== '')
+                <div data-block="numbers" style="font-size:12px; color:#3d4742; padding-top:4px; unicode-bidi:plaintext;">{{ $c['numbers'] }}</div>
+            @endif
             @if (($c['line'] ?? '') !== '')
                 <div data-block="line" style="font-size:13px; color:#3d4742; line-height:1.6; padding-top:6px;">{{ $c['line'] }}</div>
             @endif

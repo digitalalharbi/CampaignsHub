@@ -48,4 +48,8 @@
     @else
         <tr><td colspan="2" style="padding:2px 0 4px; font-size:12px; color:#8b9a97;">{{ $b['line'] }}</td></tr>
     @endif
+    @if (($b['outside_line'] ?? '') !== '' && $b['state'] !== 'unpriced')
+        {{-- Budgeted campaigns whose spend has no figure in the budget's currency: counted and named, never dropped in silence. --}}
+        <tr><td colspan="2" data-block="budget-outside" style="padding-top:2px; font-size:11px; font-weight:700; color:#b45309;">! {{ $b['outside_line'] }}</td></tr>
+    @endif
 </table>

@@ -117,7 +117,7 @@ final class AlertEventText
                     $cur = (string) ($ctx['currency'] ?? '');
 
                     return [
-                        'headline' => $ar ? 'قرّبت تخلص ميزانية الحملات' : 'The campaigns’ budget is nearly used up',
+                        'headline' => $ar ? 'قرّبت توصل للحد اللي حطيته' : 'Close to the limit you set',
                         'text' => $ar ? 'وصل الإنفاق لحد التنبيه.' : 'Spend passed an alert level of the spend limit.',
                         'numbers' => trim(($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
                             .(isset($ctx['threshold']) ? ($ar ? ' (الحد ' : ' (limit ').(int) $ctx['threshold'].'%)' : '')),

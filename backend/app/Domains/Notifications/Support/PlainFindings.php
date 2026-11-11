@@ -123,9 +123,9 @@ final class PlainFindings
             case 'internal_spend_limit':
                 return [
                     'tone' => $tone,
-                    'headline' => $ar ? 'قرّبت تخلص ميزانية الحملات' : 'The campaigns’ budget is nearly used up',
+                    'headline' => $ar ? 'قرّبت توصل للحد اللي حطيته' : 'Close to the limit you set',
                     'text' => $ar ? (string) ($note['detail'] ?? '') : 'The internal spend limit for this project has been passed.',
-                    'action' => $ar ? 'راجع الحد في صفحة الميزانية.' : 'Review the limit on the budget page.',
+                    'action' => $ar ? 'هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.' : 'This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.',
                 ];
             case 'reallocation':
                 return [

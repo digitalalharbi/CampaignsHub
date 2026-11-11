@@ -41,7 +41,7 @@ final class SendDailyDigests extends Command
 {
     protected $signature = 'notifications:send-digests
         {--user= : Send for one user id only — for verifying a change without mailing an account}
-        {--force : Ignore the recipient’s chosen hour (still idempotent per period)}
+        {--force : Ignore the recipient’s chosen hour and day; sent as an on-demand copy that never takes the period’s scheduled slot}
         {--date= : The day to summarise, YYYY-MM-DD. Defaults to the recipient’s yesterday}';
 
     protected $description = 'Send each recipient their daily, weekly and monthly digests at their own local hour.';
@@ -75,7 +75,14 @@ final class SendDailyDigests extends Command
             $timezone = $this->timezone((string) ($row->timezone ?? 'Asia/Riyadh'));
             $local = $now->copy()->setTimezone($timezone);
 
-            if (! $this->option('force') && $local->hour !== (int) ($row->digest_hour ?? 8)) {
+            /*
+             * DIGESTS-CADENCE-BUDGETS-001 — the chosen hour OR LATER the same local day, not that hour only.
+             *
+             * One sweep that overran its hour (thirty projects on a one-CPU host) used to skip, silently, every reader whose hour
+             * came next. Each period's ledger row makes a later hour a no-op for whoever already got today's mail, so a run at
+             * 09:00 or 14:00 delivers what the 08:00 one missed and nothing twice.
+             */
+            if (! $this->option('force') && $local->hour < (int) ($row->digest_hour ?? 8)) {
                 continue;
             }
 
@@ -187,12 +194,18 @@ final class SendDailyDigests extends Command
         }
     }
 
+    /**
+     * `--force` is a manual look at the mail, so it is sent under its own on-demand ledger identity and never takes the period's
+     * slot: the scheduled send for that day, week or month still goes out when it is due.
+     */
     private function dispatch(DigestDispatcher $dispatcher, string $kind, User $user, string $tenantId, Carbon $anchor, string $locale, string $audience, ?string $onlyProject): string
     {
+        $manual = (bool) $this->option('force');
+
         return match ($kind) {
-            'daily' => $dispatcher->sendDaily($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
-            'weekly' => $dispatcher->sendWeekly($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
-            default => $dispatcher->sendMonthly($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
+            'daily' => $dispatcher->sendDaily($user, $tenantId, $anchor, $locale, $audience, $onlyProject, $manual),
+            'weekly' => $dispatcher->sendWeekly($user, $tenantId, $anchor, $locale, $audience, $onlyProject, $manual),
+            default => $dispatcher->sendMonthly($user, $tenantId, $anchor, $locale, $audience, $onlyProject, $manual),
         };
     }
 

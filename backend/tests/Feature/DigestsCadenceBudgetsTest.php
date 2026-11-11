@@ -7,17 +7,23 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Role;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
+use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Notifications\Services\DigestDispatcher;
+use App\Domains\Notifications\Services\MailSendGate;
+use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Support\AlertMailItem;
 use App\Domains\Notifications\Support\AlertRuleCopy;
 use App\Domains\Notifications\Support\DigestDemo;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Notifications\Support\OperationalDigestModel;
+use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
@@ -108,15 +114,40 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $this->assertSame('Asia/Riyadh', $events[0]->timezone);
     }
 
-    public function test_the_daily_lands_at_eight_riyadh_which_is_five_utc_and_not_at_eight_utc(): void
+    public function test_the_daily_lands_at_eight_riyadh_which_is_five_utc_not_before(): void
     {
         $this->preference(['daily' => true]);
 
-        $this->runAt('2026-11-12 08:00:00');            // 11:00 in Riyadh
+        $this->runAt('2026-11-12 04:00:00');            // 07:00 in Riyadh — not yet
         $this->assertSame([], $this->ledger());
 
         $this->runAt('2026-11-12 05:00:00');            // 08:00 in Riyadh
         $this->assertSame(['daily 2026-11-11'], $this->ledger(), 'the day that ended yesterday, in Riyadh');
+
+        $this->runAt('2026-11-12 08:00:00');            // a later hour sends nothing twice
+        $this->assertSame(['daily 2026-11-11'], $this->ledger());
+    }
+
+    /** A sweep that overran its hour must not skip the readers of that hour: a later run the same day catches them up. */
+    public function test_a_missed_hour_is_caught_up_later_the_same_day(): void
+    {
+        $this->preference(['daily' => true]);
+
+        $this->runAt('2026-11-12 07:00:00');            // 10:00 in Riyadh: the 08:00 run never reached this reader
+        $this->assertSame(['daily 2026-11-11'], $this->ledger());
+    }
+
+    /** `--force` is a manual look: its own on-demand ledger row, never the period's slot. */
+    public function test_force_does_not_take_the_scheduled_slot(): void
+    {
+        $this->preference(['daily' => true]);
+
+        $this->runAt('2026-11-12 02:00:00', force: true);
+        $this->assertSame([], array_values(array_filter($this->ledger(), static fn (string $l): bool => str_starts_with($l, 'daily '))));
+        $this->assertSame(1, DB::table('digest_sends')->where('user_id', $this->user->id)->where('kind', DigestDispatcher::ON_DEMAND_PREFIX.'daily')->count());
+
+        $this->runAt('2026-11-12 05:00:00');
+        $this->assertContains('daily 2026-11-11', $this->ledger(), 'the scheduled send still goes out');
     }
 
     public function test_a_new_preference_row_sends_the_weekly_on_sunday(): void
@@ -163,39 +194,93 @@ final class DigestsCadenceBudgetsTest extends TestCase
         }
     }
 
-    public function test_the_per_project_weekly_and_monthly_follow_the_daily_answer_until_set(): void
+    public function test_each_per_project_rhythm_is_its_own_opt_in_and_absent_is_off(): void
     {
         $this->assertSame([], DigestSchedule::perProjectKinds([]));
-        $this->assertSame(['daily', 'weekly', 'monthly'], DigestSchedule::perProjectKinds(['per_project' => true]));
-        $this->assertSame(['daily', 'monthly'], DigestSchedule::perProjectKinds(['per_project' => true, 'per_project_weekly' => false]));
+        // An existing daily reader is NOT fanned out to weekly and monthly by a deploy.
+        $this->assertSame(['daily'], DigestSchedule::perProjectKinds(['per_project' => true]));
+        $this->assertSame(['daily', 'monthly'], DigestSchedule::perProjectKinds(['per_project' => true, 'per_project_monthly' => true]));
         $this->assertSame(['weekly'], DigestSchedule::perProjectKinds(['per_project_weekly' => true]));
     }
 
     public function test_a_report_per_project_needs_only_its_own_switch_and_lands_once_per_period(): void
     {
-        $this->preference(['per_project' => true]);
+        $this->preference(['per_project' => true, 'per_project_weekly' => true, 'per_project_monthly' => true]);
 
-        $this->runAt('2026-11-15 05:00:00', force: true);
-        $this->runAt('2026-11-15 05:00:00', force: true);   // a retry converges on the same rows
+        // Sunday 1 November 2026, 08:00 Riyadh: daily, weekly (Sunday) and monthly (the 1st) are all due.
+        $this->runAt('2026-11-01 05:00:00');
+        $this->runAt('2026-11-01 09:00:00');   // a later hour converges on the same rows
 
         $k = $this->key();
-        $this->assertSame(["daily 2026-11-14~{$k}", "monthly 2026-11~{$k}", "weekly 2026-W46~{$k}"], $this->ledger(), 'no projects-summary row: it was not asked for');
-        $this->assertSame(3, DB::table('digest_sends')->where('user_id', $this->user->id)->count());
+        $this->assertSame(["daily 2026-10-31~{$k}", "monthly 2026-10~{$k}", "weekly 2026-W44~{$k}"], $this->ledger(), 'no projects-summary row: it was not asked for');
     }
 
     public function test_preferences_gate_every_rhythm(): void
     {
-        $this->preference(['per_project' => true, 'per_project_weekly' => false, 'per_project_monthly' => false]);
-        $this->runAt('2026-12-06 05:00:00', force: true);
-        $this->assertSame(['daily 2026-12-05~'.$this->key()], $this->ledger());
+        $this->preference(['per_project' => true]);
+        $this->runAt('2026-11-01 05:00:00');
+        $this->assertSame(['daily 2026-10-31~'.$this->key()], $this->ledger(), 'weekly and monthly were never chosen');
 
         DB::table('notification_preferences')->update(['digests' => json_encode([])]);
-        DB::table('digest_sends')->delete();
-        $this->runAt('2026-12-07 05:00:00', force: true);
-        $this->assertSame([], $this->ledger());
+        $this->runAt('2026-11-02 05:00:00');
+        $this->assertSame(['daily 2026-10-31~'.$this->key()], $this->ledger());
     }
 
-    // ── 2. «ملخص المشاريع», led by the budgets ───────────────────────────────
+    /** Leaving ONE project report leaves that rhythm of the per-project report — not the projects summary — and costs no build. */
+    public function test_a_per_project_report_has_its_own_unsubscribe_asked_before_anything_is_built(): void
+    {
+        $this->preference(['daily' => true, 'per_project' => true]);
+        $unsubscribes = app(MailUnsubscribes::class);
+        $this->assertSame('project_daily_digest', MailUnsubscribes::projectScope('daily'));
+        $this->assertSame('project_weekly_digest', MailUnsubscribes::projectScope('weekly'));
+
+        $token = $unsubscribes->read((string) Str::afterLast((string) $unsubscribes->url((string) $this->tenant->id, (string) $this->user->email, 'project_daily_digest', $this->user->id), '/'));
+        $this->assertNotNull($token);
+        $unsubscribes->leave($token);
+
+        $digests = (array) json_decode((string) DB::table('notification_preferences')->where('user_id', $this->user->id)->value('digests'), true);
+        $this->assertFalse($digests['per_project']);
+        $this->assertTrue($digests['daily'], 'the projects summary stays on');
+
+        // A run before the switch-off is read still refuses at the gate, before any figure is built.
+        DB::table('notification_preferences')->update(['digests' => json_encode(['daily' => true, 'per_project' => true])]);
+        $this->runAt('2026-11-12 05:00:00');
+        $row = DB::table('digest_sends')->where('user_id', $this->user->id)->where('period_key', '2026-11-11~'.$this->key())->first();
+        $this->assertSame('unsubscribed', $row->status);
+
+        // Switching it back on in settings lifts the old click.
+        $this->actingAs($this->user, 'sanctum')->putJson('/api/v1/settings/notifications', ['digests' => ['per_project' => true]])->assertOk();
+        $this->assertFalse($unsubscribes->hasLeft((string) $this->tenant->id, (string) $this->user->email, 'project_daily_digest'));
+    }
+
+    /** A failed report per project is retried for a reader who wants it, by ITS switch — not dropped as «no longer wanted». */
+    public function test_a_failed_per_project_report_is_retried_by_its_own_switch(): void
+    {
+        $this->preference(['per_project' => true]);
+        DB::table('digest_sends')->insert([
+            'id' => (string) Uuid::uuid4(), 'tenant_id' => (string) $this->tenant->id, 'user_id' => $this->user->id, 'kind' => 'daily',
+            'period_key' => '2026-11-11~'.$this->key(), 'status' => 'failed', 'attempts' => 1, 'next_attempt_at' => Carbon::parse('2026-11-12 04:00:00'),
+            'window_from' => '2026-11-05 00:00:00', 'window_to' => '2026-11-11 23:59:59', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $counts = app(DigestDispatcher::class)->retryDue(Carbon::parse('2026-11-12 05:00:00'));
+
+        $this->assertArrayNotHasKey('no_longer_wanted', $counts);
+        $this->assertNotSame('failed', DB::table('digest_sends')->where('user_id', $this->user->id)->value('status'));
+    }
+
+    /** Digests leave part of the tenant's daily allowance for alerts. */
+    public function test_digests_cannot_spend_the_allowance_alerts_need(): void
+    {
+        config(['mail.daily_limit_per_tenant' => 3, 'mail.alert_reserve_per_tenant' => 2]);
+        $gate = app(MailSendGate::class);
+        $t = (string) $this->tenant->id;
+
+        $this->assertNull($gate->refusal($t, 'a@x.test', 'daily_digest', reserve: 2));
+        $this->assertSame(MailSendGate::LIMIT_REACHED, $gate->refusal($t, 'a@x.test', 'daily_digest', reserve: 2));
+        $this->assertNull($gate->refusal($t, 'a@x.test', MailUnsubscribes::ALERTS), 'an alert still goes');
+        $this->assertNull($gate->refusal($t, 'a@x.test', MailUnsubscribes::ALERTS));
+    }
 
     public function test_budget_pace_bands_and_money_rules(): void
     {
@@ -222,6 +307,75 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $this->assertSame('none', $b(['budget' => null])['state']);
     }
 
+    private function campaign(string $name, float $budget, string $currency): UnifiedCampaign
+    {
+        return UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => $name, 'status' => 'active', 'total_budget' => $budget, 'budget_currency' => $currency]);
+    }
+
+    /** @param  array<string,mixed>  $over */
+    private function spend(UnifiedCampaign $c, array $over): void
+    {
+        DailyMetric::create(array_merge([
+            'id' => (string) Str::uuid(), 'project_id' => $this->project->id, 'external_account_id' => (string) Str::uuid(),
+            'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $c->id, 'provider' => 'meta',
+            'metric_key' => 'spend', 'metric_date' => '2026-11-05', 'project_currency' => 'SAR',
+        ], $over));
+    }
+
+    /** The project's budget block as the REAL path builds it: `budgetPacing()` → `ClientBudgetRollup` → the model. */
+    private function budgetBlock(): array
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        try {
+            $digest = app(DailyDigest::class)->buildRange($this->user, (string) $this->tenant->id, [(string) $this->project->id], Carbon::parse('2026-11-05'), Carbon::parse('2026-11-11')->endOfDay(), 'daily');
+        } finally {
+            app(TenantContext::class)->forget();
+        }
+
+        return OperationalDigestModel::project($digest['projects'][0], 'ar')['budget'];
+    }
+
+    public function test_a_budget_whose_spend_is_in_another_currency_is_no_figure_with_its_reason_not_no_budget(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $this->spend($this->campaign('USD account', 5000.0, 'USD'), ['value' => 3000.0]);   // budget USD, spend SAR
+
+        $b = $this->budgetBlock();
+
+        $this->assertSame('unpriced', $b['state'], 'the project HAS a budget');
+        $this->assertSame('لا بيانات', $b['remaining']);
+        $this->assertStringContainsString('عملة الإنفاق غير عملة الميزانية', $b['line']);
+        $this->assertStringNotContainsString('ما فيه ميزانية', $b['line']);
+    }
+
+    public function test_spend_with_no_exchange_rate_names_that_reason(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $c = $this->campaign('EUR spend', 5000.0, 'SAR');
+        $this->spend($c, ['value' => 1000.0]);
+        $this->spend($c, ['value' => null, 'original_amount' => 400.0, 'original_currency' => 'EUR', 'metric_date' => '2026-11-06']);   // partial: no rate
+
+        $b = $this->budgetBlock();
+
+        $this->assertSame('unpriced', $b['state']);
+        $this->assertStringContainsString('بدون سعر صرف', $b['line']);
+    }
+
+    public function test_a_campaign_left_out_of_the_figure_is_counted_on_the_row(): void
+    {
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $this->spend($this->campaign('Priced', 10000.0, 'SAR'), ['value' => 4000.0]);
+        $this->spend($this->campaign('USD account', 5000.0, 'USD'), ['value' => 3000.0]);
+
+        $b = $this->budgetBlock();
+
+        $this->assertSame('ok', $b['state']);
+        $this->assertSame(10000.0, $b['budget_value'], 'only the priced campaign is in the figure');
+        $this->assertSame(1, $b['outside']);
+        $this->assertStringContainsString('حملة وحدة خارج الرقم', $b['outside_line']);
+        $this->assertStringContainsString('عملة الإنفاق غير عملة الميزانية', $b['outside_line']);
+    }
+
     public function test_the_projects_summary_leads_with_budgets_and_its_total_adds_up(): void
     {
         $m = OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), 'ar', 'daily');
@@ -232,7 +386,10 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $this->assertEqualsWithDelta(array_sum(array_column($ok, 'spent_value')), $m['budgets']['total']['spent_value'], 0.01);
         // A project with no budget, a withheld spend or two currencies is counted outside the total, never dropped silently.
         $this->assertGreaterThan(0, $m['budgets']['left_out']);
-        // Closest to running out first.
+        // A project with no statable figure first, then closest to running out.
+        $states = array_column($m['budgets']['rows'], 'state');
+        $firstOk = array_search('ok', $states, true);
+        $this->assertSame([], array_filter(array_slice($states, (int) $firstOk), static fn (string $st): bool => $st !== 'ok'));
         $used = array_values(array_filter(array_column($m['budgets']['rows'], 'used'), 'is_int'));
         $sorted = $used;
         rsort($sorted);
@@ -320,9 +477,19 @@ final class DigestsCadenceBudgetsTest extends TestCase
             'context' => ['roas_previous' => 4.5, 'roas_current' => 3.1], 'last_triggered_at' => Carbon::now()]);
         app(TenantContext::class)->forget();
 
-        $row = collect($this->actingAs($this->user, 'sanctum')->getJson('/api/v1/notifications')->assertOk()->json('data'))->firstWhere('id', $n->id);
+        $read = fn (): array => collect($this->actingAs($this->user, 'sanctum')->getJson('/api/v1/notifications')->assertOk()->json('data'))->firstWhere('id', $n->id);
 
+        // MEMBER-VISIBILITY-001 — a reader the project withholds the money from sees the stages, never the figures.
+        $row = $read();
         $this->assertSame('watch', $row['visual']['state']);
+        $this->assertSame('steps', $row['visual']['viz']['type']);
+        $this->assertStringNotContainsString('4.50', (string) json_encode($row['visual']));
+
+        // A reader who may see the money sees the movement drawn, and the steps.
+        Role::query()->where('tenant_id', $this->tenant->id)->first()->givePermissionTo('settings.manage');
+        $this->user->refresh();
+        app()->forgetInstance(ProjectAbilities::class);   // the engine memoises per request; a test spans two
+        $row = $read();
         $this->assertSame('before_now', $row['visual']['viz']['type']);
         $this->assertNotSame([], $row['visual']['steps']);
     }
@@ -353,10 +520,10 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $get = fn () => $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/settings/notifications')->assertOk()->json('data.digests');
 
         $d = $get();
-        $this->assertTrue($d['per_project_weekly']);
-        $this->assertTrue($d['per_project_monthly']);
+        $this->assertFalse($d['per_project_weekly'], 'never chosen, so off — no fan-out for an existing reader');
+        $this->assertFalse($d['per_project_monthly']);
 
-        $this->actingAs($this->user, 'sanctum')->putJson('/api/v1/settings/notifications', ['digests' => ['daily' => true, 'per_project_monthly' => false]])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->putJson('/api/v1/settings/notifications', ['digests' => ['daily' => true, 'per_project_weekly' => true]])->assertOk();
         $d = $get();
         $this->assertTrue($d['daily']);
         $this->assertTrue($d['per_project'], 'a client that did not send per_project cannot erase it');

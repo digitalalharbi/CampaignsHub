@@ -40,27 +40,27 @@ final class DigestSchedule
     /**
      * DIGESTS-CADENCE-BUDGETS-001 — which rhythms of the PER-PROJECT report this person asked for.
      *
-     * `per_project` is the daily one (DIGESTS-VISUAL-V2-001). The weekly and monthly keys are new, and a map stored before
-     * they existed has neither: absent means «the same as the daily answer», so somebody who already receives a report per
-     * project starts receiving the weekly and monthly ones too, and somebody who never asked receives none. An explicit
-     * `false` is always kept.
+     * `per_project` is the daily one (DIGESTS-VISUAL-V2-001); `per_project_weekly` and `per_project_monthly` are new and each is
+     * its own opt-in. Absent means OFF: a reader who already takes the daily report per project must not wake up to thirty
+     * weekly and thirty monthly mails because a deploy added a rhythm they never chose.
      *
      * @param  array<string,mixed>  $digests  the stored `notification_preferences.digests` map
      * @return list<string> a subset of daily, weekly, monthly
      */
     public static function perProjectKinds(array $digests): array
     {
-        $daily = ($digests['per_project'] ?? false) === true;
-        $out = $daily ? ['daily'] : [];
-        foreach (['weekly' => 'per_project_weekly', 'monthly' => 'per_project_monthly'] as $kind => $key) {
-            $on = array_key_exists($key, $digests) ? $digests[$key] === true : $daily;
-            if ($on) {
+        $out = [];
+        foreach (self::PER_PROJECT as $kind => $key) {
+            if (($digests[$key] ?? false) === true) {
                 $out[] = $kind;
             }
         }
 
         return $out;
     }
+
+    /** The `digests` key that switches the per-project report on each rhythm. */
+    public const PER_PROJECT = ['daily' => 'per_project', 'weekly' => 'per_project_weekly', 'monthly' => 'per_project_monthly'];
 
     /**
      * The finished calendar month before `$sendDay`'s month, and the month before THAT — plain Gregorian months.

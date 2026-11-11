@@ -50,7 +50,7 @@ final class AlertMailItem
             $c['button'] = $target[1];
         }
 
-        // A drawn problem replaces the figures strip: two ways to print the same number is how «167%» sat beside «80%».
+        // The drawing leads; the figures (amounts, currency, the limit, the date of the last figures) follow it as one small line.
         // The source is «الموقع» / «Website», never the analytics vendor's key: the website's own alerts carry no platform name at all.
         if ($websiteOwn) {
             $c['context'] = trim((string) $c['context'].' · '.($ar ? 'الموقع' : 'Website'), ' ·');
@@ -62,7 +62,7 @@ final class AlertMailItem
             $viz = AlertVisual::count((int) $ctx['count'], $ar ? 'مهتم' : 'leads', 'watch');
         }
 
-        return AlertVisual::present(array_merge($c, ['viz' => $viz, 'figures' => null, 'rule' => $recovered ? 'recovered' : $type, 'ctx' => $ctx]), $ar);
+        return AlertVisual::present(array_merge($c, ['viz' => $viz, 'rule' => $recovered ? 'recovered' : $type, 'ctx' => $ctx]), $ar);
     }
 
     /**

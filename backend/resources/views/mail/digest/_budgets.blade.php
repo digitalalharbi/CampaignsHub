@@ -33,12 +33,16 @@
                     <td width="26%" style="padding:3px 0; font-size:12px; font-weight:800; color:{{ $r['over'] ? '#b91c1c' : '#0a6b57' }}; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $r['state'] === 'ok' ? $r['remaining'] : '' }}</td>
                     <td width="22" align="center" style="padding:3px 0 3px 4px;"><span title="{{ $r['band_label'] }}" style="display:inline-block; width:18px; height:18px; line-height:18px; border-radius:5px; text-align:center; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$r['tone']] }}; color:{{ $S::INK[$r['tone']] }};">{{ $S::GLYPH[$r['tone']] }}</span></td>
                 </tr>
+                @if ($r['state'] !== 'ok' || ($r['outside_line'] ?? '') !== '')
+                    {{-- Why there is no figure, or which campaigns the figure leaves out — the reason the data gives. --}}
+                    <tr data-block="budget-outside"><td colspan="4" style="padding:0 0 4px; font-size:11px; font-weight:700; color:#b45309;">! {{ $r['state'] !== 'ok' ? $r['line'] : $r['outside_line'] }}@if ($r['state'] !== 'ok' && ($r['outside_line'] ?? '') !== '') · {{ explode(':', $r['outside_line'])[0] }}@endif</td></tr>
+                @endif
             @empty
                 <tr><td style="font-size:12px; color:#8b9a97;">{{ $dir === 'rtl' ? 'ما فيه ميزانيات مسجّلة لهذا الشهر' : 'No budgets recorded for this month' }}</td></tr>
             @endforelse
         </table>
         @if (count($bud['rows']) > count($shown))
-            <div data-block="budgets-more" style="font-size:11px; color:#5b6b68; padding-top:4px;"><span dir="ltr">+{{ count($bud['rows']) - count($shown) }}</span> {{ $dir === 'rtl' ? 'مشاريع ضمن الخطة أو أبعد عن النفاد' : 'more, further from running out' }}</div>
+            <div data-block="budgets-more" style="font-size:11px; color:#5b6b68; padding-top:4px;"><span dir="ltr">+{{ count($bud['rows']) - count($shown) }}</span> {{ $dir === 'rtl' ? 'مشاريع أبعد عن النفاد' : 'more, further from running out' }}</div>
         @endif
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="budget-legend" style="margin-top:6px;"><tr>
             @foreach (['bad' => 'ahead', 'ok' => 'on_track', 'watch' => 'behind'] as $tone => $band)
