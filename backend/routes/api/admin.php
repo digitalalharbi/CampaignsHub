@@ -28,6 +28,7 @@ use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
+use App\Domains\Platform\Http\Controllers\PlatformServiceRequestController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
 use App\Domains\Platform\Http\Controllers\PlatformTaxController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
@@ -59,6 +60,19 @@ Route::middleware(['auth:sanctum', 'platform'])
     ->prefix('admin')->name('admin.')
     ->group(function (): void {
         Route::get('/overview', PlatformOverviewController::class)->name('overview');
+
+        /*
+         * PLATFORM-SERVICE-INBOX-001 — «الطلبات»: services ordered from the official CampaignsHub site.
+         *
+         * Platform-owned rows only (`owner_scope = platform`, no tenant). A subscriber's own requests are not
+         * reachable here under any filter, and these are not reachable from any tenant route.
+         */
+        Route::get('/service-requests', [PlatformServiceRequestController::class, 'index'])->name('service-requests.index');
+        Route::get('/service-requests/{id}', [PlatformServiceRequestController::class, 'show'])->name('service-requests.show');
+        Route::get('/service-requests/{id}/files/{file}', [PlatformServiceRequestController::class, 'file'])
+            ->whereNumber('file')->middleware('throttle:60,1')->name('service-requests.file');
+        Route::patch('/service-requests/{id}', [PlatformServiceRequestController::class, 'update'])
+            ->middleware('throttle:60,1')->name('service-requests.update');
 
         /*
          * MAIL-014 — what this installation's mail has actually done.

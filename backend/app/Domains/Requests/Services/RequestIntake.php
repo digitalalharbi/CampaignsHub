@@ -8,6 +8,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
+use App\Domains\Requests\Support\RequestOwner;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
@@ -28,21 +29,26 @@ final class RequestIntake
      * @param  array<string,mixed>  $data  validated payload
      * @return array{request: ExternalRequest, token: string}
      */
-    public function create(array $data, Tenant $tenant): array
+    public function create(array $data, RequestOwner|Tenant $owner): array
     {
-        return DB::transaction(function () use ($data, $tenant) {
+        // A bare tenant is the older call shape and still means what it always did: that tenant's own request.
+        $owner = $owner instanceof Tenant ? new RequestOwner(ExternalRequest::OWNER_TENANT, $owner) : $owner;
+
+        return DB::transaction(function () use ($data, $owner) {
             $type = RequestType::where('key', $data['type'])->firstOrFail();
             $status = RequestStatus::where('key', 'new')->firstOrFail();
 
             $request = new ExternalRequest;
             $request->fill([
-                'tenant_id' => $tenant->id,
+                // PLATFORM-SERVICE-INBOX-001 — the owner as the server resolved it. A platform request has no tenant.
+                'tenant_id' => $owner->tenant?->id,
+                'owner_scope' => $owner->scope,
                 'reference' => $this->reference(),
                 'module' => $type->module,
                 'type_id' => $type->id,
                 'status_id' => $status->id,
                 'priority' => $data['priority'] ?? 'medium',
-                'source' => 'public_portal',
+                'source' => $owner->isPlatform() ? 'campaignshub_site' : 'public_portal',
                 'contact_name' => $data['contact_name'],
                 'contact_email' => $data['contact_email'],
                 'contact_phone' => $data['contact_phone'] ?? null,

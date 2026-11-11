@@ -476,6 +476,35 @@ final class LoginSingleDoorTest extends TestCase
         $this->assertNull($membership->invited_by, 'no agency chose a restricted role here, so the session reads as their code session did');
     }
 
+    /**
+     * PLATFORM-SERVICE-INBOX-001 — the same address also ordered a service from the platform itself.
+     *
+     * That request belongs to no workspace (`tenant_id` null). It must not become a group of its own when the account is set
+     * up: there is no tenant to grant, and asking the database for a tenant with an empty id failed the whole setup with a 500.
+     */
+    public function test_a_contact_who_also_ordered_from_the_platform_finishes_setup_with_only_the_agency_access(): void
+    {
+        Mail::fake();
+        $tenant = $this->tenant();
+        $client = $this->clientOf($tenant);
+        $mine = $this->nameOnARequest('mixed@door.test', $tenant, $client);
+        $platform = $this->nameOnARequest('mixed@door.test', $tenant);
+        $platform->forceFill(['tenant_id' => null, 'owner_scope' => ExternalRequest::OWNER_PLATFORM])->save();
+
+        $this->spend('mixed@door.test', $this->issuedLink('mixed@door.test'))->assertOk();
+        $this->signIn('mixed@door.test')->assertOk();
+
+        $user = User::query()->where('email', 'mixed@door.test')->firstOrFail();
+        $memberships = Membership::query()->withoutGlobalScopes()->where('user_id', $user->id)->get();
+        $this->assertSame([(string) $tenant->id], $memberships->pluck('tenant_id')->map(fn ($id): string => (string) $id)->all());
+        $this->assertSame([(string) $client->id], $memberships->first()->load('scopes')->clientScopeIds());
+        $this->assertSame(0, DB::table('portal_identity_conflicts')->whereNull('tenant_id')->count());
+
+        $references = collect($this->withHeaders($this->spa)->getJson('/api/v1/client/requests')->assertOk()->json('data.requests'))->pluck('reference');
+        $this->assertContains($mine->reference, $references);
+        $this->assertNotContains($platform->reference, $references, 'a platform order is not part of any agency portal');
+    }
+
     public function test_a_contact_of_two_agencies_gets_each_and_is_asked_which(): void
     {
         Mail::fake();
