@@ -183,7 +183,7 @@ final class ClientPortalController
     /** Named on a request, or holding a client-portal membership. Asked across tenants on purpose: nothing about the tenant is returned. */
     private function isPortalContact(string $email): bool
     {
-        return ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [Str::lower($email)])->exists()
+        return ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()->whereRaw('lower(contact_email) = ?', [Str::lower($email)])->exists()
             || Membership::query()->withoutGlobalScopes()
                 ->where('portal', Portal::ClientPortal->value)
                 ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [Str::lower($email)])->select('id'))
@@ -209,7 +209,7 @@ final class ClientPortalController
             ->where('portal', Portal::ClientPortal->value)
             ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [$address])->select('id'))
             ->active()->pluck('tenant_id')
-            ->merge(ExternalRequest::query()->withoutGlobalScopes()->whereRaw('lower(contact_email) = ?', [$address])->latest('created_at')->pluck('tenant_id'))
+            ->merge(ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()->whereRaw('lower(contact_email) = ?', [$address])->latest('created_at')->pluck('tenant_id'))
             ->map(static fn ($id): string => (string) $id)->unique()->values();
 
         if ($held->isEmpty() || ($resolved !== null && $held->contains((string) $resolved->id))) {

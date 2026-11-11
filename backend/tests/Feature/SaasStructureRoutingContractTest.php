@@ -19,7 +19,7 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\AppliesToRegister;
 use Tests\Concerns\VerifiesContact;
@@ -94,14 +94,23 @@ final class SaasStructureRoutingContractTest extends TestCase
      *
      * @param  array<string, string>  $headers
      */
-    private function submit(?string $host = null, string $email = 'visitor@example.test', array $headers = []): TestResponse
+    private function submit(?string $host = null, string $email = 'visitor@example.test', array $headers = [], bool $asProduction = false): TestResponse
     {
         app(TenantContext::class)->forget();
         $payload = $this->withVerifiedContact([
             'type' => 'paid_campaign_launch', 'contact_name' => 'Visitor', 'contact_email' => $email, 'company_name' => 'Visitor Co',
         ]);
 
-        return $this->postJson(($host === null ? '' : 'http://'.$host).'/api/v1/requests', $payload, $headers);
+        // The contact is verified first: the development code that lets a test do it is not issued in production.
+        if ($asProduction) {
+            app()->detectEnvironment(fn () => 'production');
+        }
+
+        try {
+            return $this->postJson(($host === null ? '' : 'http://'.$host).'/api/v1/requests', $payload, $headers);
+        } finally {
+            app()->detectEnvironment(fn () => 'testing');
+        }
     }
 
     private function asAgency(User $user, Tenant $tenant): self
@@ -115,26 +124,17 @@ final class SaasStructureRoutingContractTest extends TestCase
 
     public function test_s01_a_service_request_from_the_official_site_is_platform_owned(): void
     {
+        // The subscriber flagged «default» is right there, and is not given the request.
         $this->submit('campaignshub.io')->assertCreated();
         $row = ExternalRequest::query()->sole();
 
-        if (! Schema::hasColumn('external_requests', 'owner_scope')) {
-            // What today's code does, asserted so the gap is a fact and not a reading of the source.
-            $this->assertSame((string) $this->agency->id, (string) $row->tenant_id);
-            $this->asAgency($this->agencyOwner, $this->agency)->getJson('/api/v1/app/requests')
-                ->assertOk()->assertJsonPath('meta.total', 1);
-
-            $this->markTestIncomplete(
-                'PROVEN GAP (S01, contract §5 P0-6): a request made on the official host is written under the '
-                .'`is_default_portal` tenant and listed in that subscriber agency\'s inbox; there is no platform-owned '
-                .'inbox and no `owner_scope`. Ledger #168, closed by PLATFORM-SERVICE-INBOX-001.'
-            );
-        }
-
-        $this->assertSame('platform', $row->owner_scope);
+        $this->assertSame(ExternalRequest::OWNER_PLATFORM, $row->owner_scope);
         $this->assertNull($row->tenant_id);
+        $this->assertSame('campaignshub_site', $row->source);
+
         $this->asAgency($this->agencyOwner, $this->agency)->getJson('/api/v1/app/requests')
             ->assertOk()->assertJsonPath('meta.total', 0);
+        $this->asAgency($this->agencyOwner, $this->agency)->getJson('/api/v1/app/requests/'.$row->id)->assertNotFound();
     }
 
     // ── S02 — a subscription application is a registration and never a service request ─────────
@@ -248,20 +248,26 @@ final class SaasStructureRoutingContractTest extends TestCase
 
     public function test_s10_an_unknown_host_is_refused_rather_than_given_to_the_default_tenant(): void
     {
-        $response = $this->submit('unknown-host.example');
+        Log::spy();
 
-        if ($response->status() === 201) {
-            $this->assertSame((string) $this->agency->id, (string) ExternalRequest::query()->sole()->tenant_id);
+        // Production has no «default» owner: a host that is neither the platform's nor a subscriber's owns nothing.
+        $this->submit('unknown-host.example', 'visitor@example.test', [], asProduction: true)->assertNotFound();
 
-            $this->markTestIncomplete(
-                'PROVEN GAP (S10, contract §5 P0-5): a request arriving on a host that is neither the official site nor '
-                .'any tenant\'s `portal_domain` is accepted and filed under the `is_default_portal` tenant. Target is a '
-                .'safe refusal with a diagnostic log. Ledger #168, closed by PLATFORM-SERVICE-INBOX-001.'
-            );
-        }
-
-        $response->assertNotFound();
         $this->assertSame(0, ExternalRequest::query()->count());
+        Log::shouldHaveReceived('warning')->once()->withArgs(
+            fn (string $message, array $context): bool => $message === 'requests.intake.refused'
+                && $context['reason'] === 'owner_unresolved'
+                && $context['host'] === 'unknown-host.example'
+                && ! array_key_exists('contact_email', $context)
+        );
+    }
+
+    public function test_s10_the_default_workspace_is_a_local_convenience_and_never_a_production_owner(): void
+    {
+        // Outside production the one flagged workspace still receives a request on an unnamed host, as it always has.
+        $this->submit('unknown-host.example', 'local@example.test')->assertCreated();
+        $this->assertSame((string) $this->agency->id, (string) ExternalRequest::query()->sole()->tenant_id);
+        $this->assertSame(ExternalRequest::OWNER_TENANT, ExternalRequest::query()->sole()->owner_scope);
     }
 
     // ── S11 — pressing send twice is one request ──────────────────────────────────────────────

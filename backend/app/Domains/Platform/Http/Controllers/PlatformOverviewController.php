@@ -66,7 +66,7 @@ final class PlatformOverviewController extends Controller
             ],
             'workload' => [
                 'client_workspaces' => ClientWorkspace::query()->count(),
-                'open_requests' => ExternalRequest::query()
+                'open_requests' => ExternalRequest::query()->tenantOwned()
                     ->whereHas('status', fn ($q) => $q->where('is_terminal', false))->count(),
                 'unpaid_invoices' => Invoice::query()->whereNotIn('status', ['paid', 'cancelled'])->count(),
             ],
@@ -183,6 +183,9 @@ final class PlatformOverviewController extends Controller
 
         return [
             ['key' => 'registrations_pending', 'count' => (int) $pendingReview, 'to' => '/admin/registrations', 'tone' => 'warning'],
+            // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site that nobody has picked up yet.
+            ['key' => 'service_requests_new', 'count' => ExternalRequest::query()->platformOwned()->whereNull('archived_at')
+                ->whereNull('assigned_to')->whereHas('status', fn ($q) => $q->where('is_terminal', false))->count(), 'to' => '/admin/requests', 'tone' => 'warning'],
             ['key' => 'subscriptions_past_due', 'count' => (int) $pastDue, 'to' => '/admin/billing', 'tone' => 'danger'],
             ['key' => 'tenants_suspended', 'count' => Tenant::query()->where('status', 'suspended')->count(), 'to' => '/admin/tenants', 'tone' => 'danger'],
             ['key' => 'connections_need_reconnect', 'count' => $this->reconnectQuery()->count(), 'to' => '/admin/tenants', 'tone' => 'warning'],
