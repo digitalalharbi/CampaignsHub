@@ -21,12 +21,84 @@ use Illuminate\Support\Carbon;
  */
 final class DigestSchedule
 {
-    /** ISO-8601 weekday, Monday when unset or out of range. */
+    /**
+     * ISO-8601 weekday, SUNDAY when unset or out of range — DIGESTS-CADENCE-BUDGETS-001.
+     *
+     * The Owner's weekly lands on Sunday at 08:00 Riyadh: the working week here runs Sunday to Thursday, so a
+     * Monday summary arrives after the week it is meant to open. A stored, chosen day is never moved; only the
+     * fallback for a missing or broken value (and the column default for new rows) changed.
+     */
+    public const DEFAULT_WEEKDAY = 7;
+
     public static function weekday(mixed $value): int
     {
-        $day = (int) ($value ?? 1);
+        $day = (int) ($value ?? self::DEFAULT_WEEKDAY);
 
-        return $day >= 1 && $day <= 7 ? $day : 1;
+        return $day >= 1 && $day <= 7 ? $day : self::DEFAULT_WEEKDAY;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — which rhythms of the PER-PROJECT report this person asked for.
+     *
+     * `per_project` is the daily one (DIGESTS-VISUAL-V2-001). The weekly and monthly keys are new, and a map stored before
+     * they existed has neither: absent means «the same as the daily answer», so somebody who already receives a report per
+     * project starts receiving the weekly and monthly ones too, and somebody who never asked receives none. An explicit
+     * `false` is always kept.
+     *
+     * @param  array<string,mixed>  $digests  the stored `notification_preferences.digests` map
+     * @return list<string> a subset of daily, weekly, monthly
+     */
+    public static function perProjectKinds(array $digests): array
+    {
+        $daily = ($digests['per_project'] ?? false) === true;
+        $out = $daily ? ['daily'] : [];
+        foreach (['weekly' => 'per_project_weekly', 'monthly' => 'per_project_monthly'] as $kind => $key) {
+            $on = array_key_exists($key, $digests) ? $digests[$key] === true : $daily;
+            if ($on) {
+                $out[] = $kind;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The finished calendar month before `$sendDay`'s month, and the month before THAT — plain Gregorian months.
+     *
+     * Sent on the 1st, so the report is about a month that is over. No rolling «last 30 days» and no other calendar:
+     * November is 1–30 November, compared with 1–31 October, whatever their lengths.
+     *
+     * @return array{from: Carbon, to: Carbon, previous_from: Carbon, previous_to: Carbon}
+     */
+    public static function previousMonth(Carbon $sendDay): array
+    {
+        $from = $sendDay->copy()->startOfMonth()->subMonthNoOverflow()->startOfDay();
+        $prev = $from->copy()->subMonthNoOverflow();
+
+        return [
+            'from' => $from,
+            'to' => $from->copy()->endOfMonth(),
+            'previous_from' => $prev->copy()->startOfDay(),
+            'previous_to' => $prev->copy()->endOfMonth(),
+        ];
+    }
+
+    /** Budget pace above this is «ahead of plan» — the same band the report's pacing column colours by. */
+    public const PACE_AHEAD = 1.1;
+
+    /** Budget pace below this is «behind plan». */
+    public const PACE_BEHIND = 0.9;
+
+    /**
+     * on_track / ahead / behind for a pace ratio (projected spend ÷ budget), or null when no pace can be stated.
+     */
+    public static function paceBand(?float $pace): ?string
+    {
+        if ($pace === null) {
+            return null;
+        }
+
+        return $pace > self::PACE_AHEAD ? 'ahead' : ($pace < self::PACE_BEHIND ? 'behind' : 'on_track');
     }
 
     /**

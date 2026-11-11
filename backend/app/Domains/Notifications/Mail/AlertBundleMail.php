@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
+use App\Domains\Notifications\Support\AlertMailItem;
+use App\Domains\Notifications\Support\AlertVisual;
 use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
@@ -87,7 +89,8 @@ final class AlertBundleMail extends Mailable
             )),
             footerNote: MailDisclaimer::note($this->lang),
         ) + [
-            'items' => $this->items,
+            // DIGESTS-CADENCE-BUDGETS-001 — every card in the approved grammar, whichever engine built it.
+            'items' => AlertMailItem::rank(array_map(static fn (array $i): array => isset($i['chip'], $i['steps']) ? $i : AlertVisual::present($i, $ar), $this->items)),
             'greeting' => $ar
                 ? ($this->recipientName !== '' ? "مرحبًا، {$this->recipientName}" : 'مرحبًا')
                 : ($this->recipientName !== '' ? "Hello, {$this->recipientName}" : 'Hello'),

@@ -65,12 +65,12 @@ final class AlertRuleCopy
             case 'lead_unassigned':
                 $mins = (int) ($ctx['minutes'] ?? 60);
 
-                return $line($ar ? $n($count).' عملاء محتملين بدون مسؤول' : $n($count).' leads with no owner', $ar ? 'ما انسندوا لأحد من أكثر من '.self::span($mins, true).'.' : 'Nobody was assigned for over '.self::span($mins, false).'.',
-                    '', $ar ? 'أسند كل عميل لمسؤول الحين.' : 'Assign each lead to an owner now.', 'leads');
+                return $line($ar ? $n($count).' مهتمين بدون مسؤول' : $n($count).' leads with no owner', $ar ? 'ما انسندوا لأحد من أكثر من '.self::span($mins, true).'.' : 'Nobody was assigned for over '.self::span($mins, false).'.',
+                    '', $ar ? 'أسند كل مهتم لمسؤول الحين.' : 'Assign each lead to an owner now.', 'leads');
             case 'lead_no_contact':
                 $mins = (int) ($ctx['minutes'] ?? 240);
 
-                return $line($ar ? $n($count).' عملاء ما تواصل معهم أحد' : $n($count).' leads nobody has tried', $ar ? 'لهم مسؤول بس ما اتصل أحد خلال '.self::span($mins, true).'.' : 'They have an owner, yet no contact attempt in '.self::span($mins, false).'.',
+                return $line($ar ? $n($count).' مهتمين ما تواصل معهم أحد' : $n($count).' leads nobody has tried', $ar ? 'لهم مسؤول بس ما اتصل أحد خلال '.self::span($mins, true).'.' : 'They have an owner, yet no contact attempt in '.self::span($mins, false).'.',
                     '', $ar ? 'ابدأ بالأقدم.' : 'Start calling with the oldest.', 'leads_workspace');
             case 'lead_follow_up_overdue':
                 return $line($ar ? $n($count).' متابعات فات موعدها' : $n($count).' follow-ups past their date', $ar ? 'وعد بالتواصل فات وقته.' : 'A promised contact is late.',

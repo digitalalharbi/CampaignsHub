@@ -8,10 +8,11 @@
 @php($ar = $dir === 'rtl')
 @php($S = \App\Domains\Notifications\Support\DigestStatus::class)
 @php($weekly = $kind === 'weekly')
+@php($monthly = $kind === 'monthly')
 @php($st = $m['status'])
 @php($h = $m['headline'])
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
-    @include('mail.digest._head', ['title' => $weekly ? ($ar ? 'المشروع · الأسبوع' : 'Project · week') : ($ar ? 'المشروع · اليوم' : 'Project · today'), 'sub' => $periodLabel])
+    @include('mail.digest._head', ['title' => $monthly ? ($ar ? 'تقرير المشروع · الشهر' : 'Project report · month') : ($weekly ? ($ar ? 'تقرير المشروع · الأسبوع' : 'Project report · week') : ($ar ? 'تقرير المشروع · اليوم' : 'Project report · today')), 'sub' => $periodLabel])
 
     {{-- Verdict + the ONE figure the project is judged on. --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="project-head" data-state="{{ $m['state'] }}" style="background-color:{{ $S::SOFT[$m['state']] }}; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:10px;">
@@ -43,6 +44,12 @@
         </table>
     @endif
 
+    {{-- DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace: one bar, three numbers, one chip. --}}
+    @if (! empty($m['budget']))
+        <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:2px 0 6px;">{{ $ar ? 'ميزانية الشهر' : 'This month’s budget' }}@if ($m['budget']['band']) <span data-chip="pace" style="display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$m['budget']['tone']] }}; color:{{ $S::INK[$m['budget']['tone']] }};">{{ $S::GLYPH[$m['budget']['tone']] }} {{ $m['budget']['band_label'] }}</span>@endif</div>
+        @include('mail.digest._budget', ['b' => $m['budget']])
+    @endif
+
     {{-- What needs a decision: ranked, the problem drawn, one button each. --}}
     @if ($m['issues'])
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك' : 'Needs your decision' }}</div>
@@ -58,9 +65,33 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:6px 0 10px;">
         <tr><td style="padding:2px 12px 10px;">
             @include('mail.digest._figures', ['figures' => $m['kpis'], 'per' => 3, 'big' => true])
-            @include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 22, 'labels' => $weekly])
+            @if ($monthly && $m['weeks'])
+                {{-- The month as its weeks (1–7, 8–14, …): four or five bars, the last one strong. --}}
+                <div data-block="weeks">@include('mail.digest._spark', ['bars' => $m['weeks'], 'colour' => '#0d8a6f', 'height' => 40, 'labels' => true])</div>
+            @else
+                @include('mail.digest._spark', ['bars' => $m['spark'], 'colour' => '#0d8a6f', 'height' => $weekly ? 40 : 22, 'labels' => $weekly])
+            @endif
         </td></tr>
     </table>
+
+    @if ($monthly && ($m['best'] || $m['worst']))
+        {{-- The month's best and weakest platform, on the objective's own figure. --}}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="best-worst" style="margin-bottom:10px; table-layout:fixed;">
+            <tr>
+                @foreach (['best' => 'ok', 'worst' => 'watch'] as $k => $c)
+                    @if ($m[$k])
+                        <td valign="top" style="padding:0 3px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="{{ $S::SOFT[$c] }}" style="background-color:{{ $S::SOFT[$c] }}; border-{{ $startSide }}:4px solid {{ $S::INK[$c] }}; border-radius:10px; padding:8px 10px;">
+                                <div style="font-size:11px; font-weight:800; color:{{ $S::INK[$c] }};">{{ $S::GLYPH[$c] }} {{ $k === 'best' ? ($ar ? 'الأفضل هذا الشهر' : 'Best this month') : ($ar ? 'يحتاج مراجعة' : 'Needs a review') }}</div>
+                                <div style="font-size:13px; font-weight:800; color:#0b1a16; padding-top:2px;">{{ $m[$k]['name'] }}</div>
+                                <div style="font-size:12px; color:#3d4742;"><span dir="ltr">{{ $m[$k]['value'] }}</span> · {{ $m[$k]['label'] }}</div>
+                            </td></tr></table>
+                        </td>
+                    @endif
+                @endforeach
+            </tr>
+        </table>
+    @endif
 
     {{-- One block PER OBJECTIVE: its own tiles, its platforms with the objective's own figure, its funnel. Unlike objectives are never averaged. --}}
     @foreach ($m['groups'] as $g)

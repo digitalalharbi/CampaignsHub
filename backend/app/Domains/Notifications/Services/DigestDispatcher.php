@@ -123,12 +123,13 @@ final class DigestDispatcher
      * that slides is not comparable to the one before it, and comparability is the only reason to
      * send a monthly report rather than a weekly one.
      */
-    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency'): string
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null): string
     {
         $start = $inMonth->copy()->startOfMonth()->startOfDay();
         $end = $inMonth->copy()->endOfMonth()->endOfDay();
 
-        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale, $audience);
+        // DIGESTS-CADENCE-BUDGETS-001 — the per-project monthly is its own ledger row: `2026-10~<project>`.
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m').self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onlyProject: $onlyProject);
     }
 
     /**
@@ -383,7 +384,7 @@ final class DigestDispatcher
         $projects = array_values((array) ($digest['projects'] ?? []));
 
         if (count($projects) === 1 || ($perProject && $projects !== [])) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7)), $locale, $name, $kind, 'project', self::periodLabel($digest));
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest));
         }
 
         return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest));

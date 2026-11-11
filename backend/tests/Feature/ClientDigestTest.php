@@ -27,7 +27,8 @@ final class ClientDigestTest extends TestCase
         $this->assertStringNotContainsString('data-block="chart-donut"', $html);
         $this->assertStringNotContainsString('data-block="spend-share"', $html);
         $this->assertStringContainsString('96,500', $html, 'revenue stays: it is the outcome, not the money that bought it');
-        $this->assertStringContainsString('Open your portfolio board', $html, 'the agency button, not the client portal');
+        // DIGESTS-CADENCE-BUDGETS-001 — «portfolio» became «projects summary» in every user-visible string.
+        $this->assertStringContainsString('Open the projects summary', $html, 'the agency button, not the client portal');
         $this->assertStringNotContainsString('/portal"', $html);
     }
 

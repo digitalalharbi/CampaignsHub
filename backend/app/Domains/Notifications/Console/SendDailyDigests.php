@@ -8,6 +8,7 @@ use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -65,8 +66,9 @@ final class SendDailyDigests extends Command
 
         foreach ($rows as $row) {
             $digests = $this->digests($row);
+            $wanted = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
 
-            if ($digests === []) {
+            if ($digests === [] && DigestSchedule::perProjectKinds($wanted) === []) {
                 continue;
             }
 
@@ -96,46 +98,43 @@ final class SendDailyDigests extends Command
             $locale = (string) ($row->locale ?? 'ar');
             $tenantId = (string) $row->tenant_id;
             $audience = $row->client_workspace_id !== null ? 'client' : 'agency';
-
-            if (in_array('daily', $digests, true)) {
-                $state = $dispatcher->sendDaily($user, $tenantId, $day->copy()->startOfDay(), $locale, $audience);
-                $state === 'sent' ? $sent++ : $skipped++;
-                $this->line("{$user->email} daily: {$state}");
-                $this->perProject($dispatcher, $row, $user, $tenantId, 'daily', $day->copy()->startOfDay(), $locale, $audience, $sent, $skipped);
-            }
+            $perProject = DigestSchedule::perProjectKinds($wanted);
 
             /*
-             * The weekly goes out on ONE weekday, not every day at the chosen hour.
+             * DIGESTS-CADENCE-BUDGETS-001 — which rhythms are DUE this hour, decided once, then sent for each of the two
+             * audiences of the same rhythm: the cross-project «ملخص المشاريع» (the `daily`/`weekly`/`monthly` keys) and the
+             * report per project (`per_project`, `per_project_weekly`, `per_project_monthly`). Each is switched on its own:
+             * somebody who only wants a report per project no longer has to take the projects summary to get it.
              *
-             * Monday, so it summarises a finished week rather than a week in progress — and because
-             * the idempotency key is the ISO week, a `--force` run on any other day still converges
-             * on the same single send.
+             * The weekly goes out on the chosen weekday (Sunday unless changed) and reports the seven days that ended
+             * yesterday against the seven before; the monthly on the chosen day (the 1st unless changed) and reports the
+             * finished calendar month against the one before it. `--force` sends every switched-on rhythm now, and the
+             * idempotency key (day, ISO week, calendar month) still lets each land once.
              */
-            if (in_array('weekly', $digests, true) && ($this->option('force') || $local->dayOfWeekIso === $this->weekday($row))) {
-                $state = $dispatcher->sendWeekly($user, $tenantId, $day->copy()->endOfDay(), $locale, $audience);
-                $state === 'sent' ? $sent++ : $skipped++;
-                $this->line("{$user->email} weekly: {$state}");
-                $this->perProject($dispatcher, $row, $user, $tenantId, 'weekly', $day->copy()->endOfDay(), $locale, $audience, $sent, $skipped);
-            }
+            $due = [
+                'daily' => true,
+                'weekly' => $this->option('force') || $local->dayOfWeekIso === $this->weekday($row),
+                'monthly' => $this->option('force') || $local->day === $this->monthday($row),
+            ];
 
-            /*
-             * EMAIL-INTELLIGENCE-001 — the monthly goes out on the FIRST of the month, and reports
-             * the month that just finished.
-             *
-             * Sending on the 1st for the previous month is the only arrangement where the figures
-             * are complete when they arrive. Reporting the current month on the 1st would be a
-             * report about a few hours, and reporting it on the 31st would be a report the reader
-             * cannot compare with anything, because the previous one covered a different number of
-             * days.
-             *
-             * `--force` sends the month currently in progress, which is what a manual run is for;
-             * the idempotency key is the calendar month either way, so it can only land once.
-             */
-            if (in_array('monthly', $digests, true) && ($this->option('force') || $local->day === $this->monthday($row))) {
-                $month = $this->option('force') ? $day->copy() : $day->copy()->subMonthNoOverflow();
-                $state = $dispatcher->sendMonthly($user, $tenantId, $month, $locale, $audience);
-                $state === 'sent' ? $sent++ : $skipped++;
-                $this->line("{$user->email} monthly: {$state}");
+            foreach (['daily', 'weekly', 'monthly'] as $kind) {
+                if (! $due[$kind]) {
+                    continue;
+                }
+                // The monthly reports the month that just finished; a forced run reports the month in progress (a manual check).
+                $anchor = match ($kind) {
+                    'daily' => $day->copy()->startOfDay(),
+                    'weekly' => $day->copy()->endOfDay(),
+                    default => $this->option('force') ? $day->copy() : DigestSchedule::previousMonth($day->copy()->addDay())['from'],
+                };
+                if (in_array($kind, $digests, true)) {
+                    $state = $this->dispatch($dispatcher, $kind, $user, $tenantId, $anchor, $locale, $audience, null);
+                    $state === 'sent' ? $sent++ : $skipped++;
+                    $this->line("{$user->email} {$kind}: {$state}");
+                }
+                if (in_array($kind, $perProject, true)) {
+                    $this->perProject($dispatcher, $user, $tenantId, $kind, $anchor, $locale, $audience, $sent, $skipped);
+                }
             }
         }
 
@@ -157,35 +156,54 @@ final class SendDailyDigests extends Command
     }
 
     /**
-     * Which digests this row asked for.
+     * DIGESTS-VISUAL-V2-001 / DIGESTS-CADENCE-BUDGETS-001 — one report PER PROJECT, for a reader who switched that rhythm on.
+     *
+     * Off by default: thirty projects would be thirty extra mails a morning, which is a choice, not a default. Every one is its
+     * own ledger row (so an idempotent retry cannot double-send) and goes through the same gate, scope and unsubscribe as the
+     * projects summary. The approved project template carries it on every rhythm; the monthly is the same design with month framing.
+     */
+    private function perProject(DigestDispatcher $dispatcher, User $user, string $tenantId, string $kind, Carbon $anchor, string $locale, string $audience, int &$sent, int &$skipped): void
+    {
+        if (! (bool) config('mail.operational_digests')) {
+            return;
+        }
+        /*
+         * The reader's projects are asked INSIDE their tenant: a role's permissions (`clients.view_all`) are tenant-scoped, and asked
+         * from the bare scheduler they read as none — so the per-project reports silently went to nobody. `send()` sets the same
+         * context for its own build; this is the question before it.
+         */
+        $tenants = app(TenantContext::class);
+        $tenants->setTenantId($tenantId);
+        try {
+            $projectIds = app(DigestScope::class)->projectIdsFor($user, $tenantId);
+        } finally {
+            $tenants->forget();
+        }
+        foreach ($projectIds as $projectId) {
+            $key = DigestDispatcher::projectKey((string) $projectId);
+            $state = $this->dispatch($dispatcher, $kind, $user, $tenantId, $anchor, $locale, $audience, $key);
+            $state === 'sent' ? $sent++ : $skipped++;
+            $this->line("{$user->email} {$kind} project {$key}: {$state}");
+        }
+    }
+
+    private function dispatch(DigestDispatcher $dispatcher, string $kind, User $user, string $tenantId, Carbon $anchor, string $locale, string $audience, ?string $onlyProject): string
+    {
+        return match ($kind) {
+            'daily' => $dispatcher->sendDaily($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
+            'weekly' => $dispatcher->sendWeekly($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
+            default => $dispatcher->sendMonthly($user, $tenantId, $anchor, $locale, $audience, $onlyProject),
+        };
+    }
+
+    /**
+     * Which projects-summary rhythms this row asked for.
      *
      * Absent means NONE. An opt-in that defaults to on is not an opt-in, and the first scheduled run
      * after a deploy is the worst possible moment to discover that.
      *
      * @return list<string>
      */
-    /**
-     * DIGESTS-VISUAL-V2-001 — one digest PER PROJECT, after the portfolio one, only for a reader who turned `per_project` on.
-     *
-     * Off by default: thirty projects would be thirty extra mails a morning, which is a choice, not a default. Every one is its
-     * own ledger row (so an idempotent retry cannot double-send) and goes through the same gate, scope and unsubscribe as the portfolio.
-     */
-    private function perProject(DigestDispatcher $dispatcher, object $row, User $user, string $tenantId, string $kind, Carbon $day, string $locale, string $audience, int &$sent, int &$skipped): void
-    {
-        $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
-        if (($chosen['per_project'] ?? false) !== true || ! (bool) config('mail.operational_digests')) {
-            return;
-        }
-        foreach (app(DigestScope::class)->projectIdsFor($user, $tenantId) as $projectId) {
-            $key = DigestDispatcher::projectKey((string) $projectId);
-            $state = $kind === 'daily'
-                ? $dispatcher->sendDaily($user, $tenantId, $day, $locale, $audience, $key)
-                : $dispatcher->sendWeekly($user, $tenantId, $day, $locale, $audience, $key);
-            $state === 'sent' ? $sent++ : $skipped++;
-            $this->line("{$user->email} {$kind} project {$key}: {$state}");
-        }
-    }
-
     private function digests(object $row): array
     {
         $chosen = $row->digests === null ? [] : (array) json_decode((string) $row->digests, true);
@@ -205,9 +223,8 @@ final class SendDailyDigests extends Command
     /**
      * The weekday this recipient chose, ISO-8601 — EMAIL-SCHEDULE-001.
      *
-     * Monday when unset, which is what the hard-coded `isMonday()` did, so no existing recipient's
-     * mail moves. Anything outside 1–7 falls back to Monday rather than silently never matching: a
-     * digest that stops arriving because a column holds 9 is a failure nobody would think to look for.
+     * Sunday when unset or out of range (DIGESTS-CADENCE-BUDGETS-001, see `DigestSchedule::weekday()`); a stored choice
+     * is never moved. A value outside 1–7 falls back rather than silently never matching.
      */
     private function weekday(object $row): int
     {
