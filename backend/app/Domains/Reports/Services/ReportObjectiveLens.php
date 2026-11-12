@@ -88,6 +88,53 @@ final class ReportObjectiveLens
     }
 
     /**
+     * REPORT-MULTI-OBJECTIVE-001 — EVERY template a scope's objective choice names, in the order chosen.
+     *
+     * `fromScopeObjectives()` returns the first match, which is what folded «زيارات + مبيعات» into one template. This keeps them all; one
+     * entry means one objective, exactly as before.
+     *
+     * @param  list<string>  $objectives
+     * @return list<string>
+     */
+    public static function templatesOf(array $objectives): array
+    {
+        $out = [];
+        foreach ($objectives as $objective) {
+            foreach (self::TEMPLATE_MEMBERS as $template => $members) {
+                if (in_array($objective, $members, true) || $objective === $template) {
+                    $out[$template] = true;
+                }
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the report objectives the campaigns that SPENT in the scope declare, for a report nobody chose one for.
+     *
+     * The same vote `infer()` takes (spending, declared campaigns only). Several distinct answers are the default «more than one objective».
+     *
+     * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`
+     * @return list<string>
+     */
+    public static function templatesFromCampaigns(array $campaigns): array
+    {
+        $out = [];
+        foreach ($campaigns as $c) {
+            if ((float) ($c['spend'] ?? 0) <= 0 || ($c['objective_source'] ?? 'unset') === 'unset') {
+                continue;
+            }
+            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
+            if ($objective !== null) {
+                $out[self::reportObjectiveOf($objective)] = true;
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
      * The report objective for a scope, from the campaigns' own declarations.
      *
      * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`

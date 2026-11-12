@@ -22,6 +22,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Services\ReportObjectiveLens;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
@@ -543,11 +544,20 @@ final class ReportScopeController extends Controller
 
         // REPORT-KPI-CONTRACT-001 — the objective the editor sent is the report's measurement TEMPLATE: it moves to the report and the
         // stored scope keeps no objective unless «filter campaigns by objective» was explicitly switched on.
-        $template = $scope->objectiveTemplate();
+        // REPORT-MULTI-OBJECTIVE-001 — and every objective it names: one is the report's objective, several are the mixed lens plus the list.
+        $objectives = ReportObjectives::toStore($scope->objectiveTemplates());
+        $config = (array) ($model->config ?? []);
+        if ($objectives['campaign_objective'] !== null) {
+            unset($config[ReportObjectives::CONFIG_KEY]);
+            if ($objectives['objectives'] !== []) {
+                $config[ReportObjectives::CONFIG_KEY] = $objectives['objectives'];
+            }
+        }
 
         $model->forceFill([
             'scope' => $scope->isUnbounded() ? null : $scope->toArray(),
-            'campaign_objective' => $template ?? $model->campaign_objective,
+            'campaign_objective' => $objectives['campaign_objective'] ?? $model->campaign_objective,
+            'config' => $config === [] ? $model->config : $config,
             'status' => 'processing',
             'error' => null,
         ])->save();

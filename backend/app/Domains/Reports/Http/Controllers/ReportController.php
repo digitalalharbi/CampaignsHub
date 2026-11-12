@@ -24,6 +24,7 @@ use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportPeriod;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Domains\Reports\Support\SharePreferences;
@@ -243,6 +244,8 @@ final class ReportController extends Controller
             $data['period_end'] = $window['to']->toDateString();
         }
 
+        $objectives = ReportObjectives::toStore(ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplates());
+
         $attributes = [
             'name' => $data['name'],
             'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
@@ -252,7 +255,8 @@ final class ReportController extends Controller
             'form' => $level?->form() ?? $data['form'] ?? 'detailed',
             'audience' => $data['audience'] ?? 'client',
             'mode' => $data['mode'] ?? 'snapshot',
-            'campaign_objective' => $data['campaign_objective'] ?? ReportScope::fromReport((array) ($data['scope'] ?? []))->objectiveTemplate(),
+            // REPORT-MULTI-OBJECTIVE-001 — one objective, or several (stored as the mixed lens plus `config.objectives`, set below).
+            'campaign_objective' => $data['campaign_objective'] ?? $objectives['campaign_objective'],
             'period_start' => $data['period_start'] ?? Carbon::today()->subDays(29),
             'period_end' => $data['period_end'] ?? Carbon::today(),
             /*
@@ -289,6 +293,9 @@ final class ReportController extends Controller
             // project id lifted the generator's project scope onto another project's rows. The report's own project, or none.
             'scope' => ($scope = ReportScope::fromReport(self::pinnedToProject($project, ReportScopeHierarchy::verifyFlat($project, (array) ($data['scope'] ?? [])))))->isUnbounded() ? null : $scope->toArray(),
         ];
+        if (! isset($data['campaign_objective']) && $objectives['objectives'] !== []) {
+            $attributes['config'] = [...(array) $attributes['config'], ReportObjectives::CONFIG_KEY => $objectives['objectives']];
+        }
 
         // The link preferences a copy carries are cut to the known switches on every write, whoever wrote them.
         $config = (array) $attributes['config'];

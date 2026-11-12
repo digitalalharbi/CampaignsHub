@@ -22,6 +22,7 @@ use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
@@ -427,6 +428,9 @@ final class LiveReportBuilderController extends Controller
             'providers.*' => ['string', 'max:40'],
             'metrics' => ['array'],
             'metrics.*' => ['string', 'max:40'],
+            // REPORT-MULTI-OBJECTIVE-001 — the link's measurement objective(s): one, or several («زيارات + مبيعات»).
+            'objectives' => ['sometimes', 'array', 'max:7'],
+            'objectives.*' => [Rule::in(ReportObjectives::allowed())],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
@@ -592,9 +596,14 @@ final class LiveReportBuilderController extends Controller
             array_column(self::METRICS, 'key'),
         ));
 
+        // REPORT-MULTI-OBJECTIVE-001 — the objective the builder offered used to stay in the browser: every link ranked its content under
+        // «custom» and showed every KPI. It is the report's now, read by the page, its PDF and its files through `ReportObjectives`.
+        $objectives = ReportObjectives::toStore(array_values(array_filter((array) ($data['objectives'] ?? []), 'is_string')));
+
         $report = Report::create([
             'project_id' => $project,
             'name' => $data['name'],
+            'campaign_objective' => $objectives['campaign_objective'],
             'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => 'live',
             /*
@@ -627,6 +636,7 @@ final class LiveReportBuilderController extends Controller
              * beside it would be a second answer nobody asked for.
              */
             'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode]
+                + ($objectives['objectives'] === [] ? [] : [ReportObjectives::CONFIG_KEY => $objectives['objectives']])
                 + ($level === null ? [] : ['detail_level' => $level->value])
                 + (($names = array_filter(['prepared_for_name' => trim((string) ($data['prepared_for_name'] ?? '')), 'prepared_by_name' => trim((string) ($data['prepared_by_name'] ?? ''))], static fn (string $v): bool => $v !== '')) === [] ? [] : ['branding' => $names]),
             /*

@@ -117,10 +117,30 @@ final class ChosenFigures
         return new self(self::listedMetrics($report, $share), $columns !== [] ? $columns : ReportColumns::forReport($report)->toArray());
     }
 
-    /** The live payload and its drawers state the link's own lists (`metrics`, `columns`) and no other, so those are what they are cut to. */
+    /**
+     * The live payload and its drawers, cut by the SAME list its PDF is — master task 10, «schema واحد».
+     *
+     * This read the link's own `metrics` only, while `for()` (the PDF and the files of the same link) also read the report's scope and its
+     * customised set: a report whose own KPI list was chosen on the report showed every figure on its link and only the chosen ones in its PDF.
+     */
     public static function forLive(ReportShare $share): self
     {
-        return new self(self::strings(($share->scope ?? [])['metrics'] ?? []), ReportColumns::forShare($share)->toArray());
+        return new self(self::listed($share->report, $share), ReportColumns::forShare($share)->toArray());
+    }
+
+    /**
+     * The KPI list somebody CHOSE for this report through this link — the link's, an automatic composition, the report's scope, its customised
+     * set — or empty when nobody chose one (an objective's preset is not a choice and is not cut to).
+     *
+     * @return list<string>
+     */
+    public static function listed(?Report $report, ?ReportShare $share): array
+    {
+        if ($report === null) {
+            return $share !== null ? self::strings(($share->scope ?? [])['metrics'] ?? []) : [];
+        }
+
+        return self::listedMetrics($report, $share);
     }
 
     /** @return list<string> */

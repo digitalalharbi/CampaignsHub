@@ -29,6 +29,7 @@ use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportPeriod;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -73,6 +74,36 @@ final class ReportGenerator
         }
     }
 
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the operator's (one or several), else — for a report whose
+     * inferred lens is mixed — the objectives its spending campaigns declare. Master task 10: «افتراضياً من أهداف الحملات».
+     *
+     * @param  list<array<string, mixed>>  $campaigns
+     * @return list<string>
+     */
+    private function objectivesOf(Report $report, string $objective, array $campaigns): array
+    {
+        $chosen = ReportObjectives::of($report);
+        if ($chosen !== []) {
+            return $chosen;
+        }
+
+        return $objective === ReportObjectives::MIXED ? ReportObjectiveLens::templatesFromCampaigns($campaigns) : [$objective];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $campaigns
+     * @return list<string>
+     */
+    private function objectiveKpis(Report $report, string $objective, array $campaigns, ?string $destination): array
+    {
+        $objectives = $this->objectivesOf($report, $objective, $campaigns);
+
+        return count($objectives) >= 2
+            ? $this->template->metricSetForMany($objectives, $destination)
+            : $this->template->metricSet($objective, $destination);
+    }
+
     /** @return array<string, mixed> */
     private function snapshot(Report $report): array
     {
@@ -98,7 +129,16 @@ final class ReportGenerator
         // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
         // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
         if (($template = $scope->objectiveTemplate()) !== null) {
-            $report->forceFill(['campaign_objective' => $report->campaign_objective ?: $template, 'scope' => ($scope->toArray() ?: null)])->saveQuietly();
+            /*
+             * REPORT-MULTI-OBJECTIVE-001 — and EVERY objective it names, not the first. «زيارات + مبيعات» used to be folded into whichever
+             * template matched first; several are stored as the mixed lens plus the list (see ReportObjectives). One stays exactly as before.
+             */
+            $chosen = ReportObjectives::toStore(ReportObjectiveLens::templatesOf($scope->objectives));
+            $many = $report->campaign_objective ? [] : $chosen['objectives'];
+            $report->forceFill([
+                'campaign_objective' => $report->campaign_objective ?: ($chosen['campaign_objective'] ?? $template),
+                'scope' => ($scope->toArray() ?: null),
+            ] + ($many === [] ? [] : ['config' => [...(array) ($report->config ?? []), ReportObjectives::CONFIG_KEY => $many]]))->saveQuietly();
         }
         $agg = $scope->applyTo($this->agg);
 
@@ -295,7 +335,9 @@ final class ReportGenerator
                 ? $scope->metrics
                 : (isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
                     ? $config['metric_set']
-                    : $this->template->metricSet($objective, $leadDestination?->value)),
+                    : $this->objectiveKpis($report, $objective, $campaigns, $leadDestination?->value)),
+            // REPORT-MULTI-OBJECTIVE-001 — the objectives the KPIs above were taken from (one, several, or the campaigns' own when none was chosen).
+            'objectives' => $this->objectivesOf($report, $objective, $campaigns),
             'lead_destination' => $leadDestination?->value,
             // RESULT-EVENTS-001 — Results exist only where a result event is configured (project, over-ridden by this report); never inferred.
             'results' => $this->resultsFor($report, $campaigns, $destinations),
