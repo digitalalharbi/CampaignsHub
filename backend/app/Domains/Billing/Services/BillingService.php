@@ -477,7 +477,8 @@ final class BillingService
             'tenant_id' => $payment->tenant_id,
             'payment_id' => $payment->getKey(),
             'status' => $status,
-            'provider_response' => $response,
+            // PAY-WEBHOOK-SECRET-REDACT-001 — a verified result carries the webhook payload; no credential is kept.
+            'provider_response' => WebhookPayloadRedactor::redact($response),
             'created_at' => Carbon::now(),
         ])->save();
     }

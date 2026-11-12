@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Billing\Models\PaymentAttempt;
 use App\Domains\Billing\Models\PaymentWebhookEvent;
+use App\Domains\Billing\Providers\PaymentProvider;
+use App\Domains\Billing\Services\BillingService;
 use App\Domains\Billing\Support\WebhookPayloadRedactor;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +75,45 @@ final class PaymentWebhookSecretRedactionTest extends TestCase
         );
     }
 
+    /** The client-billing path keeps each verified result in `payment_attempts`; that copy carried the body too. */
+    private function settledAttempt(): PaymentAttempt
+    {
+        config()->set('billing.providers.leaky', PayloadCarryingFakeProvider::class);
+        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
+        app(TenantContext::class)->setTenantId($tenant->id);
+        $client = ClientWorkspace::create([
+            'tenant_id' => $tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
+        ]);
+        $billing = app(BillingService::class);
+        $invoice = $billing->approveQuote($billing->createQuote(['tenant_id' => $tenant->id, 'client_workspace_id' => $client->id, 'subtotal' => 100, 'total' => 100]));
+        $payment = $billing->startPayment($invoice, ['provider' => 'leaky']);
+
+        $event = $billing->handleWebhook('leaky', (string) json_encode([
+            'id' => 'evt_leaky', 'type' => 'payment_paid', 'secret_token' => 'client-billing-secret',
+            'data' => ['id' => $payment->provider_session_id, 'status' => 'paid'],
+        ]), []);
+        $this->assertTrue((bool) $event->verified);
+        $this->assertSame('paid', $payment->refresh()->status, 'settlement is unchanged');
+
+        return PaymentAttempt::query()->withoutGlobalScopes()->where('payment_id', $payment->id)->latest('id')->firstOrFail();
+    }
+
+    public function test_the_payment_attempt_ledger_keeps_the_result_without_the_secret(): void
+    {
+        $attempt = $this->settledAttempt();
+
+        $this->assertSame(WebhookPayloadRedactor::MASK, $attempt->provider_response['payload']['secret_token']);
+        $this->assertStringNotContainsString('client-billing-secret', (string) json_encode(DB::table('payment_attempts')->pluck('provider_response')->all()));
+        $this->assertStringNotContainsString('client-billing-secret', $this->storedText());
+    }
+
+    public function test_a_secret_straddling_the_cut_of_a_non_json_body_is_masked_whole(): void
+    {
+        $body = str_repeat('x', 1990).' secret_token=SECRETVALUE12345';
+
+        $this->assertStringNotContainsString('SECRET', (string) WebhookPayloadRedactor::forStorage($body)['raw']);
+    }
+
     public function test_the_cleanup_command_counts_by_default_and_redacts_only_when_told(): void
     {
         $legacy = fn (string $event, array $payload): string => tap((string) Str::uuid(), fn (string $id) => DB::table('payment_webhook_events')->insert([
@@ -78,24 +123,112 @@ final class PaymentWebhookSecretRedactionTest extends TestCase
         $old = $legacy('evt_old', ['id' => 'evt_old', 'secret_token' => 'live-secret-value', 'data' => ['id' => 'pay_9', 'amount' => 1000]]);
         $legacy('evt_clean', ['id' => 'evt_clean', 'data' => ['id' => 'pay_8']]);
 
+        // A payment attempt written before the fix, carrying the verified payload whole.
+        $attempt = $this->settledAttempt();
+        DB::table('payment_attempts')->where('id', $attempt->id)->update(['provider_response' => json_encode(['status' => 'paid', 'payload' => ['secret_token' => 'old-attempt-secret']])]);
+        $attempts = fn (): string => (string) json_encode(DB::table('payment_attempts')->pluck('provider_response')->all());
+        $events = (int) DB::table('payment_webhook_events')->count();
+
         $this->artisan('billing:redact-webhook-secrets')
             ->expectsOutputToContain('mode: dry-run')
-            ->expectsOutputToContain('rows: 2')
-            ->expectsOutputToContain('rows carrying a secret: 1')
-            ->expectsOutputToContain('rows redacted: 0')
+            ->expectsOutputToContain("payment_webhook_events rows: {$events}")
+            ->expectsOutputToContain('payment_webhook_events rows carrying a secret: 1')
+            ->expectsOutputToContain('payment_webhook_events rows redacted: 0')
+            ->expectsOutputToContain('payment_attempts rows carrying a secret: 1')
+            ->expectsOutputToContain('payment_attempts rows redacted: 0')
             ->doesntExpectOutputToContain('live-secret-value')
+            ->doesntExpectOutputToContain('old-attempt-secret')
             ->assertSuccessful();
         $this->assertStringContainsString('live-secret-value', $this->storedText(), 'a dry run writes nothing');
+        $this->assertStringContainsString('old-attempt-secret', $attempts());
 
         $this->artisan('billing:redact-webhook-secrets', ['--apply' => true])
-            ->expectsOutputToContain('rows redacted: 1')
+            ->expectsOutputToContain('payment_webhook_events rows redacted: 1')
+            ->expectsOutputToContain('payment_attempts rows redacted: 1')
             ->assertSuccessful();
 
         $this->assertStringNotContainsString('live-secret-value', $this->storedText());
+        $this->assertStringNotContainsString('old-attempt-secret', $attempts());
         $row = PaymentWebhookEvent::query()->withoutGlobalScopes()->findOrFail($old);
         $this->assertSame(['id' => 'pay_9', 'amount' => 1000], $row->payload['data'], 'nothing else changes');
         $this->assertTrue((bool) $row->verified);
 
-        $this->artisan('billing:redact-webhook-secrets')->expectsOutputToContain('rows carrying a secret: 0')->assertSuccessful();
+        $this->artisan('billing:redact-webhook-secrets')
+            ->expectsOutputToContain('payment_webhook_events rows carrying a secret: 0')
+            ->expectsOutputToContain('payment_attempts rows carrying a secret: 0')
+            ->assertSuccessful();
+    }
+}
+
+/** A configured gateway whose verified result carries the body it was sent, as Moyasar's did before the fix. */
+final class PayloadCarryingFakeProvider implements PaymentProvider
+{
+    public function confirmsPayloadIntegrity(): bool
+    {
+        return true;
+    }
+
+    /** @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null */
+    public function fetchPayment(string $providerPaymentId): ?array
+    {
+        return null;
+    }
+
+    public function supportsUnattendedCharge(): bool
+    {
+        return false;
+    }
+
+    /** @param  array<string,mixed>  $payload */
+    public function savedPaymentMethodFrom(array $payload): ?array
+    {
+        return null;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{status: string, provider_payment_id?: string|null, error?: string|null}
+     */
+    public function chargeStoredMethod(string $token, array $payload): array
+    {
+        return ['status' => 'unsupported', 'provider_payment_id' => null, 'error' => null];
+    }
+
+    public function name(): string
+    {
+        return 'leaky';
+    }
+
+    public function isConfigured(): bool
+    {
+        return true;
+    }
+
+    /** @param  array<string,mixed>  $payload */
+    public function createSession(array $payload): array
+    {
+        return ['status' => 'created', 'session_id' => 'sess_'.($payload['idempotency_key'] ?? 'x'), 'checkout_url' => 'https://pay.test/checkout', 'error' => null];
+    }
+
+    /** @param  array<string,mixed>  $payload */
+    public function paymentMethodFingerprint(array $payload): ?string
+    {
+        return null;
+    }
+
+    /** @param  array<string,string>  $headers */
+    public function verifyWebhook(string $rawBody, array $headers): array
+    {
+        /** @var array<string,mixed> $body */
+        $body = json_decode($rawBody, true) ?: [];
+
+        return [
+            'verified' => ($body['secret_token'] ?? null) === 'client-billing-secret',
+            'event_id' => (string) ($body['id'] ?? ''),
+            'type' => (string) ($body['type'] ?? ''),
+            'payment_id' => (string) ($body['data']['id'] ?? ''),
+            'status' => (string) ($body['data']['status'] ?? 'processing'),
+            'payload' => $body,
+        ];
     }
 }

@@ -13,7 +13,8 @@ namespace App\Domains\Billing\Support;
  * raw body, exactly as before (`MoyasarPaymentProvider::verifyWebhook`); only the copy that is STORED is redacted.
  *
  * Keys are matched case-insensitively at any depth. A body that is not JSON is kept as text with any
- * `key=value` / `"key": "value"` occurrence of the same keys masked.
+ * `key=value` / `"key": "value"` occurrence of the same keys masked — masked first, then cut to 2000 characters, so
+ * a secret straddling the cut is never stored half-masked.
  */
 final class WebhookPayloadRedactor
 {
@@ -31,7 +32,7 @@ final class WebhookPayloadRedactor
 
         $decoded = json_decode($rawBody, true);
 
-        return is_array($decoded) ? self::redact($decoded) : ['raw' => self::redactText(mb_substr($rawBody, 0, 2000))];
+        return is_array($decoded) ? self::redact($decoded) : ['raw' => mb_substr(self::redactText($rawBody), 0, 2000)];
     }
 
     /**
