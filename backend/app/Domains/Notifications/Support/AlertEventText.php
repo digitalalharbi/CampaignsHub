@@ -117,11 +117,11 @@ final class AlertEventText
                     $cur = (string) ($ctx['currency'] ?? '');
 
                     return [
-                        'headline' => $ar ? 'اقترب الصرف من الحد اللي حطّيته' : 'Spend is close to the limit you set',
-                        'text' => $ar ? 'وصل الاستهلاك لعتبة التنبيه.' : 'Consumption passed an alert threshold of the internal spend limit.',
-                        'numbers' => trim(($ar ? 'المستهلك ' : 'Consumed ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
-                            .(isset($ctx['threshold']) ? ($ar ? ' (العتبة ' : ' (threshold ').(int) $ctx['threshold'].'%)' : '')),
-                        'action' => $ar ? 'عدّل الحد أو راجع الصرف. النظام ما يوقف الإعلانات لوحده.' : 'Your call: adjust the limit or review the spend. The system does not pause ads on its own.',
+                        'headline' => $ar ? 'قرّبت توصل للحد اللي حطيته' : 'Close to the limit you set',
+                        'text' => $ar ? 'وصل الإنفاق لحد التنبيه.' : 'Spend passed an alert level of the spend limit.',
+                        'numbers' => trim(($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
+                            .(isset($ctx['threshold']) ? ($ar ? ' (الحد ' : ' (limit ').(int) $ctx['threshold'].'%)' : '')),
+                        'action' => $ar ? 'هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.' : 'This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.',
                         'link' => 'analytics',
                     ];
                 }
@@ -138,9 +138,9 @@ final class AlertEventText
                 return [
                     'headline' => $ar ? "ميزانية {$who} قربت تخلص" : "The {$who} budget is nearly used up",
                     'text' => $ar ? 'الحملة صرفت أغلب ميزانيتها.' : 'The campaign has used a large share of its budget.',
-                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'المصروف ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
+                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
                         .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
-                    'action' => $ar ? 'قرّر اليوم: أبقِ الميزانية ← أو عدّلها ← أو أوقف الضعيف.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
+                    'action' => $ar ? 'أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
                     'link' => 'campaign',
                 ];
             case 'cpa_increase':
@@ -152,7 +152,7 @@ final class AlertEventText
                     'headline' => $ar ? "{$label} زادت على {$who}" : ucfirst($label)." rose on {$who}",
                     'text' => $ar ? 'كل نتيجة صارت أغلى من قبل.' : 'The campaign pays more for each result than in the previous period.',
                     'numbers' => self::beforeNow($ctx, $key, $ar),
-                    'action' => $ar ? 'راجع الجمهور ثم المحتوى، وابدأ بالأضعف.' : 'Review content and audience, starting with the weakest.',
+                    'action' => $ar ? 'راجع الجمهور ← ثم المحتوى ← ابدأ بالأقل أداءً.' : 'Review content and audience, starting with the weakest.',
                     'link' => 'campaign',
                 ];
             case 'roas_drop':
@@ -160,7 +160,7 @@ final class AlertEventText
                     'headline' => $ar ? "العائد نزل على {$who}" : "Return on ad spend fell on {$who}",
                     'text' => $ar ? 'كل ريال إعلان يرجّع أقل من قبل.' : 'Each unit of ad spend returns less than in the previous period.',
                     'numbers' => self::beforeNow($ctx, 'roas', $ar),
-                    'action' => $ar ? 'الأضعف ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'action' => $ar ? 'افتح الأقل أداءً ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',
                     'link' => 'campaign',
                 ];
             case 'no_results':
