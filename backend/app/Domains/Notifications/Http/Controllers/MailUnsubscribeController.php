@@ -31,7 +31,9 @@ final class MailUnsubscribeController extends Controller
 
     public function show(Request $request, string $token): Response
     {
-        return $this->page($request, $this->unsubscribes->read($token) === null ? 'invalid' : 'confirm', $token);
+        $read = $this->unsubscribes->read($token);
+
+        return $this->page($request, $read === null ? 'invalid' : 'confirm', $token, $read);
     }
 
     public function leave(Request $request, string $token): Response
@@ -44,17 +46,20 @@ final class MailUnsubscribeController extends Controller
 
         $this->unsubscribes->leave($read);
 
-        return $this->page($request, 'done', $token);
+        return $this->page($request, 'done', $token, $read);
     }
 
-    private function page(Request $request, string $state, string $token): Response
+    /** @param  array{t: string, h: string, s: string, u: int|null}|null  $read */
+    private function page(Request $request, string $state, string $token, ?array $read = null): Response
     {
         $ar = $request->query('lang') !== 'en' && ! str_starts_with((string) $request->header('Accept-Language'), 'en');
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — a recipient OUTSIDE the platform has no account: no link into it, no account wording.
+        $external = ($read['s'] ?? null) === MailUnsubscribes::EXTERNAL;
 
         return response()->view('mail.pages.unsubscribe', [
             'state' => $state,
             'action' => route('mail.unsubscribe.confirm', ['token' => $token]),
-            'preferences' => MailLinks::to('/app/account/notifications'),
+            'preferences' => $external ? null : MailLinks::to('/app/account/notifications'),
             'dir' => $ar ? 'rtl' : 'ltr',
             'locale' => $ar ? 'ar' : 'en',
             'wordmark' => MailShell::wordmarkPlain($ar),
@@ -63,7 +68,7 @@ final class MailUnsubscribeController extends Controller
                 'confirm' => 'لإيقاف هذا النوع من الرسائل، اضغط الزر إن لم يكتمل ذلك تلقائيًا.',
                 'button' => 'إلغاء الاشتراك',
                 'done' => 'تم إلغاء اشتراكك في هذا النوع من الرسائل.',
-                'kept' => 'ستبقى رسائل أمان حسابك تصلك عند الحاجة.',
+                'kept' => $external ? 'لن تصلك رسائل متابعة الميزانية بعد الآن.' : 'ستبقى رسائل أمان حسابك تصلك عند الحاجة.',
                 'change' => 'تغيير إعدادات الإشعارات',
                 'invalid' => 'هذا الرابط غير صالح. يمكنك إدارة إشعاراتك من إعدادات حسابك.',
             ] : [
@@ -71,7 +76,7 @@ final class MailUnsubscribeController extends Controller
                 'confirm' => 'To stop this type of message, press the button if this does not finish by itself.',
                 'button' => 'Unsubscribe',
                 'done' => 'You are unsubscribed from this type of message.',
-                'kept' => 'Messages about the security of your account will still reach you when needed.',
+                'kept' => $external ? 'Budget follow-up messages will no longer reach you.' : 'Messages about the security of your account will still reach you when needed.',
                 'change' => 'Change your notification settings',
                 'invalid' => 'This link is not valid. You can manage your notifications from your account settings.',
             ],
