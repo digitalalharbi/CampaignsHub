@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { ArrowLeft, Pencil, Plus } from 'lucide-react'
+import { createProject } from '@/features/projects/api'
+import { promptDialog } from '@/stores/dialogs'
 import { getClient } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf, PRIORITY_LABELS, SERVICE_LEVEL_LABELS } from './labels'
 import { ClassificationEditor } from './ClassificationEditor'
@@ -47,6 +49,8 @@ export function ClientCommandCenterPage() {
   const [tab, setTab] = useState<Tab>(params.get('tab') === 'delivery' ? 'delivery' : 'overview')
   const [editing, setEditing] = useState(false)
   const query = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
+  /* CLIENT-UNIT-001 — a client's second project is what brings the «المشاريع» switch into view. */
+  const addProject = useMutation({ mutationFn: (name: string) => createProject({ client_workspace_id: clientId, name }) })
 
   if (query.isPending) return <div className="mx-auto max-w-5xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
 
@@ -87,7 +91,9 @@ export function ClientCommandCenterPage() {
 
   // Only tabs whose backend is live AND the user is permitted to see are shown — never a placeholder tab.
   const TABS: { key: Tab; label: string }[] = [
-    { key: 'overview', label: t('tab_overview') }, { key: 'projects', label: t('tab_projects') },
+    { key: 'overview', label: t('tab_overview') },
+    // CLIENT-UNIT-001 — the project is hidden until the client has a second one; one project IS the client.
+    ...(d.projects.length > 1 ? [{ key: 'projects' as Tab, label: t('tab_projects') }] : []),
     { key: 'campaigns', label: t('tab_campaigns') },
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
@@ -149,12 +155,36 @@ export function ClientCommandCenterPage() {
             </StatGrid>
           )}
 
-          {tab === 'projects' && (
+          {tab === 'overview' && (
+            <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="client-project-actions">
+              {d.projects.length === 1 && (
+                <Link to={portalTo(`/projects/${d.projects[0].id}/integrations`)} data-testid="client-sources-link" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
+                  {ar ? 'المنصات المربوطة' : 'Connected platforms'}
+                </Link>
+              )}
+              {d.can.update && (
+                <button
+                  type="button"
+                  data-testid="client-add-project"
+                  disabled={addProject.isPending}
+                  onClick={async () => {
+                    const name = await promptDialog({ title: ar ? 'مشروع جديد' : 'New project', label: ar ? 'اسم المشروع' : 'Project name' })
+                    if (name) addProject.mutate(name)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary"
+                >
+                  <Plus size={14} /> {ar ? 'مشروع جديد' : 'New project'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {tab === 'projects' && d.projects.length > 1 && (
             <ul className="space-y-2">
               {d.projects.length === 0 && <li className="text-sm text-text-muted">—</li>}
               {d.projects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
-                  <span className="font-medium text-text-primary">{p.name}</span>
+                  <Link to={portalTo(`/projects/${p.id}/integrations`)} className="font-medium text-brand-600 hover:underline">{p.name}</Link>
                   <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{projectStatusLabel(p.status, ar)}</span>
                 </li>
               ))}

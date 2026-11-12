@@ -314,7 +314,7 @@ export function useClientActions() {
   const qc = useQueryClient()
   const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'clients'] })
   return {
-    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', b), onSuccess: inv }),
+    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', { ...b, create_project: true }), onSuccess: inv }),
     update: useMutation({ mutationFn: (b: { id: string; name?: string; mode?: string }) => putData(`/client-workspaces/${b.id}`, b), onSuccess: inv }),
     archive: useMutation({ mutationFn: (id: string) => deleteData(`/client-workspaces/${id}`), onSuccess: inv }),
   }

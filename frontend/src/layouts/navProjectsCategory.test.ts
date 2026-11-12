@@ -43,17 +43,24 @@ describe('the projects category', () => {
    */
   it.each(rails)('%s opens the campaign area in the approved order', (_name, groups, prefix) => {
     const campaigns = groups.find((g) => g.key === 'campaigns')!
-    expect(campaigns.leaves.slice(0, 6).map((l) => l.ar)).toEqual(['نظرة عامة', 'المشاريع', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات'])
-    expect(campaigns.leaves[1]!.to).toBe(`${prefix}/projects`)
+    // CLIENT-UNIT-001 — the agency has no project directory: its clients ARE the unit, so the rail starts at the campaign.
+    const agency = prefix === '/agency'
+    expect(campaigns.leaves.slice(0, agency ? 5 : 6).map((l) => l.ar)).toEqual(agency
+      ? ['نظرة عامة', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات']
+      : ['نظرة عامة', 'المشاريع', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات'])
+    if (!agency) expect(campaigns.leaves[1]!.to).toBe(`${prefix}/projects`)
   })
 
   it.each(rails)('%s names the two project destinations so neither reads as a version of the other', (_name, groups, prefix) => {
     const leaves = groups.flatMap((g) => g.leaves)
-    const directory = leaves.find((l) => l.to === `${prefix}/projects`)!
+    const directory = leaves.find((l) => l.to === `${prefix}/projects`)
     const overview = leaves.find((l) => l.to === `${prefix}/portfolio`)!
 
-    expect([directory.ar, overview.ar]).toEqual(['المشاريع', 'ملخص المشاريع'])
-    expect([directory.en, overview.en]).toEqual(['Projects', 'Portfolio'])
+    if (prefix === '/agency') expect(directory).toBeUndefined()
+    else {
+      expect([directory!.ar, overview.ar]).toEqual(['المشاريع', 'ملخص المشاريع'])
+      expect([directory!.en, overview.en]).toEqual(['Projects', 'Portfolio'])
+    }
     expect(leaves.map((l) => l.ar)).not.toContain('جميع المشاريع')
   })
 

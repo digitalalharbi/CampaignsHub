@@ -33,12 +33,12 @@ const clientSelect = () => screen.getByTestId('agency-scope-client') as HTMLSele
 describe('AgencyScopeSwitcher — long client lists', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  /** A short roster is scannable; a filter box there is clutter, not help. */
-  it('shows no filter for a short list', async () => {
+  /** CLIENT-UNIT-001 — the client list is the one entry point, so it is always searchable once there is a choice. */
+  it('shows the search for any list with a choice in it', async () => {
     mount(5)
     await waitFor(() => expect(clientSelect()).toBeInTheDocument())
 
-    expect(screen.queryByTestId('agency-scope-client-filter')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agency-scope-client-filter')).toBeInTheDocument()
     // Five clients plus the placeholder.
     expect(clientSelect().options).toHaveLength(6)
   })

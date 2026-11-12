@@ -365,7 +365,7 @@ export function AgencyDashboardPage() {
           tone="brand"
         />
         <Metric
-          to="/agency/projects"
+          to="/agency/clients"
           label={ar ? 'المشاريع' : 'Projects'}
           value={d.projects.total}
           hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}

@@ -36,7 +36,7 @@ const APP_BEFORE = [
  * second — which is the distinction, rather than "the agency has no plan".
  */
 const AGENCY_BEFORE = [
-  '/agency/dashboard', '/agency/clients', '/agency/requests', '/agency/projects',
+  '/agency/dashboard', '/agency/clients', '/agency/requests',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',

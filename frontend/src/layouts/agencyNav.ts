@@ -1,4 +1,4 @@
-import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
+import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -66,7 +66,6 @@ export const agencyNavGroups: readonly NavGroup[] = [
     ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
       { to: '/agency/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard },
-      { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
       { to: '/agency/launch', ar: 'حملة جديدة', en: 'Launch', icon: Rocket },
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
       { to: '/agency/ad-groups', ar: 'المجموعات الإعلانية', en: 'Ad groups', icon: Rows3 },
