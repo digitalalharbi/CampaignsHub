@@ -31,7 +31,8 @@ final class TikTokCampaignStatusTest extends TestCase
             'CAMPAIGN_STATUS_ENABLE' => ['ENABLE', 'CAMPAIGN_STATUS_ENABLE', 'active'],
             'CAMPAIGN_STATUS_DISABLE' => ['ENABLE', 'CAMPAIGN_STATUS_DISABLE', 'paused'],
             'CAMPAIGN_STATUS_DELETE' => ['DISABLE', 'CAMPAIGN_STATUS_DELETE', 'archived'],
-            'CAMPAIGN_STATUS_BUDGET_EXCEED' => ['ENABLE', 'CAMPAIGN_STATUS_BUDGET_EXCEED', 'paused'],
+            // A daily budget spent: running, resumes tomorrow (its `budget_exhausted` signal is tested beside it).
+            'CAMPAIGN_STATUS_BUDGET_EXCEED' => ['ENABLE', 'CAMPAIGN_STATUS_BUDGET_EXCEED', 'active'],
             'CAMPAIGN_STATUS_ADVERTISER_AUDIT' => ['ENABLE', 'CAMPAIGN_STATUS_ADVERTISER_AUDIT', 'pending'],
             'ADVERTISER_CONTRACT_PENDING' => ['ENABLE', 'ADVERTISER_CONTRACT_PENDING', 'pending'],
             'CAMPAIGN_STATUS_AWAITING_RELEASE' => ['ENABLE', 'CAMPAIGN_STATUS_AWAITING_RELEASE', 'pending'],

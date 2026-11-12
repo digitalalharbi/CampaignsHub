@@ -386,10 +386,19 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ]);
             }
 
+            if ($state['signal'] === 'account_suspended') {
+                // Not a pause somebody chose: TikTok suspended the advertiser account. Named, so it is never read as a quiet «paused».
+                Log::warning('TikTok advertiser account suspended (ADVERTISER_ACCOUNT_PUNISH); its campaigns are not delivering', [
+                    'advertiser_id' => $adAccountId, 'campaign_id' => (string) $c['campaign_id'],
+                ]);
+            }
+
             $campaigns[] = [
                 'external_id' => (string) $c['campaign_id'],
                 'name' => (string) ($c['campaign_name'] ?? $c['campaign_id']),
                 'status' => $state['status'],
+                // Kept with the row (it lands in `external_campaigns.raw`): budget_exhausted / account_suspended, else null.
+                'delivery_signal' => $state['signal'],
                 'objective' => isset($c['objective_type']) ? (string) $c['objective_type'] : null,
                 'daily_budget' => ($c['budget_mode'] ?? null) === 'BUDGET_MODE_DAY' && isset($c['budget'])
                     ? (float) $c['budget']

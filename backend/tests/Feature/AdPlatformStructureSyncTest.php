@@ -837,7 +837,8 @@ final class AdPlatformStructureSyncTest extends TestCase
 
         $this->assertSame('paused', $unified('run')->status, 'the adopted campaign follows the platform');
         $this->assertSame('completed', $unified('off')->status, 'an authored status is not overwritten');
-        $this->assertSame('paused', $unified('odd')->status, 'out of budget is not delivering');
+        $this->assertSame('active', $unified('odd')->status, 'a daily budget spent is still a running campaign');
+        $this->assertSame('budget_exhausted', ExternalCampaign::withoutGlobalScopes()->where('external_id', 'odd')->value('raw')['delivery_signal'] ?? null);
     }
 
     /**

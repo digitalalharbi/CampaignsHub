@@ -35,6 +35,13 @@ enum CampaignStatus: string
 
         return match (true) {
             $key === '' => self::Unknown,
+            /*
+             * TIKTOK-CAMPAIGN-STATUS-001 review — asked before the words they contain. «inactive» contains «active»;
+             * LinkedIn's PENDING_DELETION («requested to be deleted») contains «pending» and CANCELED («permanently
+             * canceled») matched nothing. Source: Microsoft Learn, LinkedIn Marketing API, «Create and Manage Campaigns».
+             */
+            str_contains($key, 'inactive') => self::Paused,
+            str_contains($key, 'pending_deletion'), str_contains($key, 'cancel') => self::Archived,
             str_contains($key, 'active'), str_contains($key, 'enabled'), str_contains($key, 'delivering'), str_contains($key, 'running') => self::Active,
             str_contains($key, 'paused'), str_contains($key, 'disabled'), str_contains($key, 'inactive') => self::Paused,
             str_contains($key, 'complete'), str_contains($key, 'ended'), str_contains($key, 'finished') => self::Completed,
