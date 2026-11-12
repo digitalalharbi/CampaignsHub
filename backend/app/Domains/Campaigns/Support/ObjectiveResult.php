@@ -234,7 +234,7 @@ final class ObjectiveResult
             return null;
         }
 
-        return self::FAMILY_LABELS[$family?->value ?? ''][$key] ?? self::LABELS[$key] ?? null;
+        return self::FAMILY_LABELS[$family === null ? '' : $family->value][$key] ?? self::LABELS[$key] ?? null;
     }
 
     /**
