@@ -67,7 +67,7 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     // original in USD, and certainly not the coalesced zero.
     // The card, not the label's immediate parent: these KPIs are the shared `StatCard` now, whose
     // label sits in a row of its own beside the delta, with the figure below it.
-    const spend = (await screen.findByText('المصروف')).closest('div.rounded-2xl') as HTMLElement
+    const spend = (await screen.findByText('الإنفاق')).closest('div.rounded-2xl') as HTMLElement
     expect(within(spend).getByText('—')).toBeInTheDocument()
     expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
     expect(screen.queryByText(/1,000/)).not.toBeInTheDocument()
@@ -81,13 +81,13 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     expect(within(remaining).getByText('—')).toBeInTheDocument()
   })
 
-  it('Budget tab: «المصروف» refuses a partial figure, and the forecast it would drive reads «—»', async () => {
+  it('Budget tab: «الإنفاق» refuses a partial figure, and the forecast it would drive reads «—»', async () => {
     renderWithProviders(<CampaignBudgetTab campaign={campaign} projectId="p1" range={range} locale="ar" />)
 
-    // «المصروف» is «—» — not «0 SAR», not the SAR-labelled subset, not the USD half on its own.
+    // «الإنفاق» is «—» — not «0 SAR», not the SAR-labelled subset, not the USD half on its own.
     // The budget tab's figures are `Fact` rows, not KPI cards — unchanged markup, so the label's own
     // parent is still the row.
-    const spent = (await screen.findByText('المصروف')).parentElement as HTMLElement
+    const spent = (await screen.findByText('الإنفاق')).parentElement as HTMLElement
     expect(within(spent).getByText('—')).toBeInTheDocument()
     expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
 

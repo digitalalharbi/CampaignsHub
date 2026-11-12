@@ -181,7 +181,7 @@ function objectiveLabel(objective: string, ar: boolean): string {
 function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: boolean }) {
   return (
     <ChartCard
-      title={ar ? 'حالة محفظة العملاء' : 'The shape of the client book'}
+      title={ar ? 'حالة العملاء' : 'The shape of the client book'}
       subtitle={ar
         ? 'نسبة كل حالة من إجمالي العملاء داخل نطاقك.'
         : 'What share of the clients in your scope sits in each state.'}
@@ -317,7 +317,7 @@ export function AgencyDashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
-            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
+            {ar ? 'تنبيهات' : 'Needs your attention'}
           </h2>
           <ul className="mt-4 space-y-2.5 text-sm">
             {/*
@@ -592,7 +592,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
       </h2>
       <MetricTable
         head={ar
-          ? ['العميل', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+          ? ['العميل', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
           : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
         rows={rows.map((r) => [
           <div key="c" className="flex flex-col">
@@ -651,7 +651,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
           </h3>
           <MetricTable
             head={ar
-              ? ['المشروع', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+              ? ['المشروع', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
               : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
             rows={(open.projects_breakdown ?? []).map((p) => [
               <div key="n" className="flex flex-col">

@@ -150,7 +150,7 @@ const dictionary = {
     view_client: 'عرض العميل',
     view_campaign: 'عرض الحملة',
     clients_portfolio: 'العملاء',
-    clients_subtitle: 'محفظة العملاء — الحالة، مستوى الخدمة، المشاريع والحملات.',
+    clients_subtitle: 'العملاء — الحالة، مستوى الخدمة، المشاريع والحملات.',
     clients_empty: 'لا يوجد عملاء بعد.',
     tab_projects: 'المشاريع',
     tab_campaigns: 'الحملات',

@@ -47,7 +47,7 @@ const COPY = {
     advertising: 'منصات الإعلانات', commerce: 'المتاجر', measurement: 'قياس المواقع',
     inconclusive: 'غير حاسم — تحقّق بربط حساب', notRequired: 'لا يحتاج بيانات اعتماد للمنصة',
     emailId: 'المعرّف يبدو بريدًا إلكترونيًا — غالبًا ملأه المتصفح تلقائيًا. أعد إدخاله.',
-    ready: 'جاهز للربط', total: 'المزوّدون', attention: 'يحتاج انتباهًا',
+    ready: 'جاهز للربط', total: 'المزوّدون', attention: 'تنبيه',
     configure: 'إعداد', close: 'إغلاق', save: 'حفظ', saving: 'جارٍ الحفظ…',
     test: 'اختبار الإعداد', testing: 'جارٍ الاختبار…',
     disable: 'تعطيل المزوّد', enable: 'تفعيل المزوّد', disabled: 'معطّل',

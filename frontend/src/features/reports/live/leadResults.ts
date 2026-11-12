@@ -34,7 +34,7 @@ export function landingLabel(payload: LivePayload, ar: boolean): string {
   return purchaseIsLandingProxy(payload) ? (ar ? 'إتمامات نموذج الصفحة' : 'Landing-page form completions') : (ar ? 'عملاء صفحة الهبوط' : 'Landing-page leads')
 }
 
-export const NATIVE_LEADS_LABEL = { ar: 'العملاء المحتملون الأصليون', en: 'Native lead-form leads' }
+export const NATIVE_LEADS_LABEL = { ar: 'المهتمين', en: 'Native lead-form leads' }
 
 /**
  * NASEL 2026-10-29 — the report's own words for «Results», and whether it has Results at all.

@@ -28,7 +28,7 @@ import {
  */
 const COPY = {
   ar: {
-    title: 'التسليم الدوري', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
+    title: 'الجدولة الدورية', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
     week: 'الأسبوع', draft: 'مسودة', approved: 'معتمدة', sent: 'أُرسلت', ready: 'جاهزة للاعتماد',
     checklist: 'قبل الاعتماد', report: 'التقرير', reportStates: { completed: 'جاهز', processing: 'قيد الإعداد', failed: 'فشل', missing: 'غير موجود' } as Record<string, string>,
     undecided: 'توصيات بلا قرار', evidenceCount: 'لقطات منصات', invoice: 'الفاتورة', invoiceNone: 'غير مرتبطة',

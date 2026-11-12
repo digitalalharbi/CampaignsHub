@@ -96,7 +96,7 @@ export function CampaignSecondaryStrip({
         */}
       <Cell
         testid="campaigns-spent-against-budget"
-        label={ar ? 'المصروف من الميزانية' : 'Spent against budget'}
+        label={ar ? 'الإنفاق من الميزانية' : 'Spent against budget'}
         value={budget.spent === null ? '—' : money(budget.spent, budget.spentCurrency ?? budget.currency ?? undefined)}
       />
       <Cell testid="campaigns-cost-per-result" label={ar ? 'تكلفة النتيجة' : 'Cost / result'} value={formatMoneyReading(costPer, money)} note={costPer.note} />
@@ -131,16 +131,16 @@ function spendRefusal(unmeasured: number, unreadable: number, ar: boolean): stri
   const locale = ar ? 'ar' : 'en'
   if (unmeasured > 0 && unreadable === 0) {
     return ar
-      ? `المصروف غير مجموع — ${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة في هذه الفترة`
+      ? `الإنفاق غير مجموع — ${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة في هذه الفترة`
       : `Spend not summed — ${countedCampaigns(unmeasured, locale)} with nothing measured in this period`
   }
   if (unmeasured > 0) {
     return ar
-      ? `المصروف غير متاح — ${countedCampaigns(unreadable, locale)} بمبالغ جزئية أو بعملات متعددة، و${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة`
+      ? `الإنفاق غير متاح — ${countedCampaigns(unreadable, locale)} بمبالغ جزئية أو بعملات متعددة، و${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة`
       : `Spend unavailable — ${countedCampaigns(unreadable, locale)} partial or multi-currency, ${countedCampaigns(unmeasured, locale)} with nothing measured`
   }
 
-  return ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency'
+  return ar ? 'الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency'
 }
 
 function Cell({ label, value, note, testid }: { label: string; value: string; note?: string | null; testid?: string }) {

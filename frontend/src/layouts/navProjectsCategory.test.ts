@@ -37,13 +37,13 @@ const rails: Array<[string, readonly NavGroup[], string]> = [
 describe('the projects category', () => {
   /*
    * NAV-TAXONOMY-001 (Owner, 2026-10-21) supersedes NAV-FIVE-AREAS-001's «side by side» rule: the campaign area
-   * follows the approved order exactly — نظرة عامة · المشاريع · إطلاق الحملات · الحملات · المجموعات · الإعلانات — so the
+   * follows the approved order exactly — نظرة عامة · المشاريع · حملة جديدة · الحملات · المجموعات · الإعلانات — so the
    * portfolio overview moved to «الأداء», where it is read beside Analytics and Reports. What NAV-IA-001 protected
    * still holds: the two are never labelled as versions of one another, and «جميع المشاريع» does not return.
    */
   it.each(rails)('%s opens the campaign area in the approved order', (_name, groups, prefix) => {
     const campaigns = groups.find((g) => g.key === 'campaigns')!
-    expect(campaigns.leaves.slice(0, 6).map((l) => l.ar)).toEqual(['نظرة عامة', 'المشاريع', 'إطلاق الحملات', 'الحملات', 'المجموعات', 'الإعلانات'])
+    expect(campaigns.leaves.slice(0, 6).map((l) => l.ar)).toEqual(['نظرة عامة', 'المشاريع', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات'])
     expect(campaigns.leaves[1]!.to).toBe(`${prefix}/projects`)
   })
 
@@ -52,7 +52,7 @@ describe('the projects category', () => {
     const directory = leaves.find((l) => l.to === `${prefix}/projects`)!
     const overview = leaves.find((l) => l.to === `${prefix}/portfolio`)!
 
-    expect([directory.ar, overview.ar]).toEqual(['المشاريع', 'الملخص'])
+    expect([directory.ar, overview.ar]).toEqual(['المشاريع', 'ملخص المشاريع'])
     expect([directory.en, overview.en]).toEqual(['Projects', 'Portfolio'])
     expect(leaves.map((l) => l.ar)).not.toContain('جميع المشاريع')
   })

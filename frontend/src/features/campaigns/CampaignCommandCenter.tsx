@@ -218,7 +218,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const resultDeltaKey = result.key as Sparkable | null
   const costDelta = result.key === 'conversions' ? d.cpa : result.key === 'clicks' ? d.cpc : null
 
-  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
+  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان الإنفاق بالميزانية، فيلزمهما رقم مصروف
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
   const spendVsBudget = budgetComparableSpend(k, cur, summary.data?.currency ?? null)
@@ -237,7 +237,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
    *
    * `k` is `MetricsAggregator::totals()`, which coalesces a withheld sum to 0. Read raw, this card
-   * showed «المصروف 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
+   * showed «الإنفاق 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
    *
    * BUDGET and المتبقي are deliberately NOT read through this: a campaign budget is set by the
    * advertiser in the campaign's own currency and is never withheld. Routing it through a
@@ -261,7 +261,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
     )}
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-      <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
+      <KpiCard label="الإنفاق" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
       <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
       <KpiCard
         label={resultLabel(result, ar)}
@@ -548,7 +548,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Fact label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-        <Fact label="المصروف" value={spendRead.text} />
+        <Fact label="الإنفاق" value={spendRead.text} />
         <Fact label="المتبقي" value={remainingText(remaining, cur)} tone={remaining !== null && remaining < 0 ? 'danger' : undefined} />
         <Fact label="أيام منقضية" value={pacing ? String(pacing.elapsed) : '—'} />
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />

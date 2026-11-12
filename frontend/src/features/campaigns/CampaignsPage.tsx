@@ -230,7 +230,7 @@ export function CampaignsPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» in the rail is this page with its builder open (`?launch=1`). The builder is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» in the rail is this page with its builder open (`?launch=1`). The builder is the
    * same one the «new campaign» button opens; the address only says «open it», and closing it removes the parameter so
    * Back and a reload do not reopen it. Someone without `campaigns.create` is not shown a builder they cannot submit;
    * they are told why instead.
@@ -1578,7 +1578,7 @@ export function CampaignsPage() {
       <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
       {launching && !canCreate && (
         <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
+          {ar ? 'حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
       <LivePerformanceNotice variant="compact" />
@@ -1964,13 +1964,13 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
       {/*
         The bar and the sentence. NOT the four figures again.
 
-        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · المصروف 3.67K · المتبقي
+        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · الإنفاق 3.67K · المتبقي
         791K · المتوقع 3.67K» in the secondary strip and then the same four numbers, same order,
         same currency, in this card a few hundred pixels below. A reader meeting a figure twice does
         not read it twice — they stop to work out which of the two to believe.
 
         The strip keeps them, because it is where the budget's REFUSALS live: «ميزانيات بعملات
-        مختلفة — لا تُجمع» and «المصروف غير متاح» are its wording, under a stricter spend rule than
+        مختلفة — لا تُجمع» and «الإنفاق غير متاح» are its wording, under a stricter spend rule than
         this card applies. What this card has that nothing else does is the pacing — a bar drawn
         against the budget so an overrun is visible past the end rather than clamped away, and one
         sentence naming the overrun in money. That is what it now shows.
