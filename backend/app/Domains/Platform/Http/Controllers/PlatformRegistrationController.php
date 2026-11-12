@@ -28,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Throwable;
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -182,7 +183,7 @@ final class PlatformRegistrationController extends Controller
                 'url' => Frontend::origin()
                     .'/signup/status?request='.$registration->getKey(),
             ], occasion: $registration->getKey().':'.now()->toDateString());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             report($e);
         }
 
@@ -452,7 +453,14 @@ final class PlatformRegistrationController extends Controller
             abort(429, __('api.too_many_requests'));
         }
 
-        $issued = $this->verification->send($registration, $channel);
+        try {
+            $issued = $this->verification->send($registration, $channel);
+        } catch (Throwable $e) {
+            // A refusal before anything was sent (the mobile cooldown) does not use up one of the three.
+            RateLimiter::decrement($key, 3600);
+
+            throw $e;
+        }
 
         $this->audit->log('registration.verification_resent', RegistrationRequest::class, (string) $registration->getKey(),
             null, ['channel' => $channel, 'delivery_status' => $issued['delivery_status']]);

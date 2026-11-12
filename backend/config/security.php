@@ -48,11 +48,10 @@ return [
         $raw = trim((string) env('TRUSTED_PROXIES', ''));
         $list = array_values(array_filter(array_map('trim', explode(',', $raw)), static fn (string $p): bool => $p !== ''));
 
-        if ($list === [] || in_array('*', $list, true) || in_array('**', $list, true)) {
-            return $default;
-        }
+        // `*`/`**` are dropped, never widened to: `172.18.0.2/32,*` keeps the pinned address and nothing more.
+        $list = array_values(array_filter($list, static fn (string $p): bool => $p !== '*' && $p !== '**'));
 
-        return $list;
+        return $list === [] && $raw === '' ? $default : $list;
     })(),
 
     /*

@@ -156,11 +156,16 @@ final class PlatformInboxAttentionTest extends TestCase
         $this->assertSame(3, ContactMessage::query()->count(), 'every message is still stored');
         $this->assertSame(2, DB::table('mail_deliveries')->where('kind', 'client_request')->count());
 
-        // The contact burst does not silence the other queues, and a data request is never capped.
+        // The contact burst does not silence the other queues; data requests have their own, larger allowance.
+        config(['requests.platform_inbox.notify_data_per_hour' => 3]);
         $this->ticket();
-        foreach (['d1', 'd2', 'd3'] as $who) {
-            $this->postJson('/api/v1/data-requests', ['type' => 'export', 'name' => 'Visitor', 'email' => "{$who}@example.test"])->assertOk();
+        foreach (['d1', 'd2', 'd3', 'd4'] as $i => $who) {
+            // A different visitor each time: the intake limiter is per address, and that is what a flood would use.
+            $this->withServerVariables(['REMOTE_ADDR' => '172.18.0.4'])->postJson('/api/v1/data-requests', [
+                'type' => 'export', 'name' => 'Visitor', 'email' => "{$who}@example.test",
+            ], ['X-Forwarded-For' => '203.0.113.'.(10 + $i)])->assertOk();
         }
+        $this->assertSame(4, DataRequest::query()->count(), 'every request is still stored and counted');
         $this->assertSame(1, DB::table('mail_deliveries')->where('dedup_key', 'like', 'platform-inbox:support:%')->count());
         $this->assertSame(3, DB::table('mail_deliveries')->where('dedup_key', 'like', 'platform-inbox:data:%')->count());
     }
@@ -273,8 +278,15 @@ final class PlatformInboxAttentionTest extends TestCase
         $this->assertSame(1, RegistrationVerification::query()->where('registration_request_id', $registration->id)->where('channel', 'mobile')->whereNull('consumed_at')->count());
         $this->assertSame(1, AuditLog::query()->where('action', 'registration.verification_resent')->where('entity_id', (string) $registration->id)->count());
 
-        // Bounded from the console whatever the channel: three per application per hour.
+        // A refusal before anything was sent (the mobile cooldown) does not use up a slot.
         $url = '/api/v1/admin/registrations/'.$registration->id.'/resend-verification';
+        config(['accounts.mobile_resend_cooldown_seconds' => 600]);
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertStatus(422);
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertStatus(422);
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertStatus(422);
+        config(['accounts.mobile_resend_cooldown_seconds' => 0]);
+
+        // Bounded from the console whatever the channel: three per application per hour.
         $this->asAdmin()->postJson($url, [], $this->spa)->assertOk();
         $this->asAdmin()->postJson($url, [], $this->spa)->assertOk();
         $this->asAdmin()->postJson($url, [], $this->spa)->assertStatus(429);

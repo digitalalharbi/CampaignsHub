@@ -6,6 +6,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Middleware\TrustProxies as Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\IpUtils;
 
 /**
  * EDGE-CLIENT-IP-001 — the visitor's address is the visitor's, not the proxy's.
@@ -27,18 +28,22 @@ use Illuminate\Http\Request;
  */
 final class TrustProxies extends Middleware
 {
+    /** Where a proxy of ours can be: loopback, RFC 1918, IPv6 loopback and unique-local. */
+    private const LOCAL_RANGES = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '::1/128', 'fc00::/7'];
+
     /** @return list<string> */
     protected function proxies(): array
     {
         $list = (array) config('security.trusted_proxies', []);
 
-        return array_values(array_filter($list, static fn ($p): bool => is_string($p) && self::acceptable($p)));
+        return array_values(array_filter(array_map(static fn ($p) => is_string($p) ? trim($p) : '', $list), static fn (string $p): bool => self::acceptable($p)));
     }
 
     /**
-     * An address or a CIDR no wider than a /8 (IPv4) or a /7 (IPv6). `*`, `**`, Symfony's `REMOTE_ADDR` keyword,
-     * `0.0.0.0/0`, `::/0` and anything that does not parse are dropped — they would make every peer a proxy. An entry
-     * that is dropped trusts nothing, so a typo fails closed.
+     * An address, a private/loopback/unique-local block no wider than the range itself, or a public block no wider
+     * than /16 (IPv4) or /48 (IPv6). `*`, `**`, Symfony's `REMOTE_ADDR` keyword, `0.0.0.0/0`, `::/0`, `2000::/7` and
+     * anything that does not parse are dropped — they would make a large part of the internet a proxy. An entry that
+     * is dropped trusts nothing, so a typo fails closed.
      */
     public static function acceptable(string $entry): bool
     {
@@ -51,17 +56,26 @@ final class TrustProxies extends Middleware
             return false;
         }
 
-        if ($bits === null) {
-            return true;
-        }
-
-        if (! ctype_digit($bits)) {
+        if ($bits !== null && ! ctype_digit($bits)) {
             return false;
         }
 
-        $bits = (int) $bits;
+        $max = $v4 ? 32 : 128;
+        $bits = $bits === null ? $max : (int) $bits;
+        if ($bits > $max) {
+            return false;
+        }
 
-        return $v4 ? ($bits >= 8 && $bits <= 32) : ($bits >= 7 && $bits <= 128);
+        // Inside loopback, RFC 1918 or IPv6 unique-local, and no wider than that range: that is where proxies live.
+        // Anything else — a public range — only as a narrow block (/16 IPv4, /48 IPv6) or a single address.
+        foreach (self::LOCAL_RANGES as $range) {
+            [, $width] = explode('/', $range);
+            if ($bits >= (int) $width && IpUtils::checkIp($ip, $range)) {
+                return true;
+            }
+        }
+
+        return $bits >= ($v4 ? 16 : 48);
     }
 
     protected function headers(): int

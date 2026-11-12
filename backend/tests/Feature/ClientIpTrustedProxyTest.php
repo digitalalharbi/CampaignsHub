@@ -72,13 +72,20 @@ final class ClientIpTrustedProxyTest extends TestCase
         $this->contactFrom('10.0.0.5', '203.0.113.7', 'narrow@example.test')->assertOk();
         $this->assertSame('10.0.0.5', $this->storedIp('narrow@example.test'), 'outside the narrowed subnet is not a proxy');
 
-        foreach (['*', '0.0.0.0/0', '::/0', 'REMOTE_ADDR', '0.0.0.0/1', 'not-an-ip'] as $i => $everyone) {
+        foreach (['*', '0.0.0.0/0', '::/0', 'REMOTE_ADDR', '0.0.0.0/1', 'not-an-ip', '198.0.0.0/8', '2000::/7', '172.18.0.4/33'] as $i => $everyone) {
             config(['security.trusted_proxies' => [$everyone]]);
             // A different public peer each time: `/contact` allows five a minute per address.
             $peer = '198.51.100.'.(20 + $i);
             $this->contactFrom($peer, '203.0.113.7', "star{$i}@example.test")->assertOk();
             $this->assertSame($peer, $this->storedIp("star{$i}@example.test"), "`{$everyone}` must not make every peer a proxy");
         }
+
+        // A bad entry is dropped, never widened to the default: the pinned address keeps working and nothing more.
+        config(['security.trusted_proxies' => ['172.18.0.4/32', '*']]);
+        $this->contactFrom('172.18.0.4', '203.0.113.7', 'mixed-ok@example.test')->assertOk();
+        $this->assertSame('203.0.113.7', $this->storedIp('mixed-ok@example.test'));
+        $this->contactFrom('10.0.0.5', '203.0.113.7', 'mixed-no@example.test')->assertOk();
+        $this->assertSame('10.0.0.5', $this->storedIp('mixed-no@example.test'));
 
         // The pinned form the deploy notes recommend: the two proxies' own addresses.
         config(['security.trusted_proxies' => ['172.18.0.4/32', '172.18.0.6']]);

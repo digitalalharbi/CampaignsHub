@@ -52,15 +52,17 @@ final class PlatformInboxNotifier
         };
 
         /*
-         * One allowance per queue, so a burst of contact messages cannot silence a support ticket, and a data request
-         * is never capped here at all: it carries a statutory deadline and its own intake limiter already bounds it.
+         * One allowance per queue, so a burst of contact messages cannot silence a support ticket or a data request.
+         * Data requests get their own, larger allowance: they carry a statutory deadline, but their intake is public
+         * and per real address now (EDGE-CLIENT-IP-001), so uncapped they would let one visitor mail the owner
+         * hundreds of times an hour. Past an allowance the row is still stored and counted unread on the console.
          * `hit()` returns the new count, which makes the check and the increment one step under concurrency.
          */
-        if ($queue !== 'data') {
-            $perHour = max(1, (int) config('requests.platform_inbox.notify_per_hour', 30));
-            if (RateLimiter::hit('platform-inbox-notify:'.$queue, 3600) > $perHour) {
-                return 0;
-            }
+        $perHour = $queue === 'data'
+            ? max(1, (int) config('requests.platform_inbox.notify_data_per_hour', 60))
+            : max(1, (int) config('requests.platform_inbox.notify_per_hour', 30));
+        if (RateLimiter::hit('platform-inbox-notify:'.$queue, 3600) > $perHour) {
+            return 0;
         }
 
         $told = 0;
