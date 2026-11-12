@@ -1,4 +1,4 @@
-import { api, getData, postData } from '@/lib/api/client'
+import { afterSessionRotation, api, getData, postData } from '@/lib/api/client'
 
 /**
  * Client Portal API. Auth is the httpOnly `client_portal` cookie set on login — it flows automatically with
@@ -17,7 +17,8 @@ export const portalLoginStart = (channel: 'sms' | 'whatsapp' | 'email', destinat
   postData<PortalLoginStart>('/client/login/start', { channel, destination })
 
 export const portalLoginVerify = (verification_id: string, code: string, redirect?: string | null) =>
-  postData<{ authenticated: boolean; contact: string; dev_token: string | null; destination: string }>('/client/login/verify', { verification_id, code, redirect: redirect ?? null })
+  // The server regenerates the session here — WEBKIT-SESSION-ROTATION-001.
+  afterSessionRotation(() => postData<{ authenticated: boolean; contact: string; dev_token: string | null; destination: string }>('/client/login/verify', { verification_id, code, redirect: redirect ?? null }))
 
 export const portalSession = () => getData<{ contact_email: string | null; contact_phone: string | null }>('/client/session')
 export const portalLogout = () => postData<{ ok: boolean }>('/client/logout')

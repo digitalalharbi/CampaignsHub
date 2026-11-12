@@ -1,4 +1,4 @@
-import { api, ensureCsrfCookie, getData } from '@/lib/api/client'
+import { afterSessionRotation, api, ensureCsrfCookie, getData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export const previewInvite = (token: string) =>
@@ -9,7 +9,7 @@ export async function acceptInvite(token: string, name: string, password: string
   await ensureCsrfCookie()
   // The response returns the fully-formed, logged-in user — callers use it directly rather than making a
   // second /auth/me round-trip, which would race the session cookie the accept response just regenerated.
-  const res = await api.post<{ data: { user: AuthUser } }>('/invitations/accept', { token, name, password })
+  const res = await afterSessionRotation(() => api.post<{ data: { user: AuthUser } }>('/invitations/accept', { token, name, password }))
   return res.data.data.user
 }
 
