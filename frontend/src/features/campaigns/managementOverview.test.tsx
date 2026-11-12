@@ -33,7 +33,7 @@ describe('the management overview', () => {
 
     expect(await screen.findByTestId('entity-overview-ad-trend')).toBeInTheDocument()
     expect(screen.getByTestId('entity-overview-ad-share')).toBeInTheDocument()
-    expect(screen.getByText('مصادر النتائج')).toBeInTheDocument()
+    expect(screen.getByText('مصادر التحويلات')).toBeInTheDocument()
     expect(useSummary).toHaveBeenCalledWith('p1', { from: '2026-10-01', to: '2026-10-30' }, { provider: ['meta'] })
     expect(usePlatforms).toHaveBeenCalledWith('p1', { from: '2026-10-01', to: '2026-10-30' }, { provider: ['meta'] })
   })

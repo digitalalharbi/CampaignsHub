@@ -182,9 +182,13 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
                 testid="agency-kpi-results"
                 spark={sparkOf('conversions')}
                 tone="success"
-                label={ar ? 'النتائج المُبلَّغة' : 'Reported results'}
+                /*
+                  OBJECTIVE-RESULT-001 — a sum across every objective is the platforms' conversion
+                  count, not «النتائج» (and «المُبلَّغة» is a word the style guide retired).
+                */
+                label={ar ? 'تحويلات المنصة' : 'Platform conversions'}
                 value={<span dir="ltr">{conversions == null ? '—' : num(conversions)}</span>}
-                hint={ar ? 'مجموع ما أبلغت به المنصات' : 'Summed across the platforms that reported'}
+                hint={ar ? 'مجموع ما أرسلته المنصات لكل الأهداف. نتيجة كل حملة في صفحتها.' : 'Summed across the platforms, every objective. Each campaign’s own result is on its page.'}
                 delta={deltaOf('conversions', conversions, prevConversions)}
               />
             </Door>
@@ -259,14 +263,14 @@ export function AgencyTrendAndPlatforms({ ar }: { ar: boolean }) {
 
       <ChartCard
         title={ar ? 'مقارنة المنصات' : 'Platform comparison'}
-        subtitle={ar ? 'من حمل الإنفاق، وبأي تكلفة نتيجة.' : 'Who carried the spend, and at what cost per result.'}
+        subtitle={ar ? 'من حمل الإنفاق، وبأي تكلفة تحويل.' : 'Who carried the spend, and at what cost per conversion.'}
       >
         {platformRows.length === 0
           ? <p data-testid="agency-platforms-empty" className="flex h-[220px] items-center justify-center text-sm text-text-muted">{ar ? 'لا منصة أبلغت في هذه الفترة.' : 'No platform reported in this period.'}</p>
           : (
             <div data-testid="agency-platforms" className="min-w-0">
               <MetricTable
-                head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'تكلفة النتيجة', 'ROAS'] : ['Platform', 'Spend', 'Results', 'Cost per result', 'ROAS']}
+                head={ar ? ['المنصة', 'الإنفاق', 'تحويلات المنصة', 'تكلفة التحويل', 'ROAS'] : ['Platform', 'Spend', 'Platform conversions', 'Cost per conversion', 'ROAS']}
                 rows={platformRows.map((r) => [
                   <Link key="p" to={`/agency/content?providers=${r.provider}`} data-testid={`agency-platform-${r.provider}`} className="font-semibold text-text-primary underline decoration-dotted underline-offset-4 hover:text-brand-600">{providerName(r.provider)}</Link>,
                   <span key="s" dir="ltr">{formatMoneyReading(r.spend, money)}</span>,

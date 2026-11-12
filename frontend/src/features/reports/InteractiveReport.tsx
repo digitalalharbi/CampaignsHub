@@ -306,6 +306,15 @@ export interface ObjectivePath {
   result_composition?: ResultPart[]
   /** True when `cpa` averages across more than one kind of result — it must not be shown bare. */
   cpa_mixes_result_types?: boolean
+  /**
+   * OBJECTIVE-RESULT-001 — the path's OWN result: impressions for awareness, landing page views (else
+   * clicks) for traffic, orders for conversion. Optional only because a stored document predates it.
+   */
+  result_key?: string | null
+  result?: number | null
+  result_label?: { ar: string; en: string } | null
+  cost_per_result?: number | null
+  cost_per_result_label?: { ar: string; en: string } | null
   /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
   campaigns_count?: number

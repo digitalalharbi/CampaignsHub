@@ -109,7 +109,9 @@ final class AlertSweepBatchedReadsTest extends TestCase
                     $this->assertSame($one['coverage'], $set->coverageOfWindow($from, $to));
                     // The two annotations a batched read leaves out by design, and nothing else.
                     $expected = array_diff_key($one, array_flip(['coverage', 'spend_coverage', 'revenue_coverage', 'reach', 'frequency']));
-                    $this->assertSame($expected, array_diff_key($figures[$id], array_flip(['reach', 'frequency'])), "campaign {$id}");
+                    // OBJECTIVE-RESULT-001 — the batched read also names each campaign's objective result; the figures beside it are unchanged.
+                    $result = ['result_family', 'result_key', 'result', 'result_label', 'cost_per_result', 'cost_per_result_label', 'result_missing_reason', 'result_missing_label'];
+                    $this->assertSame($expected, array_diff_key($figures[$id], array_flip(['reach', 'frequency', ...$result])), "campaign {$id}");
                 }
             }
         }

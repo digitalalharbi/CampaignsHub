@@ -399,7 +399,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'external_id' => (string) $c['id'],
                 'name' => (string) ($c['name'] ?? $c['id']),
                 'status' => strtolower((string) ($c['status'] ?? 'unknown')),
-                'objective' => isset($c['objective']) ? (string) $c['objective'] : null,
+                // OBJECTIVE-RESULT-001 — newer campaigns state it only under `objective_v2_properties`.
+                'objective' => isset($c['objective'])
+                    ? (string) $c['objective']
+                    : (isset($c['objective_v2_properties']['objective_v2_type']) ? (string) $c['objective_v2_properties']['objective_v2_type'] : null),
                 'daily_budget' => isset($c['daily_budget_micro']) ? (float) $c['daily_budget_micro'] / self::MICRO : null,
                 'lifetime_budget' => isset($c['lifetime_spend_cap_micro']) ? (float) $c['lifetime_spend_cap_micro'] / self::MICRO : null,
                 'currency' => null, // stated on the account, not the campaign

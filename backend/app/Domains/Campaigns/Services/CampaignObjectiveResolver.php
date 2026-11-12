@@ -62,7 +62,7 @@ final class CampaignObjectiveResolver
 
         $externals = ExternalCampaign::withoutGlobalScopes()
             ->where('unified_campaign_id', $campaign->id)
-            ->get(['provider', 'objective']);
+            ->get(['provider', 'objective', 'raw']);
 
         if ($externals->isEmpty()) {
             return false;
@@ -91,6 +91,25 @@ final class CampaignObjectiveResolver
             }
 
             $objective = $this->map->resolve((string) $external->provider, $external->objective);
+
+            /*
+             * OBJECTIVE-RESULT-001 — Google states a channel type, not an objective; its bidding
+             * strategy says the goal where that goal is unambiguous. The strategy is written beside
+             * the platform's word so the classification can be traced to what it was read from.
+             */
+            if ($objective === null) {
+                $stored = is_array($external->raw) ? $external->raw : [];
+                $objective = $this->map->resolveFromBidding((string) $external->provider, $stored);
+
+                if ($objective !== null) {
+                    $strategy = (string) PlatformObjectiveMap::biddingStrategy($stored);
+                    if ($raw !== '') {
+                        $rawValues[count($rawValues) - 1] = $raw.' ('.$strategy.')';
+                    } else {
+                        $rawValues[] = $strategy;
+                    }
+                }
+            }
 
             if ($objective === null) {
                 continue;

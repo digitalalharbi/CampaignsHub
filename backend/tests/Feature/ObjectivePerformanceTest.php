@@ -577,6 +577,40 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertSame(1700.0, (float) $conversion['spend']);
     }
 
+    /**
+     * OBJECTIVE-RESULT-001 — each path's «النتائج» is the result its campaigns were bought for.
+     *
+     * Every path read its ORDERS, so the traffic path — 10,000 clicks, no order — showed 0 results
+     * on the client's own report (`LiveDetailTables`, the objectives table).
+     */
+    public function test_each_path_reports_its_own_result_not_orders(): void
+    {
+        $paths = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        $this->assertSame('clicks', $paths['traffic']['result_key']);
+        $this->assertSame(10000.0, (float) $paths['traffic']['result']);
+        $this->assertSame('النقرات', $paths['traffic']['result_label']['ar']);
+        $this->assertSame(0.1, (float) $paths['traffic']['cost_per_result']);
+
+        $this->assertSame('impressions', $paths['awareness']['result_key']);
+        $this->assertSame(2000000.0, (float) $paths['awareness']['result']);
+
+        $this->assertSame('conversions', $paths['conversion']['result_key']);
+        $this->assertSame(50.0, (float) $paths['conversion']['result']);
+    }
+
+    /** A traffic path whose platform sends landing page views reads visits. */
+    public function test_a_traffic_path_with_landing_page_views_reads_visits(): void
+    {
+        $this->seedCampaign('زيارات صفحة', CampaignObjective::Traffic, spend: 500, clicks: 4000, lpv: 2881);
+
+        $paths = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        // The first traffic campaign sent no landing page views, so the path keeps ONE unit: clicks.
+        $this->assertSame('clicks', $paths['traffic']['result_key']);
+        $this->assertSame(14000.0, (float) $paths['traffic']['result']);
+    }
+
     private function seedCampaign(
         string $name,
         CampaignObjective $objective,
@@ -585,6 +619,7 @@ final class ObjectivePerformanceTest extends TestCase
         float $clicks = 0,
         float $orders = 0,
         float $revenue = 0,
+        float $lpv = 0,
     ): void {
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -604,7 +639,7 @@ final class ObjectivePerformanceTest extends TestCase
             // `conversions` is the product's one definition of an order — the same key the
             // dashboard, the analytics breakdowns and the report's own `kpis` divide spend by.
             'spend' => $spend, 'impressions' => $impressions, 'clicks' => $clicks,
-            'conversions' => $orders, 'revenue' => $revenue,
+            'conversions' => $orders, 'revenue' => $revenue, 'landing_page_views' => $lpv,
         ] as $key => $value) {
             if ($value === 0.0) {
                 continue;

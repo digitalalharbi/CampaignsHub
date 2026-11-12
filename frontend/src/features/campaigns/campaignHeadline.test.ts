@@ -192,3 +192,43 @@ describe('money on a campaign row', () => {
     expect((spend as { text: string }).text).not.toMatch(/[A-Z]{3}/)
   })
 })
+/*
+ * OBJECTIVE-RESULT-001 — a traffic row leads with its landing page views, and with clicks NAMED
+ * «النقرات» where the platform sent none. 1KCOFFEE: 2,881 visits, 18,464 clicks, 0 conversions.
+ */
+describe('the result a traffic campaign row leads with', () => {
+  const coffee = (o: Record<string, unknown> = {}) => ({
+    campaign_id: 'c1', spend: 1440.5, clicks: 18464, landing_page_views: 2881, conversions: 0, cpc: 0.078,
+    cost_per_result: 0.5,
+    reported: { spend: true, clicks: true, landing_page_views: true, conversions: true },
+    ...o,
+  })
+
+  it('leads with landing page views, called page visits', () => {
+    const h = campaignHeadline('traffic', coffee(), true)
+
+    expect(h?.key).toBe('landing_page_views')
+    expect(h?.reading.kind).toBe('value')
+    expect(h?.label).toContain('زيارات')
+  })
+
+  it('falls back to clicks, labelled «النقرات», when no visit was measured', () => {
+    for (const row of [coffee({ landing_page_views: 0 }), coffee({ reported: { spend: true, clicks: true, landing_page_views: false } })]) {
+      const h = campaignHeadline('traffic', row, true)
+
+      expect(h?.key).toBe('clicks')
+      expect(h?.label).toBe('النقرات')
+      expect(h?.label).not.toContain('زيارات')
+    }
+  })
+
+  it('states the cost of the result it names', () => {
+    expect(campaignEfficiency('traffic', coffee(), true)?.key).toBe('cost_per_lpv')
+    expect(campaignEfficiency('traffic', coffee({ landing_page_views: 0 }), true)?.key).toBe('cpc')
+  })
+
+  it('never offers a return to a traffic campaign', () => {
+    expect(campaignReturn('traffic', coffee(), true)).toBeNull()
+  })
+})
+

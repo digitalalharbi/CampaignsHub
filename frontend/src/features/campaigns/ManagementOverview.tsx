@@ -58,7 +58,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
         <div className="lg:col-span-2">
           <Panel
             title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'}
-            description={series.note ?? (ar ? 'الإنفاق والنتائج والإيرادات يومًا بيوم' : 'Spend, results and revenue, day by day')}
+            description={series.note ?? (ar ? 'الإنفاق وتحويلات المنصة والإيرادات يومًا بيوم' : 'Spend, platform conversions and revenue, day by day')}
             loading={ts.isPending}
             error={ts.isError}
             empty={!ts.isPending && !ts.isError && series.rows.length === 0}
@@ -71,14 +71,14 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
                 rightAxisFor="conversions"
                 series={[
                   { key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' },
-                  { key: 'conversions', name: ar ? 'النتائج' : 'Results', kind: 'num' },
+                  { key: 'conversions', name: ar ? 'تحويلات المنصة' : 'Platform conversions', kind: 'num' },
                   ...(series.hasMoney ? [{ key: 'revenue', name: ar ? 'الإيرادات' : 'Revenue', kind: 'money' as const }] : []),
                 ]}
               />
             </div>
           </Panel>
         </div>
-        <ChartCard title={ar ? 'مصادر النتائج' : 'Sources of results'}>
+        <ChartCard title={ar ? 'مصادر التحويلات' : 'Sources of conversions'}>
           {platforms.isPending ? (
             <div className="h-[200px] animate-pulse rounded-xl bg-surface-secondary" />
           ) : results.length === 0 ? (
@@ -87,7 +87,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             </p>
           ) : (
             <div data-testid={`${testid}-share`}>
-              <PlatformDonutChart data={results} height={200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'النتائج' : 'Results'} />
+              <PlatformDonutChart data={results} height={200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'تحويلات المنصة' : 'Platform conversions'} />
             </div>
           )}
         </ChartCard>

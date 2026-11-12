@@ -131,6 +131,8 @@ final class PlatformObjectiveMap
             'WEB_CONVERSION' => CampaignObjective::Conversions,
             'WEB_VIEW' => CampaignObjective::Traffic,
             'CATALOG_SALES' => CampaignObjective::Sales,
+            // OBJECTIVE-RESULT-001 — Snapchat's current objective for an app buy; it fell through to nothing.
+            'APP_PROMOTION' => CampaignObjective::AppInstalls,
         ],
 
         'x' => [
@@ -143,6 +145,18 @@ final class PlatformObjectiveMap
             'APP_INSTALLS' => CampaignObjective::AppInstalls,
             'APP_ENGAGEMENTS' => CampaignObjective::AppInstalls,
             'WEBSITE_CONVERSIONS' => CampaignObjective::Conversions,
+        ],
+
+        /*
+         * OBJECTIVE-RESULT-001 — ChatGPT Ads (the OpenAI Advertiser API).
+         *
+         * It had no table at all, so every campaign it synced stayed unclassified whatever it said.
+         * Only the value the connector's own fixtures carry is listed; anything else that is spelled
+         * as one of this product's objective values still resolves through the exact-match rule in
+         * `resolve()`, and anything else stays unclassified rather than guessed.
+         */
+        'openai_ads' => [
+            'CONVERSIONS' => CampaignObjective::Conversions,
         ],
 
         'linkedin' => [
@@ -208,6 +222,62 @@ final class PlatformObjectiveMap
     }
 
     /**
+     * OBJECTIVE-RESULT-001 — Google's goal, read from what the campaign is BID to maximise.
+     *
+     * Google reports a channel type (SEARCH, PERFORMANCE_MAX) where other platforms report an
+     * objective, and a channel type is deliberately unmapped above. The bidding strategy is a
+     * different fact: it is the outcome Google's auction is told to buy, and for some strategies
+     * that outcome is unambiguous —
+     *
+     *   - TARGET_ROAS, MAXIMIZE_CONVERSION_VALUE → bid on conversion VALUE: sales
+     *   - TARGET_SPEND (Maximize clicks)         → bid on clicks: traffic
+     *   - TARGET_IMPRESSION_SHARE, TARGET_CPM, MANUAL_CPM → bid on being seen: awareness
+     *   - TARGET_CPV, MANUAL_CPV                 → bid on views: video views
+     *
+     * MAXIMIZE_CONVERSIONS, TARGET_CPA, MANUAL_CPC and ENHANCED_CPC are NOT listed: a «conversion»
+     * on Google can be a purchase, a lead or a call, and a manual bid states no goal at all. Those
+     * campaigns stay unclassified and say so, which is the honest answer until a person sets them.
+     *
+     * Read from the stored raw campaign (`campaign.biddingStrategyType`), so it applies to every
+     * sync from now on and to nothing until then.
+     *
+     * @param  array<string, mixed>  $raw  the external campaign's stored raw row
+     */
+    public function resolveFromBidding(string $provider, array $raw): ?CampaignObjective
+    {
+        if ($this->normaliseProvider($provider) !== 'google') {
+            return null;
+        }
+
+        $strategy = self::biddingStrategy($raw);
+
+        return $strategy === null ? null : (self::GOOGLE_BIDDING[$strategy] ?? null);
+    }
+
+    /** @param array<string, mixed> $raw */
+    public static function biddingStrategy(array $raw): ?string
+    {
+        $value = $raw['raw']['campaign']['biddingStrategyType']
+            ?? $raw['campaign']['biddingStrategyType']
+            ?? $raw['bidding_strategy_type']
+            ?? null;
+
+        return is_string($value) && trim($value) !== '' ? strtoupper(trim($value)) : null;
+    }
+
+    /** @var array<string, CampaignObjective> */
+    private const GOOGLE_BIDDING = [
+        'TARGET_ROAS' => CampaignObjective::Sales,
+        'MAXIMIZE_CONVERSION_VALUE' => CampaignObjective::Sales,
+        'TARGET_SPEND' => CampaignObjective::Traffic,
+        'TARGET_IMPRESSION_SHARE' => CampaignObjective::Awareness,
+        'TARGET_CPM' => CampaignObjective::Awareness,
+        'MANUAL_CPM' => CampaignObjective::Awareness,
+        'TARGET_CPV' => CampaignObjective::VideoViews,
+        'MANUAL_CPV' => CampaignObjective::VideoViews,
+    ];
+
+    /**
      * `google` and `google_ads` are the same platform under two names.
      *
      * They were genuinely drifting apart in the connector registry once already (ADAUDIT-001), and a
@@ -218,6 +288,7 @@ final class PlatformObjectiveMap
         return match (strtolower(trim($provider))) {
             'google_ads', 'googleads' => 'google',
             'twitter' => 'x',
+            'openai', 'chatgpt_ads' => 'openai_ads',
             default => strtolower(trim($provider)),
         };
     }

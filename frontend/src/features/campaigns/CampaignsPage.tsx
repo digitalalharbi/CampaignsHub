@@ -877,7 +877,12 @@ export function CampaignsPage() {
               tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
             />
             <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
-            <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
+            {/*
+              OBJECTIVE-RESULT-001 — a total across every objective is not «النتائج»: a traffic
+              campaign's visits and a sales campaign's orders do not add up. What this figure IS
+              is the platforms' conversion count, and it is named that.
+            */}
+            <StatCard label={ar ? 'تحويلات المنصة' : 'Platform conversions'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
           </>
         }
       />
@@ -1109,7 +1114,13 @@ export function CampaignsPage() {
                   r.spend === null
                     ? <span key="s" className="text-text-muted">—</span>
                     : <Num key="s">{money(r.spend, mix.currency ?? undefined)}</Num>,
-                  <Num key="r">{num(r.results)}</Num>,
+                  /*
+                   * OBJECTIVE-RESULT-001 — each objective's results in its own unit, named; a group
+                   * whose campaigns share no unit says so rather than adding them.
+                   */
+                  r.results === null
+                    ? <span key="r" className="text-xs text-text-muted">{ar ? 'أهداف مختلفة' : 'Different objectives'}</span>
+                    : <span key="r"><Num>{num(r.results)}</Num>{r.resultLabel && <span className="ms-1 text-xs text-text-muted">{ar ? r.resultLabel.ar : r.resultLabel.en}</span>}</span>,
                 ])}
               />
 

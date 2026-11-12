@@ -9,9 +9,11 @@ use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignOutcomeResolver;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Campaigns\Services\CreativeFunnel;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Coverage\AggregateCoverage;
@@ -739,10 +741,18 @@ final class MetricsAggregator
             ->get()
             ->keyBy(static fn ($r): string => (string) $r->unified_campaign_id);
 
+        // OBJECTIVE-RESULT-001 — the objective each figure is judged by, read once for the whole set.
+        // The tenant scope stays (the same one the figures were read under); a set may span projects.
+        $objectives = UnifiedCampaign::query()->withoutGlobalScope(ProjectScope::class)->withTrashed()
+            ->whereIn('id', (array) $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'])
+            ->pluck('objective', 'id');
+
         $out = [];
         foreach ((array) $this->campaignIds as $id) {
             $row = $rows->get($id);
-            $out[$id] = $this->withDerived($row === null ? [] : (array) $row);
+            $figures = $this->withDerived($row === null ? [] : (array) $row);
+            $objective = $objectives->get($id);
+            $out[$id] = $figures + ObjectiveResult::resolve(ObjectiveResult::familyOf($objective === null ? null : (string) $objective), $figures);
         }
 
         return $out;
@@ -1952,6 +1962,20 @@ final class MetricsAggregator
 
         // MONEY-RECON-RUNGS-001 — the campaigns add up to the project's total to the cent; see SiblingRounding.
         $rows = SiblingRounding::apportion($rows);
+
+        /*
+         * OBJECTIVE-RESULT-001 — the result this campaign's OBJECTIVE is judged on, from the one table.
+         *
+         * Every reader of this row used `conversions` as «النتائج», so a traffic campaign with 2,881
+         * landing page views and no orders was shown «0 نتائج». The row now says which figure is its
+         * result, the words for it, its cost, and — when there is none — why. Applied after the
+         * apportioning so the cost divides the spend the row actually shows.
+         */
+        $rows = array_map(static fn (array $row): array => $row + ObjectiveResult::resolve(
+            ObjectiveResult::familyOf($row['objective'] === null ? null : (string) $row['objective']),
+            $row,
+            ($row['reported'] ?? []) === [] ? null : $row['reported'],
+        ), $rows);
 
         return self::orderCampaignRows($rows);
     }

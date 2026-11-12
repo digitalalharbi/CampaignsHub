@@ -39,6 +39,24 @@ test.describe('the live client link, mode by mode', () => {
     await ready(page, 'live-mode-summary')
   })
 
+  /*
+   * OBJECTIVE-RESULT-001 — the «كل هدف» table states each path's OWN result, named. Every path read
+   * its orders, so a traffic path of visits printed «0» on the client's own link.
+   */
+  test('the objectives table names each path’s own result', async ({ page }) => {
+    await page.goto(`/r/${TOKEN}?view=tables`)
+    const table = page.getByTestId('live-detail-objectives')
+    await expect(table).toBeVisible({ timeout: 30000 })
+
+    const cells = table.locator('[data-testid^="objective-"][data-testid$="-result"]')
+    expect(await cells.count(), 'no objective row rendered, so this proves nothing').toBeGreaterThan(0)
+    for (const cell of await cells.all()) {
+      const text = (await cell.innerText()).trim()
+      // A figure and the unit it counts — orders, visits, clicks or impressions — never a bare number.
+      expect(text, `${await cell.getAttribute('data-testid')} printed no unit`).toMatch(/[\d.,]+[KMB]?\s*\S/)
+    }
+  })
+
   test('a platform’s own view agrees with the whole link about that platform', async ({ page }) => {
     await page.goto(`/r/${TOKEN}?view=platforms`)
     await ready(page, 'live-mode-platforms')

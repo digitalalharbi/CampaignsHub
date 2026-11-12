@@ -285,7 +285,11 @@ final class UnifiedCampaignController extends Controller
             'name' => (string) ($names[$id] ?? ''),
             'last_active_on' => $metrics->get($id)['last_active_on'] ?? null,
             'spend' => (float) ($metrics->get($id)['spend'] ?? 0),
-            'results' => (float) ($metrics->get($id)['conversions'] ?? 0),
+            /*
+             * OBJECTIVE-RESULT-001 — each campaign's OWN result (visits for traffic, orders for
+             * sales …), never `conversions` for all of them. Null when the objective is not set.
+             */
+            'results' => isset($metrics->get($id)['result']) ? (float) $metrics->get($id)['result'] : null,
         ], $ids);
 
         $sort = $request->string('sort')->toString();
@@ -304,6 +308,15 @@ final class UnifiedCampaignController extends Controller
         $descending = $request->string('dir')->toString() !== 'asc';
 
         usort($rows, static function (array $a, array $b) use ($sort, $descending): int {
+            /* A campaign with no result (its objective is not set) goes last in either direction. */
+            if ($a[$sort] === null || $b[$sort] === null) {
+                if ($a[$sort] === null && $b[$sort] === null) {
+                    return strcmp((string) $a['name'], (string) $b['name']);
+                }
+
+                return $a[$sort] === null ? 1 : -1;
+            }
+
             $cmp = $sort === 'name'
                 ? strcmp((string) $a['name'], (string) $b['name'])
                 : ($a[$sort] <=> $b[$sort]);

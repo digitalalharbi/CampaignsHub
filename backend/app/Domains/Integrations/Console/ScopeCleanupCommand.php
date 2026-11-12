@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Console;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -305,6 +306,17 @@ final class ScopeCleanupCommand extends Command
 
                 $done['external_campaigns'] += DB::table('external_campaigns')->where('id', $campaign->id)
                     ->update(['project_id' => $target, 'client_workspace_id' => $targetWorkspace, 'unified_campaign_id' => $unified, 'unlinked_at' => null]);
+
+                /*
+                 * OBJECTIVE-RESULT-001 — the same resolver the importer runs, so the adopted campaign
+                 * records WHERE its objective came from (`objective_source = platform`) and the
+                 * platform's own word. Seeding the objective alone left `objective_source = unset`
+                 * and `objective_platform_value` empty on a campaign whose platform had said TRAFFIC.
+                 */
+                $adopted = UnifiedCampaign::withoutGlobalScopes()->find($unified);
+                if ($adopted !== null) {
+                    app(CampaignObjectiveResolver::class)->sync($adopted);
+                }
             }
 
             foreach (['external_ad_sets', 'external_ads'] as $table) {

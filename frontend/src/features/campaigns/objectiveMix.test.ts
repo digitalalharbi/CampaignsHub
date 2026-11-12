@@ -102,3 +102,41 @@ describe('the portfolio by objective', () => {
     expect(mix?.rows.find((r) => r.key === 'sales')?.results).toBe(10)
   })
 })
+/*
+ * OBJECTIVE-RESULT-001 — each objective's results in its OWN unit, never `conversions` for all.
+ * The traffic row of a portfolio whose traffic campaigns brought thousands of visits read «0».
+ */
+describe('the results column of the objective mix', () => {
+  it('counts a traffic group in visits, not in orders', () => {
+    const mix = objectiveMix([
+      row({ objective: 'traffic', conversions: 0, landing_page_views: 2881, clicks: 18464, result_key: 'landing_page_views', result: 2881 }),
+      row({ objective: 'sales', conversions: 12, result_key: 'conversions', result: 12 }),
+    ], 'SAR')
+
+    const traffic = mix?.rows.find((r) => r.key === 'traffic')
+    expect(traffic?.results).toBe(2881)
+    expect(traffic?.resultKey).toBe('landing_page_views')
+    expect(traffic?.resultLabel?.ar).toBe('زيارات الصفحة')
+    expect(mix?.rows.find((r) => r.key === 'sales')?.results).toBe(12)
+  })
+
+  it('counts a traffic group whose campaigns disagree in clicks, the unit they share', () => {
+    const mix = objectiveMix([
+      row({ objective: 'traffic', landing_page_views: 100, clicks: 400, result_key: 'landing_page_views', result: 100 }),
+      row({ objective: 'traffic', landing_page_views: 0, clicks: 300, result_key: 'clicks', result: 300 }),
+    ], 'SAR')
+
+    const traffic = mix?.rows.find((r) => r.key === 'traffic')
+    expect(traffic?.resultKey).toBe('clicks')
+    expect(traffic?.results).toBe(700)
+    expect(traffic?.resultLabel?.ar).toBe('النقرات')
+  })
+
+  it('reads a row without backend result fields through the same table', () => {
+    const mix = objectiveMix([row({ objective: 'app_installs', conversions: 9, installs: 40 })], 'SAR')
+
+    expect(mix?.rows[0].results).toBe(40)
+    expect(mix?.rows[0].resultKey).toBe('installs')
+  })
+})
+
