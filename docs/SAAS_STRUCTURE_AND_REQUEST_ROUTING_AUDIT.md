@@ -4,7 +4,7 @@
 **Contract:** `docs/CampaignsHub_SaaS_Structural_Security_And_Routing_Contract_2026-11-11.md` (binding, cumulative; Appendix B of the reference).
 **Ledger:** #168, #169.
 **Read against:** `origin/main` `8a4112423` (2026-11-11). **Matrix section:** «SaaS structure and request routing 2026-11-11».
-**Probes:** `backend/tests/Feature/SaasStructureRoutingContractTest.php` (8 pass, 4 stop at a proven gap).
+**Probes:** `backend/tests/Feature/SaasStructureRoutingContractTest.php` (8 pass, 4 stop at a proven gap; after batches 1 and 2, all 13 pass).
 **Production:** read-only `BEGIN READ ONLY … ROLLBACK` counts and statuses, runs 43040097104, 43040351516, 43042874020,
 43042991090 (workflow on the temporary branch `tmp/facts-map`). No write, no message sent, no payment, no personal data
 printed. Nothing in this batch changes behaviour.
@@ -43,9 +43,9 @@ platform-level creator pool in this repository: the roster is tenant-scoped (`ro
 | `/#services`, `/services`, `/services/{category}`, «اطلب خدمة» | `RequestIntakePage`, `PaidMediaIntake` at `/requests/new` | `POST /requests` | `PublicRequestController@store` → `PortalTenantResolver` → `RequestIntake` | `ExternalRequest`, `external_requests` | **a tenant**: `portal_domain` match, else the `is_default_portal` tenant, else 404 | that tenant's `/agency/requests` | applicant (`client_notifications`); the team is not told at receipt | `RequestConversionService`: client, project, draft campaign, tasks |
 | `/requests/track?token=` | `RequestTrackPage` | `GET /requests/track/{token}` | `PublicRequestController@track` | `RequestAccessToken` (SHA-256, revocable, optional expiry) | the one request | none | none | reply becomes a client-visible comment |
 | `/portal/requests/new` | `ClientNewRequestPage` | `POST /client/requests` | `ClientPortalController@store` → `ClientRequestCreator` | `external_requests` with `client_id` | Tenant + client workspace, from the session | `/agency/requests` | in-app to the assignee, `action_url` `/agency/requests/{id}` (`RequestNotifier.php:34`) | same as above |
-| `/contact`, the «تواصل معنا» panel on `/login` | `PublicInfoPage` | `POST /contact` | `PublicIntakeController@contact` | `ContactMessage`, `contact_messages` | Platform (no tenant column) | **none**: API `GET /admin/legal/contact-messages` has no consumer | **none** | none |
-| `/support` | `PublicInfoPage` | `POST /support/tickets` | `PublicIntakeController@support` | `SupportTicket`, `support_tickets` | Platform, optional `tenant_id` of a signed-in sender | **none**: API only | **none** | none |
-| `/data-deletion`, `/data-requests`, the Meta callback | `DataDeletionPage` | `POST /data-deletion`, `/data-requests`, `/webhooks/data-deletion/{provider}` | `DataDeletionController`, `PublicIntakeController@dataRequest` | `DataRequest`, `data_requests` | Platform | **none**: API only | code to the requester only | operator completes by hand |
+| `/contact`, the «تواصل معنا» panel on `/login` | `PublicInfoPage` | `POST /contact` | `PublicIntakeController@contact` | `ContactMessage`, `contact_messages` | Platform (no tenant column) | `/admin/inbox?tab=contact` (batch 2; was none) | platform administrators, mail ledger (batch 2; was none) | a reply by email from the console, `platform_inbox_replies` |
+| `/support` | `PublicInfoPage` | `POST /support/tickets` | `PublicIntakeController@support` | `SupportTicket`, `support_tickets` | Platform, optional `tenant_id` of a signed-in sender | `/admin/inbox?tab=support` (batch 2) | platform administrators (batch 2) | a reply by email; the ticket moves to `waiting_on_customer` |
+| `/data-deletion`, `/data-requests`, the Meta callback | `DataDeletionPage` | `POST /data-deletion`, `/data-requests`, `/webhooks/data-deletion/{provider}` | `DataDeletionController`, `PublicIntakeController@dataRequest` | `DataRequest`, `data_requests` | Platform | `/admin/inbox?tab=data` (batch 2) | code to the requester; platform administrators (batch 2) | operator completes by hand |
 | `/f/{slug}` | `PublicFormPage` | `POST /public/forms/{slug}/submissions` | `PublicLeadFormController@submit` → `SubmitLeadForm` | `LeadFormSubmission`, `Lead` | Tenant + project, from the form | `/app/leads` (no rail entry; no `/agency/leads` route) | `lead_sla` alert | lead → opportunity |
 | `/invite/accept` | `InviteAcceptPage` | `POST /invitations/accept`, `/accept-existing` | `InvitationController` → `InvitationService` | `workspace_invitations` → membership | the inviting tenant | `/agency/team`, `/app/settings/permissions` | invitation mail | membership, or a client-portal user |
 | add-on request, signed in | subscriptions page | `POST /subscriptions/addons/{code}/request` | `AddonController@request` | `tenant_addons` | Tenant → platform decision | `/admin/addons` | none found | add-on activated |
@@ -77,18 +77,20 @@ R receives and works it, A approves or decides, C is consulted, I is informed.
 
 | Record type (contract §2) | Required owner | Owner today | R | A | I | Gap |
 |---|---|---|---|---|---|---|
-| `platform_registration` | Platform | Platform | platform administrator | platform administrator | applicant | administrators are not notified; the console counter is wrong |
+| `platform_registration` | Platform | Platform | platform administrator | platform administrator | applicant | administrators are not notified of a new application; the console counter now reads `pending_approval` and an application held at verification shows its step and can be re-sent a challenge (batch 2) |
 | `platform_service_request` | Platform | **does not exist**; such a request becomes a tenant's | nobody | nobody | applicant | P0-1 |
 | `tenant_service_request` | one tenant | that tenant, by `portal_domain` | tenant team | tenant manager | applicant | no tenant domain exists in Production; team not told at receipt |
 | `client_portal_request` | tenant + client workspace | same | assignee, agency team | agency manager | client | none found |
 | `lead_form_submission` | tenant + project | same | form owner or pool | project manager | none | the leads screen is not on any rail |
 | `influencer_service_request` | Platform | not openable (`influencer_ugc` is coming soon) | nobody | nobody | none | depends on P0-1 |
 | `influencer_nomination`, `collaboration` | tenant, client for a collaboration | same | agency operator | client or manager | creator | portal off |
-| contact, support, data request | Platform | Platform, unread | nobody | nobody | nobody | P0-3 |
+| contact, support, data request | Platform | Platform | platform administrator | platform administrator | platform administrators at receipt | closed in code by batch 2, not deployed |
 
 ## 5. Proven gaps, ranked by impact × likelihood
 
 **State after batch 1 (PLATFORM-SERVICE-INBOX-001, not deployed):** rows 1, 2, 3 and 7 are closed in code and covered by tests; they stay open in Production until the deploy is verified. Rows 4, 5, 6, 8 and 9 are unchanged.
+
+**State after batch 2 (PLATFORM-INBOX-ATTENTION-001 and EDGE-CLIENT-IP-001, branch `fix/platform-inboxes-and-client-ip`, not deployed):** rows 4, 5 and 6 are closed in code and covered by tests (`PlatformInboxAttentionTest`, `ClientIpTrustedProxyTest`, the two probes that stopped at the gap now assert). They stay open in Production until the deploy is read back. Rows 8 and 9 are unchanged.
 
 Only what a test or a Production read shows. Nothing here is assumed.
 
@@ -125,7 +127,7 @@ Only what a test or a Production read shows. Nothing here is assumed.
 | Signed-in isolation walked on Production (S04, S06, S07, S08) | needs two approved accounts in two workspaces; Production has nobody holding two memberships |
 | Tenant-domain intake (S03) end to end | no tenant has a `portal_domain`, and the API is served on one host, so the edge mapping of a tenant domain to the API is unproven |
 | Live payment webhook (S12) | no gateway has delivered a real event; 1 payment row, `pending` |
-| Whether the edge can be told to pass the real client address (row 6) | needs the proxy's configuration on the host, which this batch did not read |
+| Whether the edge passes the real client address (row 6) | batch 2 read the chain from the repository: Caddy → backend for `api.`, Caddy → frontend nginx → backend for the site's `/api/`; the backend publishes no port. The Caddy version (does it replace a client-sent `X-Forwarded-For`) and the `web_proxy` subnet are the host's, read-only after deploy |
 
 ## 6. The 22 scenarios
 
@@ -152,7 +154,7 @@ Only what a test or a Production read shows. Nothing here is assumed.
 | S19 | IMPLEMENTED_NOT_VERIFIED | legacy paths redirect inside the same guard | `frontend/src/app/legacyRedirects.test.tsx`, `docs/ROUTE_REDIRECT_MAP.md` | none found |
 | S20 | PARTIAL | suspension blocks access and deletes nothing | `SuspendedAccountTest` (6), `PlanMigrationTest`, `PlatformConsoleTest::test_suspending_the_public_portal_tenant_says_so` | no test states that requests and client links survive a downgrade |
 | S21 | VERIFIED | Production runs 43040097104 and 43042874020: `external_requests` 0, `request_access_tokens` 0, `request_conversions` 0. There is no historical request whose owner could be ambiguous, so nothing is reassigned and nothing needs to be | none needed | re-read before Batch B deploys |
-| S22 | PARTIAL | a service request now has a platform inbox, an owner picked from the platform's administrators, a mail-ledger notice to them, a status history and an audit trail. Conversion of a platform request into delivery work is not built, and contact, support and data requests are still unread (gap 4) | `PlatformServiceInboxTest::test_an_administrator_takes_a_request_and_moves_it_and_both_are_on_the_record`, `test_the_platforms_administrators_are_told_through_the_mail_ledger_and_no_subscriber_is`; `test_a_message_addressed_to_the_platform_tells_a_platform_administrator` (incomplete, gap 4) | PLATFORM-INBOX-ATTENTION-001; an explicit conversion step |
+| S22 | PARTIAL | a service request now has a platform inbox, an owner picked from the platform's administrators, a mail-ledger notice to them, a status history, an audit trail and (batch 2) a reply to the visitor on the tracking page and by email. Contact, support and data requests are told at receipt and have a screen (batch 2). Conversion of a platform request into delivery work is not built | `PlatformServiceInboxTest::test_an_administrator_takes_a_request_and_moves_it_and_both_are_on_the_record`, `test_the_platforms_administrators_are_told_through_the_mail_ledger_and_no_subscriber_is`; `test_a_message_addressed_to_the_platform_tells_a_platform_administrator`; `PlatformInboxAttentionTest` | deploy; an explicit conversion step |
 
 ## 7. Production facts used (counts and statuses only)
 
@@ -176,13 +178,21 @@ Only what a test or a Production read shows. Nothing here is assumed.
 |---|---|---|
 | A (this) | contract adopted, this audit, the probes | SAAS-STRUCTURE-AUDIT-001 |
 | 1 (built, not deployed) | platform owner scope for official-site requests decided on the server, deny by default, refusal logged; the platform «الطلبات» screen; administrators told at receipt. Additive, reversible migration; no historical row touched | PLATFORM-SERVICE-INBOX-001 |
-| next | registrations counter; a read surface and a notice for contact, support and data requests | PLATFORM-INBOX-ATTENTION-001 |
+| 2 (built, not deployed) | registrations counter on the real states; `/admin/inbox` for contact, support and data requests with unread counters and a notice at receipt; replies by email from the console (contact, support, platform service requests); a resend for applications held at verification; trusted proxies for the client address | PLATFORM-INBOX-ATTENTION-001, EDGE-CLIENT-IP-001 |
 | C | registration, payment and invitation path: one plan truth, verification dead ends | EXEC-REC-016 and the SIGNUP, PAY rows; gap 9 |
 | D | agency and client requests, influencer context, leads kept apart from requests | existing REQUEST, INFL, FORMS-HUB rows; gap 8 |
 | E | navigation and names once ownership is proven; legacy paths redirected | NAVIGATION rows, ADR 0002 |
 | F | S01–S22 live, Lander, deploy, Production smoke | every row above |
 
-Edge trust (gap 6) is its own row, EDGE-CLIENT-IP-001, and needs the host's proxy configuration read before a change.
+Edge trust (gap 6) is its own row, EDGE-CLIENT-IP-001, closed in code by batch 2 (`App\Http\Middleware\TrustProxies`: private ranges or `TRUSTED_PROXIES`, `X-Forwarded-For` only).
+
+### Batch 2 — what must be read back on Production after deploy (read-only)
+
+1. `/admin/inbox` signed in: the contact message of 2026-08-13 and the ticket of 2026-11-06 listed as unread; opening one moves the count.
+2. `/admin` attention: `registrations_pending` equals the `pending_approval` count, `registrations_unverified` equals the 3 + 1 applications held at mobile and email verification, `platform_inbox_unread` equals the unread rows.
+3. `/admin/registrations`: each application held at mobile verification shows its step, since when, sends and the last outcome. A resend is the Owner's decision, per applicant.
+4. Client address: new `share_access_logs` and `audit_logs` rows after the deploy carry public addresses, and more than three distinct values; `docker network inspect web_proxy` gives the subnet to set as `TRUSTED_PROXIES`; Caddy's version is 2.5 or later (it replaces a client-sent `X-Forwarded-For`; an older one appends, which this change also handles).
+5. No reply is sent and no resend is made on Production without the Owner's word.
 
 ## 9. What this batch did not do
 

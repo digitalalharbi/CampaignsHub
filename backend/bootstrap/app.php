@@ -88,6 +88,7 @@ use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Http\Middleware\NoStoreApiResponses;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\TrustProxies;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -99,6 +100,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\TrustProxies as FrameworkTrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
@@ -230,6 +232,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
         $middleware->statefulApi();
+
+        /*
+         * EDGE-CLIENT-IP-001 — the real client address behind Caddy and the frontend nginx. Only the proxies in
+         * `security.trusted_proxies`, only `X-Forwarded-For`. See App\Http\Middleware\TrustProxies.
+         */
+        $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
 
         /*
          * The sandbox gateway's confirm form (PAY-SANDBOX-001).

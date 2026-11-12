@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Legal\Services\PlatformInboxReplies;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
@@ -39,6 +40,7 @@ final class PlatformServiceRequestController extends Controller
         private readonly AuditLogger $audit,
         private readonly RequestStatusMachine $machine,
         private readonly RequestSla $sla,
+        private readonly PlatformInboxReplies $replies,
     ) {}
 
     /** GET /admin/service-requests */
@@ -112,6 +114,8 @@ final class PlatformServiceRequestController extends Controller
                         'mime' => $f->mime,
                         'at' => optional($f->created_at)->toIso8601String(),
                     ])->all(),
+                // PLATFORM-INBOX-ATTENTION-001 — what the console sent the visitor by email, with the ledger's state for each.
+                'replies' => $this->replies->thread('service_request', (string) $req->id),
                 'activity' => $req->events()->orderByDesc('created_at')->orderByDesc('id')->limit(50)->get()
                     ->map(fn (RequestEvent $e): array => [
                         'type' => $e->type,
@@ -179,6 +183,22 @@ final class PlatformServiceRequestController extends Controller
                     ['status' => $from], ['status' => $to], $data['reason'] ?? null);
             }
         }
+
+        return $this->show($id);
+    }
+
+    /**
+     * POST /admin/service-requests/{id}/reply — PLATFORM-INBOX-ATTENTION-001.
+     *
+     * The answer is a client-visible comment (the visitor reads it on their tracking page) and an email to the
+     * contact address on the request. Platform-owned requests only, like everything in this controller.
+     */
+    public function reply(Request $request, string $id): JsonResponse
+    {
+        $req = $this->find($id);
+        $data = $request->validate(['body' => ['required', 'string', 'min:2', 'max:5000']]);
+
+        $this->replies->reply($req, $request->user(), $data['body']);
 
         return $this->show($id);
     }

@@ -17,6 +17,11 @@ return [
     'platform_inbox' => [
         // Tell the platform's administrators, through the mail ledger, when a service request arrives.
         'notify' => (bool) env('REQUESTS_PLATFORM_INBOX_NOTIFY', true),
+        // PLATFORM-INBOX-ATTENTION-001 — contact, support and data-request notices share this hourly allowance, so a
+        // burst on a public form is not a burst of mail to the owner. Rows past it are still stored and counted unread.
+        'notify_per_hour' => (int) env('REQUESTS_PLATFORM_INBOX_NOTIFY_PER_HOUR', 30),
+        // An administrator's replies to one visitor's record, per hour. The route throttle covers the administrator.
+        'replies_per_record_per_hour' => (int) env('REQUESTS_PLATFORM_INBOX_REPLIES_PER_HOUR', 5),
     ],
 
     // Default SLA window (hours) applied at intake; per-type SLA policies land with the dashboard phase.

@@ -15,6 +15,41 @@ return [
     'relax_rate_limits' => env('E2E_RELAX_RATE_LIMITS', false),
 
     /*
+    |---------------------------------------------------------------------------
+    | Trusted proxies — EDGE-CLIENT-IP-001
+    |---------------------------------------------------------------------------
+    | The addresses whose `X-Forwarded-For` the application believes. Nothing else.
+    |
+    | Production's chain, from `deploy/`: the host's Caddy terminates TLS (`Caddyfile.campaignshub`) and
+    | proxies `api.campaignshub.io` straight to `campaignshub-backend:8000`, and `campaignshub.io` to the
+    | frontend nginx, which proxies `/api/`, `/l/`, `/media/covers/`, `/demo/` and `/sanctum/` on to the same
+    | backend (`infrastructure/nginx/frontend.conf`). Both hops are containers on the Docker networks
+    | `web_proxy` and `internal` (`docker-compose.production.yml`), and the backend publishes no port, so the
+    | peer the application sees is always one of them — a private address. Before this setting it trusted
+    | no proxy, so `request()->ip()` was that container's address for every visitor and every per-address
+    | throttle was one bucket shared by the whole internet.
+    |
+    | The default is the private ranges Docker assigns networks from, plus loopback — never `*`. The exact
+    | subnet of `web_proxy` is the host's, not the repository's: set `TRUSTED_PROXIES` to it (comma
+    | separated CIDRs) to narrow this further. A value of `*` or `**` is refused and the default used, so a
+    | typo cannot make every peer a proxy.
+    |
+    | Only `X-Forwarded-For` is trusted. `X-Forwarded-Host` never is: the owner of a public request is
+    | decided from the Host header (`RequestOwnerResolver`), and a forwarded host must not be able to pick it.
+    */
+    'trusted_proxies' => (static function (): array {
+        $default = ['127.0.0.1', '::1', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
+        $raw = trim((string) env('TRUSTED_PROXIES', ''));
+        $list = array_values(array_filter(array_map('trim', explode(',', $raw)), static fn (string $p): bool => $p !== ''));
+
+        if ($list === [] || in_array('*', $list, true) || in_array('**', $list, true)) {
+            return $default;
+        }
+
+        return $list;
+    })(),
+
+    /*
     | EMAIL-GAPS — the «new sign-in» email. OFF until the Owner approves it, because switching it on mails
     | real people. Devices are recorded either way, so the day it is switched on nobody is told that a
     | device they have used all along is new.
