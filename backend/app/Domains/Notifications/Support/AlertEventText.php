@@ -167,7 +167,8 @@ final class AlertEventText
                 return [
                     'headline' => $ar ? "{$who} بدون نتائج" : "Spend on {$who} with no results",
                     'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
-                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? 'النتائج 0 خلال ' : '0 results in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
+                    // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
+                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 خلال ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
                     'action' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
                     'link' => 'campaign',
                 ];

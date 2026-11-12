@@ -54,11 +54,11 @@ final class AlertsEngineTest extends TestCase
         ], $over));
     }
 
-    private function campaign(float $budget = 0): UnifiedCampaign
+    private function campaign(float $budget = 0, string $objective = 'conversions'): UnifiedCampaign
     {
         return UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'name' => 'Camp '.uniqid(), 'objective' => 'conversions', 'status' => 'active',
+            'name' => 'Camp '.uniqid(), 'objective' => $objective, 'status' => 'active',
             'total_budget' => $budget, 'budget_currency' => 'SAR',
         ]);
     }
@@ -127,6 +127,62 @@ final class AlertsEngineTest extends TestCase
         $this->assertNotNull($event->task_id);
         $this->assertDatabaseHas('tasks', ['id' => $event->task_id, 'status' => 'todo']);
         $this->assertSame(1, Task::where('tenant_id', $this->tenant->id)->count());
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — «صرف بدون نتائج» reads the campaign's OWN result. 1KCOFFEE (traffic,
+     * thousands of visits, no conversions) was told it had spent with no results.
+     */
+    public function test_no_results_ignores_a_traffic_campaign_that_brought_visits(): void
+    {
+        $c = $this->campaign(objective: 'traffic');
+        $this->metric($c, 'spend', 1440);
+        $this->metric($c, 'conversions', 0);
+        $this->metric($c, 'clicks', 18464);
+        $this->metric($c, 'landing_page_views', 2881);
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('no_results', ['threshold' => ['days' => 3]])));
+    }
+
+    /** An objective nobody set has no result to be zero — no alert. */
+    public function test_no_results_skips_a_campaign_whose_objective_is_not_set(): void
+    {
+        $c = $this->campaign(objective: 'other');
+        $this->metric($c, 'spend', 500);
+        $this->metric($c, 'conversions', 0);
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('no_results', ['threshold' => ['days' => 3]])));
+    }
+
+    /**
+     * Only a RUNNING campaign is a performance problem. A paused or completed one, or one whose end
+     * date has passed (Ettifaq vs Ajman, 29 Oct), is not alerted as «صرف بدون نتائج».
+     */
+    public function test_no_results_skips_paused_completed_and_ended_campaigns(): void
+    {
+        foreach ([['status' => 'paused'], ['status' => 'completed'], ['status' => 'active', 'ends_on' => Carbon::now()->subDays(2)->toDateString()]] as $state) {
+            $c = $this->campaign();
+            $c->forceFill($state)->save();
+            $this->metric($c, 'spend', 500);
+            $this->metric($c, 'conversions', 0);
+        }
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('no_results', ['threshold' => ['days' => 3]])));
+    }
+
+    /** A traffic campaign whose platform measured 0 visits IS a zero result, and the alert names it. */
+    public function test_no_results_names_the_objective_result_that_is_zero(): void
+    {
+        $c = $this->campaign(objective: 'traffic');
+        $this->metric($c, 'spend', 500);
+        $this->metric($c, 'clicks', 300);
+        $this->metric($c, 'landing_page_views', 0);
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
+        $context = AlertEvent::where('rule_id', $rule->id)->firstOrFail()->context;
+        $this->assertSame('landing_page_views', $context['result_key']);
+        $this->assertSame('زيارات الصفحة', $context['result_label']['ar']);
     }
 
     public function test_budget_risk_respects_the_threshold(): void
