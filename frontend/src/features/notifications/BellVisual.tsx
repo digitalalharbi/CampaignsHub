@@ -20,7 +20,7 @@ const GLYPH: Record<BellState, string> = { ok: '✓', watch: '!', bad: '✕', no
 function Bar({ label, pct, tone }: { label: string; pct: number; tone: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className="w-20 shrink-0 truncate text-[10px] text-text-muted">{label}</span>
+      <span className="w-20 shrink-0 truncate text-xs text-text-muted">{label}</span>
       <span dir="ltr" className="h-1.5 flex-1 rounded bg-surface-secondary">
         <span className={`block h-1.5 rounded ${tone}`} style={{ width: `${Math.max(4, Math.min(100, pct))}%` }} />
       </span>
@@ -51,8 +51,8 @@ export function BellVisual({ visual, ar }: { visual?: BellVisualData | null; ar:
         <span className="flex flex-wrap items-center gap-1">
           {viz.steps.map((s, i) => (
             <span key={`${s.label}-${i}`} className="flex items-center gap-1">
-              {i > 0 && <span className="text-[10px] text-text-muted">{arrow}</span>}
-              <span data-step-state={s.state} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${CHIP[s.state]}`}>
+              {i > 0 && <span className="text-xs text-text-muted">{arrow}</span>}
+              <span data-step-state={s.state} className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${CHIP[s.state]}`}>
                 {GLYPH[s.state]} {s.label}
               </span>
             </span>
@@ -64,11 +64,11 @@ export function BellVisual({ visual, ar }: { visual?: BellVisualData | null; ar:
           {Array.from({ length: viz.blocks }, (_, i) => (
             <span key={i} className={`h-2 w-2 rounded-sm ${FILL[viz.state]}`} />
           ))}
-          <span className="ms-1 text-[10px] font-bold text-text-secondary"><span dir="ltr" className="tnum">{viz.more ? '+' : ''}{viz.n}</span> {viz.label}</span>
+          <span className="ms-1 text-xs font-bold text-text-secondary"><span dir="ltr" className="tnum">{viz.more ? '+' : ''}{viz.n}</span> {viz.label}</span>
         </span>
       )}
       {visual.steps.length > 0 && (
-        <span data-testid="bell-steps" className="flex flex-wrap items-center gap-1 text-[10px] text-text-secondary">
+        <span data-testid="bell-steps" className="flex flex-wrap items-center gap-1 text-xs text-text-secondary">
           {visual.steps.map((s, i) => (
             <span key={`${s}-${i}`} className="flex items-center gap-1">
               {i > 0 && <span className="text-text-muted">{arrow}</span>}
