@@ -32,7 +32,12 @@ final class MailSendGate
     public function __construct(private readonly MailUnsubscribes $unsubscribes) {}
 
     /** @return string|null the status to record instead of sending; null means send */
-    public function refusal(?string $tenantId, string $recipient, ?string $scope, bool $charge = true): ?string
+    /**
+     * @param  int  $reserve  DIGESTS-CADENCE-BUDGETS-001 — how many of the day's sends this caller must leave for others. Digests
+     *                        pass the alert reserve, so a morning of thirty project reports cannot use up the allowance an
+     *                        afternoon alert needs; alerts pass nothing and may use the whole of it.
+     */
+    public function refusal(?string $tenantId, string $recipient, ?string $scope, bool $charge = true, int $reserve = 0): ?string
     {
         if ($tenantId === null || $scope === null) {
             return null;
@@ -42,12 +47,14 @@ final class MailSendGate
             return self::UNSUBSCRIBED;
         }
 
-        return $charge && ! $this->takeOne($tenantId) ? self::LIMIT_REACHED : null;
+        return $charge && ! $this->takeOne($tenantId, $reserve) ? self::LIMIT_REACHED : null;
     }
 
-    private function takeOne(string $tenantId): bool
+    private function takeOne(string $tenantId, int $reserve = 0): bool
     {
-        $limit = (int) config('mail.daily_limit_per_tenant', 1000);
+        $configured = (int) config('mail.daily_limit_per_tenant', 1000);
+        // Never reserve the whole allowance away: a reserve at or above the limit leaves a digest one send, not none.
+        $limit = $configured <= 0 ? $configured : max(1, $configured - max(0, $reserve));
 
         if ($limit <= 0) {
             return true;

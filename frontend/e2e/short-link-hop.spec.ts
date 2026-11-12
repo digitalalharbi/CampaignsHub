@@ -21,8 +21,12 @@ test.describe('a short link resolves for the person it was sent to', () => {
     await page.goto('/agency/short-links')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
+    /*
+      Waited for, not counted: `main` is visible before the form mounts, and on webkit `count()` read 0
+      and the test SKIPPED itself (CI run 42616955231, webkit) on the portal that offers short links.
+    */
     const submit = page.getByTestId('short-link-submit')
-    if (await submit.count() === 0) test.skip(true, 'this portal does not offer short links')
+    await expect(submit, 'this portal does not offer short links').toBeVisible({ timeout: 30000 })
 
     /* The form is open on arrival — the Owner's correction; no step before the first field. */
     await expect(submit).toBeVisible()
@@ -56,8 +60,12 @@ test.describe('a short link resolves for the person it was sent to', () => {
     await page.goto('/agency/short-links')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
+    /*
+      Waited for, not counted: `main` is visible before the form mounts, and on webkit `count()` read 0
+      and the test SKIPPED itself (CI run 42616955231, webkit) on the portal that offers short links.
+    */
     const submit = page.getByTestId('short-link-submit')
-    if (await submit.count() === 0) test.skip(true, 'this portal does not offer short links')
+    await expect(submit, 'this portal does not offer short links').toBeVisible({ timeout: 30000 })
 
     await page.getByTestId('short-link-kind-whatsapp').click()
     await page.locator('#short-link-phone').fill('532115582')

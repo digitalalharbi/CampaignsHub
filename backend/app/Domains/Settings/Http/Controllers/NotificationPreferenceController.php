@@ -119,7 +119,7 @@ final class NotificationPreferenceController extends Controller
             'available_channels' => $this->availableChannels(),
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'per_project' => false, 'recommendations' => false],
+            'digests' => self::digestsFor((array) ($row->digests ?? [])),
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -145,6 +145,20 @@ final class NotificationPreferenceController extends Controller
             'whatsapp' => WhatsAppOptInController::state($request->user(), $this->providers),
             'projects' => $this->reachableProjects($request, $tenantId),
         ], 'Notification preferences retrieved.');
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the digest switches as the screen shows them: every key present, absent meaning off — exactly
+     * what `DigestSchedule::perProjectKinds()` sends, so the screen and the sweep cannot disagree.
+     *
+     * @param  array<string,mixed>  $stored
+     * @return array<string,bool>
+     */
+    public static function digestsFor(array $stored): array
+    {
+        // One key order whatever order the row was written in, so reading the document back and saving it is an exact echo.
+        return array_replace(['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false,
+            'per_project' => false, 'per_project_weekly' => false, 'per_project_monthly' => false], $stored);
     }
 
     /**
@@ -232,6 +246,9 @@ final class NotificationPreferenceController extends Controller
             'digests.recommendations' => ['boolean'],
             // DIGESTS-VISUAL-V2-001 — one digest per project, in addition to the portfolio one. Off unless chosen.
             'digests.per_project' => ['boolean'],
+            // DIGESTS-CADENCE-BUDGETS-001 — the weekly and monthly report per project, each switched on its own.
+            'digests.per_project_weekly' => ['boolean'],
+            'digests.per_project_monthly' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *
@@ -267,6 +284,18 @@ final class NotificationPreferenceController extends Controller
          * that is present and null is still an instruction («no project scope») and is written; a
          * key that is absent is left exactly as it was.
          */
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — `digests` is MERGED key by key into what is stored.
+         *
+         * It used to replace the whole map, so a client that sent the five switches it knew about erased `per_project` (and
+         * would erase the two new per-project rhythms) without anybody touching them — the same «a client that does not know
+         * about a setting must not be able to clear it» rule the columns below already keep. A null `digests` still clears.
+         */
+        if (array_key_exists('digests', $data) && is_array($data['digests'])) {
+            $stored = $existing === null || $existing->digests === null ? [] : (array) json_decode((string) $existing->digests, true);
+            $data['digests'] = array_replace($stored, $data['digests']);
+        }
+
         $write = [];
         foreach (['channels', 'categories', 'types', 'quiet_hours', 'project_ids', 'digests'] as $json) {
             if (array_key_exists($json, $data)) {
@@ -327,6 +356,13 @@ final class NotificationPreferenceController extends Controller
 
         if (($data['digests']['alerts'] ?? false) === true) {
             $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::ALERTS);
+        }
+
+        // DIGESTS-CADENCE-BUDGETS-001 — the report per project has its own unsubscribe per rhythm, and switching it back on lifts it.
+        foreach (MailUnsubscribes::PROJECT_SCOPES as $scope => $key) {
+            if (($data['digests'][$key] ?? false) === true) {
+                $this->unsubscribes->restore($userId, $tenantId, $scope);
+            }
         }
     }
 

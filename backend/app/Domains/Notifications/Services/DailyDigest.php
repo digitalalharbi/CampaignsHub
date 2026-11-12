@@ -14,6 +14,7 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -164,9 +165,21 @@ final class DailyDigest
             ->whereIn('id', $projectIds)
             ->get(['id', 'name', 'client_workspace_id']);
 
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — the month's budget for EVERY project in ONE pacing read, grouped by the `project_id` the
+         * rows carry (the agency budgets screen's arrangement, `ClientBudgetController`). One `budgetPacing()` per project was
+         * thirty full passes per reader on a one-CPU host.
+         */
+        $monthFrom = $to->copy()->startOfMonth()->startOfDay();
+        $pacing = $projects->isEmpty() ? collect() : collect(
+            $this->metrics->acrossProjects()->forProjects($projects->map(fn (Project $p): string => (string) $p->id)->all())
+                ->budgetPacing($monthFrom, $to->copy()->endOfMonth()->endOfDay(), $to->copy()->startOfDay()),
+        )->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
+
         $blocks = [];
         foreach ($projects as $project) {
             $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
+            $block['budget_month'] = $this->monthBudget(array_values($pacing->get((string) $project->id, collect())->all()), $to);
             // GA4-DIGEST-001 — one compact GA4 line; the reader's own capability decides whether sales are in it.
             $block['ga4'] = app(Ga4DigestBlock::class)->forProject($user, $tenantId, (string) $project->id, $from, $to);
             $block['project_id'] = (string) $project->id;
@@ -446,6 +459,44 @@ final class DailyDigest
         ]);
 
         return $block;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — budget, spend to date, remaining and pace for the calendar month `$to` falls in.
+     *
+     * The month, not the email's window: a budget is planned per month, and «pace» only means something against the share of
+     * the month that has passed. For the daily and weekly that is month-to-date as of the last reported day; for the monthly
+     * (whose window IS the finished month) it is the whole month. The arithmetic is `ClientBudgetRollup`'s — comparable rows
+     * only, one currency or no total, withheld spend never counted as zero — so the mail cannot disagree with the budgets screen.
+     *
+     * @param  list<array<string,mixed>>  $rows  this project's rows of the one `budgetPacing()` read over the month
+     * @return array<string,mixed>
+     */
+    private function monthBudget(array $rows, Carbon $to): array
+    {
+        $from = $to->copy()->startOfMonth()->startOfDay();
+        $roll = app(ClientBudgetRollup::class)->of($rows);
+        $elapsed = min(1.0, ((int) round($from->diffInDays($to->copy()->startOfDay())) + 1) / max(1, $from->daysInMonth));
+
+        /*
+         * The budgeted campaigns the figure could NOT include, and why — named, never dropped in silence. A campaign whose spend
+         * has no figure in the budget's currency (no exchange rate: `partial`, `mixed_currency`; or spend in another currency:
+         * `currency_mismatch`) is left out of `ClientBudgetRollup`'s budget, spend and remaining; when every budgeted campaign is,
+         * the roll-up has no budget at all, and the mail must say «no figure, because…», not «no budget recorded».
+         */
+        $outside = array_values(array_filter(
+            $rows,
+            static fn (array $r): bool => (float) ($r['budget'] ?? 0) > 0 && ! in_array($r['pacing_basis'] ?? null, ['comparable', 'nothing_measured_in_window'], true),
+        ));
+
+        return $roll + [
+            'from' => $from->toDateString(),
+            'to' => $to->copy()->endOfMonth()->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'outside' => count($outside),
+            'outside_reasons' => array_count_values(array_map(static fn (array $r): string => (string) ($r['pacing_basis'] ?? 'unknown'), $outside)),
+        ];
     }
 
     /**

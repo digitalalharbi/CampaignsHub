@@ -112,14 +112,14 @@ describe('the notification preferences centre', () => {
   it('warns when a message is routed into a summary the person does not receive', () => {
     open(prefs({ types: { ...prefs().types, budget_pace: { email: true, in_app: true, rhythm: 'daily' } } }))
 
-    expect(screen.getByText(/لن تصلك هذه الرسالة لأن الملخص اليومي غير مفعّل/)).toBeInTheDocument()
+    expect(screen.getByText(/لن تصلك هذه الرسالة لأن ملخص المشاريع اليومي غير مفعّل/)).toBeInTheDocument()
   })
 
   /** The digest row writes to the digest opt-in, not to a per-type switch. */
   it('sends the daily summary as a digest opt-in when it is ticked', async () => {
     open()
 
-    fireEvent.click(screen.getByLabelText('الملخص اليومي'))
+    fireEvent.click(screen.getByLabelText('ملخص المشاريع اليومي'))
     fireEvent.click(screen.getByText('حفظ التفضيلات'))
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
@@ -199,5 +199,21 @@ describe('the notification preferences centre', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
     expect(mutateAsync.mock.calls[0]?.[0].digests.recommendations).toBe(true)
+  })
+
+  /** DIGESTS-CADENCE-BUDGETS-001 — the report per project has its own three rhythms, each saved on its own. */
+  it('offers the per-project report on each rhythm and saves the one that was switched', async () => {
+    open(prefs({ digests: { daily: false, weekly: false, monthly: false, alerts: false, recommendations: false, per_project: true, per_project_weekly: true, per_project_monthly: true } }))
+
+    expect(screen.getByTestId('per-project-reports')).toBeInTheDocument()
+    expect(screen.getByTestId('digest-per_project_weekly').getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByTestId('digest-per_project_monthly'))
+    fireEvent.click(screen.getByText('حفظ التفضيلات'))
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
+    const body = mutateAsync.mock.calls[0]?.[0]
+    expect(body.digests.per_project).toBe(true)
+    expect(body.digests.per_project_weekly).toBe(true)
+    expect(body.digests.per_project_monthly).toBe(false)
   })
 })

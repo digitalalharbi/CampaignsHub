@@ -9,6 +9,7 @@ use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\AlertEventText;
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\OperationalDigestModel;
@@ -89,12 +90,12 @@ final class DigestDispatcher
      *
      * @return string the state written to the ledger
      */
-    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null): string
+    public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null, bool $onDemand = false): string
     {
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
-        return $this->send($user, $tenantId, 'daily', $day->toDateString().self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onlyProject: $onlyProject);
+        return $this->send($user, $tenantId, 'daily', $day->toDateString().self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onDemand: $onDemand, onlyProject: $onlyProject);
     }
 
     /**
@@ -104,12 +105,12 @@ final class DigestDispatcher
      * week converges on the same row and the same unique-index guarantee. Everything else is the
      * daily path: same builder, same scope, same honest states.
      */
-    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null): string
+    public function sendWeekly(User $user, string $tenantId, Carbon $weekEnd, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null, bool $onDemand = false): string
     {
         $end = $weekEnd->copy()->endOfDay();
         $start = $end->copy()->subDays(6)->startOfDay();
 
-        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW').self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onlyProject: $onlyProject);
+        return $this->send($user, $tenantId, 'weekly', $end->format('o-\WW').self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onDemand: $onDemand, onlyProject: $onlyProject);
     }
 
     /**
@@ -123,12 +124,13 @@ final class DigestDispatcher
      * that slides is not comparable to the one before it, and comparability is the only reason to
      * send a monthly report rather than a weekly one.
      */
-    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency'): string
+    public function sendMonthly(User $user, string $tenantId, Carbon $inMonth, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null, bool $onDemand = false): string
     {
         $start = $inMonth->copy()->startOfMonth()->startOfDay();
         $end = $inMonth->copy()->endOfMonth()->endOfDay();
 
-        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m'), $start, $end, $locale, $audience);
+        // DIGESTS-CADENCE-BUDGETS-001 — the per-project monthly is its own ledger row: `2026-10~<project>`.
+        return $this->send($user, $tenantId, 'monthly', $start->format('Y-m').self::projectSuffix($onlyProject), $start, $end, $locale, $audience, onDemand: $onDemand, onlyProject: $onlyProject);
     }
 
     /**
@@ -208,7 +210,13 @@ final class DigestDispatcher
         $chosen = $preference === null ? [] : (array) json_decode((string) ($preference->digests ?? '[]'), true);
         $user = User::query()->find($row->user_id);
 
-        if ($user === null || $user->email === null || ($chosen[$row->kind] ?? false) !== true) {
+        // A report per project is wanted by ITS switch (DIGESTS-CADENCE-BUDGETS-001), the projects summary by its own.
+        $perProject = str_contains((string) $row->period_key, '~');
+        $wanted = $perProject
+            ? in_array((string) $row->kind, DigestSchedule::perProjectKinds($chosen), true)
+            : ($chosen[$row->kind] ?? false) === true;
+
+        if ($user === null || $user->email === null || ! $wanted) {
             DB::table('digest_sends')->where('id', $row->id)->update(['next_attempt_at' => null, 'updated_at' => Carbon::now()]);
 
             return 'no_longer_wanted';
@@ -258,6 +266,17 @@ final class DigestDispatcher
         // Claim the period first. A losing race means somebody else is already sending it.
         if (! $this->claim($tenantId, $user, $ledgerKind, $ledgerKey, $from, $to)) {
             return 'already_sent';
+        }
+
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — the unsubscribe a report per project offers is ITS rhythm's, never the projects summary's,
+         * and it is asked BEFORE anything is built: somebody who left this mail costs no queries on a one-CPU host.
+         */
+        $scope = $onlyProject !== null
+            ? MailUnsubscribes::projectScope($kind)
+            : (array_flip(MessageCatalogue::DIGEST_SWITCH)[$kind] ?? null);
+        if ($this->gate->refusal($tenantId, (string) $user->email, $scope, charge: false) !== null) {
+            return $this->finish($user, $ledgerKind, $ledgerKey, MailSendGate::UNSUBSCRIBED, MailSendGate::UNSUBSCRIBED);
         }
 
         try {
@@ -324,9 +343,9 @@ final class DigestDispatcher
              */
             $identity = $this->branding->forReport(null, $tenantId, static fn (): string => '');
 
-            // EMAIL-GAPS — asked here, at the send: a click after the sweep picked this person still counts.
-            $scope = array_flip(MessageCatalogue::DIGEST_SWITCH)[$kind] ?? null;
-            $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope);
+            // EMAIL-GAPS — asked again here, at the send: a click after the sweep picked this person still counts. A digest may not
+            // spend the share of the tenant's daily allowance that is kept for alerts (`mail.alert_reserve_per_tenant`).
+            $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope, reserve: (int) config('mail.alert_reserve_per_tenant', 200));
 
             if ($refusal !== null) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, $refusal, $refusal);
@@ -383,7 +402,7 @@ final class DigestDispatcher
         $projects = array_values((array) ($digest['projects'] ?? []));
 
         if (count($projects) === 1 || ($perProject && $projects !== [])) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7)), $locale, $name, $kind, 'project', self::periodLabel($digest));
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest));
         }
 
         return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest));

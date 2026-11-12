@@ -1,0 +1,185 @@
+name: Gate shards
+
+# CI-SPEED-001 — ONE browser's gate, split across parallel shard jobs. Called by `ci.yml` once per browser; never runs
+# on its own. The verdict is not given here: `ci.yml`'s `gate (<browser>)` job reads every shard's result AND its
+# evidence, and is the only check with the browser's name.
+#
+# Each shard is exactly what the single per-browser job was, minus the tests the other shards run:
+#   - its own runner, its own postgres service (`mediabuying_e2e`) and redis — nothing is shared between shards, as
+#     nothing was shared between browsers (E2E-ISO-002);
+#   - `npm run gate` verbatim, with `GATE_BROWSERS` naming the one browser: the same `run-gate.mjs`, the same
+#     `playwright.config.ts`, the same `globalSetup` reset + seed BEFORE the servers start, the same `setup` project,
+#     `workers: 1`, `retries: 0`, the same timeouts;
+#   - plus `--shard=<i>/<total>`, which Playwright applies to the browser's own project only: the `setup` dependency
+#     runs in every shard, as it ran once in every job.
+# A shard therefore meets the freshly seeded database the whole browser used to meet, and runs a contiguous, ordered
+# slice of the same files in the same order.
+
+on:
+  workflow_call:
+    inputs:
+      browser:
+        type: string
+        required: true
+      # A JSON array, e.g. '[1,2,3,4]'. Its length must equal `total`; `ci.yml` passes both from one place.
+      shards:
+        type: string
+        required: true
+      total:
+        type: number
+        required: true
+      # Playwright splits a project by TEST COUNT. One file here holds 224 quick tests, so equal counts are far from
+      # equal minutes; these weights (one per shard, colon-separated) set each shard's share of the count. They can
+      # only move the boundaries between contiguous slices — every test is still in exactly one shard whatever they
+      # say, and `gate-verdict.py` proves it on every run. Empty means equal counts.
+      weights:
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    strategy:
+      # Every shard reports its own verdict: «shard 2 failed» and «shards 2 and 4 failed» are different bugs.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    name: shard ${{ matrix.shard }}/${{ inputs.total }}
+    # The whole browser was given 90 minutes for ~75 of tests. A shard runs a quarter to a third of that; 60 keeps
+    # the old headroom for a slow slice plus the install, and still fails a stalled shard well before the old bound.
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend dependencies
+        working-directory: backend
+        run: composer install --no-interaction --prefer-dist
+      - name: Backend environment
+        working-directory: backend
+        run: cp .env.example .env && php artisan key:generate
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      # The suite this browser would run in ONE job — listed by Playwright from the same config, before anything is
+      # built or served (`--list` starts no server and runs no globalSetup; E2E_SKIP_BUILD skips the config-load build,
+      # which listing does not need). `gate (<browser>)` compares the union of the shards' runs against this.
+      - name: List the full ${{ inputs.browser }} suite
+        working-directory: frontend
+        env:
+          E2E_SKIP_BUILD: '1'
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/gate-evidence/full.json
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate-evidence"
+          npx playwright test --project '${{ inputs.browser }}' --list --reporter=json > /dev/null
+          echo "listed: $(wc -c < "$PLAYWRIGHT_JSON_OUTPUT_FILE") bytes"
+      # The browsers and their system packages — see the long account in `.github/scripts/install-browsers.sh` and in
+      # the history of `ci.yml`. The matrix browser AND chromium: the `setup` project runs under Playwright's default.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ inputs.browser }}-${{ hashFiles('frontend/package-lock.json') }}
+      - name: Restore apt archives
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ inputs.browser }}-${{ github.run_id }}-${{ matrix.shard }}
+          restore-keys: |
+            apt-debs-${{ runner.os }}-${{ inputs.browser }}-
+      - name: Browsers
+        id: browsers
+        working-directory: frontend
+        timeout-minutes: 30
+        run: bash ../.github/scripts/install-browsers.sh ${{ inputs.browser }}
+      - name: Save apt archives
+        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ runner.os }}-${{ inputs.browser }}-${{ github.run_id }}-${{ matrix.shard }}
+      - name: Arabic text-layer toolchain
+        run: python3 -m pip install --quiet pikepdf
+      - name: Gate — ${{ inputs.browser }} shard ${{ matrix.shard }}/${{ inputs.total }}
+        working-directory: frontend
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+          GATE_BROWSERS: ${{ inputs.browser }}
+          E2E_CONN_LOG: ${{ github.workspace }}/frontend/preview-connections.log
+          PWTEST_SHARD_WEIGHTS: ${{ inputs.weights }}
+          # The usual `list` output stays in the log; the JSON reporter writes this shard's results beside it, for the
+          # verdict. A reporter observes a run — it cannot change what runs or how a test ends.
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/gate-evidence/run.json
+        # No `continue-on-error`, no retry wrapper: the script exits with Playwright's code, and that is the verdict.
+        run: npm run gate -- --shard=${{ matrix.shard }}/${{ inputs.total }} --reporter=list,json
+      - name: Shard evidence for the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-shard-${{ inputs.browser }}-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Backend log (why the server answered 500)
+        if: failure()
+        run: |
+          echo "::group::backend/storage/logs — last 200 lines"
+          tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
+          echo "::endgroup::"
+      - name: Preview server connections (who closed what)
+        if: failure()
+        run: |
+          echo "::group::preview connections — last 200, server-closed and errors first"
+          grep -E "server-timeout|ended=error" frontend/preview-connections.log 2>/dev/null | tail -n 100 || true
+          tail -n 200 frontend/preview-connections.log 2>/dev/null || echo "(no connection log was written)"
+          echo "::endgroup::"
+      - name: Failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          # One name per shard: three browsers sharing «gate-artifacts» meant the second failing job's upload collided.
+          name: gate-artifacts-${{ inputs.browser }}-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: |
+            frontend/preview-connections.log
+            frontend/test-results/
+            frontend/playwright-report/
+            backend/storage/logs/
+            # Snapshots written by this run — the only way to obtain a LINUX visual baseline (see ci.yml history).
+            frontend/e2e/**/*-snapshots/
+          retention-days: 7
