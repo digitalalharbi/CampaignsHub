@@ -18,7 +18,7 @@
                 @endif
             </tr></table>
             <div style="font-size:{{ $big ? 18 : 16 }}px; font-weight:800; color:#0b1a16; padding-top:6px; line-height:1.5;">{{ $c['title'] }}</div>
-            @include('mail.digest._viz', ['viz' => $c['viz']])
+            @include('mail.partials.visual', ['viz' => $c['viz'], 'state' => ($c['rule'] ?? '') === 'recovered' ? 'ok' : $state, 'timeline' => $c['timeline'] ?? null])
             {{-- The figures behind the drawing, small, under it: amounts with their currency, the limit, the date of the last figures. --}}
             @if (! empty($c['figures']['lead']))
                 <div data-block="figures" style="font-size:12px; color:#3d4742; padding-top:4px; unicode-bidi:plaintext;">

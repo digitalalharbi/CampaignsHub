@@ -32,6 +32,12 @@ final class AlertAnatomy
     private const CONNECTION = ['sync_failure', 'sync_outage', 'measurement_outage', 'token_expiry'];
 
     /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — linking and measurement health, never a performance decision: these go to the
+     * «ملخص الربط» section of a digest, not to «يحتاج قرارك الآن».
+     */
+    public const LINK_HEALTH = [...self::CONNECTION, 'tracking_health', 'ga4_tracking_loss'];
+
+    /**
      * @param  array<string,mixed>  $context
      * @return array{priority: string, evidence: array<string,mixed>, anatomy: array<string,mixed>}
      */
