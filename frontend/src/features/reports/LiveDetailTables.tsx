@@ -407,10 +407,15 @@ export function LiveDetailTables({
 
   const objectives = (() => {
     /*
-     * A path's result is its ORDERS — the payload names it that, and `body()` reads `conversions`.
-     * Mapping it here rather than teaching `body()` a second key keeps one shape flowing through it.
+     * OBJECTIVE-RESULT-001 — a path's result is the one IT was bought for (`result`), not its orders.
+     * The traffic path of a client whose traffic campaigns brought thousands of visits read «0» here.
+     * A stored document from before the field keeps its orders. `body()` reads `conversions`, so the
+     * result is mapped onto that key rather than teaching `body()` a second one.
      */
-    const asRows = objectiveRows.map((p) => ({ ...p, conversions: p.orders }))
+    // A payload that carries the result (even «none», for a path mixing sales and leads) is believed; an older stored one keeps its orders.
+    const carriesResult = (p: (typeof objectiveRows)[number]) => p.result_key !== undefined || p.result_missing_reason !== undefined
+    const resultOf = (p: (typeof objectiveRows)[number]): number | null => (carriesResult(p) ? (p.result ?? null) : p.orders)
+    const asRows = objectiveRows.map((p) => ({ ...p, conversions: resultOf(p) }))
     const base = body(asRows as unknown as Array<Record<string, unknown>>, (row) => (
       <span key="name" className="font-semibold">{ar ? String(row.label_ar) : String(row.label_en)}</span>
     ))
@@ -422,9 +427,16 @@ export function LiveDetailTables({
      * this cell is the report declining to rank an awareness path on a sales metric, not a gap.
      */
     const costPer = (row: (typeof objectiveRows)[number]) =>
-      row.result_metrics_apply
-        ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), moneyExact)
-        : '\u2014'
+      carriesResult(row) && !row.result_key
+        ? '\u2014'
+        : row.result_key
+        ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cost_per_result', row.result_key === 'impressions' ? Number(row.result ?? 0) / 1000 : Number(row.result ?? 0), currency, ar), moneyExact)
+        : row.result_metrics_apply
+          ? formatMoneyReading(readCostPer(row as unknown as MoneyTotals, 'cpa', 'orders', currency, ar), moneyExact)
+          : '\u2014'
+    /* The unit beside each figure: «النتائج» spans paths that count different things. */
+    const unit = (row: (typeof objectiveRows)[number]): string | null => row.result_label ? (ar ? row.result_label.ar : row.result_label.en) : null
+    const costUnit = (row: (typeof objectiveRows)[number]): string | null => row.cost_per_result_label ? (ar ? row.cost_per_result_label.ar : row.cost_per_result_label.en) : null
 
     /*
      * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the cost per result above can be an average of prices.
@@ -440,9 +452,15 @@ export function LiveDetailTables({
 
     return {
       rows: base.rows.map((cells, i) => [
-        ...cells,
-        <span key="cost" dir="ltr">
-          {costPer(objectiveRows[i])}
+        ...cells.slice(0, 4),
+        <span key="conversions" data-testid={`objective-${objectiveRows[i].path}-result`}>
+          {resultOf(objectiveRows[i]) === null && objectiveRows[i].result_missing_label
+            ? <span className="text-xs text-text-muted">{ar ? objectiveRows[i].result_missing_label!.ar : objectiveRows[i].result_missing_label!.en}</span>
+            : <span dir="ltr">{compact(resultOf(objectiveRows[i]))}</span>}
+          {unit(objectiveRows[i]) !== null && <span className="ms-1 text-xs text-text-muted">{unit(objectiveRows[i])}</span>}
+        </span>,
+        <span key="cost" title={costUnit(objectiveRows[i]) ?? undefined}>
+          <span dir="ltr">{costPer(objectiveRows[i])}</span>
           {blend(objectiveRows[i]) !== null && (
             <span
               data-testid={`objective-${objectiveRows[i].path}-mixed-results`}
@@ -456,7 +474,7 @@ export function LiveDetailTables({
       ]),
       values: base.values.map((v, i): SortValues => [
         ...v,
-        objectiveRows[i].result_metrics_apply ? objectiveRows[i].cpa : null,
+        objectiveRows[i].result_key ? (objectiveRows[i].cost_per_result ?? null) : objectiveRows[i].result_metrics_apply ? objectiveRows[i].cpa : null,
       ]),
       exact: base.exact.map((e) => [...e, null]),
     }

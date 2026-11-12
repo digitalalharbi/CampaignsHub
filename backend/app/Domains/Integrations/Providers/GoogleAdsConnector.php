@@ -370,6 +370,7 @@ final class GoogleAdsConnector extends ApiAdvertisingConnector implements Report
     {
         $rows = $this->stream($tokens, $adAccountId, <<<'GAQL'
             SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type,
+                   campaign.bidding_strategy_type,
                    campaign_budget.amount_micros, campaign_budget.total_amount_micros
             FROM campaign
             WHERE campaign.status != 'REMOVED'

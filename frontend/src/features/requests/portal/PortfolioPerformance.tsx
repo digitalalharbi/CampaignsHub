@@ -36,14 +36,14 @@ const COPY = {
     title: 'أداء حساباتك', period: (d: number) => `آخر ${days(d, 'ar')}`, synced: 'آخر مزامنة', stale: 'قد تكون البيانات متأخرة',
     platforms: 'المنصات', projects: 'المشاريع', campaigns: 'الحملات', all: 'عرض الكل', none: 'لا توجد بيانات لهذه الفترة بعد.',
     total: 'الإجمالي',
-    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'النتائج', ctr: 'نسبة النقر', spend: 'الإنفاق', cpa: 'تكلفة النتيجة', revenue: 'الإيرادات', roas: 'العائد على الإنفاق' } as Record<string, string>,
+    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'نسبة النقر', spend: 'الإنفاق', cpa: 'تكلفة التحويل', revenue: 'الإيرادات', roas: 'العائد على الإنفاق' } as Record<string, string>,
     st: { active: 'نشطة', paused: 'متوقفة', draft: 'مسودة', ended: 'منتهية', completed: 'مكتملة', archived: 'مؤرشفة' } as Record<string, string>,
   },
   en: {
     title: 'Your performance', period: (d: number) => `Last ${days(d, 'en')}`, synced: 'Last synced', stale: 'Data may be delayed',
     platforms: 'Platforms', projects: 'Projects', campaigns: 'Campaigns', all: 'View all', none: 'No data for this period yet.',
     total: 'Total',
-    k: { impressions: 'Impressions', clicks: 'Clicks', conversions: 'Results', ctr: 'CTR', spend: 'Spend', cpa: 'Cost per result', revenue: 'Revenue', roas: 'ROAS' } as Record<string, string>,
+    k: { impressions: 'Impressions', clicks: 'Clicks', conversions: 'Platform conversions', ctr: 'CTR', spend: 'Spend', cpa: 'Cost per conversion', revenue: 'Revenue', roas: 'ROAS' } as Record<string, string>,
     st: { active: 'Active', paused: 'Paused', draft: 'Draft', ended: 'Ended', completed: 'Completed', archived: 'Archived' } as Record<string, string>,
   },
 }

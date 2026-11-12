@@ -1,5 +1,6 @@
 import { rankableMoney, type MoneyFields } from '@/lib/money/contract'
 import { canonicalOfRaw, CANONICAL_OBJECTIVE_KEYS, type CanonicalObjectiveKey } from './canonicalObjectives'
+import { campaignResult, labelForKey, type CampaignResult } from './campaignResult'
 
 /**
  * CAMPAIGNS-OVERVIEW-FIRST-001 — where the portfolio's money is going, by what it is FOR.
@@ -33,7 +34,14 @@ export interface ObjectiveMixRow {
   key: CanonicalObjectiveKey
   campaigns: number
   spend: number | null
-  results: number
+  /**
+   * OBJECTIVE-RESULT-001 — the group's results in ONE unit (`resultKey`), or null when its campaigns
+   * count different things and share no unit. It summed `conversions` for every objective, so the
+   * traffic row of a portfolio full of visits read «0».
+   */
+  results: number | null
+  resultKey: string | null
+  resultLabel: { ar: string; en: string } | null
 }
 
 export interface ObjectiveMix {
@@ -53,6 +61,37 @@ export interface ObjectiveMix {
 type MixInput = MoneyFields & {
   objective?: string | null
   conversions?: number | null
+  reported?: Record<string, boolean> | null
+}
+
+/**
+ * One unit for a group of campaigns — the frontend half of `ObjectiveResult::combine()`.
+ *
+ * All rows resolved to the same key: their results add up. Otherwise the group's common unit, where
+ * one exists: clicks for traffic (every visit was a click first), impressions for the attention
+ * objectives (reach is never additive), and leads stay leads whichever column the platform used.
+ * Anything else has no total — a sum of unlike things is not a number anybody can act on.
+ */
+function groupResult(key: CanonicalObjectiveKey, rows: MixInput[]): Pick<ObjectiveMixRow, 'results' | 'resultKey' | 'resultLabel'> {
+  const bag = (r: MixInput) => r as unknown as Record<string, unknown>
+  const resolved: CampaignResult[] = rows.map((r) => campaignResult(r.objective, bag(r), r.reported ?? null))
+  // A campaign whose result nobody reported adds NOTHING — it is not a zero.
+  const measured = resolved.filter((r) => r.value !== null && r.key !== null)
+  const keys = [...new Set(measured.map((r) => r.key as string))]
+  const total = (set: CampaignResult[]) => set.reduce((a, r) => a + (r.value as number), 0)
+  const sumOf = (field: string) => rows.reduce((a, r) => a + (Number(bag(r)[field] ?? 0) || 0), 0)
+  const labelOf = labelForKey
+
+  // Every campaign of the group reported nothing: «بدون بيانات», never 0.
+  if (measured.length === 0) return { results: null, resultKey: null, resultLabel: null }
+  if (keys.length === 1) {
+    return { results: total(measured), resultKey: keys[0], resultLabel: measured[0].label }
+  }
+  if (key === 'traffic') return { results: sumOf('clicks'), resultKey: 'clicks', resultLabel: labelOf('clicks') }
+  if (key === 'awareness_engagement') return { results: sumOf('impressions'), resultKey: 'impressions', resultLabel: labelOf('impressions') }
+  if (key === 'leads') return { results: total(measured), resultKey: 'leads', resultLabel: labelOf('leads') }
+
+  return { results: null, resultKey: null, resultLabel: null }
 }
 
 export function objectiveMix(rows: MixInput[], reportingCurrency: string | null): ObjectiveMix | null {
@@ -100,7 +139,7 @@ export function objectiveMix(rows: MixInput[], reportingCurrency: string | null)
       campaigns: group.length,
       /* All refused is «unknown», not zero — a total nobody could compute is not a total of nothing. */
       spend: known.length === 0 ? null : known.reduce((a, b) => a + b, 0),
-      results: group.reduce((sum, r) => sum + (r.conversions ?? 0), 0),
+      ...groupResult(key, group),
     })
   }
 

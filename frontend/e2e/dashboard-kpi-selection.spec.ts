@@ -114,7 +114,7 @@ test.describe('the dashboard KPI cards', () => {
 
     const overview = page.getByTestId('dashboard-overview')
 
-    await expect(overview).toContainText(/Spend, results and revenue|الإنفاق والنتائج والإيرادات/i, { timeout: 60000 })
+    await expect(overview).toContainText(/Spend, platform conversions and revenue|الإنفاق وتحويلات المنصة والإيرادات/i, { timeout: 60000 })
     /* CTR appears here only as a rate-trend panel, so its presence is the claim. */
     await expect(overview).toContainText(/CTR/)
   })

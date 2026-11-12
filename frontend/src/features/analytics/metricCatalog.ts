@@ -175,6 +175,14 @@ export const SPECS: Record<string, Spec> = {
     format: compact,
     hint: { ar: 'من نقر ووصل فعلًا إلى الصفحة — أقل من النقرات دائمًا.', en: 'Clicks that actually arrived on the page — always fewer than clicks.' },
   },
+  /* OBJECTIVE-RESULT-001 — what one landing page view cost; the traffic campaign's cost per result. */
+  cost_per_lpv: {
+    label: { ar: 'تكلفة الزيارة', en: 'Cost per visit' },
+    format: moneyExact,
+    derived: true,
+    invertGood: true,
+    hint: { ar: 'تكلفة زيارة الصفحة الواحدة = الإنفاق ÷ زيارات الصفحة (LPV).', en: 'What one landing page view cost — spend ÷ landing page views (LPV).' },
+  },
   video_views: {
     label: { ar: 'مشاهدات الفيديو', en: 'Video views' },
     format: compact,
@@ -236,8 +244,13 @@ export const SPECS: Record<string, Spec> = {
     invertGood: true,
     hint: { ar: 'تكلفة العميل المحتمل الواحد.', en: 'What one lead costs.' },
   },
+  /*
+   * OBJECTIVE-RESULT-001 — `conversions` summed over a scope is the platforms' conversion count, not
+   * «النتائج»: a traffic campaign's result is its visits. A sales scope still reads it as «الطلبات»
+   * (the objective override below); a campaign's own result comes from `campaignResult`.
+   */
   conversions: {
-    label: { ar: 'النتائج', en: 'Results' },
+    label: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
     format: compact,
     hint: {
       ar: 'مجموع ما أبلغت به كل منصة عن الحدث الذي حُسّنت له الحملة — وليس عدد طلبات فريدة.',
@@ -359,8 +372,13 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
     primary: ['reach', 'impressions', 'frequency', 'cpm'],
     secondary: ['spend', 'video_views', 'video_completions', 'video_completion_rate', 'clicks', 'ctr', 'engagements'],
   },
+  /*
+   * OBJECTIVE-RESULT-001 — the visit leads, the click follows. A landing page view is what a traffic
+   * buy is for (Owner, MASTER_FINAL §هـ: «LPV عند توفره وإلا النقرات»); a click is the step before it
+   * and the fallback where a platform sends no page views.
+   */
   traffic: {
-    primary: ['clicks', 'ctr', 'cpc', 'landing_page_views'],
+    primary: ['landing_page_views', 'clicks', 'ctr', 'cpc'],
     secondary: ['spend', 'impressions', 'reach', 'cpm', 'conversion_rate'],
   },
   leads: {
@@ -613,6 +631,7 @@ const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number |
   cpl: 'leads',
   cpi: 'installs',
   cpe: 'engagements',
+  cost_per_lpv: 'landing_page_views',
   cpm: (t) => Number((t as Record<string, number | null> | undefined)?.impressions ?? 0) / 1000,
 }
 

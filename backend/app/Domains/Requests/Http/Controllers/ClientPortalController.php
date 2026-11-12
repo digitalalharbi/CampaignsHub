@@ -1113,8 +1113,17 @@ final class ClientPortalController
     private function campaignShape(UnifiedCampaign $c, array $workspaces): array
     {
         // Reuse the SAME metrics engine (MetricsAggregator) the internal surfaces use, scoped to this campaign.
-        $totals = $this->metrics->forCampaign((string) $c->getKey())
-            ->totals(Carbon::now()->subDays(30), Carbon::now());
+        $engine = $this->metrics->forCampaign((string) $c->getKey());
+        $totals = $engine->totals(Carbon::now()->subDays(30), Carbon::now());
+        /*
+         * OBJECTIVE-RESULT-001 — the campaign's result for ITS objective, from the one table, so the
+         * client is not shown a traffic campaign's «النتائج 0». Counts and words only: the cost of a
+         * result is money and is never sent here.
+         */
+        $result = array_intersect_key(
+            $engine->resultOfTotals($c->objective === null ? null : (string) $c->objective, $totals, Carbon::now()->subDays(30), Carbon::now()),
+            array_flip(['result_key', 'result', 'result_label', 'result_missing_reason', 'result_missing_label', 'result_note']),
+        );
 
         $workspace = $workspaces[(string) $c->client_workspace_id] ?? null;
         $shows = static fn (string $key): bool => $workspace !== null && PortalVisibility::allows($workspace, $key);
@@ -1135,7 +1144,7 @@ final class ClientPortalController
                 'clicks' => $totals['clicks'] ?? 0,
                 'conversions' => $totals['conversions'] ?? 0,
                 'ctr' => $totals['ctr'] ?? null,
-            ],
+            ] + $result,
         ];
 
         /*
