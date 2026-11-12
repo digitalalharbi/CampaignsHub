@@ -217,7 +217,7 @@ function Detail({ queue, id, ar, t, onClose }: { queue: InboxQueue; id: string; 
       {r && (
         <>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-            {'reference' in r && (<><dt className="text-text-muted">{t.reference}</dt><dd className="text-text-primary" dir="ltr">{r.reference}</dd></>)}
+            {'reference' in r && (<><dt className="text-text-muted">{t.reference}</dt><dd className="text-text-primary"><Num>{r.reference}</Num></dd></>)}
             <dt className="text-text-muted">{'verified_at' in r ? t.type : t.subject}</dt>
             <dd className="min-w-0 break-words text-text-primary" dir="auto">{subjectOf(r)}</dd>
             {'verified_at' in r && (<><dt className="text-text-muted">{t.status}</dt><dd className="text-text-primary">{r.verified_at ? t.verified : t.unverified}</dd></>)}
