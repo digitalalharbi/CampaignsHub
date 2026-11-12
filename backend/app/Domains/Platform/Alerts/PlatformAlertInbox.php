@@ -55,11 +55,6 @@ final class PlatformAlertInbox
                     $fresh[] = $alert;
                 } elseif ($added > 0) {
                     $grown++;
-                    // More customers stuck on the same error: told again, but not more often than the group window.
-                    $every = max(1, (int) config('platform_alerts.group_reannounce_hours', 3));
-                    if ($alert->emailed_at === null || $alert->emailed_at->lessThanOrEqualTo($now->copy()->subHours($every))) {
-                        $fresh[] = $alert;
-                    }
                 }
 
                 continue;
@@ -75,6 +70,10 @@ final class PlatformAlertInbox
         $cleared = $this->clear($now);
 
         foreach ($fresh as $alert) {
+            $mailed += $this->announce($alert);
+        }
+
+        foreach ($this->owed($now, $fresh) as $alert) {
             $mailed += $this->announce($alert);
         }
 
@@ -114,7 +113,7 @@ final class PlatformAlertInbox
         $known = [];
 
         PlatformAlert::query()->where('kind', PlatformAlert::BLOCKING)
-            ->where('dedup_key', 'like', 'blocking:'.$type.':%')
+            ->whereRaw("facts->>'type' = ?", [$type])
             ->where('first_seen_at', '>=', $now->copy()->subHours(max(1, (int) config('platform_alerts.lookback_hours', 72)) + 48))
             ->get(['facts'])
             ->each(function (PlatformAlert $a) use (&$known): void {
@@ -182,10 +181,10 @@ final class PlatformAlertInbox
     {
         $cleared = 0;
 
+        // By id, not by offset: clearing an alert takes it out of the set being paged.
         PlatformAlert::query()->open()
             ->whereIn('kind', [PlatformAlert::ABANDONED, PlatformAlert::UNVERIFIED, PlatformAlert::MISMATCH])
-            ->orderBy('first_seen_at')
-            ->each(function (PlatformAlert $alert) use (&$cleared, $now): void {
+            ->eachById(function (PlatformAlert $alert) use (&$cleared, $now): void {
                 if ($this->detector->hasCleared($alert)) {
                     $alert->forceFill(['resolved_at' => $now])->save();
                     $cleared++;
@@ -193,6 +192,39 @@ final class PlatformAlertInbox
             });
 
         return $cleared;
+    }
+
+    /**
+     * Alerts still owed a message: a grouped error with customers no email has named yet (sent once the group window has
+     * passed since the last one, so a busy day is a few messages, not one per sweep), and any alert whose message could
+     * not be handed to the mail ledger at all on an earlier sweep.
+     *
+     * @param  list<PlatformAlert>  $already  announced in this sweep
+     * @return list<PlatformAlert>
+     */
+    private function owed(Carbon $now, array $already): array
+    {
+        $skip = array_map(fn (PlatformAlert $a): string => (string) $a->getKey(), $already);
+        $every = max(1, (int) config('platform_alerts.group_reannounce_hours', 3));
+        $since = $now->copy()->subHours(max(1, (int) config('platform_alerts.lookback_hours', 72)));
+
+        return PlatformAlert::query()->open()
+            ->where('first_seen_at', '>=', $since)
+            ->when($skip !== [], fn ($q) => $q->whereNotIn('id', $skip))
+            ->orderBy('first_seen_at')
+            ->get()
+            ->filter(function (PlatformAlert $a) use ($now, $every): bool {
+                if ($a->emailed_at === null) {
+                    return true;
+                }
+                if ($a->kind !== PlatformAlert::BLOCKING) {
+                    return false;
+                }
+
+                return $a->occurrences > (int) ($a->facts['mailed_occurrences'] ?? 0)
+                    && $a->emailed_at->lessThanOrEqualTo($now->copy()->subHours($every));
+            })
+            ->values()->all();
     }
 
     /** One message per administrator, once. Returns how many were handed to the mail ledger. */
@@ -224,7 +256,12 @@ final class PlatformAlertInbox
         }
 
         if ($told > 0) {
-            $alert->forceFill(['emailed_at' => Carbon::now()])->save();
+            $facts = $alert->facts;
+            // A group remembers how many customers the last message named, so the next one is owed only for new ones.
+            if ($alert->kind === PlatformAlert::BLOCKING) {
+                $facts['mailed_occurrences'] = $alert->occurrences;
+            }
+            $alert->forceFill(['emailed_at' => Carbon::now(), 'facts' => $facts])->save();
         }
 
         return $told;

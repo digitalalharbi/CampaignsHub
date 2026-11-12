@@ -17,6 +17,7 @@ use App\Domains\Subscriptions\Models\SubscriptionInvoice;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Tenancy\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -97,8 +98,8 @@ final class PaymentAlertDetector
         }
 
         return match ($alert->kind) {
-            PlatformAlert::ABANDONED => $payment->status !== 'pending',
-            PlatformAlert::UNVERIFIED => $payment->status === 'paid',
+            PlatformAlert::ABANDONED => $payment->status !== 'pending' || $this->laterAttempt($payment),
+            PlatformAlert::UNVERIFIED => ! $this->stillUnverified($payment),
             default => $this->mismatchOf($payment) === null,
         };
     }
@@ -115,11 +116,20 @@ final class PaymentAlertDetector
             ->where('status', 'pending')
             // A hosted payment page was opened for the customer: that is «reached the payment step».
             ->whereNotNull('checkout_url')
+            /*
+             * Only a page a PERSON asked for: an applicant's checkout, or a plan change from the billing page. A renewal or a
+             * trial conversion opened by the lifecycle sweep also gets a hosted page, but nobody «reached» it — the system did.
+             */
+            ->where(fn ($q) => $q->whereNotNull('registration_request_id')->orWhereIn('purpose', ['plan_change', 'reactivation']))
             ->whereBetween('created_at', [$this->since($now), $now->copy()->subMinutes($window)])
             ->orderBy('created_at')
             ->each(function (SubscriptionPayment $payment) use (&$out, $window): void {
                 // A verified gateway event about it means the customer DID pay or try to: that is alert 2 or 5, not this.
                 if ($this->gatewayEvent($payment) !== null) {
+                    return;
+                }
+                // They came back and opened (or paid) another attempt — another plan or term: that one is what counts.
+                if ($this->laterAttempt($payment)) {
                     return;
                 }
 
@@ -144,13 +154,16 @@ final class PaymentAlertDetector
         $out = [];
 
         $raise = function (SubscriptionPayment $payment, ?array $event) use (&$seen, &$out, $window): void {
-            if (isset($seen[$payment->getKey()]) || $payment->status === 'paid' || $payment->status === 'refund_due') {
+            if (isset($seen[$payment->getKey()]) || ! $this->stillUnverified($payment)) {
                 return;
             }
             $seen[$payment->getKey()] = true;
             $audit = $this->latestVerificationAudit($payment);
+            // «Paid» only when Moyasar said so or the payment path refused its word; a charge merely started is not «paid».
+            $paidAtGateway = in_array($event['status'] ?? null, self::GATEWAY_PAID, true) || $this->gatewaySaidPaid($payment) || $audit !== null;
 
-            $out[] = $this->candidate(PlatformAlert::UNVERIFIED, 'critical', 'unverified:'.$payment->getKey(), $payment, $this->paymentFacts($payment) + [
+            $out[] = $this->candidate(PlatformAlert::UNVERIFIED, $paidAtGateway ? 'critical' : 'warning', 'unverified:'.$payment->getKey(), $payment, $this->paymentFacts($payment) + [
+                'paid_at_gateway' => $paidAtGateway,
                 'window_minutes' => $window,
                 'our_status' => (string) $payment->status,
                 'gateway_status' => $event['status'] ?? null,
@@ -181,6 +194,15 @@ final class PaymentAlertDetector
             ->where('status', 'processing')
             ->whereBetween('updated_at', [$this->since($now), $cutoff])
             ->orderBy('updated_at')
+            ->each(fn (SubscriptionPayment $p) => $raise($p, $this->gatewayEvent($p)));
+
+        // b2. A saved-card renewal handed to Moyasar (it has Moyasar's payment id) that no confirmation ever reached.
+        SubscriptionPayment::query()
+            ->where('status', 'pending')
+            ->whereNull('checkout_url')
+            ->whereNotNull('provider_payment_id')
+            ->whereBetween('created_at', [$this->since($now), $cutoff])
+            ->orderBy('created_at')
             ->each(fn (SubscriptionPayment $p) => $raise($p, $this->gatewayEvent($p)));
 
         // c. The payment path refused a paid event: the gateway could not be asked, or disagreed with it.
@@ -238,7 +260,8 @@ final class PaymentAlertDetector
             ->orderBy('paid_at')
             ->each(function (SubscriptionInvoice $invoice) use (&$out): void {
                 $payment = SubscriptionPayment::query()->find((string) $invoice->subscription_payment_id);
-                if ($payment !== null && $payment->isSettled()) {
+                // A settled charge is no mismatch; money owed back or disputed is already its own alert or the gateway's case.
+                if ($payment !== null && ($payment->isSettled() || in_array($payment->status, ['refund_due', 'disputed'], true))) {
                     return;
                 }
                 $facts = ($payment === null ? [] : $this->paymentFacts($payment)) + [
@@ -265,13 +288,13 @@ final class PaymentAlertDetector
     /**
      * What, if anything, is wrong between this confirmed payment and what it should have activated.
      *
-     * @return array{variant: string, invoice_id?: string, invoice_number?: ?string, invoice_status?: string, recorded_error?: ?string}|null
+     * @return array{variant: string, invoice_id?: string, invoice_number?: ?string, invoice_status?: string, recorded_error?: ?string, registration_state?: string}|null
      */
     private function mismatchOf(SubscriptionPayment $payment): ?array
     {
         if ($payment->status === 'refund_due') {
             // The payment path refused to activate it and recorded why; the money is owed back by a person.
-            return ['variant' => 'refund_due', 'recorded_error' => $payment->error];
+            return ['variant' => 'refund_due', 'recorded_error' => $this->safeError($payment->error)];
         }
 
         if (! $payment->isSettled()) {
@@ -289,9 +312,9 @@ final class PaymentAlertDetector
                 return null;
             }
             if ($registration->tenant_id === null) {
-                return ['variant' => 'not_provisioned'];
+                return ['variant' => 'not_provisioned', 'registration_state' => ($registration->state ?? AccountState::Draft)->value];
             }
-            if (! $this->hasLiveSubscription((string) $registration->tenant_id)) {
+            if (! $this->subscriptionBegunAfter((string) $registration->tenant_id, $payment)) {
                 return ['variant' => 'no_active_subscription'];
             }
         }
@@ -390,7 +413,7 @@ final class PaymentAlertDetector
             ->orderBy('created_at')
             ->each(function (RegistrationVerification $v) use (&$items): void {
                 $registration = RegistrationRequest::query()->find($v->registration_request_id);
-                if ($registration === null || ! $this->stillUnverified($registration, (string) $v->channel)) {
+                if ($registration === null || ! $this->registrationStillUnverified($registration, (string) $v->channel)) {
                     return;
                 }
                 $items['reg:'.$registration->getKey().':'.$v->channel] = $this->registrationItem($registration, (string) $v->channel, (string) $v->delivery_status, $v->created_at);
@@ -405,7 +428,7 @@ final class PaymentAlertDetector
             ->each(function (RegistrationSendLog $log) use (&$items): void {
                 $registration = RegistrationRequest::query()->find($log->registration_request_id);
                 $key = 'reg:'.$log->registration_request_id.':'.$log->channel;
-                if ($registration === null || isset($items[$key]) || ! $this->stillUnverified($registration, (string) $log->channel)) {
+                if ($registration === null || isset($items[$key]) || ! $this->registrationStillUnverified($registration, (string) $log->channel)) {
                     return;
                 }
                 $items[$key] = $this->registrationItem($registration, (string) $log->channel, (string) $log->outcome, $log->created_at);
@@ -427,7 +450,7 @@ final class PaymentAlertDetector
             ->orderBy('expires_at')
             ->each(function (RegistrationVerification $v) use (&$items): void {
                 $registration = RegistrationRequest::query()->find($v->registration_request_id);
-                if ($registration === null || ! $this->stillUnverified($registration, (string) $v->channel)) {
+                if ($registration === null || ! $this->registrationStillUnverified($registration, (string) $v->channel)) {
                     return;
                 }
                 // A newer code on the same channel means the customer asked again: only the latest one counts.
@@ -460,7 +483,8 @@ final class PaymentAlertDetector
             ->each(function (SubscriptionPayment $payment) use (&$items): void {
                 // A verified paid event or a verification audit makes this alert 2's, where the detail belongs.
                 $event = $this->gatewayEvent($payment);
-                if (in_array($event['status'] ?? null, self::GATEWAY_PAID, true) || $this->latestVerificationAudit($payment) !== null) {
+                if (in_array($event['status'] ?? null, self::GATEWAY_PAID, true) || $this->latestVerificationAudit($payment) !== null
+                    || PlatformAlert::query()->where('dedup_key', 'unverified:'.$payment->getKey())->exists()) {
                     return;
                 }
                 // The customer paid afterwards on another attempt: no longer blocked.
@@ -600,22 +624,32 @@ final class PaymentAlertDetector
     /** @return array{status: ?string, type: ?string, at: ?string}|null the latest verified gateway event about this payment */
     private function gatewayEvent(SubscriptionPayment $payment): ?array
     {
+        $event = $this->eventsFor($payment)->latest('created_at')->first();
+
+        return $event === null ? null : $this->describeEvent($event);
+    }
+
+    /**
+     * The verified gateway events about this charge. Bounded by the charge's own creation — an event cannot precede the
+     * payment it is about — so the JSON match never walks the whole ledger.
+     *
+     * @return Builder<PaymentWebhookEvent>
+     */
+    private function eventsFor(SubscriptionPayment $payment): Builder
+    {
         $reference = (string) $payment->idempotency_key;
         $paymentId = (string) ($payment->provider_payment_id ?? '');
 
-        $event = PaymentWebhookEvent::withoutGlobalScopes()
+        return PaymentWebhookEvent::withoutGlobalScopes()
             ->where('provider', $payment->provider)
             ->where('verified', true)
+            ->when($payment->created_at !== null, fn ($q) => $q->where('created_at', '>=', $payment->created_at->copy()->subMinute()))
             ->where(function ($q) use ($reference, $paymentId): void {
                 $q->whereRaw("payload->'data'->'metadata'->>'reference' = ?", [$reference]);
                 if ($paymentId !== '') {
                     $q->orWhereRaw("payload->'data'->>'id' = ?", [$paymentId]);
                 }
-            })
-            ->latest('created_at')
-            ->first();
-
-        return $event === null ? null : $this->describeEvent($event);
+            });
     }
 
     /** @return array{status: ?string, type: ?string, at: ?string} the gateway's own status word, verbatim */
@@ -691,15 +725,63 @@ final class PaymentAlertDetector
         return false;
     }
 
-    private function hasLiveSubscription(string $tenantId): bool
+    /**
+     * Did this payment start (or touch) the workspace's subscription? Read as «was it begun», not «is it active now»: a
+     * subscription the owner suspended or the customer cancelled after paying is a later decision, not a mismatch.
+     */
+    private function subscriptionBegunAfter(string $tenantId, SubscriptionPayment $payment): bool
     {
         return Subscription::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereIn('status', ['active', 'trialing'])
+            ->where(function ($q) use ($payment): void {
+                $q->whereIn('status', ['active', 'trialing']);
+                if ($payment->paid_at !== null) {
+                    $q->orWhere('updated_at', '>=', $payment->paid_at);
+                }
+            })
             ->exists();
     }
 
-    private function stillUnverified(RegistrationRequest $registration, string $channel): bool
+    /** Still a charge Moyasar holds and the platform has not confirmed (or has refused on the evidence)? */
+    private function stillUnverified(SubscriptionPayment $payment): bool
+    {
+        if (in_array($payment->status, ['paid', 'refund_due', 'refunded', 'disputed', 'refused'], true) || $payment->refunded_at !== null) {
+            return false;
+        }
+        if ($this->gatewaySaidPaid($payment) || $this->latestVerificationAudit($payment) !== null) {
+            return true;
+        }
+        if ($payment->status === 'processing') {
+            return true;
+        }
+
+        // A saved-card charge Moyasar holds an id for, with no word back.
+        return $payment->status === 'pending' && $payment->checkout_url === null && $payment->provider_payment_id !== null;
+    }
+
+    /** Has Moyasar, in a verified event, ever called this charge paid or captured? */
+    private function gatewaySaidPaid(SubscriptionPayment $payment): bool
+    {
+        return $this->eventsFor($payment)->get(['payload'])
+            ->contains(fn (PaymentWebhookEvent $e): bool => in_array($this->eventData($e)['status'] ?? null, self::GATEWAY_PAID, true));
+    }
+
+    /** Another attempt by the same customer for the same thing, opened after this one. */
+    private function laterAttempt(SubscriptionPayment $payment): bool
+    {
+        $query = SubscriptionPayment::query()->whereKeyNot($payment->getKey())->where('created_at', '>', $payment->created_at);
+
+        if ($payment->registration_request_id !== null) {
+            return $query->where('registration_request_id', $payment->registration_request_id)->exists();
+        }
+        if ($payment->subscription_id !== null) {
+            return $query->where('subscription_id', $payment->subscription_id)->exists();
+        }
+
+        return false;
+    }
+
+    private function registrationStillUnverified(RegistrationRequest $registration, string $channel): bool
     {
         if ($registration->tenant_id !== null || ! in_array($registration->state ?? AccountState::Draft, self::VERIFYING, true)) {
             return false;

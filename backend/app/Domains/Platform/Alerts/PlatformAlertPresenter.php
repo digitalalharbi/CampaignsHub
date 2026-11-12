@@ -94,7 +94,10 @@ final class PlatformAlertPresenter
                 : "No status event from Moyasar; the payment here has been «{$ours}» since {$this->when($f['opened_at'] ?? null, false)}.");
 
         return [
-            'title' => $ar ? 'دفع وما تأكد الدفع من ميسر' : 'Paid, but Moyasar did not confirm it',
+            // «Paid» only on Moyasar's word (or the payment path's refusal of it); a charge merely started says so instead.
+            'title' => ($f['paid_at_gateway'] ?? true)
+                ? ($ar ? 'دفع وما تأكد الدفع من ميسر' : 'Paid, but Moyasar did not confirm it')
+                : ($ar ? 'بدأ الدفع في ميسر وما اكتمل' : 'A charge started at Moyasar and did not complete'),
             'context' => $this->who($f, $ar),
             'line' => $line,
             'more' => array_values(array_filter([
@@ -158,6 +161,7 @@ final class PlatformAlertPresenter
             'more' => array_values(array_filter([
                 $this->planLine($f, $ar),
                 $recorded === null ? null : ($ar ? 'السبب المسجّل: ' : 'Recorded reason: ').$recorded,
+                ($f['registration_state'] ?? null) === null ? null : ($ar ? 'حالة التسجيل الحين: «' : 'Application state now: «').$f['registration_state'].'»',
                 $ar ? 'ما فيه أي إجراء مالي تلقائي؛ القرار لك.' : 'No money moves automatically; the decision is yours.',
             ])),
             'steps' => $variant === 'refund_due'

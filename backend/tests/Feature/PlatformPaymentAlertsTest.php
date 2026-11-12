@@ -374,6 +374,121 @@ final class PlatformPaymentAlertsTest extends TestCase
         $this->assertSame('متجر الورد', $invite['who']);
     }
 
+    // ── Review findings: the healthy flows that must stay quiet, and the gaps that must not ───
+
+    public function test_a_renewal_page_opened_by_the_lifecycle_sweep_is_not_a_customer_who_walked_away(): void
+    {
+        $subscriptionId = $this->subscription('active');
+        $this->payment(['tenant_id' => $this->agency->getKey(), 'subscription_id' => $subscriptionId, 'purpose' => 'subscription']);
+
+        $this->travelTo($this->t0->copy()->addHours(2));
+        $this->sweep();
+
+        $this->assertSame(0, PlatformAlert::query()->count(), 'nobody reached a page the system opened');
+    }
+
+    public function test_a_customer_who_switched_term_and_paid_is_not_reported_for_the_first_attempt(): void
+    {
+        $registration = $this->registration('Ward Co', AccountState::PaymentPending);
+        $monthly = $this->payment(['registration_request_id' => $registration->getKey()]);
+
+        $this->travelTo($this->t0->copy()->addMinutes(31));
+        $this->sweep();
+        $alert = PlatformAlert::query()->sole();
+        $this->assertSame('abandoned:'.$monthly->getKey(), $alert->dedup_key);
+
+        // They came back, chose annual, and that attempt is the one that counts.
+        $this->payment(['registration_request_id' => $registration->getKey(), 'billing_interval' => 'annual', 'amount' => '1990.00']);
+        $this->sweep();
+        $this->assertNotNull($alert->refresh()->resolved_at, 'the old attempt no longer stands for the customer');
+    }
+
+    public function test_a_refunded_payment_is_not_reported_as_unconfirmed_and_a_started_charge_is_not_called_paid(): void
+    {
+        $refunded = $this->payment(['registration_request_id' => $this->registration('Refunded Co', AccountState::Active)->getKey()]);
+        $this->moyasarEvent($refunded, 'paid');
+        $refunded->forceFill(['status' => 'refunded', 'paid_at' => now(), 'refunded_at' => now()])->save();
+
+        $started = $this->payment(['registration_request_id' => $this->registration('Started Co', AccountState::PaymentPending)->getKey()]);
+        $this->moyasarEvent($started, 'initiated');
+        $started->forceFill(['status' => 'processing'])->save();
+
+        $this->travelTo($this->t0->copy()->addMinutes(31));
+        $this->sweep();
+
+        $alert = PlatformAlert::query()->sole();
+        $this->assertSame('unverified:'.$started->getKey(), $alert->dedup_key);
+        $this->assertSame('warning', $alert->severity);
+        $this->assertSame('بدأ الدفع في ميسر وما اكتمل', app(PlatformAlertPresenter::class)->present($alert, true)['title']);
+
+        // Moyasar then fails it: the alert clears and the same attempt is not reported again as a payment error.
+        $started->forceFill(['status' => 'failed'])->save();
+        $this->sweep();
+        $this->assertNotNull($alert->refresh()->resolved_at);
+        $this->assertSame(0, PlatformAlert::query()->where('kind', PlatformAlert::BLOCKING)->count());
+    }
+
+    public function test_a_saved_card_charge_with_no_word_from_moyasar_is_reported(): void
+    {
+        $subscriptionId = $this->subscription('active');
+        $payment = $this->payment(['tenant_id' => $this->agency->getKey(), 'subscription_id' => $subscriptionId, 'checkout_url' => null, 'provider_session_id' => null]);
+        $payment->forceFill(['provider_payment_id' => 'pay_saved_1'])->save();
+
+        $this->travelTo($this->t0->copy()->addMinutes(31));
+        $this->sweep();
+
+        $alert = PlatformAlert::query()->sole();
+        $this->assertSame(PlatformAlert::UNVERIFIED, $alert->kind);
+        $this->assertNull($alert->facts['gateway_status']);
+        $this->assertStringContainsString('ما وصلنا من ميسر إشعار', app(PlatformAlertPresenter::class)->present($alert, true)['line']);
+    }
+
+    public function test_money_owed_back_is_one_alert_even_when_its_invoice_was_marked_paid(): void
+    {
+        $payment = $this->payment(['registration_request_id' => $this->registration('Ward Co', AccountState::PaymentPending)->getKey()]);
+        $payment->forceFill(['status' => 'refund_due', 'paid_at' => now(), 'error' => 'A trial has already been used by this payment method.'])->save();
+        $this->settledInvoice($payment);
+
+        $this->travelTo($this->t0->copy()->addMinutes(16));
+        $this->sweep();
+
+        $this->assertSame(['mismatch:refund_due:'.$payment->getKey()], PlatformAlert::query()->pluck('dedup_key')->all());
+        $this->assertSame(1, $this->alertMails()->count());
+    }
+
+    public function test_a_subscription_cancelled_after_it_began_is_a_later_decision_not_a_mismatch(): void
+    {
+        $registration = $this->registration('Ward Co', AccountState::Active);
+        $registration->forceFill(['tenant_id' => $this->agency->getKey()])->save();
+        $payment = $this->payment(['registration_request_id' => $registration->getKey()]);
+        $payment->forceFill(['status' => 'paid', 'paid_at' => now()])->save();
+        $this->subscription('canceled');
+
+        $this->travelTo($this->t0->copy()->addMinutes(16));
+        $this->sweep();
+
+        $this->assertSame(0, PlatformAlert::query()->count());
+    }
+
+    public function test_customers_added_to_a_group_inside_the_window_are_mailed_once_the_window_passes(): void
+    {
+        $this->verification($this->registration('Alpha', AccountState::MobileVerificationRequired), 'mobile', 'failed');
+        $this->sweep();
+        $this->assertSame(1, $this->alertMails()->count());
+
+        $this->travelTo($this->t0->copy()->addMinutes(22));
+        $this->verification($this->registration('Beta', AccountState::MobileVerificationRequired), 'mobile', 'failed');
+        $this->sweep();
+        $this->assertSame(2, PlatformAlert::query()->sole()->occurrences);
+        $this->assertSame(1, $this->alertMails()->count(), 'inside the window the owner is not mailed again');
+
+        $this->travelTo($this->t0->copy()->addHours(3)->addMinutes(7));
+        $this->sweep();
+        $this->assertSame(2, $this->alertMails()->count(), 'the new customer is not dropped: named once the window passes');
+        $this->sweep();
+        $this->assertSame(2, $this->alertMails()->count());
+    }
+
     // ── Isolation: the platform's, and only the platform's ───────────────────────────────────
 
     public function test_workspace_users_never_see_or_receive_platform_alerts_even_about_their_own_workspace(): void
@@ -522,6 +637,17 @@ final class PlatformPaymentAlertsTest extends TestCase
             'delivery_status' => $status,
             'expires_at' => $expiresAt ?? now()->addMinutes(10),
         ])->save();
+    }
+
+    private function subscription(string $status): string
+    {
+        $id = (string) Str::uuid();
+        DB::table('subscriptions')->insert([
+            'id' => $id, 'tenant_id' => $this->agency->getKey(), 'plan_id' => DB::table('subscription_plans')->where('code', 'growth')->value('id'),
+            'status' => $status, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $id;
     }
 
     private function settledInvoice(SubscriptionPayment $payment): void

@@ -23,6 +23,9 @@ use Illuminate\Http\Request;
  */
 final class PlatformAlertController extends Controller
 {
+    /** @var array<string, RegistrationRequest> */
+    private array $contacts = [];
+
     public function __construct(
         private readonly PlatformAlertPresenter $presenter,
         private readonly AuditLogger $audit,
@@ -42,6 +45,9 @@ final class PlatformAlertController extends Controller
             ->get();
 
         $open = PlatformAlert::query()->open();
+        // One read for every contact on the page, rather than one per alert.
+        $ids = $alerts->map(fn (PlatformAlert $a) => $a->facts['registration_id'] ?? null)->filter(fn ($id) => is_string($id))->unique()->values()->all();
+        $this->contacts = RegistrationRequest::query()->whereIn('id', $ids)->get(['id', 'email', 'phone'])->keyBy(fn (RegistrationRequest $r) => (string) $r->getKey())->all();
 
         return ApiResponse::success([
             'alerts' => $alerts->map(fn (PlatformAlert $a): array => $this->row($a, $ar))->all(),
@@ -78,9 +84,8 @@ final class PlatformAlertController extends Controller
         $facts = $alert->facts;
         $registrationId = $facts['registration_id'] ?? null;
         // The way to reach them is read live from the application, never copied into the alert.
-        $contact = is_string($registrationId)
-            ? RegistrationRequest::query()->whereKey($registrationId)->first(['id', 'email', 'phone'])
-            : null;
+        $contact = ! is_string($registrationId) ? null
+            : ($this->contacts[$registrationId] ?? RegistrationRequest::query()->whereKey($registrationId)->first(['id', 'email', 'phone']));
 
         return [
             'id' => (string) $alert->getKey(),
