@@ -51,37 +51,25 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            q() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | "' 2>&1 <<EOF
+            BEGIN READ ONLY;
+            $1
+            ROLLBACK;
+            EOF
+            }
+            echo "== FACTS-BARDISI $(date -u +%FT%TZ)"
+            echo "## P. projects matching: id8 | status | client tz"
+            q "select left(p.id::text,8),p.status,coalesce((select cw.timezone from client_workspaces cw where cw.id=p.client_workspace_id),'-') from projects p where p.name ilike '%برديسي%';"
+            echo "## A. campaigns: id8 | status | objective | source | platform_value | ends_on | providers:objective"
+            q "select left(uc.id::text,8),uc.status,coalesce(uc.objective,'-'),coalesce(uc.objective_source,'-'),coalesce(uc.objective_platform_value,'-'),coalesce(uc.ends_on::text,'-'),(select string_agg(distinct ec.provider||':'||coalesce(ec.objective,'-'),',') from external_campaigns ec where ec.unified_campaign_id=uc.id) from unified_campaigns uc where uc.deleted_at is null and uc.project_id in (select id from projects where name ilike '%برديسي%') order by uc.status, uc.created_at desc;"
+            echo "## B. last 7d by campaign: id8 | provider | metric_key | sum | rows"
+            q "select left(dm.unified_campaign_id::text,8),dm.provider,dm.metric_key,round(sum(coalesce(dm.value,dm.original_amount))::numeric,2),count(*) from daily_metrics dm where dm.project_id in (select id from projects where name ilike '%برديسي%') and dm.metric_date>=current_date-7 and coalesce(dm.is_demo,false)=false group by 1,2,3 order by 1,2,3;"
+            echo "## C. no_results alert events: event id8 | campaign id8 | status | last_triggered | ctx conversions | ctx spend | ctx result_key"
+            q "select left(ae.id::text,8),left(ae.entity_id,8),ae.status,ae.last_triggered_at,ae.context->>'conversions',ae.context->>'spend',coalesce(ae.context->>'result_key','-') from alert_events ae where ae.type='no_results' and ae.project_id in (select id from projects where name ilike '%برديسي%') order by ae.last_triggered_at desc limit 20;"
+            echo "## D. open no_results events platform-wide: count"
+            q "select count(*) from alert_events where type='no_results' and status in ('open','snoozed');"
+            echo "== END FACTS-BARDISI"
+            exit 0
