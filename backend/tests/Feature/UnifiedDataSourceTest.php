@@ -140,7 +140,8 @@ final class UnifiedDataSourceTest extends TestCase
     /** Budget alerts spend the same figure the budget pacing screen spends. */
     public function test_the_budget_alert_and_the_budget_screen_spend_the_same_figure(): void
     {
-        $this->seedMetrics(Carbon::today()->subDays(2)->toDateString(), spend: 950, revenue: 100);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a budget alert is for a campaign that delivered yesterday (Riyadh).
+        $this->seedMetrics(Carbon::today('Asia/Riyadh')->subDay()->toDateString(), spend: 950, revenue: 100);
 
         $this->holdingTenant((string) $this->tenant->id);
 
