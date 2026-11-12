@@ -24,8 +24,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  # CI-SPEED-001 — the backend check, as three kinds of job behind ONE name.
+  #
+  # `backend` used to be one job: autopilot + pint + larastan, then `php artisan test` over ~8,000 tests in one process
+  # — 35 to 67 minutes, the longest job of the run. The suite is now dealt into four shards by
+  # `.github/scripts/backend-shard.py`, from PHPUnit's OWN list of the suite (`--list-test-files`, `--list-tests`
+  # against the repository's `phpunit.xml`), each on its own runner with its own postgres and redis — the isolation
+  # every shard needs, because RefreshDatabase migrates the database a shard owns.
+  #
+  # `artisan test --parallel` is NOT used: there is no paratest here, and it prints nothing and exits 0.
+  #
+  # The job named `backend` — the required check, and the name the Lander and the merge queue read — runs last and is
+  # green ONLY when the static job and every shard SUCCEEDED (cancelled, skipped or failed are all red) AND the
+  # shards' evidence proves the whole suite ran exactly once: same full list in every shard, disjoint shards whose
+  # union is that list, and each shard's junit recording every test it was given (see the script's docstring).
+  backend-static:
+    name: backend (static)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
+          # `composer install` could not succeed here and this workflow had never once passed.
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
+      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
+      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
+      # and "only an exact-head green PR can be merged".
+      - name: Autopilot controllers
+        # `working-directory: backend` applies to this job, so the path must be absolute from the
+        # workspace root — the suite lives at the repository root, not inside the Laravel app.
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/autopilot/test-autopilot.sh
+      - name: Pint (style)
+        run: ./vendor/bin/pint --test
+      - name: Larastan (static analysis)
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+  backend-tests:
+    name: backend (tests ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      # Every shard reports: «shard 2 failed» and «shards 2 and 3 failed» are different findings.
+      fail-fast: false
+      matrix:
+        # The shard count is written twice — here and as the `4` in the plan/verdict calls below. Change all of them.
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:16
@@ -47,8 +99,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
-          # `composer install` could not succeed here and this workflow had never once passed.
           php-version: '8.4'
           extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
           coverage: none
@@ -61,20 +111,10 @@ jobs:
       # optional would be deleting the coverage while keeping the reassurance.
       - name: Python dependency for the PDF text-layer contract
         run: python3 -m pip install --quiet pikepdf
-      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
-      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
-      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
-      # and "only an exact-head green PR can be merged".
-      - name: Autopilot controllers
-        # `working-directory: backend` applies to this job, so the path must be absolute from the
-        # workspace root — the suite lives at the repository root, not inside the Laravel app.
-        working-directory: ${{ github.workspace }}
-        run: bash scripts/autopilot/test-autopilot.sh
-
-      - name: Pint (style)
-        run: ./vendor/bin/pint --test
-      - name: Larastan (static analysis)
-        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+      # Writes this shard's phpunit.xml (the repository's, with only <testsuites> narrowed to this shard's files) and
+      # the evidence the `backend` verdict reads. Fails if PHPUnit lists nothing.
+      - name: Plan shard ${{ matrix.shard }}/4
+        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 4 "$RUNNER_TEMP/backend-evidence"
       - name: Tests
         env:
           DB_CONNECTION: pgsql
@@ -84,7 +124,42 @@ jobs:
           DB_PASSWORD: postgres
           REDIS_HOST: 127.0.0.1
           REDIS_CLIENT: phpredis
-        run: php artisan test
+        # The same command as before. `--log-junit` only records what ran, for the verdict.
+        run: php artisan test --log-junit="$RUNNER_TEMP/backend-evidence/junit.xml"
+      - name: Shard evidence for the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/backend-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backend:
+    # `always()`, not `!cancelled()`: a job that is skipped reports «skipped», and a skipped required check counts
+    # as passing. This one always runs and is red unless every part it stands for succeeded.
+    if: ${{ always() }}
+    needs: [backend-static, backend-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every backend job succeeded
+        run: |
+          echo "backend (static): ${{ needs.backend-static.result }}"
+          echo "backend (tests):  ${{ needs.backend-tests.result }}"
+          [ "${{ needs.backend-static.result }}" = success ] && [ "${{ needs.backend-tests.result }}" = success ] \
+            || { echo "::error::a backend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: backend-shard-*
+          path: ${{ runner.temp }}/backend-evidence
+      - name: The shards ran the whole suite, exactly once
+        run: python3 .github/scripts/backend-shard.py verdict 4 "$RUNNER_TEMP/backend-evidence"
 
   frontend:
     runs-on: ubuntu-latest
@@ -175,182 +250,143 @@ jobs:
   #
   # Each also installs only the browser it runs. Installing all three took several minutes per job to
   # download two engines it would never open.
-  gate:
+  #
+  # CI-SPEED-001 — and now each browser in FOUR shard jobs, behind the same check name.
+  #
+  # One job per browser still took 41–77 minutes, and the slowest browser was the whole run's wall clock. Each browser
+  # is now `gate-shards.yml` called with four shards: every shard is the old per-browser job (own runner, own
+  # database reset and seed, own servers, `npm run gate` verbatim) running a contiguous quarter of that browser's
+  # files via Playwright's `--shard`. The `setup` project runs in every shard, as it ran in every job.
+  #
+  # The job named `gate (<browser>)` — the name the Lander, `waitpr.sh` and the merge queue read — is no longer the
+  # one that runs tests. It runs after its four shards and is green ONLY when (1) the shard call SUCCEEDED (failure,
+  # cancelled and skipped are all red — it uses `always()`, so it is never itself skipped into a pass), and (2)
+  # `gate-verdict.py` proves from the shards' own reports that the union of what they ran is EXACTLY the suite
+  # Playwright lists for that browser, each test once, none failed.
+  #
+  # The weights move the boundaries between the contiguous slices so each takes ~equal MINUTES rather than equal
+  # test counts (one file holds 224 quick tests). They were computed from the per-test timestamps of run 43054580907
+  # (min-max contiguous partition over whole files). They cannot change coverage: Playwright's shard filter is a
+  # partition whatever the weights say, and the verdict checks it on every run.
+  gate-chromium-shards:
+    name: gate shards (chromium)
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: chromium
+      shards: '[1,2,3,4]'
+      total: 4
+      weights: '262:347:281:226'
+  gate-firefox-shards:
+    name: gate shards (firefox)
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: firefox
+      shards: '[1,2,3,4]'
+      total: 4
+      weights: '259:370:256:223'
+  gate-webkit-shards:
+    name: gate shards (webkit)
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: webkit
+      shards: '[1,2,3,4]'
+      total: 4
+      weights: '259:342:279:228'
+
+  gate-chromium:
+    name: gate (chromium)
+    if: ${{ always() }}
+    needs: gate-chromium-shards
     runs-on: ubuntu-latest
-    strategy:
-      # Every browser reports its own verdict. `fail-fast: false` because «webkit failed» and
-      # «webkit failed AND firefox failed» are different bugs, and cancelling the others hides the
-      # second one until somebody fixes the first.
-      fail-fast: false
-      matrix:
-        browser: [chromium, firefox, webkit]
-    name: gate (${{ matrix.browser }})
-    # A gate that cannot START its tests is not a verdict, and must not look like one.
-    #
-    # Sized from measurement: the slowest single browser is ~22.5 minutes of tests, and the job also
-    # installs a browser and boots two servers. Ninety minutes is real headroom for one of them, where
-    # two hours was headroom for all three. GitHub's default is SIX, which is how a stalled browser
-    # download sat `in_progress` for 2h40m on run 32224855943 with backend and frontend long since
-    # green and not one test executed.
-    timeout-minutes: 90
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: mediabuying_e2e
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd="pg_isready -U postgres" --health-interval=10s
-          --health-timeout=5s --health-retries=5
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
+    timeout-minutes: 10
     steps:
+      - name: Every chromium shard succeeded
+        run: |
+          echo "shards: ${{ needs.gate-chromium-shards.result }}"
+          [ "${{ needs.gate-chromium-shards.result }}" = success ] \
+            || { echo "::error::a chromium shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
       - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
-          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
-          coverage: none
-      - uses: actions/setup-node@v4
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Backend dependencies
-        working-directory: backend
-        run: composer install --no-interaction --prefer-dist
-      - name: Backend environment
-        working-directory: backend
-        run: cp .env.example .env && php artisan key:generate
-      # The gate's own servers read these; `e2e/env.ts` overrides the rest per run.
-      - name: Frontend dependencies
-        working-directory: frontend
-        run: npm ci
-      # Pure download, no application code. It takes ~2 minutes when GitHub's mirror is healthy; the
-      # bound is here so a stall on their side fails in fifteen minutes and says which step did it,
-      # instead of holding a runner until the job timeout and reporting nothing at all.
-      # The matrix browser AND chromium.
-      #
-      # Every project in `playwright.config.ts` declares `dependencies: ['setup']`, and the `setup`
-      # project carries no `use` — so it runs under Playwright's default, chromium. The firefox job
-      # therefore launches chromium before it launches firefox, and installing only firefox failed
-      # six tests with «Executable doesn't exist at …/chromium_headless_shell». Playwright dedupes
-      # the repeat when the matrix browser IS chromium.
-      #
-      # CACHED, and the timeout raised — the webkit leg has lost this step three times.
-      #
-      # «~2 minutes when GitHub's mirror is healthy» was true and is not the whole distribution.
-      # Three runs in this programme died here, each one at exactly fifteen minutes, with the apt
-      # half (`--with-deps`) still fetching mesa and gstreamer packages — a job that ran no test and
-      # reported «gate failed», which reads as a product defect and is a download.
-      #
-      # The cache removes the browser payload on a hit (the apt packages are not cached: they are
-      # installed into the runner image, not into a directory). The key carries the Playwright
-      # version, so an upgrade misses deliberately rather than restoring browsers that no longer
-      # match. Twenty-five minutes is the bound for a cold miss — still a bound, so a genuine stall
-      # fails and names this step rather than holding the runner.
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('frontend/package-lock.json') }}
-      # BROWSER-INSTALL-PREFETCH-001 — system packages come down in parallel, from a cache that survives a failed job.
-      #
-      # The whole story (the stalled mirror, the dpkg lock a retry used to race, why the install is one hard-failing
-      # command and only the browser download retries) is in `.github/scripts/install-browsers.sh`; it is a script so
-      # `browser-deps-probe.yml` can exercise the same code on a runner in minutes instead of inside an hour of gate.
-      # The archives are cached under a key per run and restored by prefix, so the newest set wins; the save step
-      # runs `if: always()` and only when something new was fetched, because the run most in need of the cache is the
-      # one that dies partway through the download.
-      - name: Restore apt archives
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/apt-debs
-          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
-          restore-keys: |
-            apt-debs-${{ runner.os }}-${{ matrix.browser }}-
-      - name: Browsers
-        id: browsers
-        working-directory: frontend
-        timeout-minutes: 30
-        run: bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
-      - name: Save apt archives
-        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/apt-debs
-          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
-      # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
-      # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
-      # would mean the gate exercises a different code path than a developer's machine does.
-      - name: Arabic text-layer toolchain
-        run: python3 -m pip install --quiet pikepdf
-      - name: Gate — ${{ matrix.browser }}
-        working-directory: frontend
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_USERNAME: postgres
-          DB_PASSWORD: postgres
-          REDIS_HOST: 127.0.0.1
-          REDIS_CLIENT: phpredis
-          # The default is all three; a job that runs one names it.
-          GATE_BROWSERS: ${{ matrix.browser }}
-          # GATE-WK-ENGINE-FAULT-001 — the preview server's connection lifecycle (src/build/connectionLog.ts), kept
-          # outside test-results/ because Playwright empties that directory when it starts.
-          E2E_CONN_LOG: ${{ github.workspace }}/frontend/preview-connections.log
-        # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
-        # saw, and that code is the gate's verdict.
-        run: npm run gate
-      # A 500 the gate saw, and could not explain.
-      #
-      # `expansion-surfaces.spec.ts` failed with «the server responded with a status of 500» on
-      # /app/integrations, twice on the same head. That sentence is the entire report: Playwright's
-      # artifacts describe the BROWSER's side — a status code and a screenshot of the resulting page
-      # — while the exception, its file, its line and its stack were written to the backend's log
-      # inside the runner and discarded when the job ended.
-      #
-      # Tailed inline as well as uploaded, so the next occurrence is readable from the run page
-      # instead of behind an artifact download.
-      - name: Backend log (why the server answered 500)
-        if: failure()
-        run: |
-          echo "::group::backend/storage/logs — last 200 lines"
-          tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
-          echo "::endgroup::"
-
-      # GATE-WK-ENGINE-FAULT-001 — which connection carried the entry script that never loaded, and who closed it.
-      - name: Preview server connections (who closed what)
-        if: failure()
-        run: |
-          echo "::group::preview connections — last 200, server-closed and errors first"
-          grep -E "server-timeout|ended=error" frontend/preview-connections.log 2>/dev/null | tail -n 100 || true
-          tail -n 200 frontend/preview-connections.log 2>/dev/null || echo "(no connection log was written)"
-          echo "::endgroup::"
-
-      - name: Failure artifacts
-        if: failure()
+          pattern: gate-shard-chromium-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole chromium suite, exactly once
+        run: python3 .github/scripts/gate-verdict.py chromium 4 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gate-artifacts
-          path: |
-            frontend/preview-connections.log
-            frontend/test-results/
-            frontend/playwright-report/
-            backend/storage/logs/
-            # Snapshots written by this run — the only way to obtain a LINUX visual baseline.
-            #
-            # Baselines are per-platform (`-chromium-linux`, `-chromium-darwin`) and a developer on
-            # macOS cannot render the linux one. Playwright writes a missing baseline to the snapshot
-            # path and fails that run, so collecting the directory turns an unreproducible file into
-            # a downloadable one. Without this the linux baselines could only ever go stale: the
-            # homepage pair sat unchanged since #85 and still passed, against an image of a logo the
-            # product had replaced.
-            frontend/e2e/**/*-snapshots/
+          name: gate-merged-chromium
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gate-firefox:
+    name: gate (firefox)
+    if: ${{ always() }}
+    needs: gate-firefox-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every firefox shard succeeded
+        run: |
+          echo "shards: ${{ needs.gate-firefox-shards.result }}"
+          [ "${{ needs.gate-firefox-shards.result }}" = success ] \
+            || { echo "::error::a firefox shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gate-shard-firefox-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole firefox suite, exactly once
+        run: python3 .github/scripts/gate-verdict.py firefox 4 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-merged-firefox
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gate-webkit:
+    name: gate (webkit)
+    if: ${{ always() }}
+    needs: gate-webkit-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every webkit shard succeeded
+        run: |
+          echo "shards: ${{ needs.gate-webkit-shards.result }}"
+          [ "${{ needs.gate-webkit-shards.result }}" = success ] \
+            || { echo "::error::a webkit shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gate-shard-webkit-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole webkit suite, exactly once
+        run: python3 .github/scripts/gate-verdict.py webkit 4 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-merged-webkit
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # A branch update made by the merge queue (the repository token) starts no pull_request run, so it
@@ -359,7 +395,7 @@ jobs:
   # real results of this run on this exact commit — nothing is invented, and a failed job posts a failure.
   report-status:
     if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-    needs: [backend, frontend, image, gate]
+    needs: [backend, frontend, image, gate-chromium, gate-firefox, gate-webkit]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -382,6 +418,7 @@ jobs:
           post "backend" "${{ needs.backend.result }}"
           post "frontend" "${{ needs.frontend.result }}"
           post "image" "${{ needs.image.result }}"
-          # One matrix job, three browsers: each browser's context carries the matrix verdict, so a
-          # red browser makes all three red rather than hiding which one in an aggregate.
-          for b in chromium firefox webkit; do post "gate ($b)" "${{ needs.gate.result }}"; done
+          # One verdict job per browser now, so each browser's context carries its OWN verdict.
+          post "gate (chromium)" "${{ needs.gate-chromium.result }}"
+          post "gate (firefox)" "${{ needs.gate-firefox.result }}"
+          post "gate (webkit)" "${{ needs.gate-webkit.result }}"
