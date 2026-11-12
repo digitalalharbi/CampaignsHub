@@ -75,8 +75,7 @@ final class ReportGenerator
     }
 
     /**
-     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the stored list (chosen, or the campaigns' own written on
-     * its first generation — «افتراضياً من أهداف الحملات»), else its one objective.
+     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the operator's list, else its one objective.
      *
      * @return list<string>
      */
@@ -253,14 +252,11 @@ final class ReportGenerator
              */
             $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form) + (array) $config;
             /*
-             * REPORT-MULTI-OBJECTIVE-001 — a report nobody chose an objective for, whose spending campaigns declare several, is measured
-             * against them all («افتراضياً من أهداف الحملات»). Written once, here, so every later generation reads the same list; a report
-             * stored as `custom` before this keeps the custom set.
+             * REPORT-MULTI-OBJECTIVE-001 — a report nobody chose an objective for stays the inferred lens. A mixed estate is NOT turned
+             * into the union of its campaigns' presets here: that would put a ROAS over traffic spend on a report the operator never
+             * asked to judge on sales (ReportObjectiveLayoutTest). Several objectives are the operator's choice, made in the editor or
+             * the link builder.
              */
-            if (! $report->campaign_objective && $objective === ReportObjectives::MIXED && ! isset($config[ReportObjectives::CONFIG_KEY])
-                && count($fromCampaigns = ReportObjectiveLens::templatesFromCampaigns($campaigns)) >= 2) {
-                $config[ReportObjectives::CONFIG_KEY] = $fromCampaigns;
-            }
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         } else {
             /*

@@ -111,30 +111,6 @@ final class ReportObjectiveLens
     }
 
     /**
-     * REPORT-MULTI-OBJECTIVE-001 — the report objectives the campaigns that SPENT in the scope declare, for a report nobody chose one for.
-     *
-     * The same vote `infer()` takes (spending, declared campaigns only). Several distinct answers are the default «more than one objective».
-     *
-     * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`
-     * @return list<string>
-     */
-    public static function templatesFromCampaigns(array $campaigns): array
-    {
-        $out = [];
-        foreach ($campaigns as $c) {
-            if ((float) ($c['spend'] ?? 0) <= 0 || ($c['objective_source'] ?? 'unset') === 'unset') {
-                continue;
-            }
-            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
-            if ($objective !== null) {
-                $out[self::reportObjectiveOf($objective)] = true;
-            }
-        }
-
-        return array_keys($out);
-    }
-
-    /**
      * The report objective for a scope, from the campaigns' own declarations.
      *
      * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`
