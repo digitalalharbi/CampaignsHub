@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, Loader2, Plus, ShieldCheck, UserCheck, X } from 'lucide-react'
 import {
   fetchAgencyTeam,
   grantClientScopes,
   withdrawClientScope,
+  type AgencyClientCoverage,
   type AgencyTeamMember,
 } from './api'
 import { Button } from '@/components/ui/Button'
@@ -164,6 +165,8 @@ export function AgencyTeamPage() {
           {error.message}
         </p>
       )}
+
+      <ClientCoverage rows={team.data.coverage ?? []} ar={ar} />
 
       {members.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
@@ -340,5 +343,60 @@ function MemberRow({
         )}
       </div>
     </li>
+  )
+}
+
+/**
+ * TEAM-CLIENT-COVERAGE-001 — «من يتابع كل عميل، والعميل بلا مدير مشروع يظهر بعلامة» (Owner,
+ * MASTER_FINAL Appendix A task 7). Clients without a manager first, because they are the ones to act on.
+ */
+function ClientCoverage({ rows, ar }: { rows: AgencyClientCoverage[]; ar: boolean }) {
+  if (rows.length === 0) return null
+  const sorted = [...rows].sort((a, b) => Number(a.has_manager) - Number(b.has_manager))
+  const missing = rows.filter((r) => !r.has_manager).length
+
+  return (
+    <section data-testid="team-coverage" className="mb-5 rounded-xl border border-border bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-heading text-sm font-bold text-text-primary">{ar ? 'متابعة العملاء' : 'Client coverage'}</h2>
+        {missing > 0 && (
+          <span data-testid="team-coverage-missing" className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">
+            <AlertTriangle size={12} aria-hidden />
+            <span className="tnum">{missing.toLocaleString('en-US')}</span> {ar ? 'بدون مدير مشروع' : 'without a project manager'}
+          </span>
+        )}
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {sorted.map((c) => {
+          const people = [...new Set([...c.managers, ...c.followers])]
+          return (
+            <li
+              key={c.id}
+              data-testid={`coverage-${c.id}`}
+              className={`min-w-0 rounded-lg border px-3 py-2.5 ${c.has_manager ? 'border-border' : 'border-warning/50 bg-warning/5'}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-semibold text-text-primary">{c.name}</span>
+                {!c.has_manager && (
+                  <span data-testid={`coverage-flag-${c.id}`} title={ar ? 'لا يوجد مدير مشروع لهذا العميل' : 'No project manager for this client'} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-warning">
+                    <AlertTriangle size={12} aria-hidden /> {ar ? 'بدون مدير' : 'No manager'}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {people.length === 0 ? (
+                  <span className="text-xs text-text-muted">{ar ? 'لا أحد' : 'Nobody'}</span>
+                ) : people.map((n) => (
+                  <span key={n} className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">
+                    {c.managers.includes(n) && <UserCheck size={11} className="text-brand-600" aria-label={ar ? 'مدير المشروع' : 'Project manager'} />}
+                    {n}
+                  </span>
+                ))}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
