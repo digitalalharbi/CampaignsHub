@@ -6,6 +6,7 @@ namespace App\Domains\Alerts\Services;
 
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
+use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
@@ -927,18 +928,43 @@ final class AlertEvaluator
             ->get();
         $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $now);
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, &$out) {
+        $today = $now->toDateString();
+
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $today, &$out) {
+            /*
+             * OBJECTIVE-RESULT-001 — «صرف بدون نتائج» is a PERFORMANCE alert, so only a RUNNING campaign
+             * qualifies (MASTER_FINAL §هـ): a paused or completed one, or one past its end date, is not
+             * a performance problem — the Ettifaq vs Ajman campaign that had ended was alerted as one.
+             */
+            $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
+            if ($c->status !== CampaignStatus::Active->value || $ended) {
+                return;
+            }
+
             $totals = $figures[(string) $c->getKey()];
             $spend = (float) $totals['spend'];
-            $conv = (float) $totals['conversions'];
-            if ($spend > 0 && $conv <= 0) {
+
+            /*
+             * The campaign's OWN result, from the one table. It read `conversions`, so a traffic
+             * campaign with thousands of landing page views was told it had none. An objective nobody
+             * set has no result to be zero, and a result nobody reported is not a zero: neither alerts.
+             */
+            $result = $totals['result'] ?? null;
+            if (($totals['result_key'] ?? null) === null || $result === null) {
+                return;
+            }
+
+            if ($spend > 0 && (float) $result <= 0) {
+                $label = (array) ($totals['result_label'] ?? []);
                 $out[] = [
                     'entity_type' => UnifiedCampaign::class,
                     'entity_id' => (string) $c->id,
                     'project_id' => (string) $c->project_id,
                     'title' => 'Spending with no results',
-                    'message' => $c->name.' spent '.round($spend, 2).' with no conversions in the last '.$days.' days.',
-                    'context' => ['spend' => $spend, 'conversions' => $conv, 'days' => $days],
+                    'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' in the last '.$days.' days.',
+                    // `conversions` keeps its name for the readers of this context; it now holds the objective's result.
+                    'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $days,
+                        'result_key' => $totals['result_key'], 'result_label' => $totals['result_label'] ?? null],
                 ];
             }
         });

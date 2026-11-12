@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  */
 final class AlertImpact
 {
-    private const METRIC = ['cpa_increase' => 'cpa', 'cpl_increase' => 'cpl', 'roas_drop' => 'roas', 'no_results' => 'conversions'];
+    private const METRIC = ['cpa_increase' => 'cpa', 'cpl_increase' => 'cpl', 'roas_drop' => 'roas', 'no_results' => 'result'];
 
     /** Lower is better for these; everything else, higher is better. */
     private const LOWER_BETTER = ['cpa', 'cpl'];
