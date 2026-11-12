@@ -172,12 +172,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * Destination still narrows the list like the platform and account do (REPORT-SETUP-001).
    */
   const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  /*
+   * REPORT-MULTI-OBJECTIVE-001 (master task 10) — «الهدف يقبل أكثر من هدف». Extra objectives beside the first; with any of them the link's
+   * KPIs are the server's union of each objective's preset, the same list the saved report and the PDF read, so nothing is pre-ticked here.
+   */
+  const [extraObjectives, setExtraObjectives] = useState<string[]>([])
+  const objectives = campaignObjective === null ? [] : [campaignObjective, ...extraObjectives.filter((o) => o !== campaignObjective)]
   const [filterByObjective, setFilterByObjective] = useState(false)
   const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
 
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
-    const members = filterByObjective ? (CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null) : null
+    const members = filterByObjective && campaignObjective !== null
+      ? CANONICAL_OBJECTIVES.filter((o) => o.id === campaignObjective || extraObjectives.includes(o.id)).flatMap((o) => o.members)
+      : null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
@@ -190,7 +198,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, filterByObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, extraObjectives, filterByObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -291,6 +299,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
+        ...(objectives.length > 0 ? { objectives: objectives.map((o) => (o === 'app' ? 'app_installs' : o)) } : {}),
         ...(Object.values(kpiLabels).some((v) => v.trim() !== '') ? { kpi_labels: kpiLabels } : {}),
         from,
         to,
@@ -521,6 +530,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                 onChange={(e) => {
                   const id = e.target.value === '' ? null : e.target.value
                   setCampaignObjective(id)
+                  if (id === null) setExtraObjectives([])
                   const template = id === null ? undefined : OBJECTIVE_KPI_TEMPLATES[id]
                   if (template !== undefined) {
                     setMetricsTouched(true)
@@ -536,6 +546,37 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
                 ))}
               </select>
+              {campaignObjective !== null && (
+                <div className="flex w-full flex-wrap items-center gap-1.5" data-testid="live-builder-extra-objectives">
+                  <span className="text-[11px] font-semibold text-text-muted">{ar ? 'أضف هدفًا' : 'Add an objective'}</span>
+                  {CANONICAL_OBJECTIVES.filter((o) => o.id !== campaignObjective).map((o) => {
+                    const on = extraObjectives.includes(o.id)
+
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        aria-pressed={on}
+                        data-testid={`live-builder-objective-${o.id}`}
+                        onClick={() => {
+                          const next = on ? extraObjectives.filter((x) => x !== o.id) : [...extraObjectives, o.id]
+                          setExtraObjectives(next)
+                          // Several objectives: the server states the union of their KPIs on the link, the saved report and the PDF alike.
+                          if (next.length > 0) {
+                            setMetricsTouched(true)
+                            setMetrics([])
+                          } else if (campaignObjective !== null && OBJECTIVE_KPI_TEMPLATES[campaignObjective] !== undefined) {
+                            setMetrics(OBJECTIVE_KPI_TEMPLATES[campaignObjective])
+                          }
+                        }}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${on ? 'border-brand-600 bg-brand-500/10 text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+                      >
+                        {ar ? o.ar : o.en}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               {campaignObjective !== null && (
                 <label className="flex items-center gap-1.5 text-xs text-text-muted">
                   <input type="checkbox" data-testid="live-builder-filter-by-objective" checked={filterByObjective} onChange={(e) => setFilterByObjective(e.target.checked)} className="h-3.5 w-3.5 accent-brand-600" />
@@ -599,6 +640,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   onClick={() => {
                     setCampaignPlatform(null)
                     setCampaignObjective(null)
+                    setExtraObjectives([])
                     setCampaignDestination(null)
                     setCampaignQuery('')
                   }}

@@ -53,6 +53,10 @@ export function ReportAdDetail({
   const ar = locale === 'ar'
   const preview = ad.preview ?? null
   const reading = readPreview(preview, ar)
+  // REPORT-OPENABLE-OPTIONS-001 — a client link's «تكبير الصور» and «تحميل الأصل», as the server set them; absent (not a link) draws nothing.
+  const [zoom, setZoom] = useState(1)
+  const still = reading.kind === 'video' ? null : (preview?.image_url ?? preview?.thumbnail_url ?? null)
+  const download = preview?.can_download === true ? (reading.kind === 'video' ? reading.src : still) : null
 
   /*
    * REPORT-CONTENT-FULL-FRAME-001 (Owner, 2026-10-19) — a reel opened from a report shows the WHOLE frame.
@@ -185,6 +189,7 @@ export function ReportAdDetail({
                  * `contain`, stated: the modal is where the reader came to see the whole frame, so
                  * nothing is cut here — and the stage, not the image, owns the box.
                  */
+                <div className="flex max-h-full max-w-full items-center justify-center transition-transform" style={zoom === 1 ? undefined : { transform: `scale(${zoom})` }}>
                 <AdPoster
                   preview={preview}
                   name={ad.name ?? ''}
@@ -197,10 +202,28 @@ export function ReportAdDetail({
                   onMeasured={onMeasured}
                   eager
                 />
+                </div>
               )}
             </div>
           )
         })()}
+
+        {(preview?.can_zoom === true && reading.kind !== 'video' && still !== null) || download ? (
+          <div className="flex flex-wrap items-center gap-1 text-xs" data-testid="report-ad-detail-tools">
+            {preview?.can_zoom === true && reading.kind !== 'video' && still !== null && (
+              <>
+                <button type="button" data-testid="report-ad-detail-zoom-out" onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} className="rounded border border-border px-2 py-1">−</button>
+                <span className="tnum w-12 text-center"><Num>{`${Math.round(zoom * 100)}%`}</Num></span>
+                <button type="button" data-testid="report-ad-detail-zoom-in" onClick={() => setZoom((z) => Math.min(z + 0.25, 4))} className="rounded border border-border px-2 py-1">+</button>
+              </>
+            )}
+            {download && (
+              <a href={download} download target="_blank" rel="noopener noreferrer" data-testid="report-ad-detail-download" className="ms-auto rounded-lg border border-border px-2 py-1 font-semibold text-brand-700 hover:bg-surface-hover">
+                {ar ? 'حمّل الأصل' : 'Download the asset'}
+              </a>
+            )}
+          </div>
+        ) : null}
 
         {/*
           CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.

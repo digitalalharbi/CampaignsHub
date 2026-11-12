@@ -904,6 +904,23 @@ function SharedCreativeDetail({
           </div>
         )}
 
+        {/*
+          REPORT-OPENABLE-OPTIONS-001 (master task 10) — «تحميل الأصل» shown is a working control: the server set `can_download` from the
+          link's switch, and nothing drew it, so the option did nothing either way. Off, there is no control.
+        */}
+        {permissions.download && preview.can_download !== false && (reading.kind === 'video' ? reading.src : still) && (
+          <a
+            href={(reading.kind === 'video' ? reading.src : still) ?? undefined}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="shared-creative-download"
+            className="justify-self-start rounded-lg border border-border px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-surface-hover"
+          >
+            {ar ? 'حمّل الأصل' : 'Download the asset'}
+          </a>
+        )}
+
         <h3 className="font-heading text-base font-extrabold">{creative.name}</h3>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
           <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />
