@@ -14,6 +14,7 @@ use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
@@ -164,9 +165,21 @@ final class DailyDigest
             ->whereIn('id', $projectIds)
             ->get(['id', 'name', 'client_workspace_id']);
 
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — the month's budget for EVERY project in ONE pacing read, grouped by the `project_id` the
+         * rows carry (the agency budgets screen's arrangement, `ClientBudgetController`). One `budgetPacing()` per project was
+         * thirty full passes per reader on a one-CPU host.
+         */
+        $monthFrom = $to->copy()->startOfMonth()->startOfDay();
+        $pacing = $projects->isEmpty() ? collect() : collect(
+            $this->metrics->acrossProjects()->forProjects($projects->map(fn (Project $p): string => (string) $p->id)->all())
+                ->budgetPacing($monthFrom, $to->copy()->endOfMonth()->endOfDay(), $to->copy()->startOfDay()),
+        )->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
+
         $blocks = [];
         foreach ($projects as $project) {
             $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
+            $block['budget_month'] = $this->monthBudget(array_values($pacing->get((string) $project->id, collect())->all()), $to);
             // GA4-DIGEST-001 — one compact GA4 line; the reader's own capability decides whether sales are in it.
             $block['ga4'] = app(Ga4DigestBlock::class)->forProject($user, $tenantId, (string) $project->id, $from, $to);
             $block['project_id'] = (string) $project->id;
@@ -357,6 +370,8 @@ final class DailyDigest
                 $scoped->timeseriesByProvider($from, $to),
             ),
             'budget_rows' => $budget,
+            // DIGESTS-OBJECTIVE-KPIS-001 — the same figures per OBJECTIVE group, so a project with awareness and sales campaigns never averages them.
+            'groups' => $this->objectiveGroups($campaigns, $lens->value(), $from, $to, $prevFrom, $prevTo),
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
             // EMAIL-DECISION-REPORT-001 — the shape of the window and where the money went, for the email's charts.
@@ -444,6 +459,44 @@ final class DailyDigest
         ]);
 
         return $block;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — budget, spend to date, remaining and pace for the calendar month `$to` falls in.
+     *
+     * The month, not the email's window: a budget is planned per month, and «pace» only means something against the share of
+     * the month that has passed. For the daily and weekly that is month-to-date as of the last reported day; for the monthly
+     * (whose window IS the finished month) it is the whole month. The arithmetic is `ClientBudgetRollup`'s — comparable rows
+     * only, one currency or no total, withheld spend never counted as zero — so the mail cannot disagree with the budgets screen.
+     *
+     * @param  list<array<string,mixed>>  $rows  this project's rows of the one `budgetPacing()` read over the month
+     * @return array<string,mixed>
+     */
+    private function monthBudget(array $rows, Carbon $to): array
+    {
+        $from = $to->copy()->startOfMonth()->startOfDay();
+        $roll = app(ClientBudgetRollup::class)->of($rows);
+        $elapsed = min(1.0, ((int) round($from->diffInDays($to->copy()->startOfDay())) + 1) / max(1, $from->daysInMonth));
+
+        /*
+         * The budgeted campaigns the figure could NOT include, and why — named, never dropped in silence. A campaign whose spend
+         * has no figure in the budget's currency (no exchange rate: `partial`, `mixed_currency`; or spend in another currency:
+         * `currency_mismatch`) is left out of `ClientBudgetRollup`'s budget, spend and remaining; when every budgeted campaign is,
+         * the roll-up has no budget at all, and the mail must say «no figure, because…», not «no budget recorded».
+         */
+        $outside = array_values(array_filter(
+            $rows,
+            static fn (array $r): bool => (float) ($r['budget'] ?? 0) > 0 && ! in_array($r['pacing_basis'] ?? null, ['comparable', 'nothing_measured_in_window'], true),
+        ));
+
+        return $roll + [
+            'from' => $from->toDateString(),
+            'to' => $to->copy()->endOfMonth()->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'outside' => count($outside),
+            'outside_reasons' => array_count_values(array_map(static fn (array $r): string => (string) ($r['pacing_basis'] ?? 'unknown'), $outside)),
+        ];
     }
 
     /**
@@ -652,6 +705,50 @@ final class DailyDigest
         }
 
         return array_slice($out, 0, 5);
+    }
+
+    /**
+     * The project's campaigns grouped by the report objective they were bought for, with each group's own figures.
+     *
+     * Every figure comes from `MetricsAggregator` narrowed to the group's campaigns — the engine the report link uses — so a group's
+     * ROAS is that group's revenue over that group's spend and an awareness group never has one. A campaign that spent nothing in the
+     * window does not found a group; one with no declared objective joins the project's own objective (or `custom` when that is mixed).
+     *
+     * @param  list<array<string,mixed>>  $campaigns  `byCampaign()` rows
+     * @return list<array<string,mixed>>
+     */
+    private function objectiveGroups(array $campaigns, string $projectObjective, Carbon $from, Carbon $to, Carbon $prevFrom, Carbon $prevTo): array
+    {
+        $ids = [];
+        foreach ($campaigns as $row) {
+            if ((float) ($row['spend'] ?? 0) <= 0 || ! isset($row['campaign_id'])) {
+                continue;
+            }
+            $key = ($row['objective_source'] ?? 'unset') === 'unset'
+                ? $projectObjective
+                : (ReportObjectiveLens::groupOf((string) ($row['objective'] ?? '')) ?? $projectObjective);
+            $ids[$key][] = (string) $row['campaign_id'];
+        }
+        $order = ['sales', 'leads', 'traffic', 'awareness', 'video', 'app_installs', 'engagement', 'custom'];
+        uksort($ids, static fn (string $a, string $b): int => (array_search($a, $order, true) === false ? 99 : array_search($a, $order, true)) <=> (array_search($b, $order, true) === false ? 99 : array_search($b, $order, true)));
+
+        $out = [];
+        foreach ($ids as $objective => $campaignIds) {
+            $scoped = $this->metrics->acrossProjects()->forCampaigns($campaignIds);
+            $out[] = [
+                'objective' => $objective,
+                'campaigns' => count($campaignIds),
+                'totals' => $scoped->totals($from, $to),
+                'previous' => $scoped->totals($prevFrom, $prevTo),
+                'reported' => $scoped->reportedKeys($from, $to),
+                'platform_rows' => $scoped->byProvider($from, $to),
+                'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
+                'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+                'funnel' => $scoped->funnel($from, $to)['stages'] ?? [],
+            ];
+        }
+
+        return $out;
     }
 
     /**

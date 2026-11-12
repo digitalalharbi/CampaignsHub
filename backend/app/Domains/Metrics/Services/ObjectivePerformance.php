@@ -6,6 +6,8 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
@@ -119,6 +121,8 @@ final class ObjectivePerformance
             $bucket['result_composition'][$objective->value]
                 = ($bucket['result_composition'][$objective->value] ?? 0.0) + (float) $row->orders;
             $bucket['revenue'] += (float) $row->revenue;
+            // OBJECTIVE-RESULT-001 — kept for the path's own result, resolved once in `derivePath`.
+            $bucket['_result_rows'][] = ['conversions' => (float) $row->orders] + (array) $row;
             $bucket['campaigns'][] = [
                 'id' => $row->unified_campaign_id,
                 'name' => $row->name,
@@ -377,6 +381,7 @@ final class ObjectivePerformance
     public function byFamilyAndPlatform(Carbon $from, Carbon $to): array
     {
         $out = [];
+        $rowsByKey = [];
 
         foreach ($this->rows($from, $to) as $row) {
             $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
@@ -392,9 +397,22 @@ final class ObjectivePerformance
             foreach (['spend', 'impressions', 'clicks', 'landing_page_views', 'revenue'] as $metric) {
                 $out[$key][$metric] += (float) ($row->{$metric} ?? 0);
             }
-            $out[$key]['results'] += (float) ($row->orders ?? 0);
+            $rowsByKey[$key][] = ['conversions' => (float) ($row->orders ?? 0), 'reach' => null] + (array) $row;
             $out[$key]['spend_withheld_rows'] += (int) ($row->spend_withheld_rows ?? 0);
             $out[$key]['revenue_withheld_rows'] += (int) ($row->revenue_withheld_rows ?? 0);
+        }
+
+        /*
+         * OBJECTIVE-RESULT-001 — `results` is the FAMILY's result: leads for a leads family, orders
+         * for sales, visits or clicks for traffic. It was orders for every family, so a lead
+         * programme's cost per lead divided its spend by purchases.
+         */
+        foreach ($out as $key => $row) {
+            $rows = $rowsByKey[$key] ?? [];
+            $result = ObjectiveResult::combine((string) $row['family'], $rows, array_map(self::rowReported(...), $rows));
+            // Null when nothing was reported — «بدون بيانات», never a measured 0.
+            $out[$key]['results'] = $result['result'];
+            $out[$key]['result_key'] = $result['result_key'];
         }
 
         return array_values($out);
@@ -637,6 +655,21 @@ final class ObjectivePerformance
     {
         $rows = $this->dailyRows($from, $to);
 
+        /*
+         * OBJECTIVE-RESULT-001 — the line's unit is the path TOTAL's unit, decided by the same rule
+         * (`pathResult`) over the same window, so the chart and the table can never disagree: visits
+         * only where every contributor measures them, else clicks; no line where the path mixes kinds.
+         */
+        $byPathRows = [];
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $byPathRows[$objective->path()->value][] = ['conversions' => (float) $row->orders] + (array) $row;
+        }
+        $pathKeys = [];
+        foreach ($byPathRows as $value => $pathRows) {
+            $pathKeys[$value] = self::pathResult(MarketingPath::from($value), $pathRows)['result_key'];
+        }
+
         /** @var array<string, array<string, array{spend: float, results: float, revenue: float, impressions: float, clicks: float}>> $byPath */
         $byPath = [];
 
@@ -645,10 +678,13 @@ final class ObjectivePerformance
             $path = $objective->path()->value;
             $date = (string) $row->metric_date;
 
-            $byPath[$path][$date] ??= ['spend' => 0.0, 'results' => 0.0, 'revenue' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0, 'withheld' => 0];
+            $byPath[$path][$date] ??= ['spend' => 0.0, 'results' => 0.0, 'revenue' => 0.0, 'impressions' => 0.0, 'clicks' => 0.0, 'landing_page_views' => 0.0, 'leads' => 0.0, 'form_leads' => 0.0, 'installs' => 0.0, 'withheld' => 0];
             $byPath[$path][$date]['withheld'] += (int) ($row->spend_withheld_rows ?? 0);
             $byPath[$path][$date]['spend'] += (float) $row->spend;
             $byPath[$path][$date]['results'] += (float) $row->orders;
+            foreach (['landing_page_views', 'leads', 'form_leads', 'installs'] as $metric) {
+                $byPath[$path][$date][$metric] += (float) ($row->{$metric} ?? 0);
+            }
             $byPath[$path][$date]['revenue'] += (float) $row->revenue;
             $byPath[$path][$date]['impressions'] += (float) $row->impressions;
             $byPath[$path][$date]['clicks'] += (float) $row->clicks;
@@ -670,6 +706,18 @@ final class ObjectivePerformance
                 continue;
             }
 
+            /*
+             * OBJECTIVE-RESULT-001 — one result unit per path for the whole window, the same rule as
+             * the path's total: impressions for awareness, visits (else clicks) for traffic, orders
+             * for conversion. Chosen over the window so a line never changes unit halfway along.
+             */
+            $resultKey = $pathKeys[$path->value] ?? null;
+            $resultKey = $resultKey === 'conversions' ? 'results' : $resultKey;
+            foreach ($measured as $date => $point) {
+                // A path with no common unit (sales, leads and installs together) draws no results line.
+                $measured[$date]['results'] = $resultKey === null ? null : ($point[$resultKey] ?? null);
+            }
+
             $series = [];
 
             foreach ($days as $date) {
@@ -679,12 +727,12 @@ final class ObjectivePerformance
                     'date' => $date,
                     'reported' => $point !== null,
                     'spend' => $point === null ? null : round($point['spend'], 2),
-                    'results' => $point === null ? null : round($point['results'], 2),
+                    'results' => $point === null || $point['results'] === null ? null : round($point['results'], 2),
                     'revenue' => $point === null ? null : round($point['revenue'], 2),
                     // Derived from THIS day's own sums — never from the window's, which is a
                     // different number the moment a result lands after the spend that bought it.
                     // DERIVED-WITHHELD-001 — a day with withheld spend states no cost.
-                    'cost_per_result' => $point === null || $point['results'] <= 0 || $point['withheld'] > 0
+                    'cost_per_result' => $point === null || $point['results'] === null || $point['results'] <= 0 || $point['withheld'] > 0
                         ? null
                         : round($point['spend'] / $point['results'], 2),
                     'cpm' => $point === null || $point['impressions'] <= 0 || $point['withheld'] > 0
@@ -693,11 +741,15 @@ final class ObjectivePerformance
                 ];
             }
 
+            $publicKey = $pathKeys[$path->value] ?? null;
+
             $out[] = [
                 'path' => $path->value,
                 'label_ar' => $path->labels()['ar'],
                 'label_en' => $path->labels()['en'],
                 'headline_metrics' => $path->headlineMetrics(),
+                'result_key' => $publicKey,
+                'result_label' => ObjectiveResult::label($publicKey),
                 'days' => $series,
                 'days_reported' => count($measured),
                 'days_in_window' => count($days),
@@ -770,6 +822,10 @@ final class ObjectivePerformance
             ->selectRaw($this->heldMoney('spend'))
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))
+            ->selectRaw($this->sum('landing_page_views'))
+            ->selectRaw($this->sum('leads'))
+            ->selectRaw($this->sum('form_leads'))
+            ->selectRaw($this->sum('installs'))
             ->selectRaw($this->sum('revenue'))
             ->selectRaw($this->heldMoney('revenue'))
             ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE metric_key = 'conversions'), 0) AS orders")
@@ -817,6 +873,14 @@ final class ObjectivePerformance
             ->selectRaw($this->sum('impressions'))
             ->selectRaw($this->sum('clicks'))
             ->selectRaw($this->sum('landing_page_views'))
+            // OBJECTIVE-RESULT-001 — whether this platform SENT landing page views at all (a reported 0 counts).
+            ->selectRaw("COUNT(*) FILTER (WHERE metric_key = 'landing_page_views') AS lpv_rows")
+            // OBJECTIVE-RESULT-001 — each family's own result, so no family is judged on orders it never bought.
+            ->selectRaw($this->sum('engagements'))
+            ->selectRaw($this->sum('video_views'))
+            ->selectRaw($this->sum('leads'))
+            ->selectRaw($this->sum('form_leads'))
+            ->selectRaw($this->sum('installs'))
             ->selectRaw($this->sum('revenue'))
             ->selectRaw($this->heldMoney('revenue'))
             /*
@@ -943,8 +1007,13 @@ final class ObjectivePerformance
         $spendWithheld = (int) ($b['spend_withheld_rows'] ?? 0) > 0;
         $revenueWithheld = (int) ($b['revenue_withheld_rows'] ?? 0) > 0;
 
+        $result = self::pathResult($path, $b['_result_rows'] ?? []);
+        // A path is not a family; the family the rule was borrowed from is not a fact about the path.
+        unset($b['_result_rows'], $result['result_family']);
+
         return [
             ...$b,
+            ...$result,
             'spend' => round($b['spend'], 2),
             'impressions' => round($b['impressions']),
             'clicks' => round($b['clicks']),
@@ -968,6 +1037,63 @@ final class ObjectivePerformance
             'results_mixed' => $mixed,
             'cpa_mixes_result_types' => $sellsThings && $mixed,
         ];
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the result a PATH is judged on, in one unit.
+     *
+     * Every path's «النتائج» column was its orders, so the traffic path of a project whose traffic
+     * campaigns brought thousands of visits read «0». The awareness path's families (awareness,
+     * engagement, video) share no result but impressions, and reach is never additive; the traffic
+     * path reads landing page views where every contributor has them, else clicks; the conversion
+     * path keeps orders, with the mix of result types it already discloses.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private static function pathResult(MarketingPath $path, array $rows): array
+    {
+        $reported = array_map(self::rowReported(...), $rows);
+
+        if ($path === MarketingPath::Awareness) {
+            return ObjectiveResult::combine(ObjectiveFamily::Awareness, array_map(static fn (array $r): array => ['reach' => null] + $r, $rows), $reported);
+        }
+
+        if ($path === MarketingPath::Traffic) {
+            return ObjectiveResult::combine(ObjectiveFamily::Traffic, $rows, $reported);
+        }
+
+        /*
+         * The conversion path holds sales, leads and app installs. One family: its own result. More
+         * than one: no total — an order, a lead and an install are not one unit, and naming a lead
+         * «الطلبات» on the client's table is the defect this path had.
+         */
+        $families = array_values(array_unique(array_map(
+            static fn (array $r): string => ObjectiveResult::familyOf(isset($r['objective']) ? (string) $r['objective'] : null)->value,
+            $rows,
+        )));
+
+        return count($families) === 1
+            ? ObjectiveResult::combine($families[0], $rows, $reported)
+            : ObjectiveResult::none($rows === [] ? 'not_reported' : 'mixed', $rows);
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — what one (campaign, platform) row reported, for the traffic rule.
+     *
+     * Landing page views count as reported when the platform sent the metric — except a platform
+     * whose 0 means «not tracked» ({@see ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED}), which counts
+     * only from a positive figure. Every other key reads as the figures-only rule would.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, bool>
+     */
+    private static function rowReported(array $row): array
+    {
+        $untracked = in_array((string) ($row['provider'] ?? ''), ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED, true);
+        $lpv = $untracked ? (float) ($row['landing_page_views'] ?? 0) > 0 : (int) ($row['lpv_rows'] ?? 0) > 0;
+
+        return ['landing_page_views' => $lpv] + array_fill_keys(['reach', 'impressions', 'clicks', 'engagements', 'video_views', 'leads', 'form_leads', 'conversions', 'installs'], true);
     }
 
     /** Null on a zero denominator — a 0 would read as a real, excellent result. */

@@ -29,9 +29,10 @@ final class MailDeepLinks
     }
 
     /** The platforms tab of the project's analytics — «open the platform inside the system». */
-    public static function platforms(string $projectId, ?int $days = null): string
+    public static function platforms(string $projectId, ?int $days = null, ?string $platform = null): string
     {
-        return self::analytics($projectId, 'platforms', $days);
+        // DIGESTS-OBJECTIVE-KPIS-001 — the period AND the platform the email is about travel in the link, so the report opens on the same view.
+        return self::analytics($projectId, 'platforms', $days).($platform !== null && $platform !== '' ? '&platform='.rawurlencode($platform) : '');
     }
 
     /** The campaigns that need attention, for one project. */

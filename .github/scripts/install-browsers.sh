@@ -22,9 +22,10 @@
 #    for any file the first one stalls on. A stall now costs one slot for a few seconds instead of the whole run.
 #    The files go to $APT_DEBS_DIR, which CI caches (and saves even when the job fails, so a retried job resumes
 #    instead of starting over) and are then placed where apt looks for archives.
-# 3. `install-deps` runs ONCE, as before. apt verifies every archive against the signed package index whether it
-#    downloaded it or found it, so the prefetch can only make the install faster, never different. If anything is
-#    still missing apt fetches it itself; if the install fails, the step FAILS. The prefetch is the only
+# 3. `install-deps` runs, and on failure runs again only once apt/dpkg have exited and released every lock — three
+#    bounded attempts (CI-SPEED-001; see section 3 below). apt verifies every archive against the signed package index
+#    whether it downloaded it or found it, so the prefetch can only make the install faster, never different. If
+#    anything is still missing apt fetches it itself; if every attempt fails, the step FAILS. The prefetch is the only
 #    best-effort part, and it is best-effort because it is an optimisation: the verdict is the install.
 # 4. Only the browser DOWNLOAD (a plain fetch, no lock) keeps its three bounded attempts.
 set -uo pipefail
@@ -154,14 +155,49 @@ prefetch || echo "::warning::prefetch skipped; install-deps will download sequen
 # Probe-only: stop here, as a dying install step would, so the cache-recovery path can be exercised on purpose.
 if [ -n "${STOP_AFTER_PREFETCH:-}" ]; then echo "STOP_AFTER_PREFETCH set: stopping before install-deps"; exit 75; fi
 
-# --- 3. system dependencies, ONCE; a failure is a failure ----------------------------------------------------------
-say "install-deps (once)"
-if ! timeout 1500 npx playwright install-deps chromium "$browser"; then
-  echo "::error::system dependencies failed to install once; not retrying apt (a retry races the lock the failed run may still hold)"
+# --- 3. system dependencies: bounded attempts, each one only after apt has let go --------------------------------
+#
+# CI-SPEED-001. This used to be ONE attempt, because the retry it replaced (#821) started while the failed apt-get
+# still held the dpkg lock and died in seconds. The danger was the race, not the retry: an attempt that begins only
+# after every apt/dpkg process has exited AND every lock file is free cannot race anything. So a failed attempt now
+# waits for exactly that (apt_idle_and_unlocked, bounded at ten minutes), lets dpkg finish any configuration a killed
+# run left half-done (`dpkg --configure -a`, the step apt itself asks for), and tries again — three attempts in all,
+# still inside the step's own timeout. The verdict is unchanged: the step passes only when an install EXITS 0, and
+# apt verifies every package against the signed index on every attempt. These are operating-system packages; no
+# test runs in this script, and no test step anywhere is retried.
+locks_free() {
+  local f
+  for f in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+    [ -e "$f" ] || continue
+    sudo fuser "$f" >/dev/null 2>&1 && return 1
+  done
+  return 0
+}
+apt_idle_and_unlocked() {
+  for _ in $(seq 1 120); do
+    if ! pgrep -x 'apt-get|apt|dpkg|unattended-upgr' >/dev/null 2>&1 && locks_free; then return 0; fi
+    sleep 5
+  done
+  echo "::error::apt/dpkg still running or holding a lock after ten minutes: $(pgrep -a -x 'apt-get|apt|dpkg|unattended-upgr' | head -3 | tr '\n' ';')"
+  return 1
+}
+DEPS_ATTEMPTS=${DEPS_ATTEMPTS:-3}
+deps_ok=0
+for attempt in $(seq 1 "$DEPS_ATTEMPTS"); do
+  say "install-deps (attempt ${attempt} of ${DEPS_ATTEMPTS})"
+  if [ "$attempt" -gt 1 ]; then
+    apt_idle_and_unlocked || { end; break; }
+    sudo dpkg --configure -a || true
+  fi
+  if timeout 1200 npx playwright install-deps chromium "$browser"; then deps_ok=1; end; break; fi
+  echo "::warning::system dependencies attempt ${attempt} failed; waiting for apt/dpkg to release every lock before the next attempt"
   pgrep -a -x 'apt-get|apt|dpkg' || true
+  end
+done
+if [ "$deps_ok" != 1 ]; then
+  echo "::error::system dependencies failed to install after ${DEPS_ATTEMPTS} lock-safe attempts"
   exit 1
 fi
-end
 
 # --- 4. the browsers themselves: a plain download, three bounded attempts ------------------------------------------
 for attempt in 1 2 3; do

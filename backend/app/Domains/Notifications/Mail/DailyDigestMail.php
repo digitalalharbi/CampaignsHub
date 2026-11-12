@@ -11,6 +11,7 @@ use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
@@ -237,6 +238,7 @@ final class DailyDigestMail extends Mailable
                     default => $ar ? 'آخر 7 أيام عبر مشاريعك ومنصاتك.' : 'The last 7 days across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
+                'footerNote' => MailDisclaimer::note($this->lang),
                 'scopeNote' => $this->scopeNote($ar),
                 // One place, because the two mailables already disagreed about the unsubscribe —
                 // and the one that was wrong resolved anyway, through a redirect (MAIL-008).
@@ -1130,11 +1132,11 @@ final class DailyDigestMail extends Mailable
             'intro_single' => 'ملخص الفترة لمشروع',
             'intro_client' => 'نتائج حملاتك هذه الفترة، وما يستحق نظرتك.',
             'open_portal' => 'افتح بوابتك ←',
-            'portfolio' => 'محفظة المشاريع',
+            'portfolio' => 'ملخص المشاريع',
             'highlights' => 'أبرز التحرّكات',
-            'health' => 'صحة المحفظة الآن',
+            'health' => 'حالة المشاريع الآن',
             'decisions' => 'يحتاج قرارك',
-            'more_projects' => 'مشاريع أخرى في لوحة المحفظة',
+            'more_projects' => 'مشاريع أخرى في ملخص المشاريع',
             'fine_projects' => 'مشاريع لا تحتاج قرارًا',
             'open_portfolio' => 'افتح لوحة مشاريعك ←',
             'needs_attention' => 'تحتاج انتباهًا',
@@ -1182,13 +1184,13 @@ final class DailyDigestMail extends Mailable
             'intro_single' => 'The period for',
             'intro_client' => 'Your campaign results this period, and what deserves a look.',
             'open_portal' => 'Open your portal →',
-            'portfolio' => 'Project portfolio',
+            'portfolio' => 'Projects summary',
             'highlights' => 'Biggest moves',
-            'health' => 'Portfolio health now',
+            'health' => 'Project health now',
             'decisions' => 'Needs your decision',
-            'more_projects' => 'more projects on the portfolio board',
+            'more_projects' => 'more projects in the projects summary',
             'fine_projects' => 'projects need no decision',
-            'open_portfolio' => 'Open your portfolio board →',
+            'open_portfolio' => 'Open the projects summary →',
             'needs_attention' => 'need attention',
             'spend_share' => 'Where the spend went, by project',
             'spend_by_platform' => 'Spend by platform',

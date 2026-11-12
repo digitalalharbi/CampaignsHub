@@ -350,7 +350,7 @@ export function DashboardOverview(d: OverviewData) {
           the axis says which.
         */}
         <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
           description={
             series.basis === 'original'
               ? ar
@@ -379,7 +379,7 @@ export function DashboardOverview(d: OverviewData) {
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
                   }
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -389,7 +389,7 @@ export function DashboardOverview(d: OverviewData) {
                 {series.hasMoney && series.basis !== 'mixed' && (
                   <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
                 )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -613,7 +613,7 @@ export function AnalyticsOverview(d: OverviewData) {
         )}
 
         <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
           description={
             series.basis === 'original'
               ? ar
@@ -637,7 +637,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
                   }
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -647,7 +647,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 {series.hasMoney && series.basis !== 'mixed' && (
                   <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
                 )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>

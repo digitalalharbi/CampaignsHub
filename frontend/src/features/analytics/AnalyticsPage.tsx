@@ -98,6 +98,7 @@ import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
+import { campaignResult, missingText, resultCostText, resultLabel, returnsRevenue } from '@/features/campaigns/campaignResult'
 import { accountContribution } from './accountContribution'
 import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
 
@@ -299,6 +300,13 @@ const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: stri
   ad: { ar: 'لم تصل بيانات الإعلانات', en: 'ad figures missing' },
 }
 
+
+/** OBJECTIVE-RESULT-001 — one campaign's result in its own unit, or why it has none. */
+function ResultCell({ row, ar }: { row: Record<string, unknown> & { objective?: string | null }; ar: boolean }) {
+  const r = campaignResult(row.objective, row, (row.reported as Record<string, boolean> | undefined) ?? null)
+  if (r.value === null) return <span className="text-xs text-text-muted">{missingText(r, ar) ?? '\u2014'}</span>
+  return <span><span className="tnum">{num(r.value)}</span> <span className="text-xs text-text-muted">{resultLabel(r, ar)}</span></span>
+}
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
@@ -1239,7 +1247,11 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
       </Panel>
       <Panel title={ar ? 'جدول المنصات' : 'Platforms table'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <MetricTable
-          head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'CPM', 'Contribution']}
+          /*
+            OBJECTIVE-RESULT-001 — a platform carries campaigns of every objective, so its count is not
+            «النتائج»: it is the platform's conversions, named as such, and their cost.
+          */
+          head={ar ? ['المنصة', 'الإنفاق', 'تحويلات المنصة', 'تكلفة التحويل', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Platform conversions', 'Cost per conversion', 'ROAS', 'CTR', 'CPM', 'Contribution']}
           rows={rows.map((r) => [
             <PlatformCell key="p" provider={r.provider} />,
             /*
@@ -1328,8 +1340,14 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * whose platform never reported a return to the bottom — «needs a look» naming a campaign nobody
    * has a figure for, over one that genuinely returned little. See `campaignRoasPanels`.
    */
-  const best = bestByRoas(rows)
-  const worst = worstByRoas(rows)
+  /*
+   * OBJECTIVE-RESULT-001 — return on ad spend ranks SALES campaigns only. A traffic or awareness
+   * campaign was never bought to return revenue, and ranking it «lowest ROAS» named it a problem for
+   * money it never sought.
+   */
+  const salesRows = rows.filter((r) => returnsRevenue(r.objective))
+  const best = bestByRoas(salesRows)
+  const worst = worstByRoas(salesRows)
   return (
     <div className="space-y-4">
       {/*
@@ -1392,6 +1410,10 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
                 ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
+          ) : rows.length > 0 && salesRows.length === 0 ? (
+            <p className="text-sm text-text-muted" data-testid="analytics-worst-no-sales">
+              {ar ? 'لا توجد حملة مبيعات في هذه الفترة. العائد على الإنفاق (ROAS) لحملات المبيعات فقط.' : 'No sales campaign in this period. Return on ad spend (ROAS) applies to sales campaigns only.'}
+            </p>
           ) : rows.length > 0 ? (
             /*
               AGGREGATION-TRUTH-001 — the panel says why it can name nobody.
@@ -1419,7 +1441,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
       </div>
       <Panel title={ar ? 'ترتيب الحملات' : 'Campaign ranking'} description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'} loading={c.isLoading} error={c.isError} empty={!c.isLoading && rows.length === 0}>
         <MetricTable
-          head={ar ? ['الحملة', 'المنصة', 'الإنفاق', 'الإيرادات', 'النتائج', 'CPA', 'ROAS'] : ['Campaign', 'Platform', 'Spend', 'Revenue', 'Results', 'CPA', 'ROAS']}
+          head={ar ? ['الحملة', 'المنصة', 'الإنفاق', 'الإيرادات', 'النتيجة', 'تكلفة النتيجة', 'ROAS'] : ['Campaign', 'Platform', 'Spend', 'Revenue', 'Result', 'Cost per result', 'ROAS']}
           rows={rows.map((r) => [
             /*
              * CAMPAIGN-DRILL-001 — the name is the way in.
@@ -1449,20 +1471,28 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
              * provenance fields, same readers.
              */
             rowMoney(r, 'spend'),
-            rowMoney(r, 'revenue'),
-            num(r.conversions),
-            rowCostPer(r, 'cpa', 'conversions'),
-            <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
+            /*
+             * OBJECTIVE-RESULT-001 — each campaign's OWN result, named, and its cost; revenue and
+             * ROAS only where the campaign sells. «النتائج» was `conversions` for every row, so a
+             * traffic campaign with thousands of visits ranked as «0».
+             */
+            returnsRevenue(r.objective) ? rowMoney(r, 'revenue') : '\u2014',
+            <ResultCell key="res" row={r as unknown as Record<string, unknown> & { objective?: string | null }} ar={ar} />,
+            resultCostText(campaignResult(r.objective, r), r, null),
+            <span key="ro" className="tnum font-semibold">{returnsRevenue(r.objective) ? rowRoas(r) : '\u2014'}</span>,
           ])}
-          values={rows.map((r) => [
-            r.campaign_name ?? '',
-            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
-            readMoney(r, 'spend', null, ar).amount,
-            readMoney(r, 'revenue', null, ar).amount,
-            r.conversions ?? null,
-            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
-            readRoas(r, ar).value,
-          ])}
+          values={rows.map((r) => {
+            const result = campaignResult(r.objective, r)
+            return [
+              r.campaign_name ?? '',
+              providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+              readMoney(r, 'spend', null, ar).amount,
+              returnsRevenue(r.objective) ? readMoney(r, 'revenue', null, ar).amount : null,
+              result.value,
+              result.value ? readMoney(r, 'spend', null, ar).amount === null ? null : Number(readMoney(r, 'spend', null, ar).amount) / result.value * result.per : null,
+              returnsRevenue(r.objective) ? readRoas(r, ar).value : null,
+            ]
+          })}
           initialSort={{ column: 2, dir: 'desc' }}
         />
         {/*

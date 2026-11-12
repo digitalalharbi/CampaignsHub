@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,20 @@ final class MailUnsubscribes
 {
     /** The alert bundle: several catalogue types in one message, switched by `digests.alerts`. */
     public const ALERTS = 'alerts';
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, one scope per rhythm, each switching its own `digests` key.
+     *
+     * Its unsubscribe used to be the projects summary's (`daily_digest`…), so leaving one project report turned off the summary
+     * and left the project reports coming.
+     */
+    public const PROJECT_SCOPES = ['project_daily_digest' => 'per_project', 'project_weekly_digest' => 'per_project_weekly', 'project_monthly_digest' => 'per_project_monthly'];
+
+    /** The per-project scope of a rhythm. */
+    public static function projectScope(string $kind): string
+    {
+        return (string) array_search(DigestSchedule::PER_PROJECT[$kind] ?? 'per_project', self::PROJECT_SCOPES, true);
+    }
 
     public function __construct(private readonly NotificationChoices $choices) {}
 
@@ -135,7 +150,7 @@ final class MailUnsubscribes
 
     private static function isOptional(string $scope): bool
     {
-        return $scope === self::ALERTS || MessageCatalogue::isUnsubscribable($scope);
+        return $scope === self::ALERTS || isset(self::PROJECT_SCOPES[$scope]) || MessageCatalogue::isUnsubscribable($scope);
     }
 
     private function switchOff(int $userId, string $tenantId, string $scope): void
@@ -144,7 +159,7 @@ final class MailUnsubscribes
             ->where('tenant_id', $tenantId)->where('user_id', $userId)
             ->whereNull('client_workspace_id')->first();
 
-        $digest = $scope === self::ALERTS ? 'alerts' : (MessageCatalogue::DIGEST_SWITCH[$scope] ?? null);
+        $digest = $scope === self::ALERTS ? 'alerts' : (self::PROJECT_SCOPES[$scope] ?? MessageCatalogue::DIGEST_SWITCH[$scope] ?? null);
         $column = $digest !== null ? 'digests' : 'types';
         $map = json_decode((string) ($row->{$column} ?? '[]'), true);
         $map = is_array($map) ? $map : [];

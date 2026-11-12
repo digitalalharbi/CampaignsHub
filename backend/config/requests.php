@@ -7,6 +7,18 @@ return [
     // for a single-portal deployment; internal dashboards still filter strictly by tenant_id.
     'portal_tenant_id' => env('REQUESTS_PORTAL_TENANT_ID'),
 
+    /*
+     * PLATFORM-SERVICE-INBOX-001 — the hosts that ARE CampaignsHub. A service request arriving on one of them
+     * belongs to the platform owner and to no subscriber. Comma-separated; left unset, the public site, the
+     * application and the API as `config/brand.php` publishes them are used.
+     */
+    'platform_hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('REQUESTS_PLATFORM_HOSTS', ''))))),
+
+    'platform_inbox' => [
+        // Tell the platform's administrators, through the mail ledger, when a service request arrives.
+        'notify' => (bool) env('REQUESTS_PLATFORM_INBOX_NOTIFY', true),
+    ],
+
     // Default SLA window (hours) applied at intake; per-type SLA policies land with the dashboard phase.
     'default_sla_hours' => (int) env('REQUESTS_DEFAULT_SLA_HOURS', 48),
 

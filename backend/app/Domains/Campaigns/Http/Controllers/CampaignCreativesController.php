@@ -7,6 +7,7 @@ namespace App\Domains\Campaigns\Http\Controllers;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Support\FinancialRatios;
 use App\Http\Controllers\Controller;
@@ -47,7 +48,7 @@ final class CampaignCreativesController extends Controller
             ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, '(select cr.external_campaign_id from external_creatives cr where cr.id = creative_daily_metrics.creative_id)', 'creative_daily_metrics.project_id'))
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->select('creative_id')
-            ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue, SUM(video_views) video_views, SUM(video_completions) video_completions, COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL) spend_withheld_rows, COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL) revenue_withheld_rows')
+            ->selectRaw('SUM(spend) spend, SUM(impressions) impressions, SUM(clicks) clicks, SUM(conversions) conversions, SUM(revenue) revenue, SUM(video_views) video_views, SUM(video_completions) video_completions, SUM(landing_page_views) landing_page_views, SUM(engagements) engagements, COUNT(*) FILTER (WHERE spend IS NULL AND spend_original IS NOT NULL) spend_withheld_rows, COUNT(*) FILTER (WHERE revenue IS NULL AND revenue_original IS NOT NULL) revenue_withheld_rows')
             ->groupBy('creative_id')
             ->get()
             ->keyBy('creative_id');
@@ -56,7 +57,10 @@ final class CampaignCreativesController extends Controller
 
         [$rankKey, $higherBetter] = self::RANK[$model->objective] ?? ['roas', true];
 
-        $rows = $creatives->map(function (ExternalCreative $c) use ($agg) {
+        // OBJECTIVE-RESULT-001 — every ad is shown with the result its campaign's objective is judged on.
+        $family = ObjectiveResult::familyOf($model->objective === null ? null : (string) $model->objective);
+
+        $rows = $creatives->map(function (ExternalCreative $c) use ($agg, $family) {
             $m = $agg->get($c->id);
             $spend = (float) ($m->spend ?? 0);
             // DERIVED-WITHHELD-001 — no cost ratio over partly withheld money.
@@ -68,6 +72,18 @@ final class CampaignCreativesController extends Controller
             $rev = (float) ($m->revenue ?? 0);
             $views = (float) ($m->video_views ?? 0);
             $completes = (float) ($m->video_completions ?? 0);
+            /*
+             * Reach summed over days is not reach, so an ad's awareness result is its impressions.
+             * `reach => null` sends the table to its stated fallback rather than to a wrong sum.
+             */
+            $result = ObjectiveResult::resolve($family, [
+                'spend' => $spend, 'spend_withheld_rows' => (int) ($m->spend_withheld_rows ?? 0),
+                'reach' => null, 'impressions' => $impr, 'clicks' => $clicks, 'conversions' => $conv,
+                'landing_page_views' => (float) ($m->landing_page_views ?? 0), 'engagements' => (float) ($m->engagements ?? 0),
+                'video_views' => $views,
+                // The ad grain holds no leads or installs column: those results are «no data» here, never a zero.
+                'leads' => null, 'installs' => null,
+            ]);
 
             return [
                 'id' => $c->id, 'name' => $c->name, 'client_display_name' => $c->client_display_name,
@@ -104,6 +120,13 @@ final class CampaignCreativesController extends Controller
                     'cpm' => FinancialRatios::costPer(! $spendWithheld ? (float) $spend : null, (float) $impr, 2, 1000.0),
                     'view_rate' => $impr > 0 ? round($views / $impr, 4) : null,
                     'completion_rate' => $views > 0 ? round($completes / $views, 4) : null,
+                    'landing_page_views' => (float) ($m->landing_page_views ?? 0),
+                    'result_key' => $result['result_key'],
+                    'result' => $result['result'],
+                    'result_label' => $result['result_label'],
+                    'cost_per_result' => $result['cost_per_result'],
+                    'cost_per_result_label' => $result['cost_per_result_label'],
+                    'result_missing_reason' => $result['result_missing_reason'],
                 ],
             ];
         })->values();
@@ -129,7 +152,8 @@ final class CampaignCreativesController extends Controller
     /** @param array<string,mixed> $r */
     private function classify(array $r, string $key, ?float $val, bool $higherBetter, float $avg): string
     {
-        $conv = (float) $r['metrics']['conversions'];
+        // OBJECTIVE-RESULT-001 — «nothing came of it» is judged on the objective's result, not on orders.
+        $conv = (float) ($r['metrics']['result'] ?? $r['metrics']['conversions']);
         $impr = (float) $r['metrics']['impressions'];
         if ($impr < 100) {
             return 'insufficient_data';

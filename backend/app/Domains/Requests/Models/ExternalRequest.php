@@ -6,6 +6,7 @@ namespace App\Domains\Requests\Models;
 
 use App\Models\User;
 use App\Support\Concerns\NormalisesPhoneNumbers;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -41,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property array<string,mixed>|null $service_details
  * @property int|null $assigned_to
  * @property Carbon|null $submitted_at
+ * @property string $owner_scope
  * @property Carbon|null $sla_due_at
  * @property Carbon|null $sla_started_at
  * @property Carbon|null $sla_paused_at
@@ -64,6 +66,17 @@ class ExternalRequest extends Model
 
     use HasUlids;
 
+    /**
+     * PLATFORM-SERVICE-INBOX-001 — the two owners a request can have.
+     *
+     * A `tenant` request belongs to one subscriber's workspace and always carries its `tenant_id`. A `platform`
+     * request is a service ordered from the official CampaignsHub site: it has NO tenant, and is worked by the
+     * platform owner alone. The pair is decided on the server at intake and never read from the visitor.
+     */
+    public const OWNER_TENANT = 'tenant';
+
+    public const OWNER_PLATFORM = 'platform';
+
     protected $guarded = ['id'];
 
     protected $casts = [
@@ -85,6 +98,38 @@ class ExternalRequest extends Model
         'services' => 'array',
         'service_details' => 'array',
     ];
+
+    public function isPlatformOwned(): bool
+    {
+        return $this->owner_scope === self::OWNER_PLATFORM;
+    }
+
+    /**
+     * The platform owner's own service requests, and nothing a subscriber owns.
+     *
+     * Both halves are stated: the scope AND the absent tenant. A row that claimed `platform` while naming a
+     * tenant would be a contradiction, and it is left out of the platform inbox rather than guessed at.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopePlatformOwned(Builder $query): Builder
+    {
+        return $query->where('external_requests.owner_scope', self::OWNER_PLATFORM)->whereNull('external_requests.tenant_id');
+    }
+
+    /**
+     * Requests that belong to SOME subscriber — for the few lookups that cross tenants on purpose (a client
+     * finding their own workspace by the address they used). A platform request names no workspace, so it can
+     * never be what such a lookup is searching for.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeTenantOwned(Builder $query): Builder
+    {
+        return $query->where('external_requests.owner_scope', self::OWNER_TENANT)->whereNotNull('external_requests.tenant_id');
+    }
 
     public function type(): BelongsTo
     {

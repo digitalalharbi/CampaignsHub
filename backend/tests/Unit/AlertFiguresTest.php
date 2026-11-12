@@ -22,7 +22,7 @@ final class AlertFiguresTest extends TestCase
     {
         $f = AlertFigures::from(['consumed' => 4500.5, 'limit' => 5000.0, 'threshold' => 90, 'currency' => 'USD'], true);
         $this->assertSame('4,500.50 USD', $f['lead']['value']);
-        $this->assertSame(['الحدّ' => '5,000.00 USD', 'العتبة' => '90%'], array_column($f['strip'], 'value', 'label'));
+        $this->assertSame(['الحد' => '5,000.00 USD', 'حد التنبيه' => '90%'], array_column($f['strip'], 'value', 'label'));
     }
 
     public function test_a_rate_now_against_before_carries_the_change_and_the_window(): void

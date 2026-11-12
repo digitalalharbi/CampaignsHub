@@ -85,8 +85,21 @@ export function campaignHeadline(
   if (row === undefined) return null
 
   const key = headlineKeys(objective)[0]
+  if (key === undefined) return null
 
-  return key === undefined ? null : reading(key, row, ar, currency)
+  /*
+   * OBJECTIVE-RESULT-001 — a traffic campaign leads with its landing page views only when its
+   * platform sent some; otherwise with its clicks, NAMED «النقرات». A click is never called a visit,
+   * and «زيارات الصفحة 0» over a platform that never measures page views is not a result.
+   */
+  if (key === 'landing_page_views' && !visitsMeasured(row)) return reading('clicks', row, ar, currency)
+
+  return reading(key, row, ar, currency)
+}
+
+function visitsMeasured(row: Record<string, unknown>): boolean {
+  const reported = row.reported as Record<string, boolean> | undefined
+  return reported?.landing_page_views === true && Number(row.landing_page_views ?? 0) > 0
 }
 
 /**
@@ -108,6 +121,15 @@ export function campaignEfficiency(
   currency: string | null = null,
 ): CampaignHeadline | null {
   if (row === undefined) return null
+
+  /*
+   * OBJECTIVE-RESULT-001 — the cost of the result the headline names. For traffic that is the cost
+   * of a visit when visits were measured (the row's own `cost_per_result`), else the cost of a click.
+   */
+  if (headlineKeys(objective)[0] === 'landing_page_views' && visitsMeasured(row)) {
+    const cost = typeof row.cost_per_result === 'number' ? row.cost_per_result : null
+    return reading('cost_per_lpv', { ...row, cost_per_lpv: cost }, ar, currency)
+  }
 
   const key = headlineKeys(objective).find((k) => SPECS[k]?.invertGood === true)
 

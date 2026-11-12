@@ -75,8 +75,8 @@ final class AlertEventText
             'action' => $say['action'],
             'url' => $url,
             'button' => $say['link'] === 'integrations'
-                ? ($ar ? 'افتح صفحة الربط' : 'Open the connections page')
-                : ($campaign !== null ? ($ar ? 'افتح الحملة داخل النظام' : 'Open the campaign') : ($ar ? 'افتح التنبيه داخل النظام' : 'Open the alert')),
+                ? ($ar ? 'افتح الربط' : 'Open the connections page')
+                : ($campaign !== null ? ($ar ? 'افتح الحملة' : 'Open the campaign') : ($ar ? 'افتح التنبيه' : 'Open the alert')),
             // The name as stored, last and quiet — never the headline.
             'secondary' => $campaign !== null ? ($ar ? 'الحملة: ' : 'Campaign: ').self::truncate((string) $campaign->name) : '',
         ];
@@ -100,6 +100,37 @@ final class AlertEventText
      *
      * @return array{headline: string, text: string, numbers: string, action: string, link: string}
      */
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 — what to check follows the objective. «حلويات برديسي» (traffic, Snapchat swipes) was told to
+     * check conversion tracking; a visits campaign has no conversions to track. Conversions are the advice for sales and leads only,
+     * and an alert raised before the objective named its result gets general advice, never «التحويلات».
+     *
+     * @param  array<string,mixed>  $ctx
+     */
+    private static function noResultsAction(array $ctx, bool $ar): string
+    {
+        $family = (string) ($ctx['result_family'] ?? match ($ctx['result_key'] ?? null) {
+            'landing_page_views', 'clicks' => 'traffic',
+            'reach', 'impressions' => 'awareness',
+            'engagements' => 'engagement',
+            'video_views' => 'video',
+            'leads', 'form_leads' => 'leads',
+            'installs' => 'app',
+            default => '',
+        });
+
+        return match ($family) {
+            'traffic' => $ar ? 'تحقق من رابط الصفحة وسرعتها ← المحتوى.' : 'Check the landing page link and its speed, then the content.',
+            'awareness' => $ar ? 'تحقق من الاستهداف والميزانية ← المحتوى.' : 'Check the targeting and budget, then the content.',
+            'engagement' => $ar ? 'راجع المحتوى ← الجمهور.' : 'Review the content, then the audience.',
+            'video' => $ar ? 'راجع أول ثواني الفيديو ← الجمهور.' : 'Review the first seconds of the video, then the audience.',
+            'app' => $ar ? 'تحقق من رابط المتجر وتتبع التثبيت ← المحتوى.' : 'Check the store link and install tracking, then the content.',
+            'leads' => $ar ? 'تحقق من النموذج وتتبع التحويلات ← المحتوى، وأوقف الحملة إن لزم.' : 'Check the form and conversion tracking, then the content, and pause if needed.',
+            'sales' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
+            default => $ar ? 'راجع المحتوى والاستهداف، وأوقف الحملة إن لزم.' : 'Review the content and targeting, and pause if needed.',
+        };
+    }
+
     public static function plain(string $type, array $ctx, bool $ar, string $platform = ''): array
     {
         return self::say($type, $ctx, $ar, $platform);
@@ -117,30 +148,30 @@ final class AlertEventText
                     $cur = (string) ($ctx['currency'] ?? '');
 
                     return [
-                        'headline' => $ar ? 'اقترب الإنفاق من الحد الذي وضعتَه' : 'Spend is close to the limit you set',
-                        'text' => $ar ? 'تجاوز الاستهلاك عتبة التنبيه في حد الإنفاق الداخلي.' : 'Consumption passed an alert threshold of the internal spend limit.',
-                        'numbers' => trim(($ar ? 'المستهلك ' : 'Consumed ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
-                            .(isset($ctx['threshold']) ? ($ar ? ' (العتبة ' : ' (threshold ').(int) $ctx['threshold'].'%)' : '')),
-                        'action' => $ar ? 'القرار لك: عدّل الحد أو راجع الإنفاق. النظام لا يوقف الإعلانات تلقائيًا.' : 'Your call: adjust the limit or review the spend. The system does not pause ads on its own.',
+                        'headline' => $ar ? 'قرّبت توصل للحد اللي حطيته' : 'Close to the limit you set',
+                        'text' => $ar ? 'وصل الإنفاق لحد التنبيه.' : 'Spend passed an alert level of the spend limit.',
+                        'numbers' => trim(($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
+                            .(isset($ctx['threshold']) ? ($ar ? ' (الحد ' : ' (limit ').(int) $ctx['threshold'].'%)' : '')),
+                        'action' => $ar ? 'هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.' : 'This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.',
                         'link' => 'analytics',
                     ];
                 }
                 if (($ctx['basis_class'] ?? '') === 'unmeasurable') {
                     return [
-                        'headline' => $ar ? 'ميزانية لا يمكن مراقبتها' : 'A budget that cannot be watched',
-                        'text' => $ar ? 'عملة الميزانية تختلف عن عملة الإنفاق ولا يوجد سعر صرف، فلا نقارن بينهما.' : 'The budget is in a different currency from the spend and there is no exchange rate, so they are not compared.',
+                        'headline' => $ar ? 'ميزانية ما نقدر نتابعها' : 'A budget that cannot be watched',
+                        'text' => $ar ? 'عملة الميزانية غير عملة الصرف وما في سعر تحويل، فما نقارن.' : 'The budget is in a different currency from the spend and there is no exchange rate, so they are not compared.',
                         'numbers' => '',
-                        'action' => $ar ? 'أضف سعر الصرف أو وحّد العملة.' : 'Add the exchange rate or use one currency.',
+                        'action' => $ar ? 'أضف سعر التحويل أو وحّد العملة.' : 'Add the exchange rate or use one currency.',
                         'link' => 'analytics',
                     ];
                 }
 
                 return [
-                    'headline' => $ar ? "ميزانية {$who} قاربت النفاد" : "The {$who} budget is nearly used up",
-                    'text' => $ar ? 'استهلكت الحملة نسبة كبيرة من ميزانيتها.' : 'The campaign has used a large share of its budget.',
-                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'المصروف ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
+                    'headline' => $ar ? "ميزانية {$who} قربت تخلص" : "The {$who} budget is nearly used up",
+                    'text' => $ar ? 'الحملة صرفت أغلب ميزانيتها.' : 'The campaign has used a large share of its budget.',
+                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
                         .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
-                    'action' => $ar ? 'قرار اليوم: أبقِ الميزانية أو عدّلها أو أوقف ما لا يؤدي.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
+                    'action' => $ar ? 'أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
                     'link' => 'campaign',
                 ];
             case 'cpa_increase':
@@ -149,59 +180,60 @@ final class AlertEventText
                 $label = PlainFindings::metricLabel($key, $ar);
 
                 return [
-                    'headline' => $ar ? "{$label} ارتفعت على {$who}" : ucfirst($label)." rose on {$who}",
-                    'text' => $ar ? 'الحملة تدفع أكثر مقابل كل نتيجة مقارنة بالفترة السابقة.' : 'The campaign pays more for each result than in the previous period.',
+                    'headline' => $ar ? "{$label} زادت على {$who}" : ucfirst($label)." rose on {$who}",
+                    'text' => $ar ? 'كل نتيجة صارت أغلى من قبل.' : 'The campaign pays more for each result than in the previous period.',
                     'numbers' => self::beforeNow($ctx, $key, $ar),
-                    'action' => $ar ? 'راجع المحتوى والجمهور، وابدأ بالأضعف أداءً.' : 'Review content and audience, starting with the weakest.',
+                    'action' => $ar ? 'راجع الجمهور ← ثم المحتوى ← ابدأ بالأقل أداءً.' : 'Review content and audience, starting with the weakest.',
                     'link' => 'campaign',
                 ];
             case 'roas_drop':
                 return [
-                    'headline' => $ar ? "العائد على الإنفاق تراجع على {$who}" : "Return on ad spend fell on {$who}",
-                    'text' => $ar ? 'كل ريال إعلان يعيد قيمة أقل من الفترة السابقة.' : 'Each unit of ad spend returns less than in the previous period.',
+                    'headline' => $ar ? "العائد نزل على {$who}" : "Return on ad spend fell on {$who}",
+                    'text' => $ar ? 'كل ريال إعلان يرجّع أقل من قبل.' : 'Each unit of ad spend returns less than in the previous period.',
                     'numbers' => self::beforeNow($ctx, 'roas', $ar),
-                    'action' => $ar ? 'راجع الإعلانات الأضعف وقرّر إيقافها أو تجديدها.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'action' => $ar ? 'افتح الأقل أداءً ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',
                     'link' => 'campaign',
                 ];
             case 'no_results':
                 return [
-                    'headline' => $ar ? "إنفاق على {$who} بلا نتائج" : "Spend on {$who} with no results",
-                    'text' => $ar ? 'صُرف مبلغ دون أي نتيجة في الأيام الأخيرة.' : 'Money was spent with no result in the last days.',
-                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? 'النتائج 0 خلال ' : '0 results in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
-                    'action' => $ar ? 'تحقق من تتبع التحويلات ثم من المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
+                    'headline' => $ar ? "{$who} بدون نتائج" : "Spend on {$who} with no results",
+                    'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
+                    // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
+                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 خلال ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
+                    'action' => self::noResultsAction($ctx, $ar),
                     'link' => 'campaign',
                 ];
             case 'sync_failure':
             case 'sync_outage':
                 return [
-                    'headline' => $platform !== '' ? ($ar ? "توقفت مزامنة بيانات {$platform}" : "{$platform} data sync has stopped") : ($ar ? 'توقفت مزامنة البيانات' : 'Data sync has stopped'),
-                    'text' => $ar ? 'آخر محاولة فشلت، فأرقام التقارير قد تكون ناقصة.' : 'The last attempt failed, so report figures may be incomplete.',
+                    'headline' => $platform !== '' ? ($ar ? "مزامنة {$platform} متوقفة" : "{$platform} data sync has stopped") : ($ar ? 'المزامنة متوقفة' : 'Data sync has stopped'),
+                    'text' => $ar ? 'آخر محاولة فشلت، فالأرقام ممكن تكون ناقصة.' : 'The last attempt failed, so report figures may be incomplete.',
                     'numbers' => isset($ctx['last_sync_at']) && $ctx['last_sync_at'] ? ($ar ? 'آخر أرقام بتاريخ ' : 'Last figures dated ').self::ltr(substr((string) $ctx['last_sync_at'], 0, 10)) : '',
-                    'action' => $ar ? 'أعد ربط الحساب حتى تكتمل الأرقام.' : 'Reconnect the account so the figures are complete.',
+                    'action' => $ar ? 'أعد ربط الحساب.' : 'Reconnect the account so the figures are complete.',
                     'link' => 'integrations',
                 ];
             case 'measurement_outage':
                 return [
-                    'headline' => $ar ? 'توقفت مزامنة بيانات الموقع' : 'Website data sync has stopped',
-                    'text' => $ar ? 'لن تظهر زيارات الموقع ومبيعاته حديثة في التقارير.' : 'Website visits and sales will not be up to date in reports.',
+                    'headline' => $ar ? 'مزامنة الموقع متوقفة' : 'Website data sync has stopped',
+                    'text' => $ar ? 'زيارات ومبيعات الموقع ما راح تظهر محدّثة.' : 'Website visits and sales will not be up to date in reports.',
                     'numbers' => '',
-                    'action' => $ar ? 'افتح صفحة الربط وأعد ربط الموقع.' : 'Open the connections page and reconnect the website.',
+                    'action' => $ar ? 'افتح الربط ← أعد ربط الموقع.' : 'Open the connections page and reconnect the website.',
                     'link' => 'integrations',
                 ];
             case 'token_expiry':
                 return [
-                    'headline' => isset($ctx['expires_at']) ? ($ar ? "ينتهي ربط {$who} قريبًا" : "The {$who} connection expires soon") : ($ar ? "ربط {$who} مرفوض ومتوقف" : "The {$who} connection was refused and has stopped"),
-                    'text' => isset($ctx['expires_at']) ? ($ar ? 'بعد الانتهاء تتوقف البيانات عن الوصول.' : 'After that, data stops arriving.') : ($ar ? 'البيانات متوقفة الآن حتى تعيد الربط.' : 'Data is stopped until you reconnect.'),
-                    'numbers' => isset($ctx['expires_at']) ? ($ar ? 'ينتهي في ' : 'Expires on ').self::ltr(substr((string) $ctx['expires_at'], 0, 10)) : '',
-                    'action' => $ar ? 'جدّد الربط قبل انقطاع البيانات.' : 'Renew the connection before the data stops.',
+                    'headline' => isset($ctx['expires_at']) ? ($ar ? "ربط {$who} قارب ينتهي" : "The {$who} connection expires soon") : ($ar ? "ربط {$who} متوقف" : "The {$who} connection was refused and has stopped"),
+                    'text' => isset($ctx['expires_at']) ? ($ar ? 'بعدها ما توصل بيانات.' : 'After that, data stops arriving.') : ($ar ? 'البيانات ما توصل لين تعيد الربط.' : 'Data is stopped until you reconnect.'),
+                    'numbers' => isset($ctx['expires_at']) ? ($ar ? 'ينتهي يوم ' : 'Expires on ').self::ltr(substr((string) $ctx['expires_at'], 0, 10)) : '',
+                    'action' => $ar ? 'جدّد الربط قبل ما تنقطع البيانات.' : 'Renew the connection before the data stops.',
                     'link' => 'integrations',
                 ];
             case 'metric_anomaly':
                 return [
-                    'headline' => $ar ? "يوم غير معتاد على {$who}" : "An unusual day on {$who}",
-                    'text' => $ar ? 'تغيّر مؤشر بشكل حاد عن خطه المعتاد.' : 'A metric moved sharply away from its usual level.',
+                    'headline' => $ar ? "يوم مو معتاد على {$who}" : "An unusual day on {$who}",
+                    'text' => $ar ? 'مؤشر تحرك بقوة عن مستواه المعتاد.' : 'A metric moved sharply away from its usual level.',
                     'numbers' => self::anomaly($ctx, $ar),
-                    'action' => $ar ? 'افتح الحملة وتحقق من الميزانية والمحتوى في ذلك اليوم.' : 'Open the campaign and check the budget and content for that day.',
+                    'action' => $ar ? 'افتح الحملة ← شوف الميزانية والمحتوى في ذلك اليوم.' : 'Open the campaign and check the budget and content for that day.',
                     'link' => 'campaign',
                 ];
         }
@@ -213,15 +245,15 @@ final class AlertEventText
         }
         // An event that carries its own Arabic title and message (the rule wrote them) is said with those, never with a generic line.
         if ($ar && is_string($ctx['title_ar'] ?? null) && $ctx['title_ar'] !== '') {
-            return ['headline' => $ctx['title_ar'], 'text' => (string) ($ctx['message_ar'] ?? ''), 'numbers' => '', 'action' => 'افتح التنبيه واتخذ قرارًا.', 'link' => 'alerts'];
+            return ['headline' => $ctx['title_ar'], 'text' => (string) ($ctx['message_ar'] ?? ''), 'numbers' => '', 'action' => 'افتحه وقرّر.', 'link' => 'alerts'];
         }
 
         // A rule type this composer does not know: a generic plain headline, never the stored English.
         return [
-            'headline' => $ar ? 'تنبيه جديد يحتاج مراجعتك' : 'A new alert needs your review',
-            'text' => $ar ? 'افتح التنبيه لترى التفاصيل.' : 'Open the alert for the details.',
+            'headline' => $ar ? 'فيه تنبيه جديد' : 'A new alert needs your review',
+            'text' => $ar ? 'افتحه وشوف التفاصيل.' : 'Open the alert for the details.',
             'numbers' => '',
-            'action' => $ar ? 'افتح التنبيه واتخذ قرارًا.' : 'Open the alert and decide.',
+            'action' => $ar ? 'افتحه وقرّر.' : 'Open the alert and decide.',
             'link' => 'alerts',
         ];
     }
@@ -230,10 +262,10 @@ final class AlertEventText
     private static function recovered(bool $ar, string $platform): array
     {
         return [
-            'headline' => $ar ? 'عادت الحالة إلى طبيعتها' : 'Back to normal',
-            'text' => $ar ? 'لم تعد الحالة التي نبّهناك إليها قائمة، وأُغلق التنبيه.' : 'The condition we warned you about is gone, and the alert is closed.',
+            'headline' => $ar ? 'رجعت الأمور طبيعية' : 'Back to normal',
+            'text' => $ar ? 'المشكلة انتهت وأُغلق التنبيه.' : 'The condition we warned you about is gone, and the alert is closed.',
             'numbers' => '',
-            'action' => $ar ? 'لا يلزمك أي إجراء.' : 'No action needed.',
+            'action' => $ar ? 'ما يحتاج منك شيء.' : 'No action needed.',
             'link' => 'alerts',
         ];
     }

@@ -61,7 +61,7 @@ describe('objective-aware layouts', () => {
   })
 
   it('gives a traffic campaign the visit metrics and no sales metrics', () => {
-    expect(layoutFor('traffic').primary).toEqual(['clicks', 'ctr', 'cpc', 'landing_page_views'])
+    expect(layoutFor('traffic').primary).toEqual(['landing_page_views', 'clicks', 'ctr', 'cpc'])
     for (const forbidden of ['purchases', 'add_to_cart', 'revenue', 'roas']) {
       expect(KEYS('traffic')).not.toContain(forbidden)
     }

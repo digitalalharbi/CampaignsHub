@@ -255,6 +255,11 @@ export interface PortalCampaignMetrics {
   clicks: number
   conversions: number
   ctr: number | null
+  /* OBJECTIVE-RESULT-001 — the campaign's result for its objective; counts and words only, never money. */
+  result_key?: string | null
+  result?: number | null
+  result_label?: { ar: string; en: string } | null
+  result_missing_label?: { ar: string; en: string } | null
 }
 
 export interface PortalCampaign {

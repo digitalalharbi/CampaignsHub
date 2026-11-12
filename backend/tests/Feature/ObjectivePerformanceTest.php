@@ -577,6 +577,71 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertSame(1700.0, (float) $conversion['spend']);
     }
 
+    /**
+     * OBJECTIVE-RESULT-001 — each path's «النتائج» is the result its campaigns were bought for.
+     *
+     * Every path read its ORDERS, so the traffic path — 10,000 clicks, no order — showed 0 results
+     * on the client's own report (`LiveDetailTables`, the objectives table).
+     */
+    public function test_each_path_reports_its_own_result_not_orders(): void
+    {
+        $paths = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        $this->assertSame('clicks', $paths['traffic']['result_key']);
+        $this->assertSame(10000.0, (float) $paths['traffic']['result']);
+        $this->assertSame('النقرات', $paths['traffic']['result_label']['ar']);
+        $this->assertSame(0.1, (float) $paths['traffic']['cost_per_result']);
+
+        $this->assertSame('impressions', $paths['awareness']['result_key']);
+        $this->assertSame(2000000.0, (float) $paths['awareness']['result']);
+
+        $this->assertSame('conversions', $paths['conversion']['result_key']);
+        $this->assertSame(50.0, (float) $paths['conversion']['result']);
+    }
+
+    /** A traffic path whose platform sends landing page views reads visits. */
+    public function test_a_traffic_path_with_landing_page_views_reads_visits(): void
+    {
+        $this->seedCampaign('زيارات صفحة', CampaignObjective::Traffic, spend: 500, clicks: 4000, lpv: 2881);
+
+        $paths = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        // The first traffic campaign sent no landing page views, so the path keeps ONE unit: clicks.
+        $this->assertSame('clicks', $paths['traffic']['result_key']);
+        $this->assertSame(14000.0, (float) $paths['traffic']['result']);
+    }
+
+    /**
+     * The conversion path holds sales and leads here: an order and a lead are not one unit, so the
+     * path states no total and why — a lead is never called «الطلبات» on the client's table.
+     */
+    public function test_a_conversion_path_mixing_leads_and_sales_has_no_single_result(): void
+    {
+        $this->seedCampaign('حملة مهتمين', CampaignObjective::Leads, spend: 400, orders: 20);
+
+        $conversion = collect($this->read()->json('data.paths'))->keyBy('path')['conversion'];
+
+        $this->assertNull($conversion['result_key']);
+        $this->assertNull($conversion['result']);
+        $this->assertSame('mixed', $conversion['result_missing_reason']);
+    }
+
+    /** The trend line counts in the same unit as the path total — clicks once a contributor lacks visits. */
+    public function test_the_traffic_trend_uses_the_path_totals_unit(): void
+    {
+        $this->seedCampaign('زيارات صفحة', CampaignObjective::Traffic, spend: 500, clicks: 4000, lpv: 2881);
+
+        $trend = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/metrics/objective-trend?from=".self::FROM.'&to='.self::TO)
+            ->assertOk()->json('data.paths'))->keyBy('path');
+        $total = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        $this->assertSame('clicks', $total['traffic']['result_key']);
+        $this->assertSame($total['traffic']['result_key'], $trend['traffic']['result_key']);
+        $day = collect($trend['traffic']['days'])->firstWhere('date', '2026-07-10');
+        $this->assertSame(14000.0, (float) $day['results']);
+    }
+
     private function seedCampaign(
         string $name,
         CampaignObjective $objective,
@@ -585,6 +650,7 @@ final class ObjectivePerformanceTest extends TestCase
         float $clicks = 0,
         float $orders = 0,
         float $revenue = 0,
+        float $lpv = 0,
     ): void {
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -604,7 +670,7 @@ final class ObjectivePerformanceTest extends TestCase
             // `conversions` is the product's one definition of an order — the same key the
             // dashboard, the analytics breakdowns and the report's own `kpis` divide spend by.
             'spend' => $spend, 'impressions' => $impressions, 'clicks' => $clicks,
-            'conversions' => $orders, 'revenue' => $revenue,
+            'conversions' => $orders, 'revenue' => $revenue, 'landing_page_views' => $lpv,
         ] as $key => $value) {
             if ($value === 0.0) {
                 continue;

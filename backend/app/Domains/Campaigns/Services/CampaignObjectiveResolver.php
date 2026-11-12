@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 
@@ -62,7 +63,7 @@ final class CampaignObjectiveResolver
 
         $externals = ExternalCampaign::withoutGlobalScopes()
             ->where('unified_campaign_id', $campaign->id)
-            ->get(['provider', 'objective']);
+            ->get(['provider', 'objective', 'raw']);
 
         if ($externals->isEmpty()) {
             return false;
@@ -91,6 +92,25 @@ final class CampaignObjectiveResolver
             }
 
             $objective = $this->map->resolve((string) $external->provider, $external->objective);
+
+            /*
+             * OBJECTIVE-RESULT-001 — Google states a channel type, not an objective; its bidding
+             * strategy says the goal where that goal is unambiguous. The strategy is written beside
+             * the platform's word so the classification can be traced to what it was read from.
+             */
+            if ($objective === null) {
+                $stored = is_array($external->raw) ? $external->raw : [];
+                $objective = $this->map->resolveFromBidding((string) $external->provider, $stored);
+
+                if ($objective !== null) {
+                    $strategy = (string) PlatformObjectiveMap::biddingStrategy($stored);
+                    if ($raw !== '') {
+                        $rawValues[count($rawValues) - 1] = $raw.' ('.$strategy.')';
+                    } else {
+                        $rawValues[] = $strategy;
+                    }
+                }
+            }
 
             if ($objective === null) {
                 continue;
@@ -133,6 +153,39 @@ final class CampaignObjectiveResolver
         }
 
         $objective = reset($resolved);
+
+        /*
+         * OBJECTIVE-RESULT-001 (Owner decision) — a sync may FILL an objective, never REPLACE one.
+         *
+         * Only a campaign whose stored objective is unset or unclassified (its family is Unknown) takes
+         * the platform's answer. One that already carries a classified objective keeps it, whoever set
+         * it: the platform's word is still written down beside it, so a disagreement is visible to an
+         * operator, but the classification every report reads does not move under them on a sweep.
+         */
+        $current = CampaignObjective::tryFrom((string) $campaign->objective);
+        /*
+         * «Classified» means somebody classified it: a person (`manual`, already returned above) or an
+         * earlier platform answer (`platform`). A value the importer SEEDED while adopting the
+         * campaign (`objective_source = unset`) is a placeholder this very sync is completing — the
+         * click-to-WhatsApp correction to leads, for instance, lands on exactly such a seed.
+         */
+        $classified = $campaign->objective_source === 'platform'
+            && $current !== null && $current->family() !== ObjectiveFamily::Unknown
+            /*
+             * The SAME platform answer, read again with more of the platform's own data (its ad sets'
+             * destination, synced a step after the campaign), may still refine what it was read as —
+             * LEAD-DESTINATION-001 turns a click-to-WhatsApp OUTCOME_SALES into leads that way. What
+             * is refused is a NEW answer replacing a classification already made.
+             */
+            && $campaign->objective_platform_value !== $rawValue;
+
+        if ($classified && $current !== $objective) {
+            if ($campaign->objective_platform_value !== $rawValue) {
+                $campaign->forceFill(['objective_platform_value' => $rawValue])->save();
+            }
+
+            return false;
+        }
 
         if ($campaign->objective === $objective->value && $campaign->objective_source === 'platform') {
             // Still record the raw value if it arrived after the classification did.
