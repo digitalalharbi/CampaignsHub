@@ -11,6 +11,7 @@ use App\Domains\Settings\Http\Controllers\NotificationChannelTestController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\NotificationVerifyController;
 use App\Domains\Settings\Http\Controllers\OrganizationSettingsController;
+use App\Domains\Settings\Http\Controllers\RolesController;
 use App\Domains\Settings\Http\Controllers\SecurityController;
 use App\Domains\Settings\Http\Controllers\TeamController;
 use App\Domains\Settings\Http\Controllers\WhatsAppOptInController;
@@ -57,6 +58,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::put('team/{user}/role', [TeamController::class, 'updateRole'])->name('team.role');
     Route::post('team/{user}/toggle', [TeamController::class, 'toggleStatus'])->name('team.toggle');
     Route::delete('team/{user}', [TeamController::class, 'destroy'])->name('team.destroy');
+
+    // TEAM-ROLE-PRESETS-001 — the ready-made roles and their checkboxes; settings.manage, audited, grant-only-what-you-hold.
+    Route::get('roles', [RolesController::class, 'index'])->name('roles.index');
+    Route::put('roles/{slug}', [RolesController::class, 'update'])->where('slug', '[a-z-]+')->name('roles.update');
+    Route::post('roles/{slug}/reset', [RolesController::class, 'reset'])->where('slug', '[a-z-]+')->name('roles.reset');
 
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');
