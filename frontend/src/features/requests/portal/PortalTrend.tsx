@@ -9,7 +9,8 @@ import type { PortalOverview } from './portalOverviewApi'
 type Metric = 'conversions' | 'clicks' | 'impressions'
 
 const LABEL: Record<Metric, { ar: string; en: string }> = {
-  conversions: { ar: 'النتائج', en: 'Results' },
+  // OBJECTIVE-RESULT-001 — a sum across every objective is the platforms' conversions, not «النتائج».
+  conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   clicks: { ar: 'النقرات', en: 'Clicks' },
   impressions: { ar: 'مرات الظهور', en: 'Impressions' },
 }

@@ -81,4 +81,24 @@ describe('the objectives row of the client report', () => {
     const cell = await screen.findByTestId('objective-conversion-result')
     expect(cell.textContent).toContain('50')
   })
+
+  /** OBJECTIVE-RESULT-001 — a conversion path holding sales and leads has no single result, and says why. */
+  it('names no total for a path that mixes kinds of result', async () => {
+    renderWithProviders(
+      <LiveDetailTables
+        payload={payload([path({
+          path: 'conversion', orders: 70, result_metrics_apply: true, cpa: 20,
+          result_key: null, result: null, result_label: null, result_missing_reason: 'mixed',
+          result_missing_label: { ar: 'أهداف مختلفة: كل حملة بنتيجتها', en: 'Different objectives: each campaign has its own result' },
+        })])}
+        currency="SAR"
+        locale="ar"
+      />,
+      { locale: 'ar' },
+    )
+
+    const cell = await screen.findByTestId('objective-conversion-result')
+    expect(cell.textContent).toContain('أهداف مختلفة')
+    expect(cell.textContent).not.toContain('70')
+  })
 })

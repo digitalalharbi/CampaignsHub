@@ -140,3 +140,19 @@ describe('the results column of the objective mix', () => {
   })
 })
 
+describe('a group nobody reported a result for', () => {
+  /** OBJECTIVE-RESULT-001 — «بدون بيانات», never a summed 0; a row without a figure adds nothing. */
+  it('has no total rather than a zero, and a missing row does not dilute the others', () => {
+    const none = objectiveMix([
+      row({ objective: 'app_installs', installs: 0, reported: { installs: false } }),
+      row({ objective: 'app_installs', installs: 0, reported: { installs: false } }),
+    ], 'SAR')
+    expect(none?.rows[0].results).toBeNull()
+
+    const some = objectiveMix([
+      row({ objective: 'app_installs', installs: 7, reported: { installs: true } }),
+      row({ objective: 'app_installs', installs: 0, reported: { installs: false } }),
+    ], 'SAR')
+    expect(some?.rows[0].results).toBe(7)
+  })
+})

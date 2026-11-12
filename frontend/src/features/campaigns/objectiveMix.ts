@@ -75,16 +75,21 @@ type MixInput = MoneyFields & {
 function groupResult(key: CanonicalObjectiveKey, rows: MixInput[]): Pick<ObjectiveMixRow, 'results' | 'resultKey' | 'resultLabel'> {
   const bag = (r: MixInput) => r as unknown as Record<string, unknown>
   const resolved: CampaignResult[] = rows.map((r) => campaignResult(r.objective, bag(r), r.reported ?? null))
-  const keys = [...new Set(resolved.map((r) => r.key).filter((k): k is string => k !== null))]
+  // A campaign whose result nobody reported adds NOTHING — it is not a zero.
+  const measured = resolved.filter((r) => r.value !== null && r.key !== null)
+  const keys = [...new Set(measured.map((r) => r.key as string))]
+  const total = (set: CampaignResult[]) => set.reduce((a, r) => a + (r.value as number), 0)
   const sumOf = (field: string) => rows.reduce((a, r) => a + (Number(bag(r)[field] ?? 0) || 0), 0)
   const labelOf = labelForKey
 
+  // Every campaign of the group reported nothing: «بدون بيانات», never 0.
+  if (measured.length === 0) return { results: null, resultKey: null, resultLabel: null }
   if (keys.length === 1) {
-    return { results: resolved.reduce((a, r) => a + (r.value ?? 0), 0), resultKey: keys[0], resultLabel: resolved.find((r) => r.key === keys[0])?.label ?? null }
+    return { results: total(measured), resultKey: keys[0], resultLabel: measured[0].label }
   }
-  if (keys.length > 1 && key === 'traffic') return { results: sumOf('clicks'), resultKey: 'clicks', resultLabel: labelOf('clicks') }
-  if (keys.length > 1 && key === 'awareness_engagement') return { results: sumOf('impressions'), resultKey: 'impressions', resultLabel: labelOf('impressions') }
-  if (keys.length > 1 && key === 'leads') return { results: resolved.reduce((a, r) => a + (r.value ?? 0), 0), resultKey: 'leads', resultLabel: labelOf('leads') }
+  if (key === 'traffic') return { results: sumOf('clicks'), resultKey: 'clicks', resultLabel: labelOf('clicks') }
+  if (key === 'awareness_engagement') return { results: sumOf('impressions'), resultKey: 'impressions', resultLabel: labelOf('impressions') }
+  if (key === 'leads') return { results: total(measured), resultKey: 'leads', resultLabel: labelOf('leads') }
 
   return { results: null, resultKey: null, resultLabel: null }
 }

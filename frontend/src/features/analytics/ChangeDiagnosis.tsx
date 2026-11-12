@@ -181,7 +181,7 @@ const OBJECTIVE_LABEL: Record<string, { ar: string; en: string }> = {
 
 const METRIC_LABEL: Record<string, { ar: string; en: string }> = {
   spend: { ar: 'الإنفاق', en: 'Spend' },
-  conversions: { ar: 'النتائج', en: 'Results' },
+  conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   clicks: { ar: 'النقرات', en: 'Clicks' },
   impressions: { ar: 'الظهور', en: 'Impressions' },
   revenue: { ar: 'الإيرادات', en: 'Revenue' },

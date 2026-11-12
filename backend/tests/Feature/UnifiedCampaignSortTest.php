@@ -116,14 +116,20 @@ final class UnifiedCampaignSortTest extends TestCase
             ->json('data'), 'name');
     }
 
-    public function test_a_traffic_campaign_ranks_by_its_visits_not_by_orders(): void
+    public function test_results_are_ranked_within_one_unit_and_an_unset_objective_goes_last(): void
     {
         $this->campaign('Coffee traffic', 'traffic', ['spend' => 1440, 'clicks' => 18464, 'landing_page_views' => 2881, 'conversions' => 0]);
         $this->campaign('Sales', 'sales', ['spend' => 300, 'clicks' => 900, 'conversions' => 12]);
         $this->campaign('Unclassified', 'other', ['spend' => 50, 'clicks' => 99999, 'conversions' => 500]);
 
-        $this->assertSame(['Coffee traffic', 'Sales', 'Unclassified'], $this->page(['sort' => 'results', 'dir' => 'desc']));
-        // Ascending still ranks the campaigns that HAVE a result, and the one without stays last.
-        $this->assertSame(['Sales', 'Coffee traffic', 'Unclassified'], $this->page(['sort' => 'results', 'dir' => 'asc']));
+        $this->campaign('Coffee traffic 2', 'traffic', ['spend' => 100, 'clicks' => 900, 'landing_page_views' => 50]);
+        $this->campaign('Sales 2', 'sales', ['spend' => 100, 'clicks' => 900, 'conversions' => 30]);
+
+        /*
+         * Grouped by unit (orders «conversions», then visits «landing_page_views»), ranked inside each
+         * group, and the campaign with no result last — 2,881 visits are never ranked against 30 orders.
+         */
+        $this->assertSame(['Sales 2', 'Sales', 'Coffee traffic', 'Coffee traffic 2', 'Unclassified'], $this->page(['sort' => 'results', 'dir' => 'desc']));
+        $this->assertSame(['Sales', 'Sales 2', 'Coffee traffic 2', 'Coffee traffic', 'Unclassified'], $this->page(['sort' => 'results', 'dir' => 'asc']));
     }
 }

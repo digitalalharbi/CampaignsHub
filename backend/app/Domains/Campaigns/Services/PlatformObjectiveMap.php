@@ -229,14 +229,16 @@ final class PlatformObjectiveMap
      * different fact: it is the outcome Google's auction is told to buy, and for some strategies
      * that outcome is unambiguous —
      *
-     *   - TARGET_ROAS, MAXIMIZE_CONVERSION_VALUE → bid on conversion VALUE: sales
-     *   - TARGET_SPEND (Maximize clicks)         → bid on clicks: traffic
-     *   - TARGET_IMPRESSION_SHARE, TARGET_CPM, MANUAL_CPM → bid on being seen: awareness
-     *   - TARGET_CPV, MANUAL_CPV                 → bid on views: video views
+     *   - TARGET_ROAS                    → bid on a return on spend: sales
+     *   - TARGET_SPEND (Maximize clicks) → bid on clicks: traffic
+     *   - TARGET_CPM, MANUAL_CPM         → bid on being seen: awareness
+     *   - TARGET_CPV, MANUAL_CPV         → bid on views: video views
      *
-     * MAXIMIZE_CONVERSIONS, TARGET_CPA, MANUAL_CPC and ENHANCED_CPC are NOT listed: a «conversion»
-     * on Google can be a purchase, a lead or a call, and a manual bid states no goal at all. Those
-     * campaigns stay unclassified and say so, which is the honest answer until a person sets them.
+     * NOT listed (Owner decision, ambiguous): MAXIMIZE_CONVERSION_VALUE (a «value» can be a lead's
+     * score as well as a sale), TARGET_IMPRESSION_SHARE (also used to defend a search position),
+     * MAXIMIZE_CONVERSIONS and TARGET_CPA (a «conversion» can be a purchase, a lead or a call), and
+     * MANUAL_CPC and ENHANCED_CPC (a manual bid states no goal). Those campaigns stay unclassified,
+     * with the platform's word kept, until a person sets them.
      *
      * Read from the stored raw campaign (`campaign.biddingStrategyType`), so it applies to every
      * sync from now on and to nothing until then.
@@ -268,9 +270,7 @@ final class PlatformObjectiveMap
     /** @var array<string, CampaignObjective> */
     private const GOOGLE_BIDDING = [
         'TARGET_ROAS' => CampaignObjective::Sales,
-        'MAXIMIZE_CONVERSION_VALUE' => CampaignObjective::Sales,
         'TARGET_SPEND' => CampaignObjective::Traffic,
-        'TARGET_IMPRESSION_SHARE' => CampaignObjective::Awareness,
         'TARGET_CPM' => CampaignObjective::Awareness,
         'MANUAL_CPM' => CampaignObjective::Awareness,
         'TARGET_CPV' => CampaignObjective::VideoViews,

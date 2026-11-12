@@ -36,7 +36,7 @@ final class ObjectiveResultTest extends TestCase
     {
         $row = ['landing_page_views' => 0] + self::COFFEE;
 
-        foreach ([null, ['landing_page_views' => false, 'clicks' => true], ['landing_page_views' => true, 'clicks' => true]] as $reported) {
+        foreach ([null, ['landing_page_views' => false, 'clicks' => true]] as $reported) {
             $r = ObjectiveResult::resolve('traffic', $row, $reported);
 
             $this->assertSame('clicks', $r['result_key']);
@@ -45,6 +45,42 @@ final class ObjectiveResultTest extends TestCase
             $this->assertStringNotContainsString('زيارات', $r['result_label']['ar']);
             $this->assertSame('تكلفة النقرة (CPC)', $r['cost_per_result_label']['ar']);
         }
+    }
+
+    /**
+     * Owner decision: a platform that REPORTS landing page views for a campaign is believed, even at 0.
+     * «زيارات الصفحة 0» is the honest signal of a page or pixel that measures nothing; falling back to
+     * clicks would hide it.
+     */
+    public function test_a_reported_zero_of_landing_page_views_is_shown_not_replaced_by_clicks(): void
+    {
+        $r = ObjectiveResult::resolve('traffic', ['landing_page_views' => 0] + self::COFFEE, ['landing_page_views' => true, 'clicks' => true]);
+
+        $this->assertSame('landing_page_views', $r['result_key']);
+        $this->assertSame(0.0, $r['result']);
+        $this->assertSame('زيارات الصفحة', $r['result_label']['ar']);
+        $this->assertNull($r['cost_per_result']);
+    }
+
+    /** Measured on some platforms only: one unit for the whole row — clicks — and the reason said. */
+    public function test_partly_measured_landing_page_views_read_as_clicks_and_say_why(): void
+    {
+        $r = ObjectiveResult::resolve('traffic', self::COFFEE, ['landing_page_views' => true, 'clicks' => true], lpvPartial: true);
+
+        $this->assertSame('clicks', $r['result_key']);
+        $this->assertSame(18464.0, $r['result']);
+        $this->assertSame(ObjectiveResult::NOTES['lpv_partial'], $r['result_note']);
+    }
+
+    /** A total of rows that reported nothing is «بدون بيانات», never 0; a row without a figure adds nothing. */
+    public function test_a_total_of_unreported_rows_is_no_data(): void
+    {
+        $none = ObjectiveResult::combine('app', [['installs' => 0], ['installs' => 0]], [['installs' => false], ['installs' => false]]);
+        $this->assertNull($none['result']);
+        $this->assertSame('not_reported', $none['result_missing_reason']);
+
+        $some = ObjectiveResult::combine('app', [['installs' => 4], ['installs' => 0]], [['installs' => true], ['installs' => false]]);
+        $this->assertSame(4.0, $some['result']);
     }
 
     public function test_every_family_names_its_own_result(): void

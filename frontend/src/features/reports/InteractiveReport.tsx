@@ -315,6 +315,9 @@ export interface ObjectivePath {
   result_label?: { ar: string; en: string } | null
   cost_per_result?: number | null
   cost_per_result_label?: { ar: string; en: string } | null
+  /** Why there is no single result — e.g. 'mixed' for a conversion path holding sales and leads. */
+  result_missing_reason?: string | null
+  result_missing_label?: { ar: string; en: string } | null
   /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
   campaigns_count?: number

@@ -128,6 +128,48 @@ final class MetricsAggregatorResultTest extends TestCase
         $this->assertSame('not_reported', $row['result_missing_reason']);
     }
 
+    /**
+     * Owner decision: a platform that REPORTS landing page views is believed at 0 — the honest signal
+     * of a page or pixel measuring nothing. Meta leaves the key out when nothing measured it, so a
+     * Meta 0 is a real 0.
+     */
+    public function test_a_reported_zero_of_landing_page_views_shows_as_zero_visits(): void
+    {
+        $campaign = $this->campaign('Broken pixel', 'traffic');
+        $this->sync($campaign, ['spend' => 200, 'clicks' => 900, 'landing_page_views' => 0], 'meta');
+
+        $row = $this->byCampaign()[(string) $campaign->id];
+
+        $this->assertSame('landing_page_views', $row['result_key']);
+        $this->assertSame(0.0, $row['result']);
+    }
+
+    /** Snapchat answers every field it is asked for, so its 0 means «not tracked»: the result is clicks. */
+    public function test_a_snapchat_zero_of_landing_page_views_is_not_a_measurement(): void
+    {
+        $campaign = $this->campaign('Snap no pixel', 'traffic');
+        $this->sync($campaign, ['spend' => 200, 'clicks' => 900, 'landing_page_views' => 0], 'snapchat');
+
+        $row = $this->byCampaign()[(string) $campaign->id];
+
+        $this->assertSame('clicks', $row['result_key']);
+        $this->assertSame(900.0, $row['result']);
+    }
+
+    /** Measured on one platform and not the other: one unit, clicks, and the reason said. */
+    public function test_partly_measured_landing_page_views_read_as_clicks_with_the_reason(): void
+    {
+        $campaign = $this->campaign('Two platforms', 'traffic');
+        $this->sync($campaign, ['spend' => 100, 'clicks' => 400, 'landing_page_views' => 250], 'snapchat');
+        $this->sync($campaign, ['spend' => 100, 'clicks' => 300], 'meta');
+
+        $row = $this->byCampaign()[(string) $campaign->id];
+
+        $this->assertSame('clicks', $row['result_key']);
+        $this->assertSame(700.0, $row['result']);
+        $this->assertSame('النقرات: زيارات الصفحة غير مقاسة على كل المنصات', $row['result_note']['ar']);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
     /** @return array<string, array<string,mixed>> */
@@ -165,7 +207,7 @@ final class MetricsAggregatorResultTest extends TestCase
     }
 
     /** @param array<string, float|int> $figures */
-    private function sync(UnifiedCampaign $campaign, array $figures): void
+    private function sync(UnifiedCampaign $campaign, array $figures, string $provider = 'snapchat'): void
     {
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -173,7 +215,7 @@ final class MetricsAggregatorResultTest extends TestCase
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'external_account_id' => $this->account->getKey(),
             'unified_campaign_id' => $campaign->id,
-            'provider' => 'snapchat', 'external_id' => 'ext-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
+            'provider' => $provider, 'external_id' => 'ext-'.uniqid(), 'name' => $campaign->name, 'status' => 'active',
         ]);
 
         $rows = [];
@@ -181,7 +223,7 @@ final class MetricsAggregatorResultTest extends TestCase
             $rows[] = new NormalizedMetric(
                 tenantId: (string) $this->tenant->id,
                 projectId: (string) $this->project->id,
-                provider: 'snapchat',
+                provider: $provider,
                 externalAccountId: (string) $this->account->getKey(),
                 externalCampaignId: (string) $external->id,
                 unifiedCampaignId: (string) $campaign->id,

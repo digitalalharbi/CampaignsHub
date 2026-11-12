@@ -17,6 +17,7 @@ import { ratio } from '@/features/analytics/format'
 import type { OverviewVM } from './UnifiedCampaignOverview'
 import { providerName } from './UnifiedCampaignOverview'
 import { moneyState, type MoneyTotals } from '@/lib/money/contract'
+import { campaignResult, returnsRevenue } from '@/features/campaigns/campaignResult'
 
 type CampaignRow = {
   campaign_id: string | number
@@ -26,6 +27,12 @@ type CampaignRow = {
   conversions: number
   cpa?: number | null
   roas?: number | null
+  /* OBJECTIVE-RESULT-001 — the objective and the result `byCampaign` computed for it. */
+  objective?: string | null
+  reported?: Record<string, boolean> | null
+  result_key?: string | null
+  result?: number | null
+  cost_per_result?: number | null
 }
 
 type PlatformRow = Parameters<typeof displaySpend>[0] & { provider: string; roas?: number | null }
@@ -70,7 +77,13 @@ export function useOverviewVm(input: {
      */
     () =>
       (campaigns ?? []).filter((c) => {
-        if (c.conversions >= 2) return false
+        /*
+         * OBJECTIVE-RESULT-001 — «spending with nothing to show» only when the campaign's OWN result
+         * (its objective's) is a MEASURED zero. It read `conversions`, so every traffic and awareness
+         * campaign — none of which buys a conversion — was flagged. A result nobody reported, or an
+         * objective nobody set, is not a zero and flags nothing.
+         */
+        if (campaignResult(c.objective, c as unknown as Record<string, unknown>, c.reported ?? null).value !== 0) return false
 
         /*
          * «Spent enough to worry about» — asked through the canonical money contract, because the
@@ -103,7 +116,7 @@ export function useOverviewVm(input: {
       if ((b.pace ?? 0) > 1.4) out.push({ severity: 'medium', text: `${b.campaign_name}: ${dash('pacingAhead', ar)} (${ratio(b.pace ?? 0, '×')})` })
     })
     struggling.forEach((c) => {
-      out.push({ severity: 'high', text: `${c.campaign_name}: ${dash('spendNoConversions', ar)}` })
+      out.push({ severity: 'high', text: `${c.campaign_name}: ${noResultText(c, ar)}` })
     })
 
     return out.slice(0, 4)
@@ -140,17 +153,26 @@ export function useOverviewVm(input: {
         name: c.campaign_name ?? '—',
         provider: c.provider,
         spend: c.spend,
-        results: c.conversions,
-        cpa: c.cpa ?? null,
-        roas: c.roas ?? null,
+        // OBJECTIVE-RESULT-001 — the campaign's own result, in its own unit; ROAS for sales only.
+        results: campaignResult(c.objective, c as unknown as Record<string, unknown>, c.reported ?? null).value,
+        resultLabel: campaignResult(c.objective, c as unknown as Record<string, unknown>, c.reported ?? null).label,
+        cpa: c.cost_per_result ?? null,
+        roas: returnsRevenue(c.objective) ? (c.roas ?? null) : null,
       })),
       needsAttention: struggling.slice(0, 4).map((c) => ({
         id: String(c.campaign_id),
         name: c.campaign_name ?? '—',
-        reason: dash('spendNoConversions', ar),
+        reason: noResultText(c, ar),
       })),
       alerts,
     }),
     [rows, campaigns, struggling, alerts, lastSync, withheldCurrency, currency, source, ar],
   )
+}
+
+/** «صرف بدون نتائج» — said only of a measured zero, and naming the result that is zero. */
+function noResultText(c: CampaignRow, ar: boolean): string {
+  const r = campaignResult(c.objective ?? null, c as unknown as Record<string, unknown>, c.reported ?? null)
+  const label = r.label ? (ar ? r.label.ar : r.label.en) : ''
+  return ar ? `صرف بدون نتائج (${label} 0)` : `Spending with no results (0 ${label.toLowerCase()})`
 }

@@ -290,6 +290,8 @@ final class UnifiedCampaignController extends Controller
              * sales …), never `conversions` for all of them. Null when the objective is not set.
              */
             'results' => isset($metrics->get($id)['result']) ? (float) $metrics->get($id)['result'] : null,
+            // The unit that result counts in — visits and orders are never ranked against each other.
+            'result_unit' => $metrics->get($id)['result_key'] ?? null,
         ], $ids);
 
         $sort = $request->string('sort')->toString();
@@ -315,6 +317,15 @@ final class UnifiedCampaignController extends Controller
                 }
 
                 return $a[$sort] === null ? 1 : -1;
+            }
+
+            /*
+             * OBJECTIVE-RESULT-001 — results are compared only within one unit. Campaigns are grouped
+             * by what their result counts (clicks, orders, visits …, in the order of those names, which
+             * stays put whichever direction is chosen) and ranked inside each group.
+             */
+            if ($sort === 'results' && $a['result_unit'] !== $b['result_unit']) {
+                return strcmp((string) $a['result_unit'], (string) $b['result_unit']);
             }
 
             $cmp = $sort === 'name'

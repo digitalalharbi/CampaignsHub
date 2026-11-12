@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 
@@ -152,6 +153,25 @@ final class CampaignObjectiveResolver
         }
 
         $objective = reset($resolved);
+
+        /*
+         * OBJECTIVE-RESULT-001 (Owner decision) — a sync may FILL an objective, never REPLACE one.
+         *
+         * Only a campaign whose stored objective is unset or unclassified (its family is Unknown) takes
+         * the platform's answer. One that already carries a classified objective keeps it, whoever set
+         * it: the platform's word is still written down beside it, so a disagreement is visible to an
+         * operator, but the classification every report reads does not move under them on a sweep.
+         */
+        $current = CampaignObjective::tryFrom((string) $campaign->objective);
+        $classified = $current !== null && $current->family() !== ObjectiveFamily::Unknown;
+
+        if ($classified && $current !== $objective) {
+            if ($campaign->objective_platform_value !== $rawValue) {
+                $campaign->forceFill(['objective_platform_value' => $rawValue])->save();
+            }
+
+            return false;
+        }
 
         if ($campaign->objective === $objective->value && $campaign->objective_source === 'platform') {
             // Still record the raw value if it arrived after the classification did.

@@ -80,6 +80,8 @@ export interface CampaignResult {
   per: number
   missing: MissingReason | null
   missingLabel: Words | null
+  /** Why the unit is what it is, when that needs saying — clicks because visits are measured on part of it. */
+  note: Words | null
 }
 
 type Row = Record<string, unknown> | MoneyTotals | null | undefined
@@ -105,6 +107,7 @@ function shape(family: ResultFamily, key: string | null, value: number | null, m
     per: key === 'reach' || key === 'impressions' ? 1000 : 1,
     missing,
     missingLabel: missing ? MISSING[missing] : null,
+    note: null,
   }
 }
 
@@ -115,10 +118,15 @@ function shape(family: ResultFamily, key: string | null, value: number | null, m
 export function campaignResult(objective: string | null | undefined, row: Row, reported?: Record<string, boolean> | null): CampaignResult {
   const family = resultFamilyOf(objective)
 
-  // A backend row already carries the answer — the table there is the source.
-  const carried = (row as Record<string, unknown> | null | undefined)?.result_key
-  if (typeof carried === 'string' && LABELS[carried]) {
-    return shape(family, carried, num(row, 'result'), (row as Record<string, unknown>).result_missing_reason as MissingReason | null ?? null)
+  // A backend row already carries the answer — the table there is the source, including which
+  // platforms' landing page views count as measured (its 0 from Snapchat means «not tracked»).
+  const bag = row as Record<string, unknown> | null | undefined
+  const carried = bag?.result_key
+  const carriedMissing = bag?.result_missing_reason
+  if ((typeof carried === 'string' && LABELS[carried]) || (carried === null && typeof carriedMissing === 'string')) {
+    const r = shape(family, (carried as string | null), num(row, 'result'), (carriedMissing as MissingReason | null) ?? null)
+    const note = bag?.result_note as Words | null | undefined
+    return note ? { ...r, note } : r
   }
 
   const { key, fallback, then } = TABLE[family]
@@ -126,6 +134,19 @@ export function campaignResult(objective: string | null | undefined, row: Row, r
 
   const chain = [key, ...[fallback, then].filter((k): k is string => typeof k === 'string')]
   const value = (k: string) => num(row, k)
+
+  /*
+   * Owner decision: traffic reads landing page views whenever a platform REPORTS them — a reported 0
+   * is «زيارات الصفحة 0», the honest sign of a page measuring nothing — and clicks only where they
+   * are not reported. (The backend also discounts a Snapchat 0, which it can see and this cannot.)
+   */
+  if (family === 'traffic') {
+    const lpvReported = reported ? reported.landing_page_views === true : (value('landing_page_views') ?? 0) > 0
+    if (lpvReported) return shape(family, 'landing_page_views', value('landing_page_views') ?? 0, null)
+    const clicksKnown = reported ? reported.clicks === true || (value('clicks') ?? 0) > 0 : value('clicks') !== null
+    return shape(family, 'clicks', clicksKnown ? (value('clicks') ?? 0) : null, clicksKnown ? null : 'not_reported')
+  }
+
   for (const k of chain) if ((value(k) ?? 0) > 0) return shape(family, k, value(k), null)
   if (reported) for (const k of chain) if (reported[k] === true && value(k) !== null) return shape(family, k, 0, null)
 
@@ -136,6 +157,53 @@ export function campaignResult(objective: string | null | undefined, row: Row, r
 
   return shape(family, key, null, 'not_reported')
 }
+
+/**
+ * ONE unit for a set of rows of one objective — the frontend half of `ObjectiveResult::combine()`.
+ *
+ * A table of ads or platforms is headed by one unit, so every row has to count in it: the shared key
+ * when every row that has a result resolved to the same one; the family's fallback (clicks, for
+ * traffic) for every row when they disagree, and why; a lead stays a lead; otherwise no shared unit,
+ * and each row is labelled with its own. A row with nothing reported is null, never 0.
+ */
+export interface SharedUnit {
+  key: string | null
+  label: Words | null
+  costLabel: Words | null
+  per: number
+  values: Array<number | null>
+  note: Words | null
+}
+
+export function sharedUnit(objective: string | null | undefined, rows: Row[]): SharedUnit {
+  const family = resultFamilyOf(objective)
+  const resolved = rows.map((r) => campaignResult(objective, r))
+  const keys = [...new Set(resolved.filter((r) => r.value !== null && r.key !== null).map((r) => r.key as string))]
+  const words = (k: string) => FAMILY_LABELS[family]?.[k] ?? LABELS[k]
+  const unit = (k: string, values: Array<number | null>, note: Words | null = null): SharedUnit => ({
+    key: k, label: { ar: words(k).ar, en: words(k).en }, costLabel: words(k).cost, per: k === 'reach' || k === 'impressions' ? 1000 : 1, values, note,
+  })
+
+  if (keys.length === 1) return unit(keys[0], resolved.map((r) => (r.key === keys[0] ? r.value : null)))
+  if (keys.length > 1 && family === 'leads') return unit('leads', resolved.map((r) => r.value))
+  const fallback = TABLE[family].fallback
+  if (keys.length > 1 && fallback) {
+    return unit(fallback, rows.map((r) => num(r, fallback)), family === 'traffic' ? MISSING_NOTE : null)
+  }
+  return { key: null, label: null, costLabel: null, per: 1, values: resolved.map((r) => r.value), note: null }
+}
+
+/** The cost of one row's value in a shared unit, through the money contract (withheld money is never divided). */
+export function unitCostText(unit: SharedUnit, index: number, row: Row, currency: string | null): string {
+  const value = unit.values[index]
+  if (unit.key === null || value === null || value === undefined || value <= 0) return '\u2014'
+  const spend = num(row, 'spend')
+  const cost = spend === null ? null : (spend / value) * unit.per
+  const bag = { ...(row as Record<string, unknown> | null | undefined ?? {}), __unit_cost: cost } as MoneyTotals
+  return formatMoneyReading(readCostPer(bag, '__unit_cost', value / unit.per, currency, true), moneyExact)
+}
+
+const MISSING_NOTE: Words = { ar: 'النقرات: زيارات الصفحة غير مقاسة على كل المنصات', en: 'Clicks: landing page views are not measured on every platform' }
 
 /** The words for a result key — the same table, for a total whose unit was chosen elsewhere. */
 export function labelForKey(key: string | null | undefined): Words | null {

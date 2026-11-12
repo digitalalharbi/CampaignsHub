@@ -40,7 +40,7 @@ import { rankableMoney, readRoas, resolveMoneySeries, spendComparableAmount, typ
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
-import { campaignResult, costLabelOf, missingText, resultCostText, resultLabel, returnsRevenue, type CampaignResult } from './campaignResult'
+import { campaignResult, costLabelOf, missingText, resultCostText, resultLabel, returnsRevenue, sharedUnit, unitCostText, type CampaignResult } from './campaignResult'
 import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
 import { StatCard } from '@/components/ui/StatCard'
@@ -266,7 +266,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
       <KpiCard
         label={resultLabel(result, ar)}
         value={result.value === null ? '—' : num(result.value)}
-        sub={missingText(result, ar) ?? undefined}
+        sub={missingText(result, ar) ?? (result.note ? (ar ? result.note.ar : result.note.en) : undefined)}
         delta={resultDeltaKey ? d[resultDeltaKey] : null}
         deltaKey={resultDeltaKey ?? undefined}
         spark={resultDeltaKey ? sparks(perf.data, resultDeltaKey) : undefined}
@@ -312,14 +312,27 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
      */
     const sells = returnsRevenue(campaign.objective)
     const result = campaignResult(campaign.objective, k, summary.data?.reported)
-    const costOf = (p: PlatformRow): number | null => {
-      const r = campaignResult(campaign.objective, p)
-      return r.value !== null && r.value > 0 && p.spend > 0 ? p.spend / r.value : null
+    /*
+     * One unit across the platforms before any comparison (a visit and a click are not compared), and
+     * the money through the contract: `rankableMoney` refuses a mixed or withheld spend instead of
+     * dividing a converted part of it.
+     */
+    const unit = sharedUnit(campaign.objective, plats)
+    const money = rankableMoney(plats as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+    const costAt = (i: number): number | null => {
+      const v = unit.values[i]
+      const spend = money?.values[i] ?? null
+      return unit.key !== null && v !== null && v > 0 && spend !== null ? (spend / v) * unit.per : null
     }
+    const ranked = plats.map((p, i) => ({ p, i, cost: costAt(i) }))
     const byRoas = sells
       ? [...plats].filter((p) => p.roas != null).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
-      : [...plats].filter((p) => costOf(p) !== null).sort((a, b) => (costOf(a) ?? 0) - (costOf(b) ?? 0))
-    const bestNote = (p: PlatformRow): string => sells ? ratio(p.roas) : `${costLabelOf(campaignResult(campaign.objective, p), ar)} ${resultCostText(campaignResult(campaign.objective, p), p, summary.data?.currency ?? null)}`
+      : ranked.filter((r) => r.cost !== null).sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0)).map((r) => r.p)
+    const bestNote = (p: PlatformRow): string => {
+      if (sells) return ratio(p.roas)
+      const i = plats.indexOf(p)
+      return `${unit.costLabel ? (ar ? unit.costLabel.ar : unit.costLabel.en) : ''} ${unitCostText(unit, i, p, summary.data?.currency ?? null)}`.trim()
+    }
     const resultText = result.value === null ? (missingText(result, ar) ?? '—') : `${num(result.value)} ${resultLabel(result, ar)}`
     const budget = campaign.total_budget ?? null
     // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
@@ -372,7 +385,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
     const total = (key: keyof TimePoint) => series.reduce((a, p) => a + Number(p[key] ?? 0), 0)
     return campaignResult(campaign.objective, {
       reach: null, impressions: total('impressions'), landing_page_views: total('landing_page_views'), clicks: total('clicks'),
-      engagements: total('engagements'), video_views: total('video_views'), leads: total('leads'), conversions: total('conversions'), installs: total('installs'),
+      engagements: total('engagements'), video_views: total('video_views'), leads: total('leads'), form_leads: total('form_leads' as keyof TimePoint), conversions: total('conversions'), installs: total('installs'),
     })
   }, [series, campaign.objective])
 
@@ -1021,14 +1034,25 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
   const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data
   /* OBJECTIVE-RESULT-001 — every ad carries its campaign objective's result from the backend. */
   const sells = returnsRevenue(campaign.objective)
-  const adResult = (c: CampaignCreative) => campaignResult(campaign.objective, c.metrics)
-  const sample = rows[0] ? adResult(rows[0]) : campaignResult(campaign.objective, null)
+  /*
+   * ONE unit for every ad on this tab, decided like the backend total (`ObjectiveResult::combine`):
+   * when the ads disagree (one measured visits, another only clicks) every ad counts in clicks, and
+   * with no common unit each cell names its own. The header used to come from the first ad alone,
+   * which put clicks under «زيارات الصفحة».
+   */
+  const unit = sharedUnit(campaign.objective, rows.map((c) => c.metrics))
+  const adIndex = new Map(rows.map((c, i) => [c.id, i]))
+  const adValue = (c: CampaignCreative) => unit.values[adIndex.get(c.id) ?? -1] ?? null
+  const adLabel = (c: CampaignCreative, inAr: boolean) => unit.label ? (inAr ? unit.label.ar : unit.label.en) : resultLabel(campaignResult(campaign.objective, c.metrics), inAr)
+  const adCostLabel = (inAr: boolean) => unit.costLabel ? (inAr ? unit.costLabel.ar : unit.costLabel.en) : (inAr ? 'تكلفة النتيجة' : 'Cost per result')
+  const adCost = (c: CampaignCreative) => unit.key === null ? '\u2014' : unitCostText(unit, adIndex.get(c.id) ?? -1, c.metrics, cur ?? null)
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs text-text-muted">
           {ar ? 'مرتّبة حسب هدف الحملة' : 'Ranked by the campaign’s objective'} ({campaign.objective})
+          {unit.note && <span data-testid="ads-result-note" className="ms-2">· {ar ? unit.note.ar : unit.note.en}</span>}
         </span>
         <div className="flex gap-1">
           {(['grid', 'table'] as const).map((v) => (
@@ -1060,10 +1084,10 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
               <div className="grid grid-cols-3 gap-1.5 text-center">
                 <MiniStat label="الإنفاق" value={money(c.metrics.spend, cur)} exact={moneyExact(c.metrics.spend, cur ?? null)} />
                 {/* OBJECTIVE-RESULT-001 — the ad's result is its campaign objective's; ROAS for sales only. */}
-                <MiniStat label={resultLabel(adResult(c), ar)} value={adResult(c).value === null ? '—' : num(adResult(c).value)} />
+                <MiniStat label={adLabel(c, ar)} value={adValue(c) === null ? '—' : num(adValue(c))} />
                 {sells && <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />}
                 {/* Never compacted — a cost per result's decimals are the decision. */}
-                <MiniStat label={costLabelOf(adResult(c), ar)} value={moneyExact(c.metrics.cost_per_result ?? (adResult(c).key === 'conversions' ? c.metrics.cpa : null), cur ?? null)} />
+                <MiniStat label={adCostLabel(ar)} value={adCost(c)} />
                 <MiniStat label="CTR" value={percent(c.metrics.ctr)} />
                 <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate, 0) : '—'} />
               </div>
@@ -1075,8 +1099,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{(ar
-                ? ['الإعلان', 'المنصة', 'الإنفاق', resultLabel(sample, true), costLabelOf(sample, true), ...(sells ? ['ROAS'] : []), 'CTR', 'التصنيف']
-                : ['Ad', 'Platform', 'Spend', resultLabel(sample, false), costLabelOf(sample, false), ...(sells ? ['ROAS'] : []), 'CTR', 'Classification']).map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
+                ? ['الإعلان', 'المنصة', 'الإنفاق', unit.label?.ar ?? 'النتيجة', adCostLabel(true), ...(sells ? ['ROAS'] : []), 'CTR', 'التصنيف']
+                : ['Ad', 'Platform', 'Spend', unit.label?.en ?? 'Result', adCostLabel(false), ...(sells ? ['ROAS'] : []), 'CTR', 'Classification']).map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-border">
@@ -1087,8 +1111,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                   </td>
                   <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
                   <td className="p-2"><span className="tnum">{money(c.metrics.spend, cur)}</span></td>
-                  <td className="p-2"><span className="tnum">{adResult(c).value === null ? '—' : num(adResult(c).value)}</span></td>
-                  <td className="p-2"><span className="tnum">{moneyExact(c.metrics.cost_per_result ?? (adResult(c).key === 'conversions' ? c.metrics.cpa : null), cur ?? null)}</span></td>
+                  <td className="p-2"><span className="tnum">{adValue(c) === null ? '—' : num(adValue(c))}</span>{unit.key === null && <span className="ms-1 text-xs text-text-muted">{adLabel(c, ar)}</span>}</td>
+                  <td className="p-2"><span className="tnum">{adCost(c)}</span></td>
                   {sells && <td className="p-2"><span className="tnum">{ratio(c.metrics.roas)}</span></td>}
                   <td className="p-2"><span className="tnum">{percent(c.metrics.ctr)}</span></td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>

@@ -244,8 +244,13 @@ export const SPECS: Record<string, Spec> = {
     invertGood: true,
     hint: { ar: 'تكلفة العميل المحتمل الواحد.', en: 'What one lead costs.' },
   },
+  /*
+   * OBJECTIVE-RESULT-001 — `conversions` summed over a scope is the platforms' conversion count, not
+   * «النتائج»: a traffic campaign's result is its visits. A sales scope still reads it as «الطلبات»
+   * (the objective override below); a campaign's own result comes from `campaignResult`.
+   */
   conversions: {
-    label: { ar: 'النتائج', en: 'Results' },
+    label: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
     format: compact,
     hint: {
       ar: 'مجموع ما أبلغت به كل منصة عن الحدث الذي حُسّنت له الحملة — وليس عدد طلبات فريدة.',

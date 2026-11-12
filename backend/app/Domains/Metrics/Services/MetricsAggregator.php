@@ -747,12 +747,21 @@ final class MetricsAggregator
             ->whereIn('id', (array) $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'])
             ->pluck('objective', 'id');
 
+        $lpv = $this->landingPageViewState($from, $to);
+
         $out = [];
         foreach ((array) $this->campaignIds as $id) {
             $row = $rows->get($id);
             $figures = $this->withDerived($row === null ? [] : (array) $row);
             $objective = $objectives->get($id);
-            $out[$id] = $figures + ObjectiveResult::resolve(ObjectiveResult::familyOf($objective === null ? null : (string) $objective), $figures);
+            $state = $lpv[$id] ?? null;
+            $out[$id] = $figures + ObjectiveResult::resolve(
+                ObjectiveResult::familyOf($objective === null ? null : (string) $objective),
+                $figures,
+                // Only the two keys traffic is decided by; every other family keeps the figures-only reading.
+                $state === null ? null : ['landing_page_views' => $state['measured'], 'clicks' => true] + array_fill_keys(array_keys(self::PIVOT), true),
+                ($state['partial'] ?? false) === true,
+            );
         }
 
         return $out;
@@ -1797,6 +1806,96 @@ final class MetricsAggregator
         return $out;
     }
 
+    /**
+     * OBJECTIVE-RESULT-001 — whether each campaign's landing page views are MEASURED, and on all of it.
+     *
+     * Per (campaign, platform): measured when the platform sent the metric, except that a platform in
+     * {@see ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED} counts only once it sent a positive figure (its
+     * 0 is «not tracked»). A campaign is partly measured when a platform that brought it clicks has
+     * no measured landing page views — then its result is clicks, one unit, and the reason is said.
+     * Keyed by campaign id; a campaign with no clicks and no views has no entry. Pass `$campaign` to
+     * read one campaign's own state (the campaign page's totals).
+     *
+     * @return array<string, array{measured: bool, partial: bool}>
+     */
+    public function landingPageViewState(Carbon $from, Carbon $to): array
+    {
+        $zeroMeansUntracked = "('".implode("','", ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED)."')";
+
+        $rows = $this->base($from, $to)
+            ->whereIn('daily_metrics.metric_key', ['clicks', 'landing_page_views'])
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'clicks'), 0) AS clicks")
+            ->selectRaw("COUNT(*) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views') AS lpv_rows")
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views'), 0) AS lpv")
+            ->selectRaw("BOOL_OR(daily_metrics.provider IN {$zeroMeansUntracked}) AS zero_untracked")
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            if ($row->unified_campaign_id === null) {
+                continue;
+            }
+            $id = (string) $row->unified_campaign_id;
+            $measured = (bool) $row->zero_untracked ? (float) $row->lpv > 0 : (int) $row->lpv_rows > 0;
+            $out[$id] ??= ['measured' => false, 'partial' => false];
+            $out[$id]['measured'] = $out[$id]['measured'] || $measured;
+            $out[$id]['partial'] = $out[$id]['partial'] || (! $measured && (float) $row->clicks > 0);
+        }
+
+        foreach ($out as $id => $state) {
+            // Partial only means something beside a measurement; with none, it is simply clicks.
+            $out[$id]['partial'] = $state['measured'] && $state['partial'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the result of this scope's TOTALS for one objective (the campaign page).
+     *
+     * The same table and the same landing-page-view rule as {@see byCampaign()}, so the campaign's
+     * own page and its row in the list cannot disagree about what its result is.
+     *
+     * @param  array<string, mixed>  $totals  {@see totals()} for the same window
+     * @return array<string, mixed>
+     */
+    public function resultOfTotals(?string $objective, array $totals, Carbon $from, Carbon $to): array
+    {
+        $states = $this->landingPageViewState($from, $to);
+        $state = $states === [] ? null : [
+            'measured' => in_array(true, array_column($states, 'measured'), true),
+            'partial' => in_array(true, array_column($states, 'partial'), true),
+        ];
+
+        return ObjectiveResult::resolve(
+            ObjectiveResult::familyOf($objective),
+            $totals,
+            self::resultReported($this->reportedKeys($from, $to), $state),
+            ($state['partial'] ?? false) === true,
+        );
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the reported map the result is resolved with: landing page views count
+     * as reported only where {@see landingPageViewState()} says they were measured.
+     *
+     * @param  array<string, bool>  $reported
+     * @param  array{measured: bool, partial: bool}|null  $lpv
+     * @return array<string, bool>|null
+     */
+    public static function resultReported(array $reported, ?array $lpv): ?array
+    {
+        if ($reported === []) {
+            return null;
+        }
+
+        $reported['landing_page_views'] = ($lpv['measured'] ?? false) === true;
+
+        return $reported;
+    }
+
     public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
     {
         $outcomes = $this->outcomesByCampaign();
@@ -1971,10 +2070,12 @@ final class MetricsAggregator
          * result, the words for it, its cost, and — when there is none — why. Applied after the
          * apportioning so the cost divides the spend the row actually shows.
          */
+        $lpv = $this->landingPageViewState($from, $to);
         $rows = array_map(static fn (array $row): array => $row + ObjectiveResult::resolve(
             ObjectiveResult::familyOf($row['objective'] === null ? null : (string) $row['objective']),
             $row,
-            ($row['reported'] ?? []) === [] ? null : $row['reported'],
+            self::resultReported((array) ($row['reported'] ?? []), $lpv[(string) $row['campaign_id']] ?? null),
+            ($lpv[(string) $row['campaign_id']]['partial'] ?? false) === true,
         ), $rows);
 
         return self::orderCampaignRows($rows);

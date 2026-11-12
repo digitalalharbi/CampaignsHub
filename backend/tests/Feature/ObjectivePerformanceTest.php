@@ -611,6 +611,37 @@ final class ObjectivePerformanceTest extends TestCase
         $this->assertSame(14000.0, (float) $paths['traffic']['result']);
     }
 
+    /**
+     * The conversion path holds sales and leads here: an order and a lead are not one unit, so the
+     * path states no total and why — a lead is never called «الطلبات» on the client's table.
+     */
+    public function test_a_conversion_path_mixing_leads_and_sales_has_no_single_result(): void
+    {
+        $this->seedCampaign('حملة مهتمين', CampaignObjective::Leads, spend: 400, orders: 20);
+
+        $conversion = collect($this->read()->json('data.paths'))->keyBy('path')['conversion'];
+
+        $this->assertNull($conversion['result_key']);
+        $this->assertNull($conversion['result']);
+        $this->assertSame('mixed', $conversion['result_missing_reason']);
+    }
+
+    /** The trend line counts in the same unit as the path total — clicks once a contributor lacks visits. */
+    public function test_the_traffic_trend_uses_the_path_totals_unit(): void
+    {
+        $this->seedCampaign('زيارات صفحة', CampaignObjective::Traffic, spend: 500, clicks: 4000, lpv: 2881);
+
+        $trend = collect($this->actingAs($this->operator, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->project->id}/metrics/objective-trend?from=".self::FROM.'&to='.self::TO)
+            ->assertOk()->json('data.paths'))->keyBy('path');
+        $total = collect($this->read()->json('data.paths'))->keyBy('path');
+
+        $this->assertSame('clicks', $total['traffic']['result_key']);
+        $this->assertSame($total['traffic']['result_key'], $trend['traffic']['result_key']);
+        $day = collect($trend['traffic']['days'])->firstWhere('date', '2026-07-10');
+        $this->assertSame(14000.0, (float) $day['results']);
+    }
+
     private function seedCampaign(
         string $name,
         CampaignObjective $objective,

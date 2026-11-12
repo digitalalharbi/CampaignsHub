@@ -18,6 +18,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -60,6 +61,9 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $this->assertSame(CampaignObjective::AppInstalls, $map->resolve('snapchat', 'APP_PROMOTION'));
         $this->assertSame(CampaignObjective::Traffic, $map->resolve('snapchat', 'TRAFFIC'));
         $this->assertSame(CampaignObjective::Conversions, $map->resolve('openai_ads', 'conversions'));
+        $this->assertSame(CampaignObjective::Conversions, $map->resolve('openai_ads', 'CONVERSIONS'));
+        // Snapchat's combined objective names no single result, so it stays unclassified.
+        $this->assertNull($map->resolve('snapchat', 'AWARENESS_AND_ENGAGEMENT'));
         $this->assertSame(CampaignObjective::Traffic, $map->resolve('openai_ads', 'TRAFFIC'));
         $this->assertNull($map->resolve('openai_ads', 'SOMETHING_ELSE'));
         // A channel type is still not an objective.
@@ -73,13 +77,13 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $raw = static fn (string $strategy): array => ['raw' => ['campaign' => ['advertisingChannelType' => 'SEARCH', 'biddingStrategyType' => $strategy]]];
 
         $this->assertSame(CampaignObjective::Sales, $map->resolveFromBidding('google', $raw('TARGET_ROAS')));
-        $this->assertSame(CampaignObjective::Sales, $map->resolveFromBidding('google_ads', $raw('MAXIMIZE_CONVERSION_VALUE')));
         $this->assertSame(CampaignObjective::Traffic, $map->resolveFromBidding('google', $raw('TARGET_SPEND')));
-        $this->assertSame(CampaignObjective::Awareness, $map->resolveFromBidding('google', $raw('TARGET_IMPRESSION_SHARE')));
+        $this->assertSame(CampaignObjective::Awareness, $map->resolveFromBidding('google_ads', $raw('TARGET_CPM')));
         $this->assertSame(CampaignObjective::VideoViews, $map->resolveFromBidding('google', $raw('TARGET_CPV')));
 
         // A Google «conversion» can be a purchase, a lead or a call; a manual bid states no goal.
-        foreach (['MAXIMIZE_CONVERSIONS', 'TARGET_CPA', 'MANUAL_CPC', 'ENHANCED_CPC'] as $strategy) {
+        // Owner decision: MAXIMIZE_CONVERSION_VALUE and TARGET_IMPRESSION_SHARE are ambiguous too.
+        foreach (['MAXIMIZE_CONVERSIONS', 'TARGET_CPA', 'MANUAL_CPC', 'ENHANCED_CPC', 'MAXIMIZE_CONVERSION_VALUE', 'TARGET_IMPRESSION_SHARE'] as $strategy) {
             $this->assertNull($map->resolveFromBidding('google', $raw($strategy)), $strategy);
         }
         // Only Google is read this way.
@@ -123,6 +127,37 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $this->assertSame('other', $unified->objective);
         $this->assertNotSame('platform', $unified->objective_source);
         $this->assertSame('SEARCH', $unified->objective_platform_value);
+    }
+
+    /**
+     * Owner decision: a sync FILLS an unclassified objective and never REPLACES a classified one —
+     * manual or platform. The platform's new word is written beside it so the disagreement shows.
+     */
+    public function test_a_sync_never_replaces_an_objective_that_is_already_classified(): void
+    {
+        foreach (['platform', 'manual', 'unset'] as $source) {
+            $unified = $this->unified('Classified — '.$source);
+            $unified->forceFill(['objective' => 'traffic', 'objective_source' => $source])->save();
+            $this->external($unified, 'snapchat', 'SALES');
+
+            app(CampaignObjectiveResolver::class)->sync($unified);
+            $unified->refresh();
+
+            $this->assertSame('traffic', $unified->objective, "a {$source} objective was overwritten by a sync");
+            $this->assertSame($source, $unified->objective_source);
+            if ($source !== 'manual') {
+                $this->assertSame('SALES', $unified->objective_platform_value, 'the platform word was not kept beside it');
+            }
+        }
+
+        // An unclassified one is filled, and the fill is audited.
+        $open = $this->unified('Unclassified');
+        $this->external($open, 'snapchat', 'SALES');
+        app(CampaignObjectiveResolver::class)->sync($open);
+
+        $this->assertSame('sales', $open->refresh()->objective);
+        $this->assertSame('platform', $open->objective_source);
+        $this->assertTrue(DB::table('audit_logs')->where('action', 'campaign.objective.derived')->where('entity_id', $open->id)->exists());
     }
 
     private function unified(string $name): UnifiedCampaign

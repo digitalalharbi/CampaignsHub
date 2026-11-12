@@ -340,7 +340,7 @@ function ClientTrends({ a, t, ar }: { a: ClientAnalytics; t: ReturnType<typeof u
       </ChartCard>
 
       <ChartCard
-        title={ar ? 'النتائج والنقرات والظهور' : 'Results, clicks and impressions'}
+        title={ar ? 'تحويلات المنصة والنقرات والظهور' : 'Platform conversions, clicks and impressions'}
         subtitle={ar ? 'أعداد — لا تتأثر بعملة الإنفاق.' : 'Counts — untouched by what the spend is priced in.'}
       >
         <div data-testid="client-count-trend" className="min-w-0">

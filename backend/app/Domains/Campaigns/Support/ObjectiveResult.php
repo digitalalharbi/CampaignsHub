@@ -101,17 +101,38 @@ final class ObjectiveResult
     }
 
     /**
+     * Providers whose landing page views arrive as 0 when nothing measured them.
+     *
+     * Snapchat answers every field a stats call asks for, so `landing_page_views` comes back as 0 on
+     * a campaign whose page is not measured at all — indistinguishable from «measured, nobody
+     * arrived». Its 0 is therefore read as «not reported»; a positive figure is a measurement. Meta
+     * leaves the key out when the action is absent (`MetaConnector` drops nulls), and TikTok,
+     * LinkedIn and X never send the metric, so for them a stated 0 is a real zero.
+     */
+    public const LPV_ZERO_MEANS_UNTRACKED = ['snapchat'];
+
+    /** @var array<string, array{ar: string, en: string}> */
+    public const NOTES = [
+        'lpv_partial' => ['ar' => 'النقرات: زيارات الصفحة غير مقاسة على كل المنصات', 'en' => 'Clicks: landing page views are not measured on every platform'],
+    ];
+
+    /**
      * The result of ONE row (a campaign, a creative, a family total) for its family.
      *
      * `$reported` is the row's own «which keys did a platform send» map when the caller has it.
      * Without it, a positive figure counts as reported and a zero stays a zero — the caller has no
      * way to tell the two apart, and inventing «not reported» would be the opposite guess.
      *
+     * Traffic follows the Owner's decision: landing page views whenever a platform REPORTS them for
+     * this row — a reported 0 is shown as «زيارات الصفحة 0», the honest signal of a page or pixel that
+     * measures nothing — and clicks only where they are not reported, or reported on only part of
+     * the row (`$lpvPartial`: some platforms measure them, others do not), which is then said.
+     *
      * @param  array<string, mixed>  $row  base sums, plus `spend` and `spend_withheld_rows` when known
      * @param  array<string, bool>|null  $reported
-     * @return array{result_family: string, result_key: string|null, result: float|null, result_label: array{ar: string, en: string}|null, cost_per_result: float|null, cost_per_result_label: array{ar: string, en: string}|null, result_missing_reason: string|null, result_missing_label: array{ar: string, en: string}|null}
+     * @return array<string, mixed>
      */
-    public static function resolve(ObjectiveFamily|string $family, array $row, ?array $reported = null): array
+    public static function resolve(ObjectiveFamily|string $family, array $row, ?array $reported = null, bool $lpvPartial = false): array
     {
         $family = $family instanceof ObjectiveFamily ? $family : (ObjectiveFamily::tryFrom($family) ?? ObjectiveFamily::Unknown);
         $spec = self::TABLE[$family->value];
@@ -125,8 +146,21 @@ final class ObjectiveResult
         $value = static fn (string $k): ?float => isset($row[$k]) && is_numeric($row[$k]) ? (float) $row[$k] : null;
         $flag = static fn (string $k): ?bool => $reported === null ? null : ($reported[$k] ?? false) === true;
 
-        // The objective's own figure whenever it is above zero, else its stated fallbacks in order —
-        // the traffic rule: LPV when reported and above zero, else clicks.
+        if ($family === ObjectiveFamily::Traffic) {
+            $lpvReported = $reported === null ? ($value('landing_page_views') ?? 0.0) > 0 : $flag('landing_page_views') === true;
+
+            if ($lpvReported && ! $lpvPartial) {
+                return self::shape($family, 'landing_page_views', $value('landing_page_views') ?? 0.0, $row, null);
+            }
+
+            $clicks = $value('clicks');
+            $clicksKnown = $reported === null ? $clicks !== null : $flag('clicks') === true;
+            $shape = self::shape($family, 'clicks', $clicksKnown ? ($clicks ?? 0.0) : null, $row, $clicksKnown ? null : 'not_reported');
+
+            return $lpvPartial ? ['result_note' => self::NOTES['lpv_partial']] + $shape : $shape;
+        }
+
+        // The objective's own figure whenever it is above zero, else its stated fallbacks in order.
         foreach ([$primary, ...$fallbacks] as $k) {
             if (($value($k) ?? 0.0) > 0) {
                 return self::shape($family, $k, $value($k), $row, null);
@@ -160,25 +194,24 @@ final class ObjectiveResult
     /**
      * The result of a SET of rows that share one family — a family's total, a platform's share of it.
      *
-     * Each row is resolved first. When they all resolved to one key, the results add up. When they
-     * did not (one traffic campaign reported landing page views, another only clicks), the total
-     * uses the family's fallback for every row where every row has it, so the sum is one unit; and
-     * where there is no common unit there is no total («أهداف مختلفة»), never a sum of unlike things.
+     * Each row is resolved first, and a row whose result nobody sent adds NOTHING (not a zero). When
+     * the rows that have a result all resolved to one key, those results add up. When they did not
+     * (one traffic campaign measured landing page views, another only clicks), the total uses the
+     * family's fallback for every row, so the sum is one unit — and says why; leads add each row's
+     * own lead. With no common unit there is no total («أهداف مختلفة»), and with no row reporting
+     * anything the total is «بدون بيانات», never 0.
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  list<array<string, bool>|null>  $reported  one entry per row, or empty
-     * @return array<string, mixed> the {@see resolve()} shape, over the summed figures
+     * @return array<string, mixed>
      */
     public static function combine(ObjectiveFamily|string $family, array $rows, array $reported = []): array
     {
         $family = $family instanceof ObjectiveFamily ? $family : (ObjectiveFamily::tryFrom($family) ?? ObjectiveFamily::Unknown);
         $spec = self::TABLE[$family->value];
-        $sum = static function (string $k) use ($rows): float {
-            return array_sum(array_map(static fn (array $r): float => (float) ($r[$k] ?? 0), $rows));
-        };
         $money = [
-            'spend' => $sum('spend'),
-            'spend_withheld_rows' => (int) $sum('spend_withheld_rows'),
+            'spend' => array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows)),
+            'spend_withheld_rows' => (int) array_sum(array_map(static fn (array $r): int => (int) ($r['spend_withheld_rows'] ?? 0), $rows)),
         ];
 
         if ($spec['key'] === null || $rows === []) {
@@ -189,26 +222,47 @@ final class ObjectiveResult
         foreach ($rows as $i => $row) {
             $resolved[] = self::resolve($family, $row, $reported[$i] ?? null);
         }
-        $keys = array_values(array_unique(array_filter(array_column($resolved, 'result_key'), static fn ($k) => $k !== null)));
+        $measured = array_values(array_filter($resolved, static fn (array $r): bool => $r['result'] !== null));
+        $keys = array_values(array_unique(array_column($measured, 'result_key')));
+        $sum = static fn (array $set): float => array_sum(array_map(static fn (array $r): float => (float) $r['result'], $set));
+
+        if ($measured === []) {
+            return self::shape($family, $spec['key'], null, $money, 'not_reported');
+        }
 
         if (count($keys) === 1) {
-            return self::shape($family, $keys[0], $sum($keys[0]), $money, null);
+            return self::shape($family, $keys[0], $sum($measured), $money, null);
         }
 
-        /*
-         * A lead is a lead whichever column the platform filed it under, so the leads family adds
-         * each row's own result. Reach and impressions, or visits and clicks, are different units,
-         * and for those the family's fallback is the one unit every row shares.
-         */
-        if ($family === ObjectiveFamily::Leads && $keys !== []) {
-            return self::shape($family, $spec['key'], array_sum(array_map(static fn (array $r): float => (float) ($r['result'] ?? 0), $resolved)), $money, null);
+        if ($family === ObjectiveFamily::Leads) {
+            return self::shape($family, $spec['key'], $sum($measured), $money, null);
         }
 
-        if ($spec['fallback'] !== null && in_array($spec['fallback'], $keys, true)) {
-            return self::shape($family, $spec['fallback'], $sum($spec['fallback']), $money, null);
+        $fallback = $spec['fallback'];
+        if ($fallback !== null) {
+            $common = array_values(array_filter($rows, static fn (array $r): bool => isset($r[$fallback]) && is_numeric($r[$fallback])));
+            if ($common !== []) {
+                $shape = self::shape($family, $fallback, array_sum(array_map(static fn (array $r): float => (float) $r[$fallback], $common)), $money, null);
+
+                return $family === ObjectiveFamily::Traffic ? ['result_note' => self::NOTES['lpv_partial']] + $shape : $shape;
+            }
         }
 
-        return self::shape($family, null, null, $money, $keys === [] ? 'not_reported' : 'mixed');
+        return self::shape($family, null, null, $money, 'mixed');
+    }
+
+    /**
+     * No total, and why — for a set whose rows count different things ('mixed') or nothing.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    public static function none(string $reason, array $rows): array
+    {
+        return self::shape(ObjectiveFamily::Unknown, null, null, [
+            'spend' => array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows)),
+            'spend_withheld_rows' => (int) array_sum(array_map(static fn (array $r): int => (int) ($r['spend_withheld_rows'] ?? 0), $rows)),
+        ], $reason);
     }
 
     /** @return array{ar: string, en: string}|null */
@@ -258,6 +312,7 @@ final class ObjectiveResult
             'cost_per_result_label' => self::costLabel($key, $family),
             'result_missing_reason' => $missing,
             'result_missing_label' => $missing === null ? null : self::MISSING[$missing],
+            'result_note' => null,
         ];
     }
 }
