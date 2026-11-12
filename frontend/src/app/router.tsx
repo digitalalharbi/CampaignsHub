@@ -100,6 +100,7 @@ const RequirePortal = lazyPage(() => import('@/features/auth/RequirePortal'), 'R
 const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOverviewPage'), 'PlatformOverviewPage')
 const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
 const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
+const ServiceRequestsPage = lazyPage(() => import('@/features/admin/ServiceRequestsPage'), 'ServiceRequestsPage')
 const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
 const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
 const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
@@ -545,6 +546,9 @@ export const router = createBrowserRouter(withErrorBoundary([
             // SIGNUP-003 — applications that have NOT become tenants yet, which is why this is its
             // own entry rather than a tab inside Tenants.
             { path: 'registrations', element: <RegistrationsPage /> },
+            // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site. Platform-owned, never a
+            // subscriber's requests: those stay in that subscriber's own `/agency/requests`.
+            { path: 'requests', element: <ServiceRequestsPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'addons', element: <AddonsPage /> },
             { path: 'plan-migration', element: <PlanMigrationPage /> },

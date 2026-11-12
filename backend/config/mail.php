@@ -118,6 +118,12 @@ return [
     'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
 
     /*
+    | DIGESTS-CADENCE-BUDGETS-001 — the part of that daily allowance digests may NOT spend, kept for alerts. Thirty projects ×
+    | three rhythms × several readers is a morning of mail; an alert raised that afternoon must still be able to leave.
+    */
+    'alert_reserve_per_tenant' => (int) env('MAIL_ALERT_RESERVE_PER_TENANT', 200),
+
+    /*
     | EMAIL-TEST-SEND-001 (§17.4.5) — how many times one alert may reach one person in 24 hours. A rule's
     | cooldown can be as short as five minutes, and a problem that stays open would otherwise mail each
     | time it passes. Its recovery is never held. 0 switches the limit off. A held message is written to the

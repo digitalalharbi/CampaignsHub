@@ -25,6 +25,7 @@ return [
         'freshness' => true,
         'methodology' => true,
         'objectives' => true,
+        'operational' => true,
     ],
 
     'sections' => [
@@ -50,6 +51,12 @@ return [
         'methodology' => [
             'ar' => 'تعتمد إدارة الحملات على المتابعة المستمرة للبيانات، واختبار المحتوى والجمهور والمنصات، وتحسين توزيع الميزانية وفق مؤشرات الأداء وأهداف كل حملة. وقد تتغير قرارات التوسع أو التخفيض أو الإيقاف بحسب جودة البيانات ومرحلة التعلّم والنتائج الفعلية.',
             'en' => 'Campaign management relies on continuous data monitoring; testing content, audiences and platforms; and optimizing budget allocation according to performance indicators and each campaign\'s objectives. Decisions to scale, reduce or pause may change based on data quality, learning phase, and actual results.',
+        ],
+
+        // Operational note — the closing line of every operational email (digests and alerts); short on purpose, so it sits in the footer.
+        'operational' => [
+            'ar' => 'مؤشرات استرشادية وغير مرجعية، تُستخدم لإدارة العمليات التشغيلية اليومية للقياس والتحسين.',
+            'en' => 'Indicative, non-reference indicators, used to run day-to-day operations for measurement and improvement.',
         ],
 
         // Objective-specific addenda (shown on matching objective reports only).

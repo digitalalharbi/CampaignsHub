@@ -86,7 +86,8 @@ final class DigestNextSendTest extends TestCase
     public function test_it_falls_back_exactly_as_the_sender_does(): void
     {
         $weekly = DigestSchedule::nextSend('weekly', ['digest_hour' => 8, 'timezone' => 'UTC', 'digest_weekday' => 9], $this->at('2026-08-28T09:00:00Z'));
-        $this->assertSame(1, $weekly?->dayOfWeekIso, 'an out-of-range weekday must fall back to Monday');
+        // DIGESTS-CADENCE-BUDGETS-001 — the fallback is Sunday now, the same answer `SendDailyDigests` gives.
+        $this->assertSame(7, $weekly?->dayOfWeekIso, 'an out-of-range weekday must fall back to Sunday');
 
         $monthly = DigestSchedule::nextSend('monthly', ['digest_hour' => 8, 'timezone' => 'UTC', 'digest_monthday' => 30], $this->at('2026-01-29T09:00:00Z'));
         $this->assertSame(1, $monthly?->day, 'the sender falls back to the 1st for an out-of-range month-day');

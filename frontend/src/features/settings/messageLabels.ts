@@ -89,15 +89,16 @@ export const TYPE_LABELS: Record<string, Words> = {
   sync_failed: { ar: 'فشل المزامنة', en: 'Syncing failed' },
   token_expiring: { ar: 'قرب انتهاء صلاحية الربط', en: 'A connection is about to expire' },
   // التقارير
-  daily_digest: { ar: 'الملخص اليومي', en: 'Daily summary' },
-  weekly_digest: { ar: 'الملخص الأسبوعي', en: 'Weekly summary' },
+  // DIGESTS-CADENCE-BUDGETS-001 — the cross-project mail is «ملخص المشاريع», led by the budgets, on all three rhythms.
+  daily_digest: { ar: 'ملخص المشاريع اليومي', en: 'Daily projects summary' },
+  weekly_digest: { ar: 'ملخص المشاريع الأسبوعي', en: 'Weekly projects summary' },
   /*
    * The third rhythm. The backend has dispatched it since EMAIL-INTELLIGENCE-001 and the catalogue
    * lists it beside the other two; this map did not, so the settings table printed the raw key
    * «monthly_digest» in a column where every sibling reads as a sentence — a database identifier in
    * front of a reader, which is the defect the portal audit has an E2E against.
    */
-  monthly_digest: { ar: 'الملخص الشهري', en: 'Monthly summary' },
+  monthly_digest: { ar: 'ملخص المشاريع الشهري', en: 'Monthly projects summary' },
   report_ready: { ar: 'تقرير جاهز', en: 'A report is ready' },
   report_failed: { ar: 'تعذّر إنشاء تقرير', en: 'A report could not be built' },
   scheduled_report: { ar: 'التقرير المجدول', en: 'A scheduled report' },
@@ -125,8 +126,8 @@ export const TYPE_LABELS: Record<string, Words> = {
 
 export const TYPE_NOTES: Record<string, Words> = {
   daily_digest: {
-    ar: 'ملخص أمس لكل مشروع تصل إليه، في الساعة التي تختارها.',
-    en: 'Yesterday, for every project you can see, at the hour you choose.',
+    ar: 'الميزانيات ثم حالة كل مشروع تصل له، آخر 7 أيام، في الساعة اللي تختارها.',
+    en: 'Budgets first, then every project you can see — the last 7 days, at the hour you choose.',
   },
   /*
    * «On the day you choose», not «Monday»: `digest_weekday` is now shown and accepted by the
@@ -134,8 +135,8 @@ export const TYPE_NOTES: Record<string, Words> = {
    * the row's own timing column does, from the chosen value.
    */
   weekly_digest: {
-    ar: 'ملخص الأسبوع المنتهي، في اليوم الذي تختاره.',
-    en: 'The finished week, on the day you choose.',
+    ar: 'الميزانيات وحالة المشاريع للأسبوع المنتهي، في اليوم اللي تختاره.',
+    en: 'Budgets and project health for the finished week, on the day you choose.',
   },
   /*
    * The month that FINISHED, not the one in progress: the sender reports the previous month, which
@@ -144,8 +145,8 @@ export const TYPE_NOTES: Record<string, Words> = {
    * states it. This sentence stays silent about the day because it is static and the day is not.
    */
   monthly_digest: {
-    ar: 'ملخص الشهر المنتهي، بعد اكتمال أرقامه.',
-    en: 'The finished month, once its figures are complete.',
+    ar: 'الميزانيات وحالة المشاريع للشهر المنتهي، بعد اكتمال أرقامه.',
+    en: 'Budgets and project health for the finished month, once its figures are complete.',
   },
   message: {
     ar: 'يصلك داخل النظام دائمًا. البريد مغلق افتراضيًا لأن رسائل المحادثات كثيرة.',

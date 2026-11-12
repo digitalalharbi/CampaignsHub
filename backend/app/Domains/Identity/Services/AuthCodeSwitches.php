@@ -238,7 +238,7 @@ final class AuthCodeSwitches
     /** Contacts named by address, holding no account that could recover by link. Cross-tenant by design: the policy is the platform's. */
     private function contacts(bool $hasPhone): int
     {
-        return (int) ExternalRequest::query()->withoutGlobalScopes()
+        return (int) ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()
             ->whereRaw("nullif(trim(contact_email), '') is not null")
             ->whereRaw($hasPhone ? "nullif(trim(contact_phone), '') is not null" : "nullif(trim(contact_phone), '') is null")
             ->whereNotExists(function (QueryBuilder $users): void {
@@ -252,7 +252,7 @@ final class AuthCodeSwitches
 
     private function phoneOnlyContacts(): int
     {
-        return (int) ExternalRequest::query()->withoutGlobalScopes()
+        return (int) ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()
             ->whereRaw("nullif(trim(contact_email), '') is null")
             ->whereRaw("nullif(trim(contact_phone), '') is not null")
             ->selectRaw('count(distinct contact_phone) as n')

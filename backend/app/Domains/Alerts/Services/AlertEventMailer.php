@@ -184,12 +184,12 @@ final class AlertEventMailer
     public static function action(string $type, bool $ar): string
     {
         return match ($type) {
-            'budget_risk' => $ar ? 'قرار اليوم: أبقِ الميزانية أو عدّلها أو أوقف ما لا يؤدي.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
-            'sync_failed' => $ar ? 'أعد ربط المصدر حتى تكتمل الأرقام.' : 'Reconnect the source so the figures are complete.',
-            'token_expiring' => $ar ? 'جدّد الصلاحية قبل انقطاع البيانات.' : 'Renew the access before the data stops.',
-            'sample_alert' => $ar ? 'هذا تنبيه تجريبي لتتأكد أنه يصلك: لا يلزمك أي إجراء.' : 'This is a sample alert so you can see it arrives: no action is needed.',
-            'report_failed' => $ar ? 'أعد توليد التقرير أو افتحه لترى السبب.' : 'Regenerate the report, or open it to read why.',
-            default => $ar ? 'افتح التنبيه واتخذ قرارًا.' : 'Open the alert and decide.',
+            'budget_risk' => $ar ? 'أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
+            'sync_failed' => $ar ? 'أعد ربط المصدر.' : 'Reconnect the source so the figures are complete.',
+            'token_expiring' => $ar ? 'جدّد الربط قبل ما تنقطع البيانات.' : 'Renew the access before the data stops.',
+            'sample_alert' => $ar ? 'تنبيه تجريبي عشان تتأكد إنه يوصلك. ما يحتاج منك شيء.' : 'This is a sample alert so you can see it arrives: no action is needed.',
+            'report_failed' => $ar ? 'أعد توليد التقرير أو افتحه وشوف السبب.' : 'Regenerate the report, or open it to read why.',
+            default => $ar ? 'افتحه وقرّر.' : 'Open the alert and decide.',
         };
     }
 

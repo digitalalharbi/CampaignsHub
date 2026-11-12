@@ -137,7 +137,7 @@ final class DigestsVisualV2Test extends TestCase
         $project = OperationalDigestModel::project($d['projects'][3], 'ar', 7);
         $pw = (new OperationalDigestMail($project, 'ar', 'م', 'weekly', 'project'))->render();
         $pd = (new OperationalDigestMail($project, 'ar', 'م', 'daily', 'project'))->render();
-        $this->assertGreaterThan(substr_count($pd, 'data-block="spark"'), substr_count($pw, 'data-block="spark"'), 'the weekly carries a 7-day bar per platform');
+        $this->assertGreaterThan(substr_count($pd, 'font-size:9px'), substr_count($pw, 'font-size:9px'), 'the weekly labels its 7 bars with weekday letters');
         $this->assertStringContainsString('data-block="platform-strip"', $pd);
     }
 
@@ -214,7 +214,7 @@ final class DigestsVisualV2Test extends TestCase
         $ranked = AlertMailItem::rank([$mk('info', 'c'), $mk('warning', 'b'), $mk('critical', 'a'), $mk('warning', 'a2')]);
         $this->assertSame(['critical', 'warning', 'warning', 'info'], array_column($ranked, 'severity'));
         $html = (new AlertBundleMail($ranked, 'ar', 'م'))->render();
-        $this->assertSame(4, substr_count($html, 'data-block="action"'));
+        $this->assertSame(4, substr_count($html, 'data-block="steps"'));
         $this->assertStringContainsString('data-block="severity-strip"', $html);
     }
 }

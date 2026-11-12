@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\MailGallery;
 use Tests\TestCase;
 
@@ -42,15 +43,24 @@ final class EmailKpiHierarchyTest extends TestCase
         }
     }
 
-    /** EMAIL-PERF-DASHBOARDS-001 — an alert leads with the rule's own number; a finding without one keeps its sentence alone. */
-    public function test_an_alert_with_figures_leads_with_them_and_one_without_does_not(): void
+    /**
+     * EMAIL-PERF-DASHBOARDS-001, then DIGESTS-CADENCE-BUDGETS-001 — an alert's numbers are DRAWN, in the approved digest grammar.
+     *
+     * The figures strip («167%» beside «80%») gave one finding two ways to print the same number; the approved cards draw it
+     * instead — the budget card as plan → spend bars, the cost card as before → now — and no card leads with a stray tile.
+     */
+    public function test_an_alert_with_figures_draws_them(): void
     {
         $html = (string) MailGallery::render('alerts-bundle', 'en');
 
-        // Three findings; only the budget-pace one carries figures.
-        $this->assertSame(1, substr_count($html, 'class="ch-kpi-lead"'));
-        $this->assertStringContainsString('167%', $html);
+        $this->assertSame(0, substr_count($html, 'class="ch-kpi-lead"'));
+        // The figures stay, small, under the drawing: the amounts with their currency.
         $this->assertStringContainsString('10,000.00 USD', $html);
+        $this->assertStringContainsString('8,000.00 USD', $html);
+        $this->assertStringContainsString('data-block="figures"', $html);
+        $this->assertStringContainsString('data-viz="pace"', $html);
+        $this->assertStringContainsString('data-viz="before_now"', $html);
+        $this->assertStringContainsString('Spent '.AlertEventText::ltr('80%'), $html);
     }
 
     /** EMAIL-DECISION-REPORT-001 — an alert is an action-required card: the decision it asks for, and the one place to take it. */
@@ -59,15 +69,16 @@ final class EmailKpiHierarchyTest extends TestCase
         $html = (string) MailGallery::render('alerts-bundle', 'ar');
 
         // EMAIL-DIGESTS-OPERATIONAL-001 — every finding now names its next step.
-        $this->assertSame(3, substr_count($html, 'data-block="action"'), 'every finding carries the decision it asks for');
-        $this->assertStringContainsString('قرار اليوم: أبقِ الميزانية', $html);
+        $this->assertSame(3, substr_count($html, 'data-block="steps"'), 'every finding carries the decision it asks for, in order');
+        $this->assertStringContainsString('أبقِ الميزانية', $html);
         $this->assertStringContainsString('أعد ربط المصدر', $html);
         // EMAIL-DIGESTS-OPERATIONAL-001 — the button lands on the exact page: the campaign, or the connections page for a sync.
         $this->assertMatchesRegularExpression('#href="[^"]+/app/campaigns/demo-project/demo-campaign"#', $html);
         $this->assertMatchesRegularExpression('#href="[^"]+/app/projects/demo-project/integrations"#', $html);
         $this->assertStringContainsString('data-block="severity-strip"', $html);
-        $this->assertMatchesRegularExpression('#2 حرج#', $html);
-        $this->assertMatchesRegularExpression('#1 تحذير#', $html);
+        // DIGESTS-CADENCE-BUDGETS-001 — counted the way the digest counts: a tile per state, its glyph, its word and its number.
+        $this->assertMatchesRegularExpression('#✕ عاجل</div>\s*<div[^>]*>2</div>#u', $html);
+        $this->assertMatchesRegularExpression('#! انتبه</div>\s*<div[^>]*>1</div>#u', $html);
 
         $one = (string) MailGallery::render('alerts-one', 'en');
         $this->assertStringNotContainsString('data-block="severity-strip"', $one, 'one finding is not a count');

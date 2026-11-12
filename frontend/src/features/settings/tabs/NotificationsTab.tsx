@@ -36,9 +36,9 @@ const FREQ = [
 
 const RHYTHM_LABELS: Record<Rhythm, { ar: string; en: string }> = {
   immediate: { ar: 'فور حدوثه', en: 'As it happens' },
-  daily: { ar: 'مع الملخص اليومي', en: 'With the daily summary' },
-  weekly: { ar: 'مع الملخص الأسبوعي', en: 'With the weekly summary' },
-  monthly: { ar: 'مع الملخص الشهري', en: 'With the monthly summary' },
+  daily: { ar: 'مع ملخص المشاريع اليومي', en: 'With the daily projects summary' },
+  weekly: { ar: 'مع ملخص المشاريع الأسبوعي', en: 'With the weekly projects summary' },
+  monthly: { ar: 'مع ملخص المشاريع الشهري', en: 'With the monthly projects summary' },
 }
 
 /**
@@ -346,7 +346,7 @@ export function NotificationsTab() {
                                 {stranded && (
                                   <p className="mt-1 max-w-xs text-xs leading-6 text-warning">
                                     {ar
-                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : stranded === 'weekly' ? 'الملخص الأسبوعي' : 'الملخص الشهري'} غير مفعّل لديك.`
+                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'ملخص المشاريع اليومي' : stranded === 'weekly' ? 'ملخص المشاريع الأسبوعي' : 'ملخص المشاريع الشهري'} غير مفعّل لديك.`
                                       : `This will not reach you: your ${stranded} summary is switched off.`}
                                   </p>
                                 )}
@@ -367,6 +367,36 @@ export function NotificationsTab() {
       ))}
 
       {/* ── الملخصات والتوقيت ─────────────────────────────────────────────────────────────── */}
+      {/*
+        DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, on each rhythm, beside «ملخص المشاريع» above.
+
+        Each switch is its own: somebody who wants every project's report does not have to take the projects summary, and
+        the other way round. The weekly and monthly follow the daily answer until they are set — the server states all three.
+      */}
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]" data-testid="per-project-reports">
+        <h3 className="text-base font-bold text-text-primary">{ar ? 'تقرير كل مشروع' : 'A report per project'}</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
+          {ar
+            ? 'رسالة لكل مشروع تصل له: الميزانية، المؤشرات حسب الهدف، المنصات، وما يحتاج قرارك.'
+            : 'One mail per project you can see: its budget, the figures its objective is judged on, each platform, and what needs your decision.'}
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {([
+            ['per_project', ar ? 'يومي' : 'Daily'],
+            ['per_project_weekly', ar ? 'أسبوعي' : 'Weekly'],
+            ['per_project_monthly', ar ? 'شهري' : 'Monthly'],
+          ] as const).map(([key, word]) => (
+            <Switch
+              key={key}
+              testId={`digest-${key}`}
+              checked={p.digests[key] === true}
+              onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, [key]: v } })}
+              label={word}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المواعيد واللغة' : 'Timing and language'}</h3>
         <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">

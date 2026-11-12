@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
@@ -62,10 +63,17 @@ final class OperationalDigestMail extends Mailable
     {
         $ar = $this->lang === 'ar';
         $name = $this->scope === 'project' ? (string) $this->model['name'] : '';
-        $title = match ($this->kind) {
-            'monthly' => $ar ? 'ملخص الشهر' : 'Monthly summary',
-            'weekly' => $ar ? 'ملخص الأسبوع' : 'Weekly summary',
-            default => $ar ? 'ملخص اليوم' : 'Daily summary',
+        // DIGESTS-CADENCE-BUDGETS-001 — the cross-project mail is «ملخص المشاريع» on every rhythm; a project's own is its report.
+        $title = $this->scope === 'project'
+            ? match ($this->kind) {
+                'monthly' => $ar ? 'تقرير الشهر' : 'Monthly report',
+                'weekly' => $ar ? 'تقرير الأسبوع' : 'Weekly report',
+                default => $ar ? 'تقرير اليوم' : 'Daily report',
+            }
+        : match ($this->kind) {
+            'monthly' => $ar ? 'ملخص المشاريع · الشهر' : 'Projects summary · month',
+            'weekly' => $ar ? 'ملخص المشاريع · الأسبوع' : 'Projects summary · week',
+            default => $ar ? 'ملخص المشاريع · اليوم' : 'Projects summary · today',
         };
         $tail = $this->scope === 'project'
             ? ($this->model['status']['label'] ?? '')
@@ -82,11 +90,11 @@ final class OperationalDigestMail extends Mailable
 
         $preheader = $project
             ? implode(' · ', array_filter([$m['status']['reason'] ?? '', ($m['kpis'][0]['label'] ?? '').' '.($m['kpis'][0]['value'] ?? '')]))
-            : ($ar
+            : (($m['budgets']['total']['state'] ?? null) === 'ok' ? ($ar ? 'المتبقي ' : 'Remaining ').$m['budgets']['total']['remaining'].'  —  ' : '').($ar
                 ? "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} من {$m['coverage']['total']} مفحوصة"
                 : "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} of {$m['coverage']['total']} checked");
 
-        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader);
+        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader, footerNote: MailDisclaimer::note($this->lang, $this->copy($ar)['unit_note']));
         $t = $this->copy($ar);
         $shell['t'] = array_merge($shell['t'], $t);
 

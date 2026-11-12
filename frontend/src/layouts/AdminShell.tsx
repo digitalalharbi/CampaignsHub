@@ -7,6 +7,7 @@ import {
   Gauge,
   Receipt,
   ShieldAlert,
+  Inbox,
   ScrollText,
   Settings,
   Building2,
@@ -61,6 +62,8 @@ const adminNav = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
   // The queue in front of Tenants: applications that have not become one yet (SIGNUP-003).
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
+  // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site, owned by the platform.
+  { to: '/admin/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
@@ -111,8 +114,8 @@ const adminAdvancedNav = [
 const ADMIN_TABS: MobileTab[] = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: adminNav[0].icon, end: true },
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: adminNav[1].icon },
-  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: adminNav[2].icon },
-  { to: '/admin/billing', ar: 'الاشتراكات', en: 'Billing', icon: adminNav[3].icon },
+  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: adminNav[3].icon },
+  { to: '/admin/billing', ar: 'الاشتراكات', en: 'Billing', icon: adminNav[4].icon },
 ]
 
 /**

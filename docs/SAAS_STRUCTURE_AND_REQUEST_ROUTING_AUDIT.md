@@ -88,6 +88,8 @@ R receives and works it, A approves or decides, C is consulted, I is informed.
 
 ## 5. Proven gaps, ranked by impact × likelihood
 
+**State after batch 1 (PLATFORM-SERVICE-INBOX-001, not deployed):** rows 1, 2, 3 and 7 are closed in code and covered by tests; they stay open in Production until the deploy is verified. Rows 4, 5, 6, 8 and 9 are unchanged.
+
 Only what a test or a Production read shows. Nothing here is assumed.
 
 | # | Priority | Gap | Evidence | Impact | Likelihood | Matrix row |
@@ -129,7 +131,7 @@ Only what a test or a Production read shows. Nothing here is assumed.
 
 | # | Status | Evidence | Proving test | Missing |
 |---|---|---|---|---|
-| S01 | NOT_STARTED | gap 1 and 3 | `SaasStructureRoutingContractTest::test_s01_a_service_request_from_the_official_site_is_platform_owned` (incomplete, proves the gap) | platform owner scope, platform inbox, screen |
+| S01 | IMPLEMENTED_NOT_VERIFIED | PLATFORM-SERVICE-INBOX-001: the official hosts resolve to the platform, the row carries `owner_scope = platform` and no tenant, and the flagged default workspace does not list it | `SaasStructureRoutingContractTest::test_s01_a_service_request_from_the_official_site_is_platform_owned`, `PlatformServiceInboxTest` (9), `e2e/admin-service-requests.spec.ts` | deploy, then one live order with the Owner's consent |
 | S02 | IMPLEMENTED_NOT_VERIFIED | Production: 16 registrations, 0 service requests | `test_s02_a_registration_is_never_a_service_request_in_any_inbox`, `RegistrationReviewQueueTest` | a signed-in walk of `/admin/registrations` |
 | S03 | IMPLEMENTED_NOT_VERIFIED | `PortalTenantResolver.php:23-27` | `test_s03_a_request_on_a_tenants_portal_domain_is_filed_under_that_tenant_only`, `RequestPortalResolverTest::test_resolves_by_matching_portal_domain` | a real tenant domain in Production |
 | S04 | IMPLEMENTED_NOT_VERIFIED | 11 routes, 404, nothing leaked | `test_s04_another_tenants_request_is_not_found_on_every_internal_route`, `RequestDashboardTest::test_dashboard_is_tenant_isolated` | Production walk with two workspaces |
@@ -137,8 +139,8 @@ Only what a test or a Production read shows. Nothing here is assumed.
 | S06 | IMPLEMENTED_NOT_VERIFIED | probes enumerate every client endpoint | `ClientPortalIsolationProbeTest` (3), `ClientPortalWriteIsolationTest`, `ClientSpaceIsolationTest` (9) | Production walk with two client users |
 | S07 | IMPLEMENTED_NOT_VERIFIED | lists, counts and conversion honour the client ceiling | `InternalRequestsClientCeilingTest` (5), `AgencyTeamScopesTest`, `TenantLevelListsHonourProjectReachTest`, `PortfolioScopeTest` | exports and notifications for a two-client manager, walked live |
 | S08 | IMPLEMENTED_NOT_VERIFIED | explicit switch, next request scoped | `WorkspaceSwitchIsolationTest` (17), `PortalDistinctnessTest::test_switching_to_someone_elses_membership_is_refused` | nobody in Production holds two memberships |
-| S09 | PARTIAL | refuses 404 and writes nothing; Production shows exactly this state | `test_s09_with_no_owner_the_intake_refuses_and_writes_nothing`, `RequestPortalResolverTest::test_fails_closed_when_no_portal_is_configured` | the reason is not logged (gap 7) |
-| S10 | PARTIAL | forwarded header ignored; unknown host accepted into the default tenant | `test_s10_a_forwarded_host_header_cannot_select_another_tenant` (pass), `test_s10_an_unknown_host_is_refused_…` (incomplete) | gap 2 |
+| S09 | IMPLEMENTED_NOT_VERIFIED | refuses 404 and writes nothing, before the visitor's verification is consumed; `requests.intake.refused` is logged | `test_s09_with_no_owner_the_intake_refuses_and_writes_nothing`, `test_s10_an_unknown_host_is_refused_…` (asserts the log line), `RequestPortalResolverTest::test_fails_closed_when_no_portal_is_configured` | deploy |
+| S10 | IMPLEMENTED_NOT_VERIFIED | forwarded header ignored; in production an unknown host is refused and the refusal is logged with the host and no personal data; the default workspace is honoured outside production only | `test_s10_a_forwarded_host_header_cannot_select_another_tenant`, `test_s10_an_unknown_host_is_refused_rather_than_given_to_the_default_tenant`, `test_s10_the_default_workspace_is_a_local_convenience_and_never_a_production_owner` | deploy |
 | S11 | IMPLEMENTED_NOT_VERIFIED | second submit 422, one row, one notice | `test_s11_resubmitting_the_same_verified_form_does_not_open_a_second_request`, `LeadFormsTest::test_one_submission_id_is_one_lead_however_many_times_it_arrives` | none at feature level |
 | S12 | IMPLEMENTED_NOT_VERIFIED | forged, replayed, short, wrong-currency and misattributed events settle nothing | `PaymentActivationSecurityTest`, `PaymentWebhookRefusalTest`, `PaymentReconcileTest` | a real gateway event: BLOCKED_EXTERNAL_CREDENTIALS for the live half |
 | S13 | IMPLEMENTED_NOT_VERIFIED | address must match and be verified; expired and reused tokens refused | `AgencyProvisioningTest::test_the_invitation_cannot_be_claimed_by_the_wrong_person`, `WorkspaceInvitationTest::test_expired_and_reused_tokens_are_rejected` | none at feature level |
@@ -150,7 +152,7 @@ Only what a test or a Production read shows. Nothing here is assumed.
 | S19 | IMPLEMENTED_NOT_VERIFIED | legacy paths redirect inside the same guard | `frontend/src/app/legacyRedirects.test.tsx`, `docs/ROUTE_REDIRECT_MAP.md` | none found |
 | S20 | PARTIAL | suspension blocks access and deletes nothing | `SuspendedAccountTest` (6), `PlanMigrationTest`, `PlatformConsoleTest::test_suspending_the_public_portal_tenant_says_so` | no test states that requests and client links survive a downgrade |
 | S21 | VERIFIED | Production runs 43040097104 and 43042874020: `external_requests` 0, `request_access_tokens` 0, `request_conversions` 0. There is no historical request whose owner could be ambiguous, so nothing is reassigned and nothing needs to be | none needed | re-read before Batch B deploys |
-| S22 | NOT_STARTED | no platform inbox, no assignee, no notice | `test_a_message_addressed_to_the_platform_tells_a_platform_administrator` (incomplete) | follows S01 and gap 4 |
+| S22 | PARTIAL | a service request now has a platform inbox, an owner picked from the platform's administrators, a mail-ledger notice to them, a status history and an audit trail. Conversion of a platform request into delivery work is not built, and contact, support and data requests are still unread (gap 4) | `PlatformServiceInboxTest::test_an_administrator_takes_a_request_and_moves_it_and_both_are_on_the_record`, `test_the_platforms_administrators_are_told_through_the_mail_ledger_and_no_subscriber_is`; `test_a_message_addressed_to_the_platform_tells_a_platform_administrator` (incomplete, gap 4) | PLATFORM-INBOX-ATTENTION-001; an explicit conversion step |
 
 ## 7. Production facts used (counts and statuses only)
 
@@ -173,7 +175,8 @@ Only what a test or a Production read shows. Nothing here is assumed.
 | Batch | Scope | Rows |
 |---|---|---|
 | A (this) | contract adopted, this audit, the probes | SAAS-STRUCTURE-AUDIT-001 |
-| B | platform owner scope for official-site requests decided on the server, deny by default, refusal logged; a platform «الطلبات» screen; administrators notified at receipt; registrations counter; a read surface for contact, support and data requests. Additive, reversible migrations; no historical row touched | PLATFORM-SERVICE-INBOX-001, PLATFORM-INBOX-ATTENTION-001 |
+| 1 (built, not deployed) | platform owner scope for official-site requests decided on the server, deny by default, refusal logged; the platform «الطلبات» screen; administrators told at receipt. Additive, reversible migration; no historical row touched | PLATFORM-SERVICE-INBOX-001 |
+| next | registrations counter; a read surface and a notice for contact, support and data requests | PLATFORM-INBOX-ATTENTION-001 |
 | C | registration, payment and invitation path: one plan truth, verification dead ends | EXEC-REC-016 and the SIGNUP, PAY rows; gap 9 |
 | D | agency and client requests, influencer context, leads kept apart from requests | existing REQUEST, INFL, FORMS-HUB rows; gap 8 |
 | E | navigation and names once ownership is proven; legacy paths redirected | NAVIGATION rows, ADR 0002 |

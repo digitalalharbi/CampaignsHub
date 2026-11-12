@@ -80,6 +80,7 @@ export function planLabel(code: string, ar: boolean): string {
 /** The attention rows the overview returns, in the reader's language. */
 export const ATTENTION_LABELS: Record<string, Label> = {
   registrations_pending: { ar: 'طلبات تسجيل بانتظار المراجعة', en: 'Registrations awaiting review' },
+  service_requests_new: { ar: 'طلبات خدمات بدون مسؤول', en: 'Service requests with no owner' },
   subscriptions_past_due: { ar: 'اشتراكات متأخرة السداد', en: 'Subscriptions past due' },
   tenants_suspended: { ar: 'مستأجرون موقوفون', en: 'Suspended tenants' },
   users_without_membership: { ar: 'مستخدمون بلا مساحة عمل', en: 'People with no workspace' },
