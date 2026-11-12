@@ -72,9 +72,20 @@ final class ClientIpTrustedProxyTest extends TestCase
         $this->contactFrom('10.0.0.5', '203.0.113.7', 'narrow@example.test')->assertOk();
         $this->assertSame('10.0.0.5', $this->storedIp('narrow@example.test'), 'outside the narrowed subnet is not a proxy');
 
-        config(['security.trusted_proxies' => ['*']]);
-        $this->contactFrom('198.51.100.9', '203.0.113.7', 'star@example.test')->assertOk();
-        $this->assertSame('198.51.100.9', $this->storedIp('star@example.test'), '`*` must not make every peer a proxy');
+        foreach (['*', '0.0.0.0/0', '::/0', 'REMOTE_ADDR', '0.0.0.0/1', 'not-an-ip'] as $i => $everyone) {
+            config(['security.trusted_proxies' => [$everyone]]);
+            // A different public peer each time: `/contact` allows five a minute per address.
+            $peer = '198.51.100.'.(20 + $i);
+            $this->contactFrom($peer, '203.0.113.7', "star{$i}@example.test")->assertOk();
+            $this->assertSame($peer, $this->storedIp("star{$i}@example.test"), "`{$everyone}` must not make every peer a proxy");
+        }
+
+        // The pinned form the deploy notes recommend: the two proxies' own addresses.
+        config(['security.trusted_proxies' => ['172.18.0.4/32', '172.18.0.6']]);
+        $this->contactFrom('172.18.0.4', '203.0.113.7', 'pinned@example.test')->assertOk();
+        $this->assertSame('203.0.113.7', $this->storedIp('pinned@example.test'));
+        $this->contactFrom('172.18.0.9', '203.0.113.7', 'neighbour@example.test')->assertOk();
+        $this->assertSame('172.18.0.9', $this->storedIp('neighbour@example.test'), 'a neighbour on the same network is not a proxy');
     }
 
     public function test_a_forwarded_host_is_still_not_trusted(): void

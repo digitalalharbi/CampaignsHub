@@ -27,6 +27,7 @@ use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -440,6 +441,16 @@ final class PlatformRegistrationController extends Controller
 
         abort_if($channel === null, 422, __('accounts.nothing_to_verify'));
         abort_if($channel === 'mobile' && $registration->phone === null, 422, __('accounts.no_mobile_on_file'));
+
+        /*
+         * The applicant's own path has a cooldown on mobile only. From the console, every channel is bounded: three per
+         * application per hour, so a held application cannot be turned into a stream of SMS (cost) or of replaced email
+         * links (each send retires the link the applicant holds). `hit()` returns the new count — one step.
+         */
+        $key = 'admin-resend-verification:'.$registration->getKey();
+        if (RateLimiter::hit($key, 3600) > 3) {
+            abort(429, __('api.too_many_requests'));
+        }
 
         $issued = $this->verification->send($registration, $channel);
 

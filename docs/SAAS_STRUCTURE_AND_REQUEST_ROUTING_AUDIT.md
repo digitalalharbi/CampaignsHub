@@ -191,7 +191,7 @@ Edge trust (gap 6) is its own row, EDGE-CLIENT-IP-001, closed in code by batch 2
 1. `/admin/inbox` signed in: the contact message of 2026-08-13 and the ticket of 2026-11-06 listed as unread; opening one moves the count.
 2. `/admin` attention: `registrations_pending` equals the `pending_approval` count, `registrations_unverified` equals the 3 + 1 applications held at mobile and email verification, `platform_inbox_unread` equals the unread rows.
 3. `/admin/registrations`: each application held at mobile verification shows its step, since when, sends and the last outcome. A resend is the Owner's decision, per applicant.
-4. Client address: new `share_access_logs` and `audit_logs` rows after the deploy carry public addresses, and more than three distinct values; `docker network inspect web_proxy` gives the subnet to set as `TRUSTED_PROXIES`; Caddy's version is 2.5 or later (it replaces a client-sent `X-Forwarded-For`; an older one appends, which this change also handles).
+4. Client address: new `share_access_logs` and `audit_logs` rows after the deploy carry public addresses, and more than three distinct values; `docker inspect` of the Caddy and `campaignshub-frontend` containers gives the two addresses to pin as `TRUSTED_PROXIES` (/32s — other products' containers share the `web_proxy` subnet, so the subnet alone would let them write their own `X-Forwarded-For`); Caddy's version is 2.5 or later (it replaces a client-sent `X-Forwarded-For`; an older one appends, which this change also handles).
 5. No reply is sent and no resend is made on Production without the Owner's word.
 
 ## 9. What this batch did not do

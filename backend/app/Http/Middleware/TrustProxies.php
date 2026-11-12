@@ -30,10 +30,38 @@ final class TrustProxies extends Middleware
     /** @return list<string> */
     protected function proxies(): array
     {
-        /** @var list<string> $list */
         $list = (array) config('security.trusted_proxies', []);
 
-        return array_values(array_filter($list, static fn ($p): bool => is_string($p) && $p !== '' && $p !== '*' && $p !== '**'));
+        return array_values(array_filter($list, static fn ($p): bool => is_string($p) && self::acceptable($p)));
+    }
+
+    /**
+     * An address or a CIDR no wider than a /8 (IPv4) or a /7 (IPv6). `*`, `**`, Symfony's `REMOTE_ADDR` keyword,
+     * `0.0.0.0/0`, `::/0` and anything that does not parse are dropped — they would make every peer a proxy. An entry
+     * that is dropped trusts nothing, so a typo fails closed.
+     */
+    public static function acceptable(string $entry): bool
+    {
+        $entry = trim($entry);
+        [$ip, $bits] = str_contains($entry, '/') ? explode('/', $entry, 2) : [$entry, null];
+
+        $v4 = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        $v6 = ! $v4 && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+        if (! $v4 && ! $v6) {
+            return false;
+        }
+
+        if ($bits === null) {
+            return true;
+        }
+
+        if (! ctype_digit($bits)) {
+            return false;
+        }
+
+        $bits = (int) $bits;
+
+        return $v4 ? ($bits >= 8 && $bits <= 32) : ($bits >= 7 && $bits <= 128);
     }
 
     protected function headers(): int
