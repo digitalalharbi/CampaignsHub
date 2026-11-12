@@ -13,6 +13,7 @@ use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
 
@@ -85,6 +86,36 @@ final class MailGallery
     }
 
     /** @return array<string, Mailable> */
+    /**
+     * SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the shape `ProjectSpendSummary::build()` returns, every state on purpose: over the
+     * limit, close to it, within it, unconverted (never a 0), and no limit set. The outside recipient's sees its two projects only.
+     *
+     * @return array<string,mixed>
+     */
+    private static function spendSummary(bool $external = false): array
+    {
+        $row = static fn (string $name, string $state, ?float $spend, ?float $cap, ?float $consumed, ?float $used, ?int $days, bool $withheld = false): array => [
+            'id' => md5($name), 'name' => $name, 'spend' => $spend, 'spend_currency' => 'SAR', 'spend_withheld' => $withheld,
+            'cap' => $cap, 'cap_currency' => $cap === null ? null : 'SAR', 'consumed' => $consumed,
+            'remaining' => $cap !== null && $consumed !== null ? $cap - $consumed : null, 'used' => $used,
+            'limit_from' => '2026-11-01', 'limit_to' => '2026-11-30', 'days_left' => $days, 'state' => $state,
+        ];
+        $projects = [
+            $row('Diwan Coffee', 'over', 4200.0, 15000.0, 15600.0, 1.04, null),
+            $row('Al-Ettifaq Club', 'near', 6100.0, 20000.0, 17400.0, 0.87, 2),
+            $row('Karam Alnakhil', 'ok', 2100.0, 12000.0, 5200.0, 0.433, 22),
+            $row('Al-Reef Restaurants', 'unconverted', null, 8000.0, null, null, null, true),
+            $row('Rose Store', 'none', 950.0, null, null, null, null),
+        ];
+        if ($external) {
+            $projects = array_slice($projects, 1, 2);
+        }
+
+        return ['from' => '2026-11-08', 'to' => '2026-11-14', 'days' => 7, 'projects' => $projects, 'total' => $external
+            ? ['spend' => 8200.0, 'spend_currency' => 'SAR', 'spend_left_out' => 0, 'cap' => 32000.0, 'remaining' => 9400.0, 'cap_currency' => 'SAR', 'cap_left_out' => 0, 'used' => 0.71, 'near' => 1, 'projects' => 2]
+            : ['spend' => null, 'spend_currency' => 'SAR', 'spend_left_out' => 1, 'cap' => 47000.0, 'remaining' => 8800.0, 'cap_currency' => 'SAR', 'cap_left_out' => 1, 'used' => 0.81, 'near' => 2, 'projects' => 5]];
+    }
+
     public static function messages(string $locale): array
     {
         $ar = $locale === 'ar';
@@ -114,6 +145,9 @@ final class MailGallery
             'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
             'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', $ar)),
             'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق» for the workspace, and the self-contained follow-up for a recipient outside the platform.
+            'spend-summary-weekly' => new SpendSummaryMail(self::spendSummary(), $locale, 'weekly'),
+            'spend-summary-external' => new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $ar ? 'سارة' : 'Sarah'),
             // Every alert family, one card each, built by the real `AlertMailItem::build()` from an alert outbox item.
             ...self::alertTypes($locale),
 
