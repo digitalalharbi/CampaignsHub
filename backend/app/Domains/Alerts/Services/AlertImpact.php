@@ -42,7 +42,8 @@ final class AlertImpact
 
         $value = $this->figure((string) $campaign->id, $metric, $now->copy()->subDays($days)->startOfDay(), $now->copy()->subDay()->endOfDay());
 
-        return $base + ['measurable' => true, 'campaign_id' => (string) $campaign->id, 'value_at_done' => $value['value'], 'before_complete' => $value['complete']];
+        return $base + ['measurable' => true, 'campaign_id' => (string) $campaign->id, 'value_at_done' => $value['value'], 'before_complete' => $value['complete']]
+            + ($metric === 'result' ? ['result_key' => $value['result_key']] : []);
     }
 
     /** @return array<string,mixed> */
@@ -76,6 +77,11 @@ final class AlertImpact
         if (! $after['complete'] || $after['value'] === null) {
             return $out + ['state' => 'insufficient_data', 'reason' => $after['complete'] ? 'no_value_in_window' : 'incomplete_data'];
         }
+        // ALERT-OBJECTIVE-RESULT-001 — a result is comparable only with itself: form leads before and leads after, or clicks
+        // before and landing page views after, are two units, and their difference is not a change.
+        if ($b['metric'] === 'result' && ($b['result_key'] ?? null) !== $after['result_key']) {
+            return $out + ['state' => 'insufficient_data', 'reason' => 'result_unit_changed', 'result_key_before' => $b['result_key'] ?? null, 'result_key_after' => $after['result_key']];
+        }
 
         $before = (float) $b['value_at_done'];
         $change = $before > 0 ? ($after['value'] - $before) / $before * 100 : null;
@@ -85,7 +91,7 @@ final class AlertImpact
         return $out + ['state' => 'computed', 'after' => $after['value'], 'change_pct' => $change === null ? null : round($change, 1), 'verdict' => $verdict];
     }
 
-    /** @return array{value: ?float, complete: bool} */
+    /** @return array{value: ?float, complete: bool, result_key: ?string} */
     private function figure(string $campaignId, string $metric, Carbon $from, Carbon $to): array
     {
         $m = $this->metrics->acrossProjects()->forCampaigns([$campaignId]);
@@ -96,6 +102,6 @@ final class AlertImpact
             $complete = false;
         }
 
-        return ['value' => is_numeric($v) ? (float) $v : null, 'complete' => $complete];
+        return ['value' => is_numeric($v) ? (float) $v : null, 'complete' => $complete, 'result_key' => isset($row['result_key']) ? (string) $row['result_key'] : null];
     }
 }

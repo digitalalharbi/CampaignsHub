@@ -27,6 +27,7 @@ use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
@@ -304,9 +305,59 @@ final class AlertEvaluator
                 if (isset($still[$event->dedup_key])) {
                     return;
                 }
+                $quiet = $this->notApplicable($rule, $event);
+                if ($quiet !== null) {
+                    $this->closeQuietly($event, $quiet, $now);
+
+                    return;
+                }
                 $this->recover($rule, $event, $now);
             });
     }
+
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 — why an open «صرف بدون نتائج» is no longer a question this rule asks, or null when its condition
+     * really cleared.
+     *
+     * A campaign that was paused or ended, one whose objective nobody set, one whose result its platforms do not report, and one
+     * alerted on a figure that is no longer its result (the old rule read `conversions` on a traffic campaign that brought visits)
+     * did not RECOVER: telling the reader «تعافى» about them would be a claim nobody measured.
+     */
+    private function notApplicable(AlertRule $rule, AlertEvent $event): ?string
+    {
+        if ($rule->type !== 'no_results') {
+            return null;
+        }
+        $state = $this->noResultsState[(string) $rule->id][(string) $event->entity_id] ?? null;
+        if ($state === null) {
+            return null;
+        }
+        if ($state['reason'] !== null) {
+            return $state['reason'];
+        }
+
+        // An alert raised before the objective decided the result was raised on `conversions`.
+        return ($event->context['result_key'] ?? 'conversions') === $state['result_key'] ? null : 'result_redefined';
+    }
+
+    /** Close an alert that no longer applies: resolved, with its reason, and no notification or mail — nothing recovered. */
+    private function closeQuietly(AlertEvent $event, string $reason, Carbon $now): void
+    {
+        $context = (array) $event->context;
+        $context['closed_reason'] = $reason;
+        $context['closed_at'] = $now->toIso8601String();
+
+        $this->resolve($event, $now);
+        $event->forceFill(['context' => $context])->save();
+    }
+
+    /**
+     * What the last `noResults()` sweep found about each campaign it read, per rule: why it is not asked about (`reason`), or
+     * which result it is judged on (`result_key`).
+     *
+     * @var array<string, array<string, array{reason: ?string, result_key: ?string}>>
+     */
+    private array $noResultsState = [];
 
     private function recover(AlertRule $rule, AlertEvent $event, Carbon $now): void
     {
@@ -927,21 +978,27 @@ final class AlertEvaluator
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get();
         $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $now);
+        $clock = app(ReportingTimezone::class);
+        $state = [];
 
-        $today = $now->toDateString();
-
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $today, &$out) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $now, $clock, &$out, &$state) {
+            $id = (string) $c->getKey();
             /*
              * OBJECTIVE-RESULT-001 — «صرف بدون نتائج» is a PERFORMANCE alert, so only a RUNNING campaign
              * qualifies (MASTER_FINAL §هـ): a paused or completed one, or one past its end date, is not
              * a performance problem — the Ettifaq vs Ajman campaign that had ended was alerted as one.
+             * «Past its end date» is the client's day: at 01:30 in Riyadh yesterday's end date has passed,
+             * though the server's UTC clock still says it is today.
              */
+            $today = $now->copy()->setTimezone($clock->forProject((string) $c->project_id))->toDateString();
             $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
             if ($c->status !== CampaignStatus::Active->value || $ended) {
+                $state[$id] = ['reason' => 'campaign_inactive', 'result_key' => null];
+
                 return;
             }
 
-            $totals = $figures[(string) $c->getKey()];
+            $totals = $figures[$id];
             $spend = (float) $totals['spend'];
 
             /*
@@ -950,9 +1007,17 @@ final class AlertEvaluator
              * set has no result to be zero, and a result nobody reported is not a zero: neither alerts.
              */
             $result = $totals['result'] ?? null;
-            if (($totals['result_key'] ?? null) === null || $result === null) {
+            if (($totals['result_key'] ?? null) === null) {
+                $state[$id] = ['reason' => 'objective_unknown', 'result_key' => null];
+
                 return;
             }
+            if ($result === null) {
+                $state[$id] = ['reason' => 'result_not_reported', 'result_key' => (string) $totals['result_key']];
+
+                return;
+            }
+            $state[$id] = ['reason' => null, 'result_key' => (string) $totals['result_key']];
 
             if ($spend > 0 && (float) $result <= 0) {
                 $label = (array) ($totals['result_label'] ?? []);
@@ -968,6 +1033,7 @@ final class AlertEvaluator
                 ];
             }
         });
+        $this->noResultsState[(string) $rule->id] = $state;
 
         return $out;
     }

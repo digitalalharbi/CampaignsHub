@@ -63,12 +63,12 @@ final class AlertsEngineTest extends TestCase
         ]);
     }
 
-    private function metric(UnifiedCampaign $c, string $key, float $value, int $daysAgo = 1): void
+    private function metric(UnifiedCampaign $c, string $key, float $value, int $daysAgo = 1, string $provider = 'sandbox'): void
     {
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'external_account_id' => (string) Str::uuid(), 'external_campaign_id' => (string) Str::uuid(),
-            'unified_campaign_id' => $c->id, 'provider' => 'sandbox', 'metric_key' => $key,
+            'unified_campaign_id' => $c->id, 'provider' => $provider, 'metric_key' => $key,
             'metric_date' => Carbon::now()->subDays($daysAgo)->toDateString(), 'value' => $value,
             /*
              * Every money row a sync writes carries the unit it was converted INTO, and the budget
@@ -183,6 +183,138 @@ final class AlertsEngineTest extends TestCase
         $context = AlertEvent::where('rule_id', $rule->id)->firstOrFail()->context;
         $this->assertSame('landing_page_views', $context['result_key']);
         $this->assertSame('زيارات الصفحة', $context['result_label']['ar']);
+    }
+
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 review (1) — a figure the platform never SENDS is not a zero. Snapchat and
+     * TikTok write no `engagements` row, TikTok no `installs`; a leads campaign may carry none of leads,
+     * form leads or conversions. Each spent with clicks and was told «بدون نتائج». A reported 0 still alerts.
+     */
+    public function test_no_results_skips_a_result_the_platform_never_sends(): void
+    {
+        $silent = [];
+        foreach ([['engagement', 'snapchat', true], ['engagement', 'tiktok', true], ['app_installs', 'tiktok', true], ['app_installs', 'tiktok', false], ['leads', 'meta', true]] as [$objective, $provider, $clicks]) {
+            $c = $this->campaign(objective: $objective);
+            $this->metric($c, 'spend', 500, provider: $provider);
+            $this->metric($c, 'impressions', 40000, provider: $provider);
+            if ($clicks) {
+                $this->metric($c, 'clicks', 300, provider: $provider);
+            }
+            $silent[] = (string) $c->id;
+        }
+        // The control: Meta REPORTED engagements, and they were 0 — that is a real «بدون تفاعل».
+        $reported = $this->campaign(objective: 'engagement');
+        $this->metric($reported, 'spend', 500, provider: 'meta');
+        $this->metric($reported, 'clicks', 300, provider: 'meta');
+        $this->metric($reported, 'engagements', 0, provider: 'meta');
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
+        $alerted = AlertEvent::where('rule_id', $rule->id)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->all();
+        $this->assertSame([(string) $reported->id], $alerted);
+        $this->assertSame([], array_intersect($silent, $alerted));
+        $this->assertSame('engagements', AlertEvent::where('rule_id', $rule->id)->firstOrFail()->context['result_key']);
+    }
+
+    /**
+     * The other silence: Meta drops a figure that is zero, so a sales campaign with no purchase has no `conversions` row. Meta
+     * DOES send conversions (its sibling campaign proves it), so that absence is a zero and the alert must still fire.
+     */
+    public function test_no_results_still_fires_when_a_platform_that_sends_the_figure_omitted_its_zero(): void
+    {
+        $converting = $this->campaign();
+        $this->metric($converting, 'spend', 300, provider: 'meta');
+        $this->metric($converting, 'conversions', 4, provider: 'meta');
+        $silent = $this->campaign();
+        $this->metric($silent, 'spend', 500, provider: 'meta');
+        $this->metric($silent, 'clicks', 120, provider: 'meta');
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
+        $event = AlertEvent::where('rule_id', $rule->id)->firstOrFail();
+        $this->assertSame((string) $silent->id, (string) $event->entity_id);
+        $this->assertSame('conversions', $event->context['result_key']);
+    }
+
+    /**
+     * Review (2) — the deploy-time transition. Alerts the old rule opened on a traffic campaign that brought
+     * visits, a paused campaign and one with no objective are not «تعافى»: they close quietly with their
+     * reason, with no notification and nothing for the mail. A real recovery still says so.
+     */
+    public function test_alerts_that_no_longer_apply_close_quietly_and_a_real_recovery_still_notifies(): void
+    {
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+        $open = function (UnifiedCampaign $c, array $context = []) use ($rule): AlertEvent {
+            return AlertEvent::create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'rule_id' => $rule->id, 'type' => 'no_results',
+                'entity_type' => UnifiedCampaign::class, 'entity_id' => $c->id,
+                'dedup_key' => hash('sha256', implode('|', [$rule->id, UnifiedCampaign::class, $c->id])),
+                'status' => 'open', 'severity' => 'warning',
+                'context' => $context + ['spend' => 500.0, 'conversions' => 0.0, 'days' => 3, 'title' => 'Spending with no results', 'message' => 'x'],
+                'last_triggered_at' => Carbon::now()->subDays(2),
+            ]);
+        };
+
+        $traffic = $this->campaign(objective: 'traffic');
+        $this->metric($traffic, 'spend', 1440);
+        $this->metric($traffic, 'clicks', 18464);
+        $this->metric($traffic, 'landing_page_views', 2881);
+        $paused = $this->campaign();
+        $paused->forceFill(['status' => 'paused'])->save();
+        $this->metric($paused, 'spend', 500);
+        $this->metric($paused, 'conversions', 0);
+        $unknown = $this->campaign(objective: 'other');
+        $this->metric($unknown, 'spend', 500);
+        $recovered = $this->campaign();
+        $this->metric($recovered, 'spend', 500);
+        $this->metric($recovered, 'conversions', 4);
+
+        $quiet = ['result_redefined' => $open($traffic), 'campaign_inactive' => $open($paused), 'objective_unknown' => $open($unknown)];
+        $real = $open($recovered, ['result_key' => 'conversions']);
+
+        $evaluator = app(AlertEvaluator::class);
+        $evaluator->evaluateRule($rule);
+
+        foreach ($quiet as $reason => $event) {
+            $fresh = $event->fresh();
+            $this->assertSame('resolved', $fresh->status, $reason);
+            $this->assertSame($reason, $fresh->context['closed_reason'] ?? null, $reason);
+            $this->assertArrayNotHasKey('recovered_at', $fresh->context, $reason);
+        }
+        $this->assertSame('resolved', $real->fresh()->status);
+        $this->assertArrayHasKey('recovered_at', $real->fresh()->context);
+
+        // Exactly one notification and one mail item: the real recovery's.
+        $this->assertSame(1, AppNotification::where('tenant_id', $this->tenant->id)->count());
+        $this->assertStringStartsWith('Recovered: ', (string) AppNotification::where('tenant_id', $this->tenant->id)->value('title'));
+        $outbox = (new \ReflectionProperty($evaluator, 'outbox'))->getValue($evaluator);
+        $this->assertCount(1, $outbox);
+        $this->assertSame((string) $real->id, $outbox[0]['event_id']);
+    }
+
+    /**
+     * Review (4) — «ended» is the client's day, not the server's. At 22:30 UTC on 12 Nov it is already
+     * 13 Nov in Riyadh: a campaign that ended on the 12th has ended; one ending on the 13th runs today.
+     */
+    public function test_no_results_reads_the_end_date_on_the_clients_clock(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-12 22:30:00', 'UTC'));
+        try {
+            $endedYesterday = $this->campaign();
+            $endedYesterday->forceFill(['ends_on' => '2026-11-12'])->save();
+            $endsToday = $this->campaign();
+            $endsToday->forceFill(['ends_on' => '2026-11-13'])->save();
+            foreach ([$endedYesterday, $endsToday] as $c) {
+                $this->metric($c, 'spend', 500);
+                $this->metric($c, 'conversions', 0);
+            }
+            $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+
+            $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
+            $this->assertSame((string) $endsToday->id, (string) AlertEvent::where('rule_id', $rule->id)->value('entity_id'));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_budget_risk_respects_the_threshold(): void
