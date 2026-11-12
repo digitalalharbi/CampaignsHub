@@ -17,6 +17,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -431,6 +432,8 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            // LINK-HEALTH-YESTERDAY-001 — why a day shows no spend: the link, the campaigns' status, or the platform spent nothing.
+            'no_data_state' => app(LinkHealth::class)->noDataState($tenantId, (string) $projectId, $to->copy(), Carbon::now()),
             // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
             'open_alerts' => $this->openAlerts($projectId, $from, $to),
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the open connection alerts, for «ملخص الربط» only.

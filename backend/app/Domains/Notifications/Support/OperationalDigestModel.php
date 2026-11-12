@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -1418,8 +1419,13 @@ final class OperationalDigestModel
 
         $withheld = (int) (($block['totals'] ?? [])['spend_withheld_rows'] ?? 0) > 0;
 
+        // LINK-HEALTH-YESTERDAY-001 — the three states, each in its own words, decided by the one rule (`LinkHealth`).
+        $state = is_string($block['no_data_state'] ?? null) ? (string) $block['no_data_state'] : null;
+
         return match (true) {
             $withheld => $ar ? 'فيه إنفاق مسجّل بعملة ما لها سعر صرف، فما نعرضه كرقم' : 'Spend was recorded in a currency with no exchange rate, so it is not shown as a figure',
+            $state === 'not_synced' => LinkHealth::text('not_synced', $ar).($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
+            $state !== null => LinkHealth::text($state, $ar),
             ($f['sync_failed'] ?? false) === true || ($f['state'] ?? '') === 'sync_failed' => ($ar ? 'المزامنة متوقفة' : 'The sync has stopped').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
             ($f['state'] ?? '') === 'stale' => ($ar ? 'البيانات متأخرة' : 'The figures are late').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
             $sources === [] => $ar ? 'ما فيه منصة إعلانية مربوطة بالمشروع' : 'No ad platform is linked to this project',

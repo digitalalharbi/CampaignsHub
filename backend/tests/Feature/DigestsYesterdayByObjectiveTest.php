@@ -345,16 +345,22 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
     }
 
-    /** A credential that does NOT renew itself and really expires is recorded for «ملخص الربط», never sent instantly. */
-    public function test_a_non_renewing_credential_near_expiry_waits_for_the_morning_digest(): void
+    /**
+     * A credential that does NOT renew itself, near its expiry, while its data still arrives: no link alert at all
+     * (§7أ, the decisive criterion — LINK-HEALTH-YESTERDAY-001). It speaks the morning its yesterday does not arrive.
+     */
+    public function test_a_non_renewing_credential_near_expiry_raises_nothing_while_yesterday_arrives(): void
     {
-        $this->connection('linkedin', null, '+3 days');
+        $c = $this->connection('linkedin', null, '+3 days');
+        DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'connection_id' => $c->id, 'provider' => 'linkedin', 'status' => 'success',
+            'window_start' => '2026-11-09', 'window_end' => '2026-11-12', 'started_at' => now()->subHour(), 'finished_at' => now()->subHour(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         $notices = DB::table('app_notifications')->count();
 
-        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
-        $event = AlertEvent::where('type', 'token_expiry')->sole();
-        $this->assertTrue($event->context['digest_only']);
-        $this->assertSame($notices, DB::table('app_notifications')->count(), 'no instant notice');
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
+        $this->assertSame($notices, DB::table('app_notifications')->count(), 'no notice');
     }
 
     /** ROAS is a sales figure: a traffic campaign with no revenue is never told its return fell. */
