@@ -319,7 +319,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
      * @param  list<string>  $chunk
      * @return list<array<string, mixed>>
      */
-    private function fetchStatsPiece(OAuthTokens $tokens, string $adAccountId, array $chunk, ReportingWindow $piece, string $entity = 'CAMPAIGN'): array
+    private function fetchStatsPiece(OAuthTokens $tokens, string $adAccountId, array $chunk, ReportingWindow $piece, string $entity = 'CAMPAIGN', bool $countRaw = true): array
     {
         $rows = [];
         $from = $piece->startAt()->toDateString();
@@ -355,7 +355,9 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
         // X returns one record per ENTITY, each carrying its own day series — so the unit here is
         // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
-        $this->countRawInsightRows(count($entities));
+        if ($countRaw) {
+            $this->countRawInsightRows(count($entities));
+        }
 
         foreach ($entities as $entity) {
             $campaignId = (string) ($entity['id'] ?? '');
@@ -438,7 +440,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
         foreach ($window->chunked(self::MAX_DAYS_PER_REQUEST) as $piece) {
             foreach (array_chunk(array_keys($tweetOf), self::ENTITIES_PER_CALL) as $chunk) {
-                foreach ($this->fetchStatsPiece($tokens, $adAccountId, array_map('strval', $chunk), $piece, 'PROMOTED_TWEET') as $row) {
+                foreach ($this->fetchStatsPiece($tokens, $adAccountId, array_map('strval', $chunk), $piece, 'PROMOTED_TWEET', countRaw: false) as $row) {
                     $promoted = (string) $row['campaign_id'];
                     $tweet = $tweetOf[$promoted] ?? null;
                     if ($tweet === null) {

@@ -51,6 +51,20 @@ final class ReportObjectives
     }
 
     /**
+     * Whether the report's objective(s) were chosen through this change — several (`config.objectives`), or one picked in the live builder
+     * (a live report's `campaign_objective`, which the builder never wrote before). A saved report's inferred objective does not count.
+     */
+    public static function chosenForLink(Report $report): bool
+    {
+        $config = (array) ($report->config ?? []);
+        if (count((array) ($config[self::CONFIG_KEY] ?? [])) >= 2) {
+            return true;
+        }
+
+        return ($config['live'] ?? false) === true && self::of($report) !== [];
+    }
+
+    /**
      * What to write on a report for these objectives: `campaign_objective` and the `config` key.
      *
      * @param  list<string>  $objectives

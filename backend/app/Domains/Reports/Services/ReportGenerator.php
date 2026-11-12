@@ -28,8 +28,8 @@ use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
-use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportObjectives;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -75,29 +75,22 @@ final class ReportGenerator
     }
 
     /**
-     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the operator's (one or several), else — for a report whose
-     * inferred lens is mixed — the objectives its spending campaigns declare. Master task 10: «افتراضياً من أهداف الحملات».
+     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the stored list (chosen, or the campaigns' own written on
+     * its first generation — «افتراضياً من أهداف الحملات»), else its one objective.
      *
-     * @param  list<array<string, mixed>>  $campaigns
      * @return list<string>
      */
-    private function objectivesOf(Report $report, string $objective, array $campaigns): array
+    private function objectivesOf(Report $report, string $objective): array
     {
         $chosen = ReportObjectives::of($report);
-        if ($chosen !== []) {
-            return $chosen;
-        }
 
-        return $objective === ReportObjectives::MIXED ? ReportObjectiveLens::templatesFromCampaigns($campaigns) : [$objective];
+        return $chosen !== [] ? $chosen : ($objective === ReportObjectives::MIXED ? [] : [$objective]);
     }
 
-    /**
-     * @param  list<array<string, mixed>>  $campaigns
-     * @return list<string>
-     */
-    private function objectiveKpis(Report $report, string $objective, array $campaigns, ?string $destination): array
+    /** @return list<string> */
+    private function objectiveKpis(Report $report, string $objective, ?string $destination): array
     {
-        $objectives = $this->objectivesOf($report, $objective, $campaigns);
+        $objectives = $this->objectivesOf($report, $objective);
 
         return count($objectives) >= 2
             ? $this->template->metricSetForMany($objectives, $destination)
@@ -259,6 +252,15 @@ final class ReportGenerator
              * The layout's own keys still win; every other key stays as saved.
              */
             $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form) + (array) $config;
+            /*
+             * REPORT-MULTI-OBJECTIVE-001 — a report nobody chose an objective for, whose spending campaigns declare several, is measured
+             * against them all («افتراضياً من أهداف الحملات»). Written once, here, so every later generation reads the same list; a report
+             * stored as `custom` before this keeps the custom set.
+             */
+            if (! $report->campaign_objective && $objective === ReportObjectives::MIXED && ! isset($config[ReportObjectives::CONFIG_KEY])
+                && count($fromCampaigns = ReportObjectiveLens::templatesFromCampaigns($campaigns)) >= 2) {
+                $config[ReportObjectives::CONFIG_KEY] = $fromCampaigns;
+            }
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         } else {
             /*
@@ -335,9 +337,9 @@ final class ReportGenerator
                 ? $scope->metrics
                 : (isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
                     ? $config['metric_set']
-                    : $this->objectiveKpis($report, $objective, $campaigns, $leadDestination?->value)),
+                    : $this->objectiveKpis($report, $objective, $leadDestination?->value)),
             // REPORT-MULTI-OBJECTIVE-001 — the objectives the KPIs above were taken from (one, several, or the campaigns' own when none was chosen).
-            'objectives' => $this->objectivesOf($report, $objective, $campaigns),
+            'objectives' => $this->objectivesOf($report, $objective),
             'lead_destination' => $leadDestination?->value,
             // RESULT-EVENTS-001 — Results exist only where a result event is configured (project, over-ridden by this report); never inferred.
             'results' => $this->resultsFor($report, $campaigns, $destinations),

@@ -547,7 +547,7 @@ final class ReportScopeController extends Controller
         // REPORT-MULTI-OBJECTIVE-001 — and every objective it names: one is the report's objective, several are the mixed lens plus the list.
         $objectives = ReportObjectives::toStore($scope->objectiveTemplates());
         $config = (array) ($model->config ?? []);
-        if ($objectives['campaign_objective'] !== null) {
+        if ($objectives['campaign_objective'] !== null || $scope->objectiveFilter) {
             unset($config[ReportObjectives::CONFIG_KEY]);
             if ($objectives['objectives'] !== []) {
                 $config[ReportObjectives::CONFIG_KEY] = $objectives['objectives'];

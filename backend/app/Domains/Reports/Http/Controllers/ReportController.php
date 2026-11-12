@@ -23,8 +23,8 @@ use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\DetailLevel;
 use App\Domains\Reports\Support\ExportStaleness;
 use App\Domains\Reports\Support\ReportColumns;
-use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportObjectives;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Domains\Reports\Support\SharePreferences;
@@ -196,7 +196,8 @@ final class ReportController extends Controller
     }
 
     /** What the editor owns outright in `config`: never carried over from the original, always what the editor sent. */
-    private const EDITOR_OWNED_CONFIG = ['columns', 'detail_level', 'period_kind', 'period_mode', 'live', 'metrics', Report::DRAFT_MARK];
+    // REPORT-MULTI-OBJECTIVE-001 — `objectives` is re-derived from what the editor sends, never carried from the copied report.
+    private const EDITOR_OWNED_CONFIG = ['columns', 'detail_level', 'period_kind', 'period_mode', 'live', 'metrics', ReportObjectives::CONFIG_KEY, Report::DRAFT_MARK];
 
     /** The slide layout the generator authors for a report's form, objective and platforms ({@see ReportTemplateEngine::defaultConfig()}). */
     private const AUTHORED_LAYOUT = ['version', 'objective', 'metric_set', 'platform_order', 'slides'];

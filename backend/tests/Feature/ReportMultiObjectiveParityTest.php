@@ -20,6 +20,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -206,6 +207,33 @@ final class ReportMultiObjectiveParityTest extends TestCase
         $page = $this->getJson("/api/v1/reports/shared/{$created['token']}/live")->assertOk()->json('data');
 
         $this->assertSame(['clicks', 'impressions'], $page['metrics'], 'the link ignored the report\'s own KPI list');
+    }
+
+    public function test_a_live_link_of_a_report_whose_objective_was_inferred_still_shows_every_kpi(): void
+    {
+        $this->report(self::FIGURES);
+        $created = $this->live([], ['hide_spend' => false]);
+        $report = Report::withoutGlobalScopes()->findOrFail($created['report_id']);
+        // A saved report's generator writes its inferred objective; that is not a choice made for its link.
+        $report->forceFill(['campaign_objective' => 'sales', 'config' => [...(array) $report->config, 'live' => false]])->saveQuietly();
+
+        $page = $this->getJson("/api/v1/reports/shared/{$created['token']}/live")->assertOk()->json('data');
+
+        $this->assertSame([], $page['metrics'], 'an existing link changed the KPIs it shows');
+    }
+
+    public function test_a_report_stored_as_custom_keeps_the_custom_kpis(): void
+    {
+        $this->report(self::FIGURES);
+        $saved = Report::create([
+            'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(), 'name' => 'Custom',
+            'type' => 'performance', 'status' => 'completed', 'audience' => 'client', 'form' => 'detailed', 'campaign_objective' => 'custom',
+            'period_start' => '2026-09-01', 'period_end' => '2026-09-30', 'currency' => 'SAR', 'created_by' => $this->operator->getKey(),
+        ]);
+        $data = app(ReportGenerator::class)->generate($saved->fresh());
+
+        $this->assertSame(app(ReportTemplateEngine::class)->metricSet('custom'), $data['metric_set']);
+        $this->assertSame([], $data['objectives']);
     }
 
     /** @param array<string, float> $metrics */

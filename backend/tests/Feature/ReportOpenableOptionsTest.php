@@ -12,9 +12,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
-use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Reports\Services\ShareService;
-use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -198,5 +196,22 @@ final class ReportOpenableOptionsTest extends TestCase
         $this->assertSame('https://cdn.test/meta.mp4', $ad['preview']['video_url'] ?? null);
         $this->assertSame('Buy now', $ad['body'] ?? null);
         $this->assertSame('SHOP_NOW', $ad['cta'] ?? null);
+    }
+
+    public function test_a_saved_reports_link_made_before_the_panel_keeps_its_words(): void
+    {
+        $row = ['name' => 'meta creative', 'provider' => 'meta', 'body' => 'Buy now', 'headline' => 'Sale',
+            'preview' => ['state' => 'available', 'kind' => 'video', 'video_url' => 'https://cdn.test/meta.mp4', 'thumbnail_url' => 'https://cdn.test/meta.jpg']];
+        DB::table('reports')->where('id', $this->report->id)->update(['generated_at' => now(), 'data' => json_encode([
+            'period' => ['from' => '2026-07-01', 'to' => '2026-07-31'], 'currency' => 'SAR', 'objective' => 'sales',
+            'kpis' => ['impressions' => 1000], 'metric_set' => ['impressions'], 'ads' => [$row],
+        ])]);
+        $this->report = Report::withoutGlobalScopes()->findOrFail($this->report->id);
+
+        [, $raw] = $this->snapshotShare([]);
+        $ad = $this->getJson("/api/v1/reports/shared/{$raw}")->assertOk()->json('data.data.ads.0');
+
+        $this->assertSame('Buy now', $ad['body'] ?? null, 'an existing snapshot link lost the ad text it always showed');
+        $this->assertSame('https://cdn.test/meta.mp4', $ad['preview']['video_url'] ?? null);
     }
 }

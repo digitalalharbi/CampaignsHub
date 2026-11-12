@@ -139,6 +139,10 @@ final class ChosenFigures
         if ($report === null) {
             return $share !== null ? self::strings(($share->scope ?? [])['metrics'] ?? []) : [];
         }
+        // As `for()`: an internal report states every figure.
+        if (($report->audience ?? 'client') === 'internal') {
+            return [];
+        }
 
         return self::listedMetrics($report, $share);
     }

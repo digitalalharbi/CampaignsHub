@@ -268,7 +268,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 // still CONTENT and gets its row — it was `null` before, so a sponsored post never
                 // reached the content library, the report or the live link at all.
                 'creative' => $this->creativeFace($id, $c)
-                    ?? $this->postFace($id, $c, $posts, $postReason, $images + $videos, $imageReason ?? $videoReason),
+                    ?? $this->postFace($id, $c, $posts, $postReason, $images + $videos, ['images' => $imageReason, 'videos' => $videoReason]),
                 'raw' => (array) $c,
             ], static fn ($v) => $v !== null);
         }
@@ -298,7 +298,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 continue;
             }
 
-            if (in_array($response->status(), [401, 403], true)) {
+            // 403 is the grant; a 401 is an expired or revoked token, which is not a permission the Owner can add.
+            if ($response->status() === 403) {
                 return [$out, $refusedReason]; // the grant, not the item: asking again will not change it
             }
 
@@ -337,9 +338,10 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
      * @param  array<string, mixed>  $creative
      * @param  array<string, array<string, mixed>>  $posts
      * @param  array<string, array<string, mixed>>  $media
+     * @param  array{images: ?string, videos: ?string}  $mediaReasons
      * @return array<string, mixed>
      */
-    private function postFace(string $id, array $creative, array $posts, ?string $postReason, array $media, ?string $mediaReason): array
+    private function postFace(string $id, array $creative, array $posts, ?string $postReason, array $media, array $mediaReasons): array
     {
         $reference = is_string($creative['content']['reference'] ?? null) ? $creative['content']['reference'] : null;
         $post = $reference === null ? null : ($posts[$reference] ?? null);
@@ -362,7 +364,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
         $reason = match (true) {
             $reference === null => 'linkedin_no_post_reference',
             $post === null => $postReason ?? 'linkedin_post_unreadable',
-            $mediaUrn !== null && $still === null => $mediaReason ?? 'linkedin_media_unreadable',
+            $mediaUrn !== null && $still === null => $mediaReasons[$isVideo ? 'videos' : 'images'] ?? 'linkedin_media_unreadable',
             default => null,
         };
 
@@ -501,7 +503,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             }
         }
 
-        return $this->analytics($tokens, $adAccountId, $from, $to, 'CREATIVE', fn (mixed $pivot): ?string => $this->creativeIdFrom($pivot), $objectives);
+        // Not counted as the run's raw rows: those state the CAMPAIGN read (SYNC-TRUTH-004), as Snapchat's creative pass does not either.
+        return $this->analytics($tokens, $adAccountId, $from, $to, 'CREATIVE', fn (mixed $pivot): ?string => $this->creativeIdFrom($pivot), $objectives, countRaw: false);
     }
 
     /** @return array<string, string|null> campaign id → LinkedIn objective */
@@ -522,7 +525,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
      * @param  array<string, string|null>  $objectives  entity id → objective
      * @return list<array<string, mixed>>
      */
-    private function analytics(OAuthTokens $tokens, string $adAccountId, string $from, string $to, string $pivot, callable $entityOf, array $objectives): array
+    private function analytics(OAuthTokens $tokens, string $adAccountId, string $from, string $to, string $pivot, callable $entityOf, array $objectives, bool $countRaw = true): array
     {
         /*
          * Paged like everything else (LINKEDIN-PAGE-001), and here the truncation was worst: one row
@@ -566,7 +569,9 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             'fields' => implode(',', $fields),
         ]);
 
-        $this->countRawInsightRows(count($reported));
+        if ($countRaw) {
+            $this->countRawInsightRows(count($reported));
+        }
 
         $rows = [];
 

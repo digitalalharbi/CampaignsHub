@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Actions\UpsertCreativeDailyMetrics;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Campaigns\Services\CreativePresenter;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Catalogue\ProviderCapability;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
@@ -16,6 +20,8 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Providers\ReportsCreativeInsights;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Services\ReportAds;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -257,21 +263,21 @@ final class XAndLinkedInContentReachesReportTest extends TestCase
      */
     public function test_every_x_and_linkedin_ad_that_ran_is_listed_in_the_report(): void
     {
-        $ws = \App\Domains\ClientWorkspaces\Models\ClientWorkspace::create([
+        $ws = ClientWorkspace::create([
             'tenant_id' => $this->tenant->id, 'name' => 'W', 'slug' => 'w-'.uniqid(),
             'mode' => 'managed', 'status' => 'active', 'client_status' => 'active',
         ]);
-        $project = \App\Domains\Projects\Models\Project::create([
+        $project = Project::create([
             'tenant_id' => $this->tenant->id, 'client_workspace_id' => $ws->id, 'name' => 'P', 'status' => 'active',
         ]);
 
         $creativeOf = function (string $provider, string $accountExternal, string $creativeExternal, array $face) use ($project): array {
-            $account = \App\Domains\Integrations\Models\ExternalAccount::withoutGlobalScopes()->firstOrCreate(
+            $account = ExternalAccount::withoutGlobalScopes()->firstOrCreate(
                 ['tenant_id' => $this->tenant->id, 'provider' => $provider, 'external_id' => $accountExternal],
                 ['provider_connection_id' => $this->connection?->getKey(), 'account_type' => 'ad_account', 'name' => $provider,
                     'currency' => 'SAR', 'timezone' => 'Asia/Riyadh', 'status' => 'active', 'discovered_at' => Carbon::now()],
             );
-            $campaign = \App\Domains\Campaigns\Models\ExternalCampaign::withoutGlobalScopes()->firstOrCreate(
+            $campaign = ExternalCampaign::withoutGlobalScopes()->firstOrCreate(
                 ['tenant_id' => $this->tenant->id, 'external_account_id' => $account->id, 'external_id' => 'cmp-'.$provider],
                 ['project_id' => $project->id, 'provider' => $provider, 'name' => 'Campaign', 'status' => 'active'],
             );
@@ -284,7 +290,7 @@ final class XAndLinkedInContentReachesReportTest extends TestCase
             return [$account, $campaign];
         };
 
-        $section = fn (): array => app(\App\Domains\Reports\Services\ReportAds::class)->for(
+        $section = fn (): array => app(ReportAds::class)->for(
             'traffic', Carbon::parse('2026-11-01'), Carbon::parse('2026-11-01'), ['project_ids' => [(string) $project->id]],
         );
 
@@ -299,7 +305,7 @@ final class XAndLinkedInContentReachesReportTest extends TestCase
 
         $this->assertSame(0, $section()['creatives_in_scope'] - $section()['creatives_unmeasured'], 'before the creative stats, no X or LinkedIn ad is measured in the period');
 
-        $upsert = app(\App\Domains\Campaigns\Actions\UpsertCreativeDailyMetrics::class);
+        $upsert = app(UpsertCreativeDailyMetrics::class);
         $upsert->execute($xAccount, [
             ['currency' => 'SAR', 'campaign_id' => '900', 'date' => '2026-11-01', 'spend' => 3.0, 'impressions' => 150.0, 'clicks' => 5.0],
             ['currency' => 'SAR', 'campaign_id' => '901', 'date' => '2026-11-01', 'spend' => 5.0, 'impressions' => 10.0],
@@ -338,7 +344,7 @@ final class XAndLinkedInContentReachesReportTest extends TestCase
 
     private function recordAccount(string $provider, string $externalId, string $timezone): void
     {
-        \App\Domains\Integrations\Models\ExternalAccount::withoutGlobalScopes()->create([
+        ExternalAccount::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
             'provider_connection_id' => $this->connection?->getKey(),
             'provider' => $provider,

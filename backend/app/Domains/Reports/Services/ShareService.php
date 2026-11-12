@@ -9,8 +9,8 @@ use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
-use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ClientAccountRows;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\HiddenMoney;
@@ -363,7 +363,8 @@ final class ShareService
          * to every content list; the snapshot link applied it to none, so a saved report's link published the ad copy and the films its
          * own switches withheld on the live link of the same share.
          */
-        foreach ([...self::CREATIVE_SECTIONS, 'ads_groups', 'ads_platform_groups'] as $section) {
+        // Only once the operator configured the panel: a snapshot link made before it keeps the words it has always shown.
+        foreach ($share->creativeVisibility()->creatives ? [...self::CREATIVE_SECTIONS, 'ads_groups', 'ads_platform_groups'] : [] as $section) {
             if (! empty($data[$section]) && is_array($data[$section])) {
                 $data[$section] = ContentCopy::rows($data[$section], $share->creativeVisibility());
             }

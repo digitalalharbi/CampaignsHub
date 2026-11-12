@@ -55,6 +55,7 @@ export function ReportAdDetail({
   const reading = readPreview(preview, ar)
   // REPORT-OPENABLE-OPTIONS-001 — a client link's «تكبير الصور» and «تحميل الأصل», as the server set them; absent (not a link) draws nothing.
   const [zoom, setZoom] = useState(1)
+  useEffect(() => setZoom(1), [ad.id])
   const still = reading.kind === 'video' ? null : (preview?.image_url ?? preview?.thumbnail_url ?? null)
   const download = preview?.can_download === true ? (reading.kind === 'video' ? reading.src : still) : null
 

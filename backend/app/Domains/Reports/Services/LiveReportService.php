@@ -492,7 +492,9 @@ final class LiveReportService
     {
         $report = $share->report;
         $listed = ChosenFigures::listed($report, $share);
-        if ($listed !== [] || $report === null) {
+        // The objective fallback is for reports that carry the objective choice this change introduced; every link made before it keeps
+        // «all of them» when nobody chose a list (a saved report's inferred `campaign_objective` is not a choice made for its link).
+        if ($listed !== [] || $report === null || ! ReportObjectives::chosenForLink($report)) {
             return $listed;
         }
 
