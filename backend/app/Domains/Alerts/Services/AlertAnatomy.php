@@ -79,7 +79,8 @@ final class AlertAnatomy
             // cost-per rules withdraw a verdict when either window is incomplete; ROAS has no such guard.
             $e['completeness'] = $key === 'roas' ? 'unverified' : 'complete';
         } elseif ($type === 'no_results') {
-            $e['metric'] = 'conversions';
+            // ALERT-OBJECTIVE-RESULT-001 — the evidence names the result it measured; `conversions` only for an older event.
+            $e['metric'] = isset($c['result_key']) ? (string) $c['result_key'] : 'conversions';
             $e['now'] = $num($c['conversions'] ?? null);
             $e['window_days'] = isset($c['days']) ? (int) $c['days'] : null;
             $e['threshold'] = 0.0;

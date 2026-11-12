@@ -100,6 +100,37 @@ final class AlertEventText
      *
      * @return array{headline: string, text: string, numbers: string, action: string, link: string}
      */
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 — what to check follows the objective. «حلويات برديسي» (traffic, Snapchat swipes) was told to
+     * check conversion tracking; a visits campaign has no conversions to track. Conversions are the advice for sales and leads only,
+     * and an alert raised before the objective named its result gets general advice, never «التحويلات».
+     *
+     * @param  array<string,mixed>  $ctx
+     */
+    private static function noResultsAction(array $ctx, bool $ar): string
+    {
+        $family = (string) ($ctx['result_family'] ?? match ($ctx['result_key'] ?? null) {
+            'landing_page_views', 'clicks' => 'traffic',
+            'reach', 'impressions' => 'awareness',
+            'engagements' => 'engagement',
+            'video_views' => 'video',
+            'leads', 'form_leads' => 'leads',
+            'installs' => 'app',
+            default => '',
+        });
+
+        return match ($family) {
+            'traffic' => $ar ? 'تحقق من رابط الصفحة وسرعتها ← المحتوى.' : 'Check the landing page link and its speed, then the content.',
+            'awareness' => $ar ? 'تحقق من الاستهداف والميزانية ← المحتوى.' : 'Check the targeting and budget, then the content.',
+            'engagement' => $ar ? 'راجع المحتوى ← الجمهور.' : 'Review the content, then the audience.',
+            'video' => $ar ? 'راجع أول ثواني الفيديو ← الجمهور.' : 'Review the first seconds of the video, then the audience.',
+            'app' => $ar ? 'تحقق من رابط المتجر وتتبع التثبيت ← المحتوى.' : 'Check the store link and install tracking, then the content.',
+            'leads' => $ar ? 'تحقق من النموذج وتتبع التحويلات ← المحتوى، وأوقف الحملة إن لزم.' : 'Check the form and conversion tracking, then the content, and pause if needed.',
+            'sales' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
+            default => $ar ? 'راجع المحتوى والاستهداف، وأوقف الحملة إن لزم.' : 'Review the content and targeting, and pause if needed.',
+        };
+    }
+
     public static function plain(string $type, array $ctx, bool $ar, string $platform = ''): array
     {
         return self::say($type, $ctx, $ar, $platform);
@@ -169,7 +200,7 @@ final class AlertEventText
                     'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
                     // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
                     'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 خلال ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
-                    'action' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
+                    'action' => self::noResultsAction($ctx, $ar),
                     'link' => 'campaign',
                 ];
             case 'sync_failure':

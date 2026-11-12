@@ -1029,7 +1029,7 @@ final class AlertEvaluator
                     'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' in the last '.$days.' days.',
                     // `conversions` keeps its name for the readers of this context; it now holds the objective's result.
                     'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $days,
-                        'result_key' => $totals['result_key'], 'result_label' => $totals['result_label'] ?? null],
+                        'result_key' => $totals['result_key'], 'result_family' => $totals['result_family'] ?? null, 'result_label' => $totals['result_label'] ?? null],
                 ];
             }
         });

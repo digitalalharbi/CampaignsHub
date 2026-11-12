@@ -144,6 +144,35 @@ final class AlertsEngineTest extends TestCase
         $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('no_results', ['threshold' => ['days' => 3]])));
     }
 
+    /**
+     * «حلويات برديسي» on Production: a traffic campaign on Snapchat. Snapchat's swipes are stored as `clicks`, and its
+     * `landing_page_views` arrive as 0 when no pixel measures the page — «not tracked», not «nobody came». Its result is the
+     * swipes, so it is not «بدون نتائج»; and an alert the old rule left open on it closes quietly, never «تعافى».
+     */
+    public function test_no_results_reads_a_snapchat_traffic_campaigns_swipes_and_closes_its_old_alert_quietly(): void
+    {
+        $c = $this->campaign(objective: 'traffic');
+        $this->metric($c, 'spend', 620, provider: 'snapchat');
+        $this->metric($c, 'impressions', 85000, provider: 'snapchat');
+        $this->metric($c, 'clicks', 940, provider: 'snapchat');
+        $this->metric($c, 'landing_page_views', 0, provider: 'snapchat');
+        $this->metric($c, 'conversions', 0, provider: 'snapchat');
+        $rule = $this->rule('no_results', ['threshold' => ['days' => 3]]);
+        $old = AlertEvent::create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'rule_id' => $rule->id, 'type' => 'no_results',
+            'entity_type' => UnifiedCampaign::class, 'entity_id' => $c->id,
+            'dedup_key' => hash('sha256', implode('|', [$rule->id, UnifiedCampaign::class, $c->id])),
+            'status' => 'open', 'severity' => 'warning',
+            'context' => ['spend' => 620.0, 'conversions' => 0.0, 'days' => 3, 'title' => 'Spending with no results', 'message' => 'x'],
+            'last_triggered_at' => Carbon::now()->subDay(),
+        ]);
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($rule));
+        $this->assertSame('resolved', $old->fresh()->status);
+        $this->assertSame('result_redefined', $old->fresh()->context['closed_reason']);
+        $this->assertSame(0, AppNotification::where('tenant_id', $this->tenant->id)->count());
+    }
+
     /** An objective nobody set has no result to be zero — no alert. */
     public function test_no_results_skips_a_campaign_whose_objective_is_not_set(): void
     {

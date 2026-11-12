@@ -13,7 +13,7 @@
                 "dedup_key": "6dbd79fc595c189402b81d9ab22bfad9add65b036d2c4f9dcd1442ca69ac7752",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005415",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -42,7 +42,7 @@
                 "dedup_key": "e1b3b7901c1d81f966da5399c2f8d190ff7684faa630daef397a536d0ee2091e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005419",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -71,7 +71,7 @@
                 "dedup_key": "5a6520235a16733911253943f4f021ea87c3464384fa7dd0e1d9c655153c33c1",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005423",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -100,7 +100,7 @@
                 "dedup_key": "d1e2c6600025e7bb3e0830dc1f6badc01b75a092facbe9475f06cc845fb6e095",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005427",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -129,7 +129,7 @@
                 "dedup_key": "f81744e086b96f65aeb06708369a67df4e2b90f45dceccbd72bd860ed1355f98",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005431",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -158,7 +158,7 @@
                 "dedup_key": "b82fe03561f09e09da9b5e01e92114a08f9a582471277ad337886bac973f2152",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005435",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -187,7 +187,7 @@
                 "dedup_key": "e88c1db1e15830ac05b9650980a2476cec6507ee96e0892b0b263c104909aebd",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005439",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -216,7 +216,7 @@
                 "dedup_key": "9610eb92ae703dc5608c8b05ecf8c17f3b5a810b658e9bed0bde10d2ed61a47c",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005441",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -245,7 +245,7 @@
                 "dedup_key": "370101087120002e4687369f80d2030d0e6839490ac810d276899409e569a5ce",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005443",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -274,7 +274,7 @@
                 "dedup_key": "363faaa6d597d35a1fc76fe9c41648ec29802f0963f6960d00cb39dd2dd529d9",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005445",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -303,7 +303,7 @@
                 "dedup_key": "a16cb09bb9043d056178080ef52ccb1b5a5a58b88cdb02ec565539d0cbcc4065",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005447",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1376,7 +1376,7 @@
                 "dedup_key": "ab5760a205d68f6b7d3e6165f1950094cdbe690f922bf3154b6215f91707272e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1521,7 +1521,7 @@
                 "dedup_key": "7820625e26595d78b715a1c24f027bc880892de8de4ae934574ffeafd83bccd7",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1550,7 +1550,7 @@
                 "dedup_key": "c63df9d7c49102f81693d4840e78717c9459cb3064db17b9a5635f9e189e445d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1579,7 +1579,7 @@
                 "dedup_key": "f1a332473510b3255d6dd74d6fd9c98b9f2c8ab9de555a220cd1753b1c1026f5",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1608,7 +1608,7 @@
                 "dedup_key": "e367c2eed7398a29bfea1f51e1b3bd2943fb3e21dbd803ab813dd08c959812dd",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7131,7 +7131,7 @@
                 "dedup_key": "6dbd79fc595c189402b81d9ab22bfad9add65b036d2c4f9dcd1442ca69ac7752",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005415",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7160,7 +7160,7 @@
                 "dedup_key": "e1b3b7901c1d81f966da5399c2f8d190ff7684faa630daef397a536d0ee2091e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005419",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7189,7 +7189,7 @@
                 "dedup_key": "5a6520235a16733911253943f4f021ea87c3464384fa7dd0e1d9c655153c33c1",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005423",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7218,7 +7218,7 @@
                 "dedup_key": "d1e2c6600025e7bb3e0830dc1f6badc01b75a092facbe9475f06cc845fb6e095",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005427",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7247,7 +7247,7 @@
                 "dedup_key": "f81744e086b96f65aeb06708369a67df4e2b90f45dceccbd72bd860ed1355f98",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005431",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7276,7 +7276,7 @@
                 "dedup_key": "b82fe03561f09e09da9b5e01e92114a08f9a582471277ad337886bac973f2152",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005435",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7305,7 +7305,7 @@
                 "dedup_key": "e88c1db1e15830ac05b9650980a2476cec6507ee96e0892b0b263c104909aebd",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005439",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7334,7 +7334,7 @@
                 "dedup_key": "9610eb92ae703dc5608c8b05ecf8c17f3b5a810b658e9bed0bde10d2ed61a47c",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005441",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7363,7 +7363,7 @@
                 "dedup_key": "370101087120002e4687369f80d2030d0e6839490ac810d276899409e569a5ce",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005443",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7392,7 +7392,7 @@
                 "dedup_key": "363faaa6d597d35a1fc76fe9c41648ec29802f0963f6960d00cb39dd2dd529d9",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005445",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7421,7 +7421,7 @@
                 "dedup_key": "a16cb09bb9043d056178080ef52ccb1b5a5a58b88cdb02ec565539d0cbcc4065",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005447",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -8494,7 +8494,7 @@
                 "dedup_key": "ab5760a205d68f6b7d3e6165f1950094cdbe690f922bf3154b6215f91707272e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -8639,7 +8639,7 @@
                 "dedup_key": "7820625e26595d78b715a1c24f027bc880892de8de4ae934574ffeafd83bccd7",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -8668,7 +8668,7 @@
                 "dedup_key": "c63df9d7c49102f81693d4840e78717c9459cb3064db17b9a5635f9e189e445d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -8697,7 +8697,7 @@
                 "dedup_key": "f1a332473510b3255d6dd74d6fd9c98b9f2c8ab9de555a220cd1753b1c1026f5",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -8726,7 +8726,7 @@
                 "dedup_key": "e367c2eed7398a29bfea1f51e1b3bd2943fb3e21dbd803ab813dd08c959812dd",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14348,7 +14348,7 @@
                 "dedup_key": "6dbd79fc595c189402b81d9ab22bfad9add65b036d2c4f9dcd1442ca69ac7752",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005415",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14377,7 +14377,7 @@
                 "dedup_key": "e1b3b7901c1d81f966da5399c2f8d190ff7684faa630daef397a536d0ee2091e",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005419",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14406,7 +14406,7 @@
                 "dedup_key": "5a6520235a16733911253943f4f021ea87c3464384fa7dd0e1d9c655153c33c1",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005423",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14435,7 +14435,7 @@
                 "dedup_key": "d1e2c6600025e7bb3e0830dc1f6badc01b75a092facbe9475f06cc845fb6e095",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005427",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14464,7 +14464,7 @@
                 "dedup_key": "f81744e086b96f65aeb06708369a67df4e2b90f45dceccbd72bd860ed1355f98",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005431",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14493,7 +14493,7 @@
                 "dedup_key": "b82fe03561f09e09da9b5e01e92114a08f9a582471277ad337886bac973f2152",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005435",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14522,7 +14522,7 @@
                 "dedup_key": "e88c1db1e15830ac05b9650980a2476cec6507ee96e0892b0b263c104909aebd",
                 "status": "resolved",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005439",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -14551,7 +14551,7 @@
                 "dedup_key": "9610eb92ae703dc5608c8b05ecf8c17f3b5a810b658e9bed0bde10d2ed61a47c",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005441",
                 "last_triggered_at": "2026-10-21 09:45:00+00",
@@ -14580,7 +14580,7 @@
                 "dedup_key": "370101087120002e4687369f80d2030d0e6839490ac810d276899409e569a5ce",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005443",
                 "last_triggered_at": "2026-10-21 09:45:00+00",
@@ -14609,7 +14609,7 @@
                 "dedup_key": "363faaa6d597d35a1fc76fe9c41648ec29802f0963f6960d00cb39dd2dd529d9",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005445",
                 "last_triggered_at": "2026-10-21 09:45:00+00",
@@ -14638,7 +14638,7 @@
                 "dedup_key": "a16cb09bb9043d056178080ef52ccb1b5a5a58b88cdb02ec565539d0cbcc4065",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005447",
                 "last_triggered_at": "2026-10-21 09:45:00+00",
@@ -15711,7 +15711,7 @@
                 "dedup_key": "ab5760a205d68f6b7d3e6165f1950094cdbe690f922bf3154b6215f91707272e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -15856,7 +15856,7 @@
                 "dedup_key": "7820625e26595d78b715a1c24f027bc880892de8de4ae934574ffeafd83bccd7",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -15885,7 +15885,7 @@
                 "dedup_key": "c63df9d7c49102f81693d4840e78717c9459cb3064db17b9a5635f9e189e445d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -15914,7 +15914,7 @@
                 "dedup_key": "f1a332473510b3255d6dd74d6fd9c98b9f2c8ab9de555a220cd1753b1c1026f5",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -15943,7 +15943,7 @@
                 "dedup_key": "e367c2eed7398a29bfea1f51e1b3bd2943fb3e21dbd803ab813dd08c959812dd",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -22054,7 +22054,7 @@
                 "dedup_key": "6dbd79fc595c189402b81d9ab22bfad9add65b036d2c4f9dcd1442ca69ac7752",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 120, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 120 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005415",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22083,7 +22083,7 @@
                 "dedup_key": "e1b3b7901c1d81f966da5399c2f8d190ff7684faa630daef397a536d0ee2091e",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005419",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -22112,7 +22112,7 @@
                 "dedup_key": "5a6520235a16733911253943f4f021ea87c3464384fa7dd0e1d9c655153c33c1",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005423",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22141,7 +22141,7 @@
                 "dedup_key": "d1e2c6600025e7bb3e0830dc1f6badc01b75a092facbe9475f06cc845fb6e095",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005427",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22170,7 +22170,7 @@
                 "dedup_key": "f81744e086b96f65aeb06708369a67df4e2b90f45dceccbd72bd860ed1355f98",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005431",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22199,7 +22199,7 @@
                 "dedup_key": "b82fe03561f09e09da9b5e01e92114a08f9a582471277ad337886bac973f2152",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005435",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22228,7 +22228,7 @@
                 "dedup_key": "e88c1db1e15830ac05b9650980a2476cec6507ee96e0892b0b263c104909aebd",
                 "status": "resolved",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005439",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -22257,7 +22257,7 @@
                 "dedup_key": "9610eb92ae703dc5608c8b05ecf8c17f3b5a810b658e9bed0bde10d2ed61a47c",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005441",
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22286,7 +22286,7 @@
                 "dedup_key": "370101087120002e4687369f80d2030d0e6839490ac810d276899409e569a5ce",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 350, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 350 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005443",
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22315,7 +22315,7 @@
                 "dedup_key": "363faaa6d597d35a1fc76fe9c41648ec29802f0963f6960d00cb39dd2dd529d9",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005445",
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -22344,7 +22344,7 @@
                 "dedup_key": "a16cb09bb9043d056178080ef52ccb1b5a5a58b88cdb02ec565539d0cbcc4065",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 490, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 490 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005447",
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -23417,7 +23417,7 @@
                 "dedup_key": "ab5760a205d68f6b7d3e6165f1950094cdbe690f922bf3154b6215f91707272e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -23562,7 +23562,7 @@
                 "dedup_key": "7820625e26595d78b715a1c24f027bc880892de8de4ae934574ffeafd83bccd7",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -23591,7 +23591,7 @@
                 "dedup_key": "c63df9d7c49102f81693d4840e78717c9459cb3064db17b9a5635f9e189e445d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -23620,7 +23620,7 @@
                 "dedup_key": "f1a332473510b3255d6dd74d6fd9c98b9f2c8ab9de555a220cd1753b1c1026f5",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 150, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 150 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -23649,7 +23649,7 @@
                 "dedup_key": "e367c2eed7398a29bfea1f51e1b3bd2943fb3e21dbd803ab813dd08c959812dd",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 210, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 210 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -34565,7 +34565,7 @@
                 "dedup_key": "6dbd79fc595c189402b81d9ab22bfad9add65b036d2c4f9dcd1442ca69ac7752",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 80, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 80 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 80, \"title\": \"Spending with no results\", \"message\": \"second-no-results spent 80 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005415",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34594,7 +34594,7 @@
                 "dedup_key": "e1b3b7901c1d81f966da5399c2f8d190ff7684faa630daef397a536d0ee2091e",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005419",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -34623,7 +34623,7 @@
                 "dedup_key": "5a6520235a16733911253943f4f021ea87c3464384fa7dd0e1d9c655153c33c1",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 200, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 200 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 200, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 200 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005423",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34652,7 +34652,7 @@
                 "dedup_key": "d1e2c6600025e7bb3e0830dc1f6badc01b75a092facbe9475f06cc845fb6e095",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 100, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 100 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 100, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 100 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005427",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34681,7 +34681,7 @@
                 "dedup_key": "f81744e086b96f65aeb06708369a67df4e2b90f45dceccbd72bd860ed1355f98",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005431",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34710,7 +34710,7 @@
                 "dedup_key": "b82fe03561f09e09da9b5e01e92114a08f9a582471277ad337886bac973f2152",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005435",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34739,7 +34739,7 @@
                 "dedup_key": "e88c1db1e15830ac05b9650980a2476cec6507ee96e0892b0b263c104909aebd",
                 "status": "resolved",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 700, \"title\": \"Spending with no results\", \"message\": \"no-results spent 700 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005439",
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -34768,7 +34768,7 @@
                 "dedup_key": "9610eb92ae703dc5608c8b05ecf8c17f3b5a810b658e9bed0bde10d2ed61a47c",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005441",
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34797,7 +34797,7 @@
                 "dedup_key": "370101087120002e4687369f80d2030d0e6839490ac810d276899409e569a5ce",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 300 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005443",
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34826,7 +34826,7 @@
                 "dedup_key": "363faaa6d597d35a1fc76fe9c41648ec29802f0963f6960d00cb39dd2dd529d9",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 420, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 420 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 420, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 420 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005445",
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -34855,7 +34855,7 @@
                 "dedup_key": "a16cb09bb9043d056178080ef52ccb1b5a5a58b88cdb02ec565539d0cbcc4065",
                 "status": "open",
                 "severity": "critical",
-                "context": "{\"days\": 7, \"spend\": 420, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 420 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 7, \"spend\": 420, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 420 with no orders in the last 7 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": "00000000-0000-4000-8000-000000005447",
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -35928,7 +35928,7 @@
                 "dedup_key": "ab5760a205d68f6b7d3e6165f1950094cdbe690f922bf3154b6215f91707272e",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"other-project-no-results spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -36073,7 +36073,7 @@
                 "dedup_key": "7820625e26595d78b715a1c24f027bc880892de8de4ae934574ffeafd83bccd7",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 300, \"title\": \"Spending with no results\", \"message\": \"no-results spent 300 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"recovered_at\": \"2026-10-21T09:45:00+00:00\", \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -36102,7 +36102,7 @@
                 "dedup_key": "c63df9d7c49102f81693d4840e78717c9459cb3064db17b9a5635f9e189e445d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 200, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 200 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 200, \"title\": \"Spending with no results\", \"message\": \"withheld-partly spent 200 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -36131,7 +36131,7 @@
                 "dedup_key": "f1a332473510b3255d6dd74d6fd9c98b9f2c8ab9de555a220cd1753b1c1026f5",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 100, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 100 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 100, \"title\": \"Spending with no results\", \"message\": \"demo-only spent 100 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -36160,7 +36160,7 @@
                 "dedup_key": "e367c2eed7398a29bfea1f51e1b3bd2943fb3e21dbd803ab813dd08c959812dd",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}}",
+                "context": "{\"days\": 3, \"spend\": 140, \"title\": \"Spending with no results\", \"message\": \"rows-filed-elsewhere spent 140 with no orders in the last 3 days.\", \"result_key\": \"conversions\", \"conversions\": 0, \"result_label\": {\"ar\": \"الطلبات\", \"en\": \"Orders\"}, \"result_family\": \"sales\"}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -51988,6 +51988,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52128,6 +52129,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52182,6 +52184,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52236,6 +52239,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52290,6 +52294,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52705,6 +52710,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -52759,6 +52765,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54308,6 +54315,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54362,6 +54370,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54416,6 +54425,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54470,6 +54480,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54524,6 +54535,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54578,6 +54590,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54632,6 +54645,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -54686,6 +54700,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55082,6 +55097,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55137,6 +55153,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55192,6 +55209,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55247,6 +55265,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55302,6 +55321,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55816,6 +55836,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -55871,6 +55892,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56324,6 +56346,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56379,6 +56402,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56434,6 +56458,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56489,6 +56514,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56544,6 +56570,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56599,6 +56626,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56654,6 +56682,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -56709,6 +56738,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58244,6 +58274,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58298,6 +58329,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58352,6 +58384,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58406,6 +58439,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58578,6 +58612,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58633,6 +58668,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58688,6 +58724,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58743,6 +58780,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -58916,6 +58954,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -59056,6 +59095,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -59110,6 +59150,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -59164,6 +59205,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -59523,6 +59565,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -59577,6 +59620,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61070,6 +61114,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61124,6 +61169,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61178,6 +61224,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61232,6 +61279,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61286,6 +61334,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61340,6 +61389,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61736,6 +61786,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61791,6 +61842,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61846,6 +61898,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -61901,6 +61954,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62415,6 +62469,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62470,6 +62525,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62812,6 +62868,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62867,6 +62924,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62922,6 +62980,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -62977,6 +63036,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -63032,6 +63092,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -63087,6 +63148,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -64530,6 +64592,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -64670,6 +64733,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -64724,6 +64788,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -64778,6 +64843,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -65019,6 +65085,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -65073,6 +65140,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66035,6 +66103,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66089,6 +66158,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66143,6 +66213,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66197,6 +66268,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66251,6 +66323,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -66305,6 +66378,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67074,6 +67148,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67129,6 +67204,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67184,6 +67260,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67239,6 +67316,7 @@
                         "conversions": 0,
                         "days": 7,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67639,6 +67717,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -67694,6 +67773,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68036,6 +68116,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68091,6 +68172,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68146,6 +68228,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68201,6 +68284,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68256,6 +68340,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
@@ -68311,6 +68396,7 @@
                         "conversions": 0,
                         "days": 3,
                         "result_key": "conversions",
+                        "result_family": "sales",
                         "result_label": {
                             "ar": "الطلبات",
                             "en": "Orders"
