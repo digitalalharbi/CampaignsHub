@@ -34,6 +34,12 @@ return [
     | separated CIDRs) to narrow this further. A value of `*` or `**` is refused and the default used, so a
     | typo cannot make every peer a proxy.
     |
+    | KNOWN LIMIT of the default: another product's container on the shared `web_proxy` network is also a
+    | private address, so it could connect to the backend directly and write its own `X-Forwarded-For`. Its
+    | own subnet does not close that; the two proxies' exact addresses do. After deploy, read them on the host
+    | (`docker inspect` of the Caddy and `campaignshub-frontend` containers) and set them as /32s here. Each
+    | entry must be an address or a CIDR no wider than /8 (IPv4) or /7 (IPv6); anything else is dropped.
+    |
     | Only `X-Forwarded-For` is trusted. `X-Forwarded-Host` never is: the owner of a public request is
     | decided from the Host header (`RequestOwnerResolver`), and a forwarded host must not be able to pick it.
     */

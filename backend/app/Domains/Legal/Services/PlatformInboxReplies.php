@@ -46,14 +46,17 @@ final class PlatformInboxReplies
 
     public function reply(ContactMessage|SupportTicket|ExternalRequest $record, User $author, string $body): PlatformInboxReply
     {
-        [$type, $id, $recipient, $name, $about, $reference, $locale] = $this->describe($record);
+        [$type, $id, $recipient, $about, $reference, $locale] = $this->describe($record);
+
+        // The record must carry an address to answer; nothing here ever takes one from the request.
+        abort_if(trim($recipient) === '' || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false, 422, __('api.validation'));
 
         $key = 'platform-reply:'.$type.':'.$id;
         $perHour = max(1, (int) config('requests.platform_inbox.replies_per_record_per_hour', 5));
-        if (RateLimiter::tooManyAttempts($key, $perHour)) {
+        // `hit()` returns the new count: the check and the increment are one step, so two clicks cannot both pass.
+        if (RateLimiter::hit($key, 3600) > $perHour) {
             throw new TooManyRequestsHttpException(RateLimiter::availableIn($key));
         }
-        RateLimiter::hit($key, 3600);
 
         $reply = DB::transaction(function () use ($record, $type, $id, $recipient, $author, $body): PlatformInboxReply {
             $reply = new PlatformInboxReply;
@@ -76,7 +79,9 @@ final class PlatformInboxReplies
 
         $status = $this->mailer->queue(
             recipient: $recipient,
-            mail: new PlatformReplyMail(about: $about, body: $body, lang: $locale, recipientName: $name, reference: $reference),
+            // No visitor-typed text (their name, their subject) goes into a mail CampaignsHub signs: the address on the
+            // record is the visitor's word, so echoing their words to it would let a form become a branded lure.
+            mail: new PlatformReplyMail(about: $about, body: $body, lang: $locale, reference: $reference),
             kind: PlatformInboxNotifier::KIND,
             template: 'mail.platform-reply',
             locale: $locale,
@@ -116,24 +121,28 @@ final class PlatformInboxReplies
         ])->values()->all();
     }
 
-    /** @return array{0: string, 1: string, 2: string, 3: string, 4: string, 5: string|null, 6: string} */
+    /** @return array{0: string, 1: string, 2: string, 3: string, 4: string|null, 5: string} */
     private function describe(ContactMessage|SupportTicket|ExternalRequest $record): array
     {
         if ($record instanceof ExternalRequest) {
             // Never a subscriber's request: those are answered from the subscriber's own inbox.
-            abort_unless($record->isPlatformOwned(), 404);
+            abort_unless($record->isPlatformOwned() && $record->tenant_id === null, 404);
 
-            return ['service_request', (string) $record->id, (string) $record->contact_email, (string) ($record->contact_name ?? ''),
+            return ['service_request', (string) $record->id, (string) $record->contact_email,
                 (string) $record->type->name_ar, (string) $record->reference, 'ar'];
         }
 
         if ($record instanceof SupportTicket) {
-            return ['support_ticket', (string) $record->getKey(), (string) $record->email, (string) $record->name,
-                (string) $record->subject, (string) $record->reference, $record->locale === 'en' ? 'en' : 'ar'];
+            $en = $record->locale === 'en';
+
+            return ['support_ticket', (string) $record->getKey(), (string) $record->email,
+                $en ? 'Your support ticket' : 'تذكرة الدعم', (string) $record->reference, $en ? 'en' : 'ar'];
         }
 
-        return ['contact_message', (string) $record->getKey(), (string) $record->email, (string) $record->name,
-            (string) ($record->subject ?? ''), null, $record->locale === 'en' ? 'en' : 'ar'];
+        $en = $record->locale === 'en';
+
+        return ['contact_message', (string) $record->getKey(), (string) $record->email,
+            $en ? 'Your message from the contact form' : 'رسالتك من نموذج التواصل', null, $en ? 'en' : 'ar'];
     }
 
     private function afterReply(ContactMessage|SupportTicket|ExternalRequest $record, User $author, string $body): void

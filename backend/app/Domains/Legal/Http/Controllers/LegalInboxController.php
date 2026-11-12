@@ -126,7 +126,9 @@ final class LegalInboxController extends Controller
     private function markRead(Model $row, Request $request): void
     {
         if ($row->getAttribute('read_at') === null) {
-            $row->forceFill(['read_at' => now(), 'read_by' => $request->user()?->id])->save();
+            // Conditional, so two administrators opening it at once leave the first one on the record.
+            $row->newQuery()->whereKey($row->getKey())->whereNull('read_at')
+                ->update(['read_at' => now(), 'read_by' => $request->user()?->id]);
         }
     }
 

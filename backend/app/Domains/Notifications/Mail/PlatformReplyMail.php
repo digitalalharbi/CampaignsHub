@@ -30,7 +30,7 @@ final class PlatformReplyMail extends Mailable
     use OffersUnsubscribe, Queueable, SerializesModels;
 
     public function __construct(
-        /** What the visitor wrote about — their subject, a ticket reference, a request reference. */
+        /** Which channel this answers, in our words — never the visitor's own subject or name. */
         public readonly string $about,
         public readonly string $body,
         public readonly string $lang = 'ar',

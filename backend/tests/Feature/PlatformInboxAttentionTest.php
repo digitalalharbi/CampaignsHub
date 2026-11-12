@@ -155,6 +155,14 @@ final class PlatformInboxAttentionTest extends TestCase
 
         $this->assertSame(3, ContactMessage::query()->count(), 'every message is still stored');
         $this->assertSame(2, DB::table('mail_deliveries')->where('kind', 'client_request')->count());
+
+        // The contact burst does not silence the other queues, and a data request is never capped.
+        $this->ticket();
+        foreach (['d1', 'd2', 'd3'] as $who) {
+            $this->postJson('/api/v1/data-requests', ['type' => 'export', 'name' => 'Visitor', 'email' => "{$who}@example.test"])->assertOk();
+        }
+        $this->assertSame(1, DB::table('mail_deliveries')->where('dedup_key', 'like', 'platform-inbox:support:%')->count());
+        $this->assertSame(3, DB::table('mail_deliveries')->where('dedup_key', 'like', 'platform-inbox:data:%')->count());
     }
 
     public function test_the_counters_say_what_nobody_has_opened_and_opening_marks_it_read(): void
@@ -264,6 +272,13 @@ final class PlatformInboxAttentionTest extends TestCase
         $this->assertSame(0, Membership::query()->where('tenant_id', '!=', $this->agency->id)->count());
         $this->assertSame(1, RegistrationVerification::query()->where('registration_request_id', $registration->id)->where('channel', 'mobile')->whereNull('consumed_at')->count());
         $this->assertSame(1, AuditLog::query()->where('action', 'registration.verification_resent')->where('entity_id', (string) $registration->id)->count());
+
+        // Bounded from the console whatever the channel: three per application per hour.
+        $url = '/api/v1/admin/registrations/'.$registration->id.'/resend-verification';
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertOk();
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertOk();
+        $this->asAdmin()->postJson($url, [], $this->spa)->assertStatus(429);
+        $this->assertSame(3, AuditLog::query()->where('action', 'registration.verification_resent')->count());
     }
 
     public function test_the_resend_is_refused_where_there_is_nothing_to_verify_and_to_a_tenant(): void
@@ -296,6 +311,12 @@ final class PlatformInboxAttentionTest extends TestCase
         ], $this->spa)->assertOk();
 
         Mail::assertSent(PlatformReplyMail::class, fn (PlatformReplyMail $m): bool => $m->hasTo('visitor@example.test') && str_contains($m->body, 'Team plan'));
+        // Nothing the visitor typed (their name, their subject) is echoed into a mail CampaignsHub signs.
+        Mail::assertSent(PlatformReplyMail::class, function (PlatformReplyMail $m): bool {
+            $html = $m->render();
+
+            return ! str_contains($html, 'A question') && ! str_contains($html, 'Visitor') && $m->recipientName === '';
+        });
         Mail::assertNotSent(PlatformReplyMail::class, fn (PlatformReplyMail $m): bool => $m->hasTo('someone-else@example.test'));
 
         $reply = PlatformInboxReply::query()->sole();

@@ -28,9 +28,10 @@ use Throwable;
  * The notice carries no part of what the visitor wrote — no message, no details, no phone. It says which queue
  * and the reference, and the administrator reads the rest behind the console's sign-in.
  *
- * The three forms are public. A burst of submissions must not become a burst of mail to the owner, so the notices
- * share an hourly allowance (`requests.platform_inbox.notify_per_hour`); past it the row is still stored and still
- * counted unread on the console, it just does not mail again within that hour.
+ * The three forms are public. A burst of submissions must not become a burst of mail to the owner, so contact and
+ * support notices each have an hourly allowance (`requests.platform_inbox.notify_per_hour`); past it the row is still
+ * stored and still counted unread on the console, it just does not mail again within that hour. Data requests are
+ * always notified.
  */
 final class PlatformInboxNotifier
 {
@@ -44,17 +45,23 @@ final class PlatformInboxNotifier
             return 0;
         }
 
-        $perHour = max(1, (int) config('requests.platform_inbox.notify_per_hour', 30));
-        if (RateLimiter::tooManyAttempts('platform-inbox-notify', $perHour)) {
-            return 0;
-        }
-        RateLimiter::hit('platform-inbox-notify', 3600);
-
         [$queue, $id] = match (true) {
             $record instanceof ContactMessage => ['contact', (string) $record->getKey()],
             $record instanceof SupportTicket => ['support', (string) $record->getKey()],
             default => ['data', (string) $record->getKey()],
         };
+
+        /*
+         * One allowance per queue, so a burst of contact messages cannot silence a support ticket, and a data request
+         * is never capped here at all: it carries a statutory deadline and its own intake limiter already bounds it.
+         * `hit()` returns the new count, which makes the check and the increment one step under concurrency.
+         */
+        if ($queue !== 'data') {
+            $perHour = max(1, (int) config('requests.platform_inbox.notify_per_hour', 30));
+            if (RateLimiter::hit('platform-inbox-notify:'.$queue, 3600) > $perHour) {
+                return 0;
+            }
+        }
 
         $told = 0;
 
