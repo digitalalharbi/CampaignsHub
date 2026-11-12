@@ -43,7 +43,7 @@ enum CampaignStatus: string
             str_contains($key, 'inactive') => self::Paused,
             str_contains($key, 'pending_deletion'), str_contains($key, 'cancel') => self::Archived,
             str_contains($key, 'active'), str_contains($key, 'enabled'), str_contains($key, 'delivering'), str_contains($key, 'running') => self::Active,
-            str_contains($key, 'paused'), str_contains($key, 'disabled'), str_contains($key, 'inactive') => self::Paused,
+            str_contains($key, 'paused'), str_contains($key, 'disabled') => self::Paused,
             str_contains($key, 'complete'), str_contains($key, 'ended'), str_contains($key, 'finished') => self::Completed,
             str_contains($key, 'archiv'), str_contains($key, 'removed'), str_contains($key, 'deleted') => self::Archived,
             str_contains($key, 'pending'), str_contains($key, 'review'), str_contains($key, 'draft') => self::Pending,
