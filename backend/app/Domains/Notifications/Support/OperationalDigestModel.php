@@ -102,6 +102,9 @@ final class OperationalDigestModel
     /** How many ranked issues are drawn in full; the rest are counted on the «+N» line. */
     public const TOP_ISSUES = 5;
 
+    /** DIGESTS-CADENCE-BUDGETS-001 — budget lines drawn in «ملخص المشاريع»; the rest are counted on one «+N» line. */
+    public const BUDGET_ROWS = 10;
+
     public static function objectiveLabel(string $objective, bool $ar): string
     {
         return (self::OBJECTIVE_LABEL[$objective] ?? self::OBJECTIVE_LABEL['custom'])[$ar ? 0 : 1];
@@ -123,7 +126,7 @@ final class OperationalDigestModel
      * @param  array<string,mixed>  $block  one entry of `DailyDigest::buildRange()['projects']`
      * @return array<string,mixed>
      */
-    public static function project(array $block, string $lang, int $days = 7): array
+    public static function project(array $block, string $lang, int $days = 7, string $kind = 'daily'): array
     {
         $ar = $lang === 'ar';
         $p = (new DigestPresenter($lang, $days))->forPayload($block);
@@ -206,9 +209,18 @@ final class OperationalDigestModel
 
         $headlineKey = self::HEADLINE[$objective] ?? 'ctr';
 
+        $series = (array) ($block['series'] ?? []);
+
         return [
             'id' => $id,
+            'kind' => $kind,
             'name' => (string) ($block['project_name'] ?? ''),
+            // DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend to date, remaining and pace, drawn as one bar.
+            'budget' => self::budget(isset($block['budget_month']) && is_array($block['budget_month']) ? $block['budget_month'] : null, $lang),
+            // The monthly's own framing: the month as 4–5 week bars, and the best and weakest platform on the objective's figure.
+            'weeks' => $kind === 'monthly' ? self::weeks($series, $ar) : [],
+            'best' => $kind === 'monthly' && ! $mixed ? self::extreme($rows, $objective, $p, $ar, true) : null,
+            'worst' => $kind === 'monthly' && ! $mixed ? self::extreme($rows, $objective, $p, $ar, false) : null,
             'objective' => $objective,
             'objective_label' => self::objectiveLabel($objective, $ar),
             'unit' => $block['currency'] ?? null,
@@ -311,6 +323,9 @@ final class OperationalDigestModel
 
         return [
             'kind' => $kind,
+            // DIGESTS-CADENCE-BUDGETS-001 — «ملخص المشاريع» LEADS with the money: every project's budget, spend, remaining and pace.
+            'budgets' => self::budgets($projects, $lang),
+            'weeks' => $kind === 'monthly' ? self::weeks((array) ($t['series'] ?? []), $ar) : [],
             'projects_total' => count($projects),
             'need_attention' => $health['bad'] + $health['watch'],
             'kpis' => $kpis,
@@ -329,6 +344,264 @@ final class OperationalDigestModel
             'links' => ['alerts' => MailDeepLinks::alerts(), 'dashboard' => MailDeepLinks::dashboard()],
             'raw' => ['totals' => $t],
         ];
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — one project's month: budget, spend to date, remaining, pace — or why there is no figure.
+     *
+     * The input is `ClientBudgetRollup::of()` plus the month's elapsed share (see `DailyDigest::monthBudget()`), so every rule
+     * of the budgets screen holds here by construction: a spend that is withheld is «لا بيانات», never 0; two budget currencies
+     * give no total; a pace is stated only when every part of it is measured.
+     *
+     * @param  array<string,mixed>|null  $b
+     * @return array<string,mixed>|null null when the payload carries no budget block at all (an older payload)
+     */
+    public static function budget(?array $b, string $lang): ?array
+    {
+        if ($b === null) {
+            return null;
+        }
+        $ar = $lang === 'ar';
+        $budget = is_numeric($b['budget'] ?? null) ? (float) $b['budget'] : null;
+        $spent = is_numeric($b['spent'] ?? null) ? (float) $b['spent'] : null;
+        $currency = is_string($b['currency'] ?? null) ? (string) $b['currency'] : null;
+        $p = new DigestPresenter($lang, 30, $currency);
+        $elapsed = (int) round(min(1.0, max(0.0, (float) ($b['elapsed'] ?? 0))) * 100);
+        $outside = (int) ($b['outside'] ?? 0);
+        $unmeasured = (int) ($b['unmeasured'] ?? 0);
+        $why = self::unpricedReason((array) ($b['outside_reasons'] ?? []), $unmeasured, $ar);
+        $outsideLine = $outside > 0 ? self::campaignsOutside($outside, $ar).': '.$why : '';
+        $noData = $ar ? 'لا بيانات' : 'No data';
+
+        if ((int) ($b['currencies'] ?? 0) > 1) {
+            return ['state' => 'mixed', 'line' => $ar ? 'الميزانيات بعملات مختلفة، فما نجمعها' : 'Budgets are in different currencies, so they are not added up', 'elapsed' => $elapsed, 'outside_line' => $outsideLine] + self::emptyBudget();
+        }
+        if ($budget === null || $budget <= 0) {
+            /*
+             * No budget in the figure is not «no budget»: when every budgeted campaign was left out — its spend has no figure in
+             * the budget's currency — the project HAS budgets, and saying otherwise hides exactly the project somebody must fix.
+             */
+            if ($outside > 0) {
+                return ['state' => 'unpriced', 'line' => $why, 'elapsed' => $elapsed, 'outside_line' => $outsideLine, 'budget' => $noData, 'spent' => $noData, 'remaining' => $noData] + self::emptyBudget();
+            }
+
+            return ['state' => 'none', 'line' => $ar ? 'ما فيه ميزانية مسجّلة لهذا الشهر' : 'No budget recorded for this month', 'elapsed' => $elapsed, 'outside_line' => ''] + self::emptyBudget();
+        }
+
+        // The roll-up's own remaining when it states one (it withholds it while any part of the spend is unmeasured).
+        $remaining = array_key_exists('remaining', $b)
+            ? (is_numeric($b['remaining']) ? round((float) $b['remaining'], 2) : null)
+            : ($spent === null ? null : round($budget - $spent, 2));
+        $complete = $spent !== null && $remaining !== null;
+        $pace = $complete && is_numeric($b['pace'] ?? null) ? (float) $b['pace'] : null;
+        $band = DigestSchedule::paceBand($pace);
+        $used = $complete ? (int) round($spent / $budget * 100) : null;
+        // Spend past the budget is its own fact, whatever the pace says about the rest of the month.
+        if ($remaining !== null && $remaining < 0) {
+            $band = 'over';
+        }
+
+        return [
+            'state' => $complete ? 'ok' : 'withheld',
+            'currency' => $currency,
+            'budget_value' => $budget,
+            'spent_value' => $spent,
+            'remaining_value' => $remaining,
+            'projected_value' => is_numeric($b['projected'] ?? null) ? (float) $b['projected'] : null,
+            'outside' => $outside,
+            'outside_reasons' => (array) ($b['outside_reasons'] ?? []),
+            'budget' => $p->headline($budget),
+            'spent' => $spent === null ? $noData : $p->headline($spent),
+            'remaining' => $remaining === null ? $noData : $p->headline($remaining),
+            'over' => $remaining !== null && $remaining < 0,
+            'used' => $used,
+            'bar' => $used === null ? 0 : max(2, min(100, $used)),
+            'elapsed' => $elapsed,
+            'band' => $band,
+            'band_label' => self::bandLabel($band, $ar),
+            'tone' => match ($band) {
+                'ahead', 'over' => 'bad', 'behind' => 'watch', 'on_track' => 'ok', default => 'none'
+            },
+            'line' => $complete
+                ? ($ar ? 'مضى '.AlertEventText::ltr($elapsed.'%').' من الشهر · الإنفاق '.AlertEventText::ltr($used.'%').' من الميزانية' : AlertEventText::ltr($elapsed.'%').' of the month gone · '.AlertEventText::ltr($used.'%').' of the budget spent')
+                : self::unpricedReason([], max(1, $unmeasured), $ar),
+            'outside_line' => $outsideLine,
+        ];
+    }
+
+    /**
+     * Why a budget has no full figure, from the pacing basis of the campaigns left out — the reason the data gives, never a
+     * guessed one: spend in another currency than the budget, spend with no exchange rate, or no spend figures yet this month.
+     *
+     * @param  array<string,int>  $reasons  `pacing_basis` → how many budgeted campaigns
+     */
+    private static function unpricedReason(array $reasons, int $unmeasured, bool $ar): string
+    {
+        arsort($reasons);
+        $top = array_key_first($reasons);
+
+        return match (true) {
+            $top === 'currency_mismatch' => $ar ? 'عملة الإنفاق غير عملة الميزانية، فما نقارنهم' : 'Spend is in another currency than the budget, so they are not compared',
+            in_array($top, ['partial', 'mixed_currency', 'complete_withheld', 'absent'], true) => $ar ? 'جزء من الإنفاق بدون سعر صرف، فما نحسب الرقم' : 'Part of the spend has no exchange rate, so the figure is not computed',
+            $top === null && $unmeasured > 0 => $ar ? 'ما وصلت أرقام إنفاق لهذا الشهر بعد' : 'No spend figures have arrived for this month yet',
+            default => $ar ? 'ما نقدر نحسب الإنفاق بعملة الميزانية' : 'Spend cannot be stated in the budget’s currency',
+        };
+    }
+
+    private static function campaignsOutside(int $n, bool $ar): string
+    {
+        if (! $ar) {
+            return AlertEventText::ltr((string) $n).($n === 1 ? ' campaign outside the figure' : ' campaigns outside the figure');
+        }
+
+        return match (true) {
+            $n === 1 => 'حملة وحدة خارج الرقم',
+            $n === 2 => 'حملتين خارج الرقم',
+            default => AlertEventText::ltr((string) $n).' حملات خارج الرقم',
+        };
+    }
+
+    /** @return array<string,mixed> */
+    private static function emptyBudget(): array
+    {
+        return ['currency' => null, 'budget_value' => null, 'spent_value' => null, 'remaining_value' => null, 'projected_value' => null, 'outside' => 0,
+            'budget' => '', 'spent' => '', 'remaining' => '', 'over' => false, 'used' => null, 'bar' => 0, 'band' => null, 'band_label' => '', 'tone' => 'none'];
+    }
+
+    public static function bandLabel(?string $band, bool $ar): string
+    {
+        return match ($band) {
+            'over' => $ar ? 'تجاوزت الميزانية' : 'Over budget',
+            'ahead' => $ar ? 'أسرع من الخطة' : 'Ahead of plan',
+            'behind' => $ar ? 'أبطأ من الخطة' : 'Behind plan',
+            'on_track' => $ar ? 'ضمن الخطة' : 'On track',
+            default => $ar ? 'بدون سرعة صرف' : 'No pace',
+        };
+    }
+
+    /**
+     * Every project's budget row, closest to running out first, and ONE total row.
+     *
+     * The total adds budget and spend only across projects whose budgets share one currency and whose spend is measured; a
+     * project left out is counted, never silently dropped. Two currencies → no total at all, with the reason. Results are never
+     * summed here: this block is money only, so no objective is ever added to another.
+     *
+     * @param  list<array<string,mixed>>  $projects  built by {@see project()}
+     * @return array<string,mixed>
+     */
+    private static function budgets(array $projects, string $lang): array
+    {
+        $ar = $lang === 'ar';
+        $rows = [];
+        $none = 0;
+        foreach ($projects as $pr) {
+            if ($pr['budget'] === null) {
+                continue;
+            }
+            // A project with no budget is counted on one line, not drawn as thirty empty rows.
+            if ($pr['budget']['state'] === 'none') {
+                $none++;
+
+                continue;
+            }
+            $rows[] = ['id' => $pr['id'], 'name' => $pr['name'], 'url' => $pr['links']['budget']] + $pr['budget'];
+        }
+        // A project whose budget cannot be stated comes FIRST (somebody has to fix its money), then closest to running out.
+        usort($rows, static fn (array $a, array $b): int => (($b['state'] !== 'ok') <=> ($a['state'] !== 'ok'))
+            ?: (($b['used'] ?? -1) <=> ($a['used'] ?? -1)) ?: strcmp((string) $a['name'], (string) $b['name']));
+
+        $counted = array_values(array_filter($rows, static fn (array $r): bool => $r['state'] === 'ok'));
+        $currencies = array_values(array_unique(array_map(static fn (array $r): string => strtoupper((string) $r['currency']), $counted)));
+        $left = count($rows) - count($counted) + $none;
+        $total = null;
+        $reason = null;
+        if (count($currencies) > 1) {
+            $reason = $ar ? 'المشاريع بعملات مختلفة، فما فيه مجموع واحد' : 'Projects budget in different currencies, so there is no single total';
+        } elseif ($counted !== []) {
+            $budget = array_sum(array_column($counted, 'budget_value'));
+            $spent = array_sum(array_column($counted, 'spent_value'));
+            $projectable = array_filter($counted, static fn (array $r): bool => $r['projected_value'] === null) === [];
+            $projected = $projectable ? array_sum(array_column($counted, 'projected_value')) : null;
+            $elapsed = (int) ($counted[0]['elapsed'] ?? 0);
+            $remaining = array_sum(array_column($counted, 'remaining_value'));
+            $total = self::budget([
+                'budget' => $budget, 'spent' => $spent, 'remaining' => $remaining, 'currency' => $currencies[0] ?? null, 'currencies' => 1,
+                'pace' => $projected !== null && $budget > 0 ? round($projected / $budget, 4) : null, 'projected' => $projected, 'elapsed' => $elapsed / 100,
+                // The campaigns each counted project left out, so the total says it is short of them rather than looking whole.
+                'outside' => array_sum(array_column($counted, 'outside')),
+                'outside_reasons' => array_reduce($counted, static function (array $all, array $r): array {
+                    foreach ((array) ($r['outside_reasons'] ?? []) as $k => $n) {
+                        $all[$k] = ($all[$k] ?? 0) + (int) $n;
+                    }
+
+                    return $all;
+                }, []),
+            ], $lang);
+        }
+
+        return [
+            'rows' => $rows,
+            'total' => $total,
+            'total_reason' => $reason,
+            'left_out' => $left,
+            'left_out_line' => $left > 0 ? ($ar ? AlertEventText::ltr((string) $left).' بدون ميزانية أو إنفاق مقيس، خارج المجموع' : AlertEventText::ltr((string) $left).' without a budget or measured spend, outside the total') : null,
+        ];
+    }
+
+    /**
+     * The month as week bars: days 1–7, 8–14, 15–21, 22–28 and 29 to the end — four or five bars, plain calendar days.
+     *
+     * @param  list<array<string,mixed>>  $series  daily `{date, spend}` points across the month
+     * @return list<array<string,mixed>>
+     */
+    public static function weeks(array $series, bool $ar): array
+    {
+        $buckets = [];
+        foreach ($series as $pt) {
+            try {
+                $d = Carbon::parse((string) ($pt['date'] ?? ''));
+            } catch (\Throwable) {
+                continue;
+            }
+            $i = intdiv($d->day - 1, 7);
+            $buckets[$i]['from'] ??= $d->day;
+            $buckets[$i]['to'] = $d->day;
+            if (is_numeric($pt['spend'] ?? null)) {
+                $buckets[$i]['spend'] = (float) ($buckets[$i]['spend'] ?? 0) + (float) $pt['spend'];
+            } else {
+                $buckets[$i]['spend'] ??= null;
+            }
+        }
+        ksort($buckets);
+        $bars = self::bars(array_map(static fn (array $b): ?float => $b['spend'] ?? null, array_values($buckets)), [], $ar);
+
+        return array_values(array_map(static fn (array $bar, array $b): array => array_merge($bar, ['label' => $b['from'].'–'.$b['to']]), $bars, array_values($buckets)));
+    }
+
+    /**
+     * The best (or weakest) platform of the month on the OBJECTIVE's own headline figure — a cost falls to be better, a return rises.
+     *
+     * Null with fewer than two platforms that carry the figure: a ranking of one is not a ranking.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return array<string,string>|null
+     */
+    private static function extreme(array $rows, string $objective, DigestPresenter $p, bool $ar, bool $best): ?array
+    {
+        $key = self::HEADLINE[$objective] ?? null;
+        if ($key === null) {
+            return null;
+        }
+        $have = array_values(array_filter($rows, static fn (array $r): bool => is_numeric($r[$key] ?? null) && (float) ($r['spend'] ?? 0) > 0));
+        if (count($have) < 2) {
+            return null;
+        }
+        $lower = (bool) (self::FIG[$key][3] ?? false);
+        usort($have, static fn (array $a, array $b): int => $lower ? ((float) $a[$key] <=> (float) $b[$key]) : ((float) $b[$key] <=> (float) $a[$key]));
+        $row = $best ? $have[0] : $have[count($have) - 1];
+        $fig = self::figures([$key], $row, [], [], $p, $ar)[0];
+
+        return ['name' => AdPlatforms::name((string) $row['provider'], $ar ? 'ar' : 'en'), 'label' => $fig['label'], 'value' => $fig['value']];
     }
 
     /**
@@ -942,10 +1215,10 @@ final class OperationalDigestModel
                 $pace = (float) ($budget['pace'] ?? 0);
                 $used = (int) round(min(1.0, (float) ($budget['spent'] ?? 0) / max(0.0001, (float) ($budget['budget'] ?? 1))) * 100);
                 $expected = $pace > 0 ? (int) round(min(100, $used / $pace)) : 0;
-                $headline = $reason === 'pace_hot' ? ($ar ? 'الصرف أسرع من الخطة' : 'Spending ahead of plan') : ($ar ? 'الصرف أبطأ من الخطة' : 'Spending behind plan');
+                $headline = $reason === 'pace_hot' ? ($ar ? 'الإنفاق أسرع من الخطة' : 'Spending ahead of plan') : ($ar ? 'الإنفاق أبطأ من الخطة' : 'Spending behind plan');
                 // Both bars are shares of the BUDGET, so «used» and «plan» are comparable and no second percentage can contradict the first.
                 $figure = ($ar ? 'انصرف ' : 'Spent ').AlertEventText::ltr($used.'%').' · '.($ar ? 'المخطط ' : 'planned ').AlertEventText::ltr($expected.'%');
-                $viz = ['type' => 'pace', 'used' => $used, 'plan' => $expected, 'used_label' => ($ar ? 'صُرف' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($expected.'%')];
+                $viz = ['type' => 'pace', 'used' => $used, 'plan' => $expected, 'used_label' => ($ar ? 'الإنفاق' : 'Spent').' '.AlertEventText::ltr($used.'%'), 'plan_label' => ($ar ? 'الخطة' : 'Plan').' '.AlertEventText::ltr($expected.'%')];
                 break;
             case 'worse':
             case 'results_down':

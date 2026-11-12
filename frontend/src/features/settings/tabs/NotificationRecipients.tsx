@@ -109,7 +109,7 @@ export function NotificationRecipients() {
       */}
       <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
         {ar
-          ? 'يشمل هذا الترتيب التنبيهات الفورية. أما الملخص اليومي والأسبوعي فيبقى اختيار كل عضو من إعداداته أعلاه.'
+          ? 'يشمل هذا الترتيب التنبيهات الفورية. أما ملخص المشاريع وتقرير كل مشروع فيبقى اختيار كل عضو من إعداداته.'
           : 'This covers immediate alerts. The daily and weekly summaries stay each person’s own choice, in their settings above.'}
       </p>
 

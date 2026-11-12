@@ -1,42 +1,29 @@
 {{--
-  One thing to say, and one way to act on it — MAIL-006.
+  One thing to say, and one way to act on it — MAIL-006, in the approved digest grammar since DIGESTS-CADENCE-BUDGETS-001.
 
-  Every operational message renders through this: an alert, a report that is ready, an invoice, an
-  approval, a new conversation. They share a shape because they share a purpose — tell somebody what
-  happened, what it means for them, and what to do next — and one template is one place to fix a
-  rendering bug rather than eight.
+  Every operational message renders through this: an alert, a report that is ready, an invoice, an approval, a new
+  conversation. The card is the same one every alert uses (`mail.partials.alert-card`): a status chip and a coloured edge,
+  the message drawn as its stages, one short line, the steps in order, and ONE button below it. The detail's other lines,
+  when it has them, follow as a short list — never a paragraph.
 
-  The same email rules as the digest apply and for the same reasons: tables, inline styles, no
-  external images, explicit backgrounds so a dark-mode client cannot invert a card into
-  black-on-black. See `layout.blade.php`.
+  Tables, inline styles, no external images, explicit backgrounds. See `layout.blade.php`.
 --}}
-@php($tone = ['critical' => '#b91c1c', 'warning' => '#b45309', 'positive' => '#0d8a6f', 'info' => '#5b6b68'])
-@php($toneBg = ['critical' => '#fef2f2', 'warning' => '#fffbeb', 'positive' => '#e8f5f1', 'info' => '#faf8f3'])
-@php($colour = $tone[$severity] ?? $tone['info'])
-@php($background = $toneBg[$severity] ?? $toneBg['info'])
-
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
-    <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
+    <div style="font-size:14px; color:#5b6b68; margin:0 0 12px;">{{ $greeting }}</div>
 
-    {{--
-      The headline carries its own severity as a colour and a rule, never as an icon.
+    @include('mail.partials.alert-card', ['c' => $card, 'big' => true])
 
-      An emoji is a font the client may not have, and a coloured left border is the one visual
-      signal that renders identically in Gmail, Outlook and Apple Mail.
-    --}}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="background-color:{{ $background }}; border-radius:12px; margin-bottom:18px;">
-        <tr>
-            <td style="padding:16px 18px; border-{{ $startSide }}:4px solid {{ $colour }}; border-radius:12px;">
-                @if ($context !== '')
-                    <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $context }}</div>
-                @endif
-                <div style="font-size:18px; font-weight:800; color:#0b1a16; padding-top:4px; line-height:1.5;">{{ $title }}</div>
-                <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px; white-space:pre-line;">{{ $detail }}</div>
-            </td>
-        </tr>
-    </table>
+    @if ($more)
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="more" style="margin:-2px 0 14px;">
+            @foreach ($more as $line)
+                <tr>
+                    <td width="14" valign="top" style="padding:2px 0; font-size:12px; color:#8b9a97;">•</td>
+                    <td style="padding:2px 0; font-size:13px; color:#3d4742; line-height:1.6;">{{ $line }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
 
     {{-- One button, and it says what it does. «اضغط هنا» tells a reader nothing about where they land. --}}
     @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])

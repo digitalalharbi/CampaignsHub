@@ -27,7 +27,7 @@ final class AlertFigures
             return [
                 'lead' => ['label' => $ar ? 'من الإنفاق المتوقع حتى الآن' : 'of the spend expected by now', 'value' => self::percent((float) $context['ratio'])],
                 'strip' => array_values(array_filter([
-                    isset($context['spend']) ? ['label' => $ar ? 'المصروف' : 'Spent', 'value' => self::amount($context['spend'], $currency)] : null,
+                    isset($context['spend']) ? ['label' => $ar ? 'الإنفاق' : 'Spent', 'value' => self::amount($context['spend'], $currency)] : null,
                     isset($context['budget']) ? ['label' => $ar ? 'الميزانية' : 'Budget', 'value' => self::amount($context['budget'], $currency)] : null,
                 ])),
             ];
@@ -38,10 +38,10 @@ final class AlertFigures
             $currency = isset($context['currency']) ? (string) $context['currency'] : null;
 
             return [
-                'lead' => ['label' => $ar ? 'المستهلك من الحدّ' : 'Consumed of the limit', 'value' => self::amount($context['consumed'], $currency)],
+                'lead' => ['label' => $ar ? 'الإنفاق من الحد' : 'Spent of the limit', 'value' => self::amount($context['consumed'], $currency)],
                 'strip' => array_values(array_filter([
-                    ['label' => $ar ? 'الحدّ' : 'Limit', 'value' => self::amount($context['limit'], $currency)],
-                    isset($context['threshold']) && is_numeric($context['threshold']) ? ['label' => $ar ? 'العتبة' : 'Threshold', 'value' => self::percent((float) $context['threshold'] > 1 ? (float) $context['threshold'] / 100 : (float) $context['threshold'])] : null,
+                    ['label' => $ar ? 'الحد' : 'Limit', 'value' => self::amount($context['limit'], $currency)],
+                    isset($context['threshold']) && is_numeric($context['threshold']) ? ['label' => $ar ? 'حد التنبيه' : 'Alert at', 'value' => self::percent((float) $context['threshold'] > 1 ? (float) $context['threshold'] / 100 : (float) $context['threshold'])] : null,
                 ])),
             ];
         }
@@ -73,7 +73,7 @@ final class AlertFigures
             return [
                 'lead' => ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) ($context['conversions'] ?? 0))],
                 'strip' => array_values(array_filter([
-                    ['label' => $ar ? 'المصروف' : 'Spent', 'value' => self::amount($context['spend'], null)],
+                    ['label' => $ar ? 'الإنفاق' : 'Spent', 'value' => self::amount($context['spend'], null)],
                     isset($context['days']) && is_numeric($context['days']) ? ['label' => $ar ? 'الأيام' : 'Days', 'value' => (string) (int) $context['days']] : null,
                 ])),
             ];

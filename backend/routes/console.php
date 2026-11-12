@@ -152,7 +152,10 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
  * own timezone, so the schedule has to come round every hour for that question to be answerable.
  * Sending is idempotent by database constraint, so an overlapping run cannot double-send.
  */
-Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
+// DIGESTS-CADENCE-BUDGETS-001 — pinned to Riyadh, as every other morning job here: the app clock is UTC (`config/app.php`, and no `APP_TIMEZONE` in the production env), so
+// the scheduler's own clock is UTC. The sweep is hourly and asks each reader's own hour (08:00 Asia/Riyadh by default), so the pin
+// states the frame the 08:00 promise is made in rather than moving any send.
+Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh')->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
