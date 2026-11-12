@@ -60,20 +60,12 @@ jobs:
             ROLLBACK;
             EOF
             }
-            echo "== FACTS-MAIL $(date -u +%FT%TZ)"
-            echo "## M1. digest_sends for the no_results events closed since deploy: kind | status | count"
-            q "select kind,status,count(*) from digest_sends where alert_event_id in (select id::text from alert_events where type='no_results' and resolved_at>'2026-11-12 12:59:20+00') and created_at>'2026-11-12 12:59:20+00' group by 1,2;"
-            echo "## M1b. total digest_sends since deploy for those events"
-            q "select count(*) from digest_sends where alert_event_id in (select id::text from alert_events where type='no_results' and resolved_at>'2026-11-12 12:59:20+00') and created_at>'2026-11-12 12:59:20+00';"
-            echo "## M2. app_notifications since deploy titled Recovered (any rule): count"
-            q "select count(*) from app_notifications where created_at>'2026-11-12 12:59:20+00' and (title like 'Recovered:%' or title_ar like 'تعافى:%');"
-            echo "## M2b. Recovered notifications since deploy by source rule type: type | count"
-            q "select type,count(*) from app_notifications where created_at>'2026-11-12 12:59:20+00' and (title like 'Recovered:%' or title_ar like 'تعافى:%') group by 1 order by 1;"
-            echo "## M2c. Recovered alert_events since deploy by rule type: type | count"
-            q "select type,count(*) from alert_events where resolved_at>'2026-11-12 12:59:20+00' and context ? 'recovered_at' group by 1 order by 1;"
-            echo "## M3. app_notifications since deploy on the closed events' campaigns: count"
-            q "select count(*) from app_notifications where created_at>'2026-11-12 12:59:20+00' and entity_id in (select entity_id from alert_events where id in (select id from alert_events where type='no_results' and resolved_at>'2026-11-12 12:59:20+00'));"
-            echo "## M4. mail_deliveries since deploy by kind: kind | count"
-            q "select kind,count(*) from mail_deliveries where created_at>'2026-11-12 12:59:20+00' group by 1 order by 1;"
-            echo "== END FACTS-MAIL"
+            echo "== FACTS-STATUS $(date -u +%FT%TZ)"
+            echo "## T1. tiktok external campaigns: stored status | raw operation_status | raw secondary_status | count"
+            q "select ec.status,coalesce(ec.raw->>'status','-'),coalesce(ec.raw->'raw'->>'operation_status','-'),coalesce(ec.raw->'raw'->>'secondary_status','-'),count(*) from external_campaigns ec where ec.provider='tiktok' group by 1,2,3,4 order by 5 desc;"
+            echo "## T2. unified status vs its single external status, by provider: provider | unified | external | adopted_from | count"
+            q "with one as (select unified_campaign_id from external_campaigns where unified_campaign_id is not null group by 1 having count(*)=1) select ec.provider,uc.status,ec.status,coalesce(uc.meta->>'adopted_from','-'),count(*) from unified_campaigns uc join external_campaigns ec on ec.unified_campaign_id=uc.id join one on one.unified_campaign_id=uc.id where uc.deleted_at is null group by 1,2,3,4 order by 1,5 desc;"
+            echo "## T3. unified campaigns with more than one external: count"
+            q "select count(*) from (select unified_campaign_id from external_campaigns where unified_campaign_id is not null group by 1 having count(*)>1) x;"
+            echo "== END FACTS-STATUS"
             exit 0
