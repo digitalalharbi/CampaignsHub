@@ -19,7 +19,7 @@ import type { CreativeCard } from '@/features/content/api'
  * claims with different standing.
  */
 const alert = (over: Partial<AlertEvent> = {}): AlertEvent => ({
-  id: 'a1', project_id: null, rule_id: 'r', type: 'token_expiry', entity_type: null, entity_id: null,
+  id: 'a1', project_id: null, rule_id: 'r', type: 'roas_drop', entity_type: null, entity_id: null,
   status: 'open', severity: 'warning', context: null, notification_id: null, task_id: null,
   last_triggered_at: null, snoozed_until: null, resolved_at: null, created_at: null, ...over,
 } as AlertEvent)
@@ -62,9 +62,24 @@ describe('what the action centre holds', () => {
   })
 
   it('files an alert under the kind its own taxonomy gives it', () => {
-    const items = buildActionCentre({ alerts: [alert({ type: 'sync_failure' })] })
+    const items = buildActionCentre({ alerts: [alert({ type: 'sync_failure', context: { link_state: 'not_synced' } })] })
 
     expect(items[0].category).toBe('data')
+  })
+
+  /** LINK-HEALTH-YESTERDAY-001 — a link item is counted only when yesterday did not arrive, and once per connection. */
+  it('counts a link alert only when yesterday did not arrive, once per connection', () => {
+    const conn = { entity_type: 'App\\Domains\\Integrations\\Models\\ProviderConnection', entity_id: 'c1' }
+    const items = buildActionCentre({
+      alerts: [
+        alert({ id: 'x1', type: 'token_expiry', ...conn, context: { provider: 'google', expires_at: '2026-11-12T06:00:00Z' } }),
+        alert({ id: 'x2', type: 'sync_failure', ...conn, context: { provider: 'google', link_state: 'not_synced' } }),
+        alert({ id: 'x3', type: 'sync_failure', ...conn, context: { provider: 'google', link_state: 'not_synced' } }),
+        alert({ id: 'x4', type: 'sync_outage', entity_type: 'Project', entity_id: 'p1', context: { link_state: 'not_synced' } }),
+      ],
+    })
+
+    expect(items.map((i) => i.id)).toEqual(['alert:x2'])
   })
 })
 

@@ -50,7 +50,7 @@ export interface FindingKpi {
   higherIsBetter: boolean
 }
 
-export type FindingFactKey = 'provider' | 'expires_at' | 'error' | 'count' | 'basis' | 'threshold' | 'window_days' | 'utilisation' | 'pace' | 'exhaustion' | 'date'
+export type FindingFactKey = 'provider' | 'expires_at' | 'error' | 'missing_day' | 'last_day' | 'count' | 'basis' | 'threshold' | 'window_days' | 'utilisation' | 'pace' | 'exhaustion' | 'date'
 
 export interface FindingFact {
   key: FindingFactKey
@@ -85,6 +85,7 @@ export type FindingAction =
   | 'refresh_creative'
   | 'scale_winner'
   | 'reconnect'
+  | 'check_sync'
   | 'assign_leads'
   | 'contact_leads'
   | 'investigate_day'
@@ -271,29 +272,26 @@ function fromAlert(item: Extract<ActionItem, { kind: 'alert' }>, ctx: FindingCon
       }
     }
 
+    /*
+     * LINK-HEALTH-YESTERDAY-001 — a link card exists only when yesterday's data did not arrive (the server's one rule,
+     * `LinkHealth`), and it says exactly that: the day that is missing and the last day that arrived. An event without that
+     * reading (an old «expiring» access token, a run a later run made good) is not a link problem and shows nothing.
+     */
     case 'sync_failure':
-      return {
-        ...base,
-        subject: { type: 'connection', id: null, name: null, platform: str(c.provider) },
-        evidence: { target: 'integrations', path: '/integrations' },
-        nature: 'tracking',
-        action: 'reconnect',
-        facts: [
-          ...(str(c.provider) ? [{ key: 'provider' as const, value: str(c.provider)! }] : []),
-          ...(str(c.error) ? [{ key: 'error' as const, value: str(c.error)! }] : []),
-        ],
-      }
-
+    case 'measurement_outage':
     case 'token_expiry':
+      if (c.link_state !== 'not_synced') return null
       return {
         ...base,
-        subject: { type: 'connection', id: null, name: null, platform: str(c.provider) },
+        code: 'link_not_synced',
+        subject: { type: 'connection', id: a.entity_type?.endsWith('ProviderConnection') ? a.entity_id : null, name: null, platform: str(c.provider) },
         evidence: { target: 'integrations', path: '/integrations' },
         nature: 'tracking',
-        action: 'reconnect',
+        action: a.type === 'token_expiry' && str(c.error) ? 'reconnect' : 'check_sync',
         facts: [
           ...(str(c.provider) ? [{ key: 'provider' as const, value: str(c.provider)! }] : []),
-          ...(str(c.expires_at) ? [{ key: 'expires_at' as const, value: str(c.expires_at)!.slice(0, 10) }] : []),
+          ...(str(c.required_day) ? [{ key: 'missing_day' as const, value: str(c.required_day)! }] : []),
+          ...(str(c.last_day) ? [{ key: 'last_day' as const, value: str(c.last_day)! }] : []),
         ],
       }
 

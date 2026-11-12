@@ -24,6 +24,7 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
@@ -169,6 +170,7 @@ final class AlertEvaluator
         private readonly SpendLimitGovernor $limits,
         private readonly DataFreshnessService $freshness,
         private readonly AlertEventMailer $mailer,
+        private readonly LinkHealth $linkHealth,
     ) {}
 
     /**
@@ -270,6 +272,11 @@ final class AlertEvaluator
             default => $this->unevaluated($rule),
         };
 
+        // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
+            $breaches = $this->onlyWhereYesterdayMissing($rule, $breaches, $now);
+        }
+
         $raised = 0;
         foreach ($breaches as $b) {
             if ($this->raise($rule, $b, $now)) {
@@ -333,6 +340,16 @@ final class AlertEvaluator
 
                 return;
             }
+            /*
+             * LINK-HEALTH-YESTERDAY-001 — a link event whose connection delivered yesterday (or that was raised by the old
+             * rules on a «stale» window or a run a later run made good) is closed without a word: no «تعافى» notice, no mail.
+             */
+            if (in_array($rule->type, LinkHealth::TYPES, true)) {
+                $this->resolve($event, $now);
+                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'yesterday_arrived', 'closed_at' => $now->toIso8601String()]])->save();
+
+                return;
+            }
             if ($event->entity_type === UnifiedCampaign::class && in_array($rule->type, self::CAMPAIGN_PERFORMANCE, true)
                 && ! in_array((string) $event->entity_id, $live, true)) {
                 $this->resolve($event, $now);
@@ -350,6 +367,8 @@ final class AlertEvaluator
         $titleAr = (string) ($event->context['title_ar'] ?? $title);
         $context = (array) $event->context;
         $context['recovered_at'] = $now->toIso8601String();
+        // ALERT-VISUAL-EVERY-CARD-001 — when it opened, so the recovery card's timeline can be drawn.
+        $context['opened_at'] ??= ($event->created_at ?? $now)->toIso8601String();
 
         $this->resolve($event, $now);
         $event->forceFill(['context' => $context])->save();
@@ -378,7 +397,9 @@ final class AlertEvaluator
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
             'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
             'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
-            'context' => [],
+            // ALERT-VISUAL-EVERY-CARD-001 — the figures and dates travel with the recovery, so its card draws them.
+            'context' => array_intersect_key($context, array_flip(['opened_at', 'recovered_at', 'window_from', 'window_to', 'provider',
+                'roas_current', 'roas_previous', 'cpa_current', 'cpa_previous', 'cpl_current', 'cpl_previous', 'ctr_current', 'ctr_previous', 'cpc_current', 'cpc_previous'])),
         ], 'info', $now, recovered: true);
     }
 
@@ -388,7 +409,7 @@ final class AlertEvaluator
          * LINKING-ALERT-NO-FALSE-EXPIRY-001 — a connection's health is ONE fact per tenant, whichever rule found it: three token rules
          * (one per project) produced three identical cards. Every other type stays keyed by its rule.
          */
-        if ($rule->type === 'token_expiry') {
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
             return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '']));
         }
 
@@ -644,25 +665,36 @@ final class AlertEvaluator
         return $c->status === CampaignStatus::Active->value && ! $ended;
     }
 
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last fortnight is a CANDIDATE, one per connection; the
+     * one rule ({@see onlyWhereYesterdayMissing()}) keeps those whose yesterday did not arrive. A failed run that a later run
+     * made good is therefore nothing, and a connection that simply stopped syncing (no failed run at all) is
+     * still found. A connection the platform refused is the `token_expiry` card, never a second one here.
+     */
     private function syncFailures(AlertRule $rule): array
     {
-        // Latest sync run per connection; a failed latest run is an active problem.
         $latest = MetricSyncRun::query()
             ->whereIn('id', function ($q) {
                 $q->selectRaw('DISTINCT ON (connection_id) id')
                     ->from('metric_sync_runs')
+                    ->whereNotNull('connection_id')
+                    ->where('created_at', '>=', Carbon::now()->subDays(14))
                     ->orderByRaw('connection_id, started_at DESC NULLS LAST, created_at DESC');
             })
-            ->where('status', 'failed')
+            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get();
+        // One item per connection: a connection the platform refused is the `token_expiry` card; a removed one says nothing.
+        $dead = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
+            ->whereIn('status', ['error', 'disconnected', 'disabled', 'revoked'])->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $dead, true))->values();
 
         return $latest->map(fn (MetricSyncRun $r) => [
             'entity_type' => ProviderConnection::class,
             'entity_id' => (string) $r->connection_id,
             'project_id' => $r->project_id ? (string) $r->project_id : null,
             'title' => 'Data sync failed',
-            'message' => 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.'),
-            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->error],
+            'message' => $r->status === 'failed' ? 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.') : 'Syncs for '.$r->provider.' have not delivered the day.',
+            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->status === 'failed' ? $r->error : null],
         ])->all();
     }
 
@@ -846,6 +878,66 @@ final class AlertEvaluator
             ]);
 
         return $refused->concat($expiring)->values()->all();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — keeps a link breach only where the required day (yesterday, after 06:00 Riyadh) did not
+     * arrive, states it in the reader's words (state 1, «بيانات أمس ما وصلت»), and escalates it to critical once
+     * {@see LinkHealth::ESCALATE_AFTER_DAYS} days are missing. A project-level outage keeps only the platforms whose data
+     * is missing, and goes away when none is.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @return list<array<string,mixed>>
+     */
+    private function onlyWhereYesterdayMissing(AlertRule $rule, array $breaches, Carbon $now): array
+    {
+        $this->linkHealth->prime(array_values(array_map(static fn (array $b): string => (string) $b['entity_id'],
+            array_filter($breaches, static fn (array $b): bool => $b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null))), $now);
+        $out = [];
+        foreach ($breaches as $b) {
+            $context = (array) ($b['context'] ?? []);
+            if ($b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null) {
+                $reading = $this->linkHealth->forConnection((string) $b['entity_id'], $now);
+                if ($reading['arrived']) {
+                    continue;
+                }
+            } elseif ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
+                $missing = [];
+                $reading = null;
+                foreach ((array) ($context['sources'] ?? []) as $source) {
+                    $r = $this->linkHealth->forProjectProvider((string) $b['entity_id'], (string) ($source['provider'] ?? ''), $now);
+                    if (! $r['arrived']) {
+                        $missing[] = $source;
+                        $reading ??= $r;
+                    }
+                }
+                if ($missing === [] || $reading === null) {
+                    continue;
+                }
+                $context['sources'] = $missing;
+            } else {
+                continue;
+            }
+
+            $day = (string) $reading['required_day'];
+            $context['link_state'] = 'not_synced';
+            $context['required_day'] = $day;
+            $context['last_day'] = $reading['last_day'];
+            $context['missing_days'] = $reading['missing_days'];
+            $context['title_ar'] = LinkHealth::text('not_synced', true);
+            $context['message_ar'] = 'ما وصلت بيانات يوم '.$day.($reading['last_day'] !== null ? '، آخر يوم وصل '.$reading['last_day'] : '').'.';
+            $b['title'] = LinkHealth::text('not_synced', false);
+            $b['message'] = 'No data arrived for '.$day.($reading['last_day'] !== null ? '; the last day that arrived is '.$reading['last_day'] : '').'.'
+                .(isset($b['message']) ? ' '.$b['message'] : '');
+            unset($context['digest_only']);
+            if (($reading['missing_days'] ?? 0) >= LinkHealth::ESCALATE_AFTER_DAYS) { // escalation needs a MEASURED persistence; a link never read is not «days missing»
+                $b['severity'] = 'critical';
+            }
+            $b['context'] = $context;
+            $out[] = $b;
+        }
+
+        return $out;
     }
 
     /**

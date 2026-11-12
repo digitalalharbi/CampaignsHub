@@ -345,16 +345,22 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
     }
 
-    /** A credential that does NOT renew itself and really expires is recorded for «ملخص الربط», never sent instantly. */
-    public function test_a_non_renewing_credential_near_expiry_waits_for_the_morning_digest(): void
+    /**
+     * A credential that does NOT renew itself, near its expiry, while its data still arrives: no link alert at all
+     * (§7أ, the decisive criterion — LINK-HEALTH-YESTERDAY-001). It speaks the morning its yesterday does not arrive.
+     */
+    public function test_a_non_renewing_credential_near_expiry_raises_nothing_while_yesterday_arrives(): void
     {
-        $this->connection('linkedin', null, '+3 days');
+        $c = $this->connection('linkedin', null, '+3 days');
+        DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'connection_id' => $c->id, 'provider' => 'linkedin', 'status' => 'success',
+            'window_start' => '2026-11-09', 'window_end' => '2026-11-12', 'started_at' => now()->subHour(), 'finished_at' => now()->subHour(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         $notices = DB::table('app_notifications')->count();
 
-        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
-        $event = AlertEvent::where('type', 'token_expiry')->sole();
-        $this->assertTrue($event->context['digest_only']);
-        $this->assertSame($notices, DB::table('app_notifications')->count(), 'no instant notice');
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
+        $this->assertSame($notices, DB::table('app_notifications')->count(), 'no notice');
     }
 
     /** ROAS is a sales figure: a traffic campaign with no revenue is never told its return fell. */
@@ -547,5 +553,52 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         foreach ($notes as $n) {
             $this->assertDoesNotMatchRegularExpression('/ربما|قد يشير|منافسة|ضعف أداء المحتوى/u', (string) ($n['detail'] ?? ''));
         }
+    }
+
+    // ── ALERT-MAIL-DATED-BARS-001 — the approved card, locked ───────────────
+
+    /** @return array{0: string, 1: array<string,mixed>} the rendered project mail and its model */
+    private function decisionCards(string $objective, array $was, array $now): array
+    {
+        $project = $this->project('Card '.$objective);
+        $this->campaign($project, $this->account('meta'), $objective, ['2026-11-10' => $was, '2026-11-11' => $now]);
+        $day = Carbon::parse('2026-11-11', 'Asia/Riyadh');
+        $digest = app(DailyDigest::class)->buildRange($this->user, (string) $this->tenant->id, [(string) $project->id], $day->copy()->startOfDay(), $day->copy()->endOfDay(), 'daily');
+        $m = OperationalDigestModel::project($digest['projects'][0], 'ar', 1);
+
+        return [(new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس الأربعاء 11 نوفمبر'))->render(), $m];
+    }
+
+    /**
+     * The Owner approved this card (2026-11-12): the metric and its % change as the title, before/after bars that name their
+     * days («أمس الأربعاء 11 نوفمبر» against «الثلاثاء 10 نوفمبر», never a bare «قبل / الآن»), and numbered action chips.
+     */
+    public function test_the_decision_card_keeps_the_approved_layout_with_dated_bars(): void
+    {
+        [$html] = $this->decisionCards('traffic',
+            ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 300.0, 'link_clicks' => 300.0],
+            ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 150.0, 'link_clicks' => 150.0]);
+        $text = preg_replace('/\s+/u', ' ', strip_tags(html_entity_decode($html)));
+
+        $this->assertStringContainsString('data-viz="before_now"', $html);
+        $this->assertMatchesRegularExpression('/تكلفة النقرة زادت\s*\S*100%/u', $text, 'the metric and its % change');
+        $this->assertStringContainsString('الثلاثاء 10 نوفمبر · ', $text, 'the «before» bar names its day');
+        $this->assertStringContainsString('أمس الأربعاء 11 نوفمبر · ', $text, 'the «after» bar names its day');
+        preg_match_all('/data-viz="before_now".*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/us', $html, $bars);
+        $this->assertNotEmpty($bars[0]);
+        foreach ($bars[0] as $bar) {
+            $this->assertDoesNotMatchRegularExpression('/>\s*(قبل|الآن) /u', $bar, 'never a bare «قبل / الآن» on a bar');
+        }
+    }
+
+    /** ROAS cards come only from sales: a traffic campaign whose «return» fell is never judged on it. */
+    public function test_a_roas_card_comes_only_from_a_sales_campaign(): void
+    {
+        $roas = static fn (float $revenue): array => ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 200.0, 'link_clicks' => 200.0, 'conversions' => 2.0, 'revenue' => $revenue];
+        [$traffic] = $this->decisionCards('traffic', $roas(800.0), $roas(200.0));
+        [$sales] = $this->decisionCards('sales', $roas(800.0), $roas(200.0));
+
+        $this->assertStringNotContainsString('العائد على الإنفاق نزل', strip_tags(html_entity_decode($traffic)));
+        $this->assertStringContainsString('العائد على الإنفاق', strip_tags(html_entity_decode($sales)));
     }
 }

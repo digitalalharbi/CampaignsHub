@@ -155,6 +155,8 @@
                 @foreach ($m['linking'] as $lp)
                     @foreach ($lp['items'] as $li)
                         <tr data-state="{{ $li['state'] }}">
+                            {{-- ALERT-VISUAL-EVERY-CARD-001 — a small ring in the link's state beside each row. --}}
+                            <td width="30" style="padding:2px 0;">@include('mail.partials.visual', ['viz' => null, 'state' => $li['state'] === 'failed' ? 'bad' : 'watch', 'size' => 16])</td>
                             <td style="padding:2px 0; font-size:11px; color:#3d4742;">{{ \Illuminate\Support\Str::limit($lp['name'], 22, '…') }}@if ($li['platform'] !== '') · {{ $li['platform'] }}@endif</td>
                             <td style="padding:2px 0; text-align:{{ $endSide }}; font-size:11px; font-weight:700; color:{{ $li['state'] === 'failed' ? $S::INK['bad'] : $S::INK['watch'] }};">{{ $li['label'] }}@if ($li['since'] !== '') <span style="font-weight:400; color:#8b9a97;">· {{ $ar ? 'آخر تحديث' : 'last refreshed' }} {{ $li['since'] }}</span>@endif</td>
                         </tr>

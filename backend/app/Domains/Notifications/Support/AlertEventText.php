@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Support\AdPlatforms;
 
 /**
@@ -110,6 +111,23 @@ final class AlertEventText
     {
         $who = $platform !== '' ? $platform : ($ar ? 'المنصة' : 'the platform');
         $num = static fn ($v, int $d = 2): string => number_format((float) $v, $d);
+
+        /*
+         * LINK-HEALTH-YESTERDAY-001 — a link item the one rule kept says ONE thing, in the same words on every surface: yesterday's
+         * data did not arrive (state 1), with the day missing and the last day that arrived. A refused grant asks for a reconnect.
+         */
+        if (in_array($type, LinkHealth::TYPES, true) && ($ctx['link_state'] ?? null) === 'not_synced') {
+            $refused = $type === 'token_expiry' && ! isset($ctx['expires_at']);
+
+            return [
+                'headline' => $platform !== '' ? ($ar ? "بيانات أمس ما وصلت من {$platform}" : "Yesterday's data did not arrive from {$platform}") : LinkHealth::text('not_synced', $ar),
+                'text' => $refused ? ($ar ? 'المنصة رفضت الربط، فالبيانات متوقفة.' : 'The platform refused the connection, so data has stopped.') : ($ar ? 'ما نجحت مزامنة تغطي اليوم كامل.' : 'No successful sync covered the whole day.'),
+                'numbers' => isset($ctx['required_day']) ? ($ar ? 'اليوم الناقص ' : 'Missing day ').self::ltr((string) $ctx['required_day'])
+                    .(isset($ctx['last_day']) && $ctx['last_day'] ? ($ar ? ' · آخر يوم وصل ' : ' · last day that arrived ').self::ltr((string) $ctx['last_day']) : '') : '',
+                'action' => $refused ? ($ar ? 'أعد ربط المنصة.' : 'Reconnect the platform.') : ($ar ? 'افحص المزامنة ← أعد الربط إن استمر.' : 'Check the sync, then reconnect if it persists.'),
+                'link' => 'integrations',
+            ];
+        }
 
         switch ($type) {
             case 'budget_risk':

@@ -17,6 +17,7 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -360,6 +361,8 @@ final class DailyDigest
         $freshness = $this->freshnessFor($projectId, $from, $to);
 
         $block = [
+            // ALERT-MAIL-DATED-BARS-001 — the two periods every before/now card compares, so each bar names its days.
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'previous_from' => $prevFrom->toDateString(), 'previous_to' => $prevTo->toDateString()],
             // EMAIL-CANONICAL-METRICS-001 — the unit the web states for this window; null = the rows mix.
             'currency' => $unit,
             'objective' => count($groups) === 1 ? (string) $groups[0]['objective'] : ($mixedObjectives ? 'custom' : $lens->value()),
@@ -431,6 +434,8 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            // LINK-HEALTH-YESTERDAY-001 — why a day shows no spend: the link, the campaigns' status, or the platform spent nothing.
+            'no_data_state' => app(LinkHealth::class)->noDataState($tenantId, (string) $projectId, $to->copy(), Carbon::now()),
             // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
             'open_alerts' => $this->openAlerts($projectId, $from, $to),
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the open connection alerts, for «ملخص الربط» only.

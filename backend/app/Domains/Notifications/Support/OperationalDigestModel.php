@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -1053,7 +1054,7 @@ final class OperationalDigestModel
             $name = AdPlatforms::name($key, $ar ? 'ar' : 'en');
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
-                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine);
+                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine, (array) ($block['window'] ?? []));
                 $issue['objective'] = $groupLabel;
             }
             $cells[] = [
@@ -1173,8 +1174,27 @@ final class OperationalDigestModel
         return ['priority' => $state === 'bad' ? 'P1' : 'P3', 'sev' => $state === 'bad' ? 0 : 1, 'fired' => 0];
     }
 
+    /**
+     * ALERT-MAIL-DATED-BARS-001 — the days each bar of a before/now card measured, in the reader's words («أمس الأربعاء 11
+     * نوفمبر» against «الثلاثاء 10 نوفمبر», or two ranges). Empty when the block carries no window.
+     *
+     * @param  array<string,mixed>  $window
+     * @return array{before_when?: string, now_when?: string}
+     */
+    public static function when(array $window, bool $ar): array
+    {
+        foreach (['from', 'to', 'previous_from', 'previous_to'] as $k) {
+            if (! is_string($window[$k] ?? null) || $window[$k] === '') {
+                return [];
+            }
+        }
+        $label = static fn (string $f, string $t): string => DigestSchedule::periodLabel($f === $t ? 'daily' : 'range', $f, $t, $ar);
+
+        return ['before_when' => $label($window['previous_from'], $window['previous_to']), 'now_when' => $label($window['from'], $window['to'])];
+    }
+
     /** @return array<string,mixed> */
-    private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days, array $alerts = []): array
+    private static function issue(array $verdict, string $provider, string $platform, array $row, array $prev, ?array $budget, string $headlineKey, ?string $resultKey, DigestPresenter $p, bool $ar, string $projectId, string $projectName, int $order, int $days, array $alerts = [], array $window = []): array
     {
         $reason = (string) $verdict['reason'];
         $label = self::FIG[$headlineKey][$ar ? 0 : 1] ?? $headlineKey;
@@ -1227,7 +1247,8 @@ final class OperationalDigestModel
                 $headline = $label.' '.$verb.' '.$pct($was > 0 ? ($now - $was) / $was : 0);
                 $figure = $fmt($key, $was).' ← '.$fmt($key, $now);
                 $max = max($now, $was, 0.0001);
-                $viz = ['type' => 'before_now', 'before' => max(6, (int) round($was / $max * 100)), 'now' => max(6, (int) round($now / $max * 100)), 'before_label' => $fmt($key, $was), 'now_label' => $fmt($key, $now), 'key' => $key];
+                $viz = ['type' => 'before_now', 'before' => max(6, (int) round($was / $max * 100)), 'now' => max(6, (int) round($now / $max * 100)), 'before_label' => $fmt($key, $was), 'now_label' => $fmt($key, $now), 'key' => $key]
+                    + self::when($window, $ar);
                 break;
         }
 
@@ -1418,8 +1439,13 @@ final class OperationalDigestModel
 
         $withheld = (int) (($block['totals'] ?? [])['spend_withheld_rows'] ?? 0) > 0;
 
+        // LINK-HEALTH-YESTERDAY-001 — the three states, each in its own words, decided by the one rule (`LinkHealth`).
+        $state = is_string($block['no_data_state'] ?? null) ? (string) $block['no_data_state'] : null;
+
         return match (true) {
             $withheld => $ar ? 'فيه إنفاق مسجّل بعملة ما لها سعر صرف، فما نعرضه كرقم' : 'Spend was recorded in a currency with no exchange rate, so it is not shown as a figure',
+            $state === 'not_synced' => LinkHealth::text('not_synced', $ar).($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
+            $state !== null => LinkHealth::text($state, $ar),
             ($f['sync_failed'] ?? false) === true || ($f['state'] ?? '') === 'sync_failed' => ($ar ? 'المزامنة متوقفة' : 'The sync has stopped').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
             ($f['state'] ?? '') === 'stale' => ($ar ? 'البيانات متأخرة' : 'The figures are late').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
             $sources === [] => $ar ? 'ما فيه منصة إعلانية مربوطة بالمشروع' : 'No ad platform is linked to this project',
