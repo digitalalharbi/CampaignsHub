@@ -12,6 +12,7 @@ use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
+use App\Domains\Billing\Console\RedactWebhookSecretsCommand;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
@@ -228,6 +229,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
+        // PAY-WEBHOOK-SECRET-REDACT-001 — dry run by default; `--apply` on Production only with the Owner's approval.
+        RedactWebhookSecretsCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

@@ -12,6 +12,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Support\TaxTreatment;
+use App\Domains\Billing\Support\WebhookPayloadRedactor;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -488,9 +489,8 @@ final class BillingService
             return null;
         }
 
-        $decoded = json_decode($rawBody, true);
-
-        return is_array($decoded) ? $decoded : ['raw' => $rawBody];
+        // PAY-WEBHOOK-SECRET-REDACT-001 — the body is evidence; the secret that authenticated it is not stored.
+        return WebhookPayloadRedactor::forStorage($rawBody);
     }
 
     /**
