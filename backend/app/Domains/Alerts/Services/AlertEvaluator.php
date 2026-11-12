@@ -31,6 +31,7 @@ use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
@@ -192,6 +193,8 @@ final class AlertEvaluator
             return $this->sweepAll($now, $raised);
         } finally {
             MetricsAggregator::sweep(null);
+            $this->delivered = [];
+            $this->deliveredSweep = null;
         }
     }
 
@@ -342,7 +345,7 @@ final class AlertEvaluator
         $live = [];
         if (in_array($rule->type, self::CAMPAIGN_PERFORMANCE, true)) {
             $ids = $events->filter(fn (AlertEvent $e): bool => $e->entity_type === UnifiedCampaign::class && ! isset($still[$e->dedup_key]))->pluck('entity_id')->unique()->values()->all();
-            $running = $ids === [] ? new Collection : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get()->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+            $running = $ids === [] ? new Collection : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get()->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
             $live = $this->delivering($running, $now)->map(fn (UnifiedCampaign $c): string => (string) $c->id)->all();
         }
 
@@ -754,6 +757,14 @@ final class AlertEvaluator
         return $campaigns->filter(fn (UnifiedCampaign $c): bool => $this->delivered[(string) $c->getKey()] ?? false)->values();
     }
 
+    private ?ReportingTimezone $clock = null;
+
+    /** One reporting clock per evaluator: each project's timezone is read once, not once per campaign. */
+    private function clock(): ReportingTimezone
+    {
+        return $this->clock ??= app(ReportingTimezone::class);
+    }
+
     /** @var array<string, bool> campaign id → delivered yesterday, for the sweep in {@see} */
     private array $delivered = [];
 
@@ -764,9 +775,11 @@ final class AlertEvaluator
      * active and not past its end date. A paused, completed or ended campaign (its budget ran out, its dates passed) raises
      * nothing about its cost or its return — that is history, not a decision (MASTER_FINAL §هـ).
      */
-    public static function running(UnifiedCampaign $c, Carbon $now): bool
+    public static function running(UnifiedCampaign $c, Carbon $now, ?ReportingTimezone $clock = null): bool
     {
-        $today = $now->copy()->setTimezone(self::MEASURE_TIMEZONE)->toDateString();
+        // «Past its end date» is the CLIENT's day (ALERT-OBJECTIVE-RESULT-001): the project's reporting timezone, Riyadh by default.
+        // A caller judging many campaigns passes ONE clock, which reads each project's timezone once.
+        $today = $now->copy()->setTimezone(($clock ?? app(ReportingTimezone::class))->forProject((string) $c->project_id))->toDateString();
         $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
 
         return $c->status === CampaignStatus::Active->value && ! $ended;
@@ -1173,7 +1186,7 @@ final class AlertEvaluator
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign whose budget already ran out, or that is paused or ended, is not «at risk».
-            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
         $campaigns = $this->delivering($campaigns, $now);
 
         /*
@@ -1373,7 +1386,7 @@ final class AlertEvaluator
          * performance problem. ALERT-OBJECTIVE-RESULT-001 — and it is recorded why, so its open alert closes quietly.
          */
         $campaigns = $all->filter(function (UnifiedCampaign $c) use ($now, &$state): bool {
-            if (self::running($c, $now)) {
+            if (self::running($c, $now, $this->clock())) {
                 return true;
             }
             $state[(string) $c->getKey()] = ['reason' => 'campaign_inactive', 'result_key' => null];
@@ -1437,7 +1450,7 @@ final class AlertEvaluator
         $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
-            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now)
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock())
                 && ObjectiveResult::familyOf($c->objective === null ? null : (string) $c->objective) === ObjectiveFamily::Sales)
             ->values();
         $metrics = $this->campaignMetrics($campaigns);
@@ -1512,7 +1525,7 @@ final class AlertEvaluator
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
             // Running (not past its end date) and delivered yesterday — an idle or ended campaign has no «unusual day» to report.
-            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
         $campaigns = $this->delivering($campaigns, $now);
         $metrics = $this->campaignMetrics($campaigns);
         $series = $metrics->timeseriesByCampaign($from, $to);
@@ -1916,7 +1929,7 @@ final class AlertEvaluator
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a paused or ended campaign's cost is history, not a decision.
-            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
         $metrics = $this->campaignMetrics($campaigns);
 
         // Either window holding withheld money has no comparable cost — no verdict, no alert.
