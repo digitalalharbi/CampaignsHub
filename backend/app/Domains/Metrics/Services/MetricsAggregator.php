@@ -1877,6 +1877,28 @@ final class MetricsAggregator
         );
     }
 
+    /** The providers whose 0 means «not tracked», as a SQL list. */
+    private static function lpvUntrackedList(): string
+    {
+        return "('".implode("','", ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED)."')";
+    }
+
+    /**
+     * {@see landingPageViewState()} for one campaign, from the two provider lists `byCampaign()` reads.
+     *
+     * @return array{measured: bool, partial: bool}
+     */
+    private static function lpvStateFrom(string $clicked, string $measured): array
+    {
+        $clickedSet = array_filter(explode(',', $clicked));
+        $measuredSet = array_filter(explode(',', $measured));
+
+        return [
+            'measured' => $measuredSet !== [],
+            'partial' => $measuredSet !== [] && array_diff($clickedSet, $measuredSet) !== [],
+        ];
+    }
+
     /**
      * OBJECTIVE-RESULT-001 — the reported map the result is resolved with: landing page views count
      * as reported only where {@see landingPageViewState()} says they were measured.
@@ -1936,6 +1958,14 @@ final class MetricsAggregator
              * activity would rank it alongside one serving right now — the same confusion between
              * «no data» and «zero» the money contract exists to prevent, one grain up.
              */
+            /*
+             * OBJECTIVE-RESULT-001 — which platforms brought clicks and which MEASURED landing page
+             * views, read in the same statement (a separate read would cost every live build a query).
+             * The rule is {@see landingPageViewState()}'s: a platform whose 0 means «not tracked»
+             * counts only from a positive figure.
+             */
+            ->selectRaw("ARRAY_TO_STRING(ARRAY_AGG(DISTINCT daily_metrics.provider) FILTER (WHERE daily_metrics.metric_key = 'clicks' AND daily_metrics.value > 0), ',') AS clicked_providers")
+            ->selectRaw("ARRAY_TO_STRING(ARRAY_AGG(DISTINCT daily_metrics.provider) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views' AND (daily_metrics.provider NOT IN ".self::lpvUntrackedList()." OR daily_metrics.value > 0)), ',') AS lpv_providers")
             ->selectRaw(self::LAST_ACTIVE_EXPRESSION.' AS last_active_on')
             /*
              * MONEY-TRUTH-002 — the same provenance, qualified for the join.
@@ -2050,6 +2080,7 @@ final class MetricsAggregator
                 ),
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
+                '_lpv_state' => self::lpvStateFrom((string) ($r->clicked_providers ?? ''), (string) ($r->lpv_providers ?? '')),
                 'provider' => $r->provider,
             ] + $this->withPeriodReachFor(
                 $this->withDerived((array) $r),
@@ -2070,13 +2101,17 @@ final class MetricsAggregator
          * result, the words for it, its cost, and — when there is none — why. Applied after the
          * apportioning so the cost divides the spend the row actually shows.
          */
-        $lpv = $this->landingPageViewState($from, $to);
         $rows = array_map(static fn (array $row): array => $row + ObjectiveResult::resolve(
             ObjectiveResult::familyOf($row['objective'] === null ? null : (string) $row['objective']),
             $row,
-            self::resultReported((array) ($row['reported'] ?? []), $lpv[(string) $row['campaign_id']] ?? null),
-            ($lpv[(string) $row['campaign_id']]['partial'] ?? false) === true,
+            self::resultReported((array) ($row['reported'] ?? []), $row['_lpv_state']),
+            $row['_lpv_state']['partial'],
         ), $rows);
+        $rows = array_map(static function (array $row): array {
+            unset($row['_lpv_state']);
+
+            return $row;
+        }, $rows);
 
         return self::orderCampaignRows($rows);
     }

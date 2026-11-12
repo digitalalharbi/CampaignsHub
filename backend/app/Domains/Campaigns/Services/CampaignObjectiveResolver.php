@@ -163,7 +163,21 @@ final class CampaignObjectiveResolver
          * operator, but the classification every report reads does not move under them on a sweep.
          */
         $current = CampaignObjective::tryFrom((string) $campaign->objective);
-        $classified = $current !== null && $current->family() !== ObjectiveFamily::Unknown;
+        /*
+         * «Classified» means somebody classified it: a person (`manual`, already returned above) or an
+         * earlier platform answer (`platform`). A value the importer SEEDED while adopting the
+         * campaign (`objective_source = unset`) is a placeholder this very sync is completing — the
+         * click-to-WhatsApp correction to leads, for instance, lands on exactly such a seed.
+         */
+        $classified = $campaign->objective_source === 'platform'
+            && $current !== null && $current->family() !== ObjectiveFamily::Unknown
+            /*
+             * The SAME platform answer, read again with more of the platform's own data (its ad sets'
+             * destination, synced a step after the campaign), may still refine what it was read as —
+             * LEAD-DESTINATION-001 turns a click-to-WhatsApp OUTCOME_SALES into leads that way. What
+             * is refused is a NEW answer replacing a classification already made.
+             */
+            && $campaign->objective_platform_value !== $rawValue;
 
         if ($classified && $current !== $objective) {
             if ($campaign->objective_platform_value !== $rawValue) {

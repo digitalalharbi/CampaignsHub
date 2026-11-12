@@ -135,9 +135,10 @@ final class ObjectiveSourceRecordedTest extends TestCase
      */
     public function test_a_sync_never_replaces_an_objective_that_is_already_classified(): void
     {
-        foreach (['platform', 'manual', 'unset'] as $source) {
+        foreach (['platform', 'manual'] as $source) {
             $unified = $this->unified('Classified — '.$source);
-            $unified->forceFill(['objective' => 'traffic', 'objective_source' => $source])->save();
+            // Classified earlier from the platform's own TRAFFIC; the platform now says SALES.
+            $unified->forceFill(['objective' => 'traffic', 'objective_source' => $source, 'objective_platform_value' => 'TRAFFIC'])->save();
             $this->external($unified, 'snapchat', 'SALES');
 
             app(CampaignObjectiveResolver::class)->sync($unified);
@@ -149,6 +150,14 @@ final class ObjectiveSourceRecordedTest extends TestCase
                 $this->assertSame('SALES', $unified->objective_platform_value, 'the platform word was not kept beside it');
             }
         }
+
+        // A value the importer only SEEDED (source unset) is not a classification: the sync completes it.
+        $seeded = $this->unified('Seeded');
+        $seeded->forceFill(['objective' => 'traffic', 'objective_source' => 'unset'])->save();
+        $this->external($seeded, 'snapchat', 'SALES');
+        app(CampaignObjectiveResolver::class)->sync($seeded);
+        $this->assertSame('sales', $seeded->refresh()->objective);
+        $this->assertSame('platform', $seeded->objective_source);
 
         // An unclassified one is filled, and the fill is audited.
         $open = $this->unified('Unclassified');
