@@ -108,16 +108,16 @@ export function PlatformInboxPage() {
         <p className="mt-1 max-w-2xl text-sm text-text-secondary">{t.subtitle}</p>
       </header>
 
-      <div role="tablist" className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div role="tablist" className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
         {QUEUES.map(({ key, icon: Icon }) => {
           const unread = summary.data?.[key].unread
           const active = queue === key
           return (
             <button key={key} type="button" role="tab" aria-selected={active} data-testid={`inbox-tab-${key}`} onClick={() => go({ tab: key })}
-              className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-start ${active ? 'border-brand-500' : 'border-border'}`}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-text-secondary"><Icon size={18} aria-hidden /></span>
+              className={`flex min-w-0 items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 text-start sm:px-4 sm:py-3 ${active ? 'border-brand-500' : 'border-border'}`}>
+              <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-text-secondary sm:flex"><Icon size={18} aria-hidden /></span>
               <span className="min-w-0">
-                <span className="block text-xs font-semibold text-text-muted">{t[key]} · {t.unread}</span>
+                <span className="block truncate text-xs font-semibold text-text-muted">{t[key]}<span className="hidden sm:inline"> · {t.unread}</span></span>
                 <span data-testid={`inbox-unread-${key}`} className={`block text-2xl font-extrabold ${unread ? 'text-warning' : 'text-text-primary'}`}><Num>{unread ?? '—'}</Num></span>
               </span>
             </button>
