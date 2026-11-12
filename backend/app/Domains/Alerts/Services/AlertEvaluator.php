@@ -7,11 +7,13 @@ namespace App\Domains\Alerts\Services;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
 use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
@@ -84,6 +86,12 @@ final class AlertEvaluator
         // GA4-ALERTS-001 — the store as GA4 measured it: sales, bounce, conversion, basket, the platforms' claims against GA4, lost tracking, unmatched spend.
         'ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend',
     ];
+
+    /** The rule types that judge one campaign's performance — closed silently once that campaign stops running. */
+    public const CAMPAIGN_PERFORMANCE = ['roas_drop', 'cpa_increase', 'cpl_increase', 'no_results', 'budget_risk', 'metric_anomaly'];
+
+    /** The calendar a performance window is cut in — the Owner's (Asia/Riyadh); `metric_date` rows are calendar days. */
+    public const MEASURE_TIMEZONE = 'Asia/Riyadh';
 
     /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
     private const MEASUREMENT_OUTAGE_HOURS = 12;
@@ -296,16 +304,36 @@ final class AlertEvaluator
             $still[$this->dedupKey($rule, $b)] = true;
         }
 
-        AlertEvent::query()
+        $events = AlertEvent::query()
             ->where('rule_id', $rule->id)
             ->whereIn('status', ['open', 'snoozed'])
-            ->get()
-            ->each(function (AlertEvent $event) use ($still, $rule, $now): void {
-                if (isset($still[$event->dedup_key])) {
-                    return;
-                }
-                $this->recover($rule, $event, $now);
-            });
+            ->get();
+        // The campaigns of the cleared performance events that are still running AND delivered yesterday: only those are told «recovered».
+        $live = [];
+        if (in_array($rule->type, self::CAMPAIGN_PERFORMANCE, true)) {
+            $ids = $events->filter(fn (AlertEvent $e): bool => $e->entity_type === UnifiedCampaign::class && ! isset($still[$e->dedup_key]))->pluck('entity_id')->unique()->values()->all();
+            $running = $ids === [] ? new Collection : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get()->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+            $live = $this->delivering($running, $now)->map(fn (UnifiedCampaign $c): string => (string) $c->id)->all();
+        }
+
+        $events->each(function (AlertEvent $event) use ($still, $rule, $now, $live): void {
+            if (isset($still[$event->dedup_key])) {
+                return;
+            }
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a performance alert on a campaign that is no longer running (paused,
+             * completed, past its end date) is CLOSED without a word: «رجعت الأمور طبيعية» about an ended campaign is a
+             * notification about an ended campaign, which the Owner's rules forbid. The context records why.
+             */
+            if ($event->entity_type === UnifiedCampaign::class && in_array($rule->type, self::CAMPAIGN_PERFORMANCE, true)
+                && ! in_array((string) $event->entity_id, $live, true)) {
+                $this->resolve($event, $now);
+                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'campaign_not_running', 'closed_at' => $now->toIso8601String()]])->save();
+
+                return;
+            }
+            $this->recover($rule, $event, $now);
+        });
     }
 
     private function recover(AlertRule $rule, AlertEvent $event, Carbon $now): void
@@ -536,7 +564,61 @@ final class AlertEvaluator
     /** EMAIL-ALERT-DETERIORATION-001 — the window and the threshold a deterioration was judged on, in one sentence. */
     private function deteriorationBasis(int $days, float $pct, string $direction): string
     {
-        return 'the last '.$days.' days against the '.$days.' before; this rule fires at a '.rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.').'% '.$direction.'.';
+        return 'the last '.$days.' complete days against the '.$days.' before; this rule fires at a '.rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.').'% '.$direction.'.';
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured window of a performance rule: `$days` COMPLETE days ending YESTERDAY
+     * (Riyadh calendar), against the same number of complete days before them. Today is still being written by the platforms,
+     * so a window that ends «now» compares a part-day with whole days and reads every sweep differently.
+     *
+     * @return array{0: Carbon, 1: Carbon, 2: Carbon, 3: Carbon} current from, current to, previous from, previous to
+     */
+    public static function completeDays(Carbon $now, int $days): array
+    {
+        $days = max(1, $days);
+        $to = $now->copy()->setTimezone(self::MEASURE_TIMEZONE)->subDay()->endOfDay();
+        $from = $to->copy()->subDays($days - 1)->startOfDay();
+        $prevTo = $from->copy()->subSecond();
+        $prevFrom = $from->copy()->subDays($days)->startOfDay();
+
+        return [$from, $to, $prevFrom, $prevTo];
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — of these campaigns, the ones that DELIVERED yesterday (spend or impressions above
+     * zero). A running campaign with no movement has nothing to be alerted about: no spend, no budget at risk.
+     *
+     * @param  Collection<int, UnifiedCampaign>  $campaigns
+     * @return Collection<int, UnifiedCampaign>
+     */
+    private function delivering(Collection $campaigns, Carbon $now): Collection
+    {
+        if ($campaigns->isEmpty()) {
+            return $campaigns;
+        }
+        [$from, $to] = self::completeDays($now, 1);
+        $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $to);
+
+        return $campaigns->filter(static function (UnifiedCampaign $c) use ($figures): bool {
+            $f = $figures[(string) $c->getKey()] ?? [];
+
+            // A spend the money contract withheld (no exchange rate) is still spend the platform reported: it delivered.
+            return (float) ($f['spend'] ?? 0) > 0 || (float) ($f['impressions'] ?? 0) > 0 || (int) ($f['spend_withheld_rows'] ?? 0) > 0;
+        })->values();
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign is eligible for a PERFORMANCE alert only while it is running: status
+     * active and not past its end date. A paused, completed or ended campaign (its budget ran out, its dates passed) raises
+     * nothing about its cost or its return — that is history, not a decision (MASTER_FINAL §هـ).
+     */
+    public static function running(UnifiedCampaign $c, Carbon $now): bool
+    {
+        $today = $now->copy()->setTimezone(self::MEASURE_TIMEZONE)->toDateString();
+        $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
+
+        return $c->status === CampaignStatus::Active->value && ! $ended;
     }
 
     private function syncFailures(AlertRule $rule): array
@@ -734,7 +816,10 @@ final class AlertEvaluator
 
         $campaigns = UnifiedCampaign::query()->where('total_budget', '>', 0)
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get()
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign whose budget already ran out, or that is paused or ended, is not «at risk».
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+        $campaigns = $this->delivering($campaigns, $now);
 
         /*
          * Falls THROUGH rather than returning: the workspace's own spend limits are merged in at the
@@ -920,26 +1005,22 @@ final class AlertEvaluator
     private function noResults(AlertRule $rule, Carbon $now): array
     {
         $days = (int) ($rule->threshold['days'] ?? 3);
-        $from = $now->copy()->subDays($days);
+        [$from, $to] = self::completeDays($now, $days);
         $out = [];
 
         $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
-        $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $now);
-
-        $today = $now->toDateString();
-
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $today, &$out) {
+            ->get()
             /*
              * OBJECTIVE-RESULT-001 — «صرف بدون نتائج» is a PERFORMANCE alert, so only a RUNNING campaign
              * qualifies (MASTER_FINAL §هـ): a paused or completed one, or one past its end date, is not
              * a performance problem — the Ettifaq vs Ajman campaign that had ended was alerted as one.
              */
-            $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
-            if ($c->status !== CampaignStatus::Active->value || $ended) {
-                return;
-            }
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+        $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $to);
+        $window = ['window_from' => $from->toDateString(), 'window_to' => $to->toDateString()];
+
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $window, &$out) {
 
             $totals = $figures[(string) $c->getKey()];
             $spend = (float) $totals['spend'];
@@ -964,7 +1045,7 @@ final class AlertEvaluator
                     'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' in the last '.$days.' days.',
                     // `conversions` keeps its name for the readers of this context; it now holds the objective's result.
                     'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $days,
-                        'result_key' => $totals['result_key'], 'result_label' => $totals['result_label'] ?? null],
+                        'result_key' => $totals['result_key'], 'result_label' => $totals['result_label'] ?? null] + $window,
                 ];
             }
         });
@@ -978,18 +1059,21 @@ final class AlertEvaluator
         $pct = (float) ($rule->threshold['pct'] ?? 25); // % drop vs previous window
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
-        $curFrom = $now->copy()->subDays($days);
-        $prevFrom = $now->copy()->subDays($days * 2);
-        $prevTo = $now->copy()->subDays($days + 1);
+        [$curFrom, $curTo, $prevFrom, $prevTo] = self::completeDays($now, $days);
 
+        // Running campaigns only, and ROAS only where the campaign was bought for sales (ROAS belongs to sales alone).
         $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get()
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now)
+                && ObjectiveResult::familyOf($c->objective === null ? null : (string) $c->objective) === ObjectiveFamily::Sales)
+            ->values();
         $metrics = $this->campaignMetrics($campaigns);
-        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $current = $metrics->figuresByCampaign($curFrom, $curTo);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, &$out) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $window, &$out) {
             $cur = $current[(string) $c->getKey()]['roas'];
             $prev = $previous[(string) $c->getKey()]['roas'];
             if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
@@ -1000,7 +1084,7 @@ final class AlertEvaluator
                     'title' => 'ROAS dropped',
                     // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window, stated.
                     'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).' — '.$this->deteriorationBasis($days, $pct, 'drop'),
-                    'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days],
+                    'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days] + $window,
                 ];
             }
         });
@@ -1045,21 +1129,25 @@ final class AlertEvaluator
     private function metricAnomalies(AlertRule $rule, Carbon $now): array
     {
         $days = max(self::ANOMALY_MIN_WINDOW_DAYS, (int) ($rule->threshold['days'] ?? 21));
-        $from = $now->copy()->subDays($days);
-        $earliest = $now->copy()->subDays(self::ANOMALY_RECENCY_DAYS)->toDateString();
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — complete days ending yesterday (Riyadh); today is still being written.
+        [$from, $to] = self::completeDays($now, $days);
+        $earliest = $to->copy()->subDays(self::ANOMALY_RECENCY_DAYS - 1)->toDateString();
 
         $out = [];
 
         $campaigns = UnifiedCampaign::query()
             ->where('status', 'active')
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get()
+            // Running (not past its end date) and delivered yesterday — an idle or ended campaign has no «unusual day» to report.
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
+        $campaigns = $this->delivering($campaigns, $now);
         $metrics = $this->campaignMetrics($campaigns);
-        $series = $metrics->timeseriesByCampaign($from, $now);
+        $series = $metrics->timeseriesByCampaign($from, $to);
         $timeline = new ChangeTimeline($metrics);
 
         $campaigns
-            ->each(function (UnifiedCampaign $c) use ($series, $timeline, $from, $now, $earliest, &$out) {
+            ->each(function (UnifiedCampaign $c) use ($series, $timeline, $from, $to, $earliest, &$out) {
                 $points = array_values(array_filter(
                     $timeline->fromSeries($series[(string) $c->getKey()] ?? [])['points'],
                     static fn (array $p): bool => $p['date'] >= $earliest,
@@ -1081,7 +1169,7 @@ final class AlertEvaluator
                      * why — so the value, the baseline and how far apart they are all travel with
                      * the alert, which is what the alerts surface renders as context chips.
                      */
-                    'context' => ['points' => $points, 'window_days' => $from->diffInDays($now)],
+                    'context' => ['points' => $points, 'window_days' => (int) round($from->diffInDays($to)) + 1],
                 ];
             });
 
@@ -1449,14 +1537,14 @@ final class AlertEvaluator
         $pct = (float) ($rule->threshold['pct'] ?? 25);
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
-        $curFrom = $now->copy()->subDays($days);
-        $prevFrom = $now->copy()->subDays($days * 2);
-        $prevTo = $now->copy()->subDays($days + 1);
+        [$curFrom, $curTo, $prevFrom, $prevTo] = self::completeDays($now, $days);
         $label = strtoupper($key);
 
         $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get()
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a paused or ended campaign's cost is history, not a decision.
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
         $metrics = $this->campaignMetrics($campaigns);
 
         // Either window holding withheld money has no comparable cost — no verdict, no alert.
@@ -1478,17 +1566,18 @@ final class AlertEvaluator
          * PERF-RECOVERY-001 — the coverage block of an across-projects read is the tenant's, the same for every campaign, so it is read
          * once per window and an incomplete one withdraws every verdict of this rule at once, as it always did one campaign at a time.
          */
-        $curComplete = ($metrics->coverageOfWindow($curFrom, $now)['state'] ?? 'complete') === 'complete';
+        $curComplete = ($metrics->coverageOfWindow($curFrom, $curTo)['state'] ?? 'complete') === 'complete';
         $prevComplete = ($metrics->coverageOfWindow($prevFrom, $prevTo)['state'] ?? 'complete') === 'complete';
 
         if (! $curComplete || ! $prevComplete) {
             return [];
         }
 
-        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $current = $metrics->figuresByCampaign($curFrom, $curTo);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, &$out) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, $window, &$out) {
             $cur = $current[(string) $c->getKey()];
             $prev = $previous[(string) $c->getKey()];
 
@@ -1523,7 +1612,7 @@ final class AlertEvaluator
                     $key.'_previous' => round($was, 4),
                     'rise_pct' => round($rise, 2),
                     $resultKey => (int) ($cur[$resultKey] ?? 0),
-                ],
+                ] + $window,
             ];
         });
 

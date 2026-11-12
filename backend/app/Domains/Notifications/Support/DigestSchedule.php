@@ -83,6 +83,76 @@ final class DigestSchedule
         ];
     }
 
+    /** Gregorian month names, Arabic — the mail states its period in words with Latin digits, never through a locale that may print ٠١٢. */
+    private const AR_MONTHS = [1 => 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+    /** ISO weekday → Arabic name. */
+    private const AR_DAYS = [1 => 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the period word of each rhythm, in the same plain dialect everywhere:
+     * the daily mail is about YESTERDAY (one whole day), the weekly about the seven complete days that ended yesterday,
+     * the monthly about the last complete calendar month.
+     */
+    public static function periodWord(string $kind, bool $ar): string
+    {
+        return match ($kind) {
+            'monthly' => $ar ? 'الشهر الماضي' : 'Last month',
+            'weekly' => $ar ? 'الأسبوع الماضي' : 'Last week',
+            default => $ar ? 'أمس' : 'Yesterday',
+        };
+    }
+
+    /**
+     * The title of a digest: «ملخص المشاريع • أمس» across projects, «ملخص المشروع • أمس» for one project.
+     * Never the old «portfolio» word (style guide: it is «ملخص المشاريع»).
+     */
+    public static function title(string $scope, string $kind, bool $ar): string
+    {
+        $head = $scope === 'project' ? ($ar ? 'ملخص المشروع' : 'Project summary') : ($ar ? 'ملخص المشاريع' : 'Projects summary');
+
+        return $head.' • '.self::periodWord($kind, $ar);
+    }
+
+    /**
+     * The period, stated explicitly with its dates — «أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر», «أكتوبر 2026».
+     * Dates are calendar dates in the recipient's timezone (the window the dispatcher built), Latin digits.
+     */
+    public static function periodLabel(string $kind, string $from, string $to, bool $ar): string
+    {
+        $f = Carbon::parse($from);
+        $t = Carbon::parse($to);
+        $month = static fn (Carbon $d): string => $ar ? self::AR_MONTHS[$d->month] : $d->format('F');
+        $day = static fn (Carbon $d): string => $ar ? self::AR_DAYS[$d->dayOfWeekIso] : $d->format('l');
+
+        if ($kind === 'monthly') {
+            return $month($f).' '.$f->year;
+        }
+        if ($kind === 'daily' || $f->isSameDay($t)) {
+            // «أمس» only when the day IS yesterday in Riyadh; an older stored window or a `--date` run names its day alone.
+            $yesterday = $t->toDateString() === Carbon::now('Asia/Riyadh')->subDay()->toDateString();
+
+            return $yesterday
+                ? ($ar ? 'أمس '.$day($t).' '.$t->day.' '.$month($t) : 'Yesterday, '.$day($t).' '.$t->day.' '.$month($t))
+                : $day($t).' '.$t->day.' '.$month($t);
+        }
+        $range = $f->month === $t->month
+            ? AlertEventText::ltr($f->day.'–'.$t->day).' '.$month($t)
+            : $f->day.' '.$month($f).' – '.$t->day.' '.$month($t);
+
+        return $range.($f->year !== (int) Carbon::now()->year || $t->year !== $f->year ? ' '.$t->year : '');
+    }
+
+    /** What the figures are compared with, for each rhythm. */
+    public static function comparedWith(string $kind, bool $ar): string
+    {
+        return match ($kind) {
+            'monthly' => $ar ? 'مقارنة بالشهر اللي قبله' : 'against the month before',
+            'weekly' => $ar ? 'مقارنة بالـ 7 أيام اللي قبلها' : 'against the 7 days before',
+            default => $ar ? 'مقارنة باليوم اللي قبله' : 'against the day before',
+        };
+    }
+
     /** Budget pace above this is «ahead of plan» — the same band the report's pacing column colours by. */
     public const PACE_AHEAD = 1.1;
 

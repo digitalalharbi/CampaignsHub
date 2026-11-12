@@ -178,6 +178,14 @@ final class DigestDeliveryTest extends TestCase
 
         $this->assertTrue((bool) (require config_path('mail.php'))['operational_digests'], 'the operational digest is on unless the env var switches it off');
         config()->set('mail.operational_digests', false);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the daily is ONE day, so each send here reports a day that has spend.
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        app(UpsertDailyMetrics::class)->handle([new NormalizedMetric(
+            tenantId: (string) $this->tenant->id, projectId: (string) $this->project->id,
+            externalAccountId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'acc')->toString(), externalCampaignId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'camp')->toString(),
+            provider: 'meta', metricKey: 'spend', metricDate: Carbon::today(), value: 300.0,
+        )]);
+        app(TenantContext::class)->forget();
         $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()));
         Mail::assertSent(DailyDigestMail::class, 1);
         Mail::assertNotSent(OperationalDigestMail::class);

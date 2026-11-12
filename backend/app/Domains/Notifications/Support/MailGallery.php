@@ -107,13 +107,13 @@ final class MailGallery
 
             // EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests: one project with a block per platform, and the portfolio of all of them.
             'digest-project' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][0], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'project'),
-            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project'),
+            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 1), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
             'digest-portfolio' => new OperationalDigestMail(OperationalDigestModel::portfolio(self::operationalDigest(), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio'),
             // DIGESTS-CADENCE-BUDGETS-001 — the three rhythms of each: a project's monthly report, and «ملخص المشاريع» daily and monthly over thirty projects.
-            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
-            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', AlertEventText::ltr('2026-11-03').' – '.AlertEventText::ltr('2026-11-09')),
-            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', AlertEventText::ltr('2026-11-01').' – '.AlertEventText::ltr('2026-11-07')),
-            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
+            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
+            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', $ar)),
+            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
             // Every alert family, one card each, built by the real `AlertMailItem::build()` from an alert outbox item.
             ...self::alertTypes($locale),
 
@@ -543,7 +543,7 @@ final class MailGallery
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
                         'title' => 'ارتفاع تكلفة النتيجة',
-                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR، ربما بسبب منافسة أعلى أو محتوى تعب.',
+                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR.',
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],

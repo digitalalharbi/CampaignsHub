@@ -88,9 +88,10 @@ final class OperationalDigestModel
     ];
 
     private const OBJECTIVE_LABEL = [
-        'sales' => ['المبيعات', 'Sales'], 'leads' => ['العملاء المحتملون', 'Leads'], 'traffic' => ['الزيارات', 'Traffic'],
+        'sales' => ['المبيعات', 'Sales'], 'leads' => ['المهتمين', 'Leads'], 'traffic' => ['الزيارات', 'Traffic'],
         'awareness' => ['الوعي', 'Awareness'], 'app_installs' => ['تثبيت التطبيق', 'App installs'],
-        'engagement' => ['التفاعل', 'Engagement'], 'video' => ['مشاهدات الفيديو', 'Video views'], 'custom' => ['أهداف متعددة', 'Mixed objectives'],
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign whose objective nobody can classify is «أخرى», never a blended «أهداف متعددة».
+        'engagement' => ['التفاعل', 'Engagement'], 'video' => ['مشاهدات الفيديو', 'Video views'], 'custom' => ['أخرى', 'Other'],
     ];
 
     /** Column headers of the heatmap: short enough for a phone. */
@@ -206,6 +207,11 @@ final class OperationalDigestModel
             array_map(static fn (array $i): string => $i['state'] === 'bad' ? 'critical' : 'warning', array_filter($issues, static fn (array $i): bool => $i['kind'] === 'project')),
         );
         $status = self::status($block, $decisions, $issues, $state, $ar);
+        $linking = self::linking($block, $cells, $ar, $id);
+        if ($state === 'none') {
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «لا بيانات», and the reason the data proves — never a guess.
+            $status['reason'] = self::noDataReason($block, $ar);
+        }
 
         $headlineKey = self::HEADLINE[$objective] ?? 'ctr';
 
@@ -227,13 +233,16 @@ final class OperationalDigestModel
             'status' => $status,
             'state' => $state,
             'cells' => array_map(static fn (array $c): array => array_diff_key($c, ['issue' => 1]), $cells),
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the linking health of this project, apart from its performance.
+            'linking' => $linking,
             'issues' => $issues,
             'fresh' => ! in_array((string) ($freshness['state'] ?? ''), ['stale', 'sync_failed', 'no_data'], true) && ! ($freshness['sync_failed'] ?? false),
             // Unlike objectives are never averaged: a mixed project's own tile row is the money alone; each group has its own row.
             'mixed' => $mixed,
             'groups' => $groups,
             'headline' => self::figures([$mixed ? 'spend' : $headlineKey], $totals, $previous, $reported, $p, $ar)[0],
-            'kpis' => self::figures($mixed ? ['spend'] : ['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
+            // The project's TOTAL across all its objectives: spend and the delivery counts every objective shares — never a result summed across objectives.
+            'kpis' => self::figures($mixed ? ['spend', 'impressions', 'clicks'] : ['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
             'spark' => self::bars(array_map(static fn (array $pt): ?float => $pt['spend'] ?? null, (array) ($block['series'] ?? [])), array_column((array) ($block['series'] ?? []), 'date'), $ar),
             'yesterday' => self::lastDay((array) ($block['series'] ?? []), $p, $ar),
             'changes' => self::changes($block, $p, $ar),
@@ -335,7 +344,10 @@ final class OperationalDigestModel
             'heatmap' => self::heatmap($projects, $ar),
             'coverage' => self::coverage($projects, $ar),
             'moves' => self::moves($projects, $ar),
-            'movers' => self::movers($projects, $ar),
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — best and weakest per objective, on every rhythm (yesterday against the day before).
+            'movers' => self::groupMovers($projects, $ar),
+            // «ملخص الربط»: every project whose sources failed or are late, apart from performance.
+            'linking' => array_values(array_filter(array_map(static fn (array $pr): ?array => $pr['linking'] === [] ? null : ['id' => $pr['id'], 'name' => $pr['name'], 'items' => $pr['linking']], $projects))),
             'mix' => $mix,
             'projects' => $projects,
             'issues' => $issues,
@@ -722,37 +734,6 @@ final class OperationalDigestModel
     }
 
     /**
-     * The weekly view's best and worst: up to three projects each, by the headline figure's own direction against the previous window.
-     *
-     * @param  list<array<string,mixed>>  $projects
-     * @return array{best: list<array<string,mixed>>, worst: list<array<string,mixed>>}
-     */
-    private static function movers(array $projects, bool $ar): array
-    {
-        $scored = [];
-        foreach ($projects as $pr) {
-            $key = self::HEADLINE[$pr['objective']] ?? 'ctr';
-            $now = $pr['raw']['totals'][$key] ?? null;
-            $was = $pr['raw']['previous'][$key] ?? null;
-            if (! is_numeric($now) || ! is_numeric($was) || (float) $was == 0.0) {
-                continue;
-            }
-            $d = ((float) $now - (float) $was) / abs((float) $was);
-            $score = (self::FIG[$key][3] ?? false) ? -$d : $d;
-            if (abs($d) < 0.05) {
-                continue;
-            }
-            $scored[] = ['name' => $pr['name'], 'label' => $pr['headline']['label'], 'value' => $pr['headline']['value'], 'change' => $pr['headline']['change'], 'score' => $score, 'good' => $score > 0];
-        }
-        usort($scored, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
-
-        return [
-            'best' => array_slice(array_values(array_filter($scored, static fn (array $r): bool => $r['good'])), 0, 3),
-            'worst' => array_slice(array_reverse(array_values(array_filter($scored, static fn (array $r): bool => ! $r['good']))), 0, 3),
-        ];
-    }
-
-    /**
      * @param  list<string>  $keys
      * @param  array<string,mixed>  $row
      * @param  array<string,mixed>  $prev
@@ -893,7 +874,7 @@ final class OperationalDigestModel
         $labels = [
             'impressions' => ['الظهور', 'Impressions'], 'clicks' => ['النقرات', 'Clicks'], 'landing_page_views' => ['زيارات الصفحة', 'Landing page views'],
             'add_to_cart' => ['الإضافة للسلة', 'Add to cart'], 'checkout' => ['بدء الدفع', 'Checkout'], 'purchases' => ['الطلبات', 'Orders'],
-            'leads' => ['العملاء المحتملون', 'Leads'], 'installs' => ['التثبيتات', 'Installs'],
+            'leads' => ['المهتمين', 'Leads'], 'installs' => ['التثبيتات', 'Installs'],
         ];
         $kept = array_values(array_filter($stages, static fn (array $s): bool => is_numeric($s['count'] ?? null)));
         if (count($kept) < 2) {
@@ -941,15 +922,15 @@ final class OperationalDigestModel
         $ar = $lang === 'ar';
         $out = [];
         foreach ((array) ($block['observations'] ?? []) as $note) {
-            if (! in_array($note['severity'] ?? '', ['critical', 'warning'], true)) {
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — linking health is not a decision on performance.
+            if (! in_array($note['severity'] ?? '', ['critical', 'warning'], true) || in_array($note['kind'] ?? '', ['stale_data', 'data_gap'], true)) {
                 continue;
             }
             $say = PlainFindings::say($note, $ar);
-            $stale = ($note['kind'] ?? '') === 'stale_data';
             $out[] = $say + [
                 'severity' => (string) $note['severity'],
-                'url' => $stale ? MailDeepLinks::integrations($projectId) : MailDeepLinks::platforms($projectId),
-                'button' => $stale ? ($ar ? 'افتح صفحة الربط' : 'Open the connections page') : ($ar ? 'افتح المنصة داخل النظام' : 'Open the platform in the system'),
+                'url' => MailDeepLinks::platforms($projectId),
+                'button' => $ar ? 'افتح المنصة داخل النظام' : 'Open the platform in the system',
             ];
         }
 
@@ -1045,7 +1026,11 @@ final class OperationalDigestModel
             $budget = $budgetCanon[$key] ?? null;
             $verdict = DigestStatus::cell([
                 'alert' => DigestStatus::alertState($mine = self::alertsOn($key, (array) ($block['open_alerts'] ?? []))),
-                'source' => $sources[$key] ?? null,
+                /*
+                 * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a cell's state is PERFORMANCE only. A stale or failed source is linking
+                 * health: it is reported once, in «ملخص الربط», and never wears a performance chip or a «decide now» card.
+                 */
+                'source' => null,
                 'spend' => $row['spend'] ?? null,
                 'spend_withheld' => (int) ($row['spend_withheld_rows'] ?? 0) > 0,
                 'results_key' => $resultKey,
@@ -1057,6 +1042,14 @@ final class OperationalDigestModel
                 'headline_lower_is_better' => $lower,
                 'pace' => $budget !== null && (float) ($budget['budget'] ?? 0) > 0 ? ($budget['pace'] ?? null) : null,
             ]);
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — no finding about a platform that did not deliver in the period (no spend, no
+             * impressions, nothing withheld): a group that spent only in the previous period is shown, never judged.
+             */
+            $delivered = (float) ($row['spend'] ?? 0) > 0 || (float) ($row['impressions'] ?? 0) > 0 || (int) ($row['spend_withheld_rows'] ?? 0) > 0;
+            if (! $delivered && in_array($verdict['state'], ['bad', 'watch', 'ok'], true)) {
+                $verdict = ['state' => 'none', 'reason' => 'no_data', 'severity' => 0.0];
+            }
             $name = AdPlatforms::name($key, $ar ? 'ar' : 'en');
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
@@ -1070,6 +1063,8 @@ final class OperationalDigestModel
                 'state' => $verdict['state'],
                 'reason' => $verdict['reason'],
                 'issue' => $issue,
+                // The source's own health, for «ملخص الربط» only: failed / stale, or null when current.
+                'link' => in_array($sources[$key] ?? null, ['failed', 'stale'], true) ? (string) $sources[$key] : null,
             ];
         }
 
@@ -1236,6 +1231,12 @@ final class OperationalDigestModel
                 break;
         }
 
+        /*
+         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a CAUSE is written only when the data proves it. The one this cell can prove is
+         * the budget: the platform's own spend has reached its budget. Otherwise the card states the measured fact alone.
+         */
+        $cause = in_array($reason, ['worse', 'results_down', 'no_results'], true) ? self::provenCause($budget, $ar) : null;
+
         // Priority, severity and recency, as the board ranks: the worst open alert on the cell when there is one; else a metric finding is P1 when it is a problem and P3 when it is a watch.
         $meta = self::rankOf($verdict['state'], $alerts);
         // The objective's own figure for this platform, for the card's leading edge: big value, small metric name, delta.
@@ -1251,6 +1252,7 @@ final class OperationalDigestModel
             'platform' => $platform,
             'headline' => $headline,
             'figure' => $figure,
+            'cause' => $cause,
             'fig' => $fig,
             'viz' => $viz,
             'at_stake' => (float) ($row['spend'] ?? 0),
@@ -1295,14 +1297,7 @@ final class OperationalDigestModel
                 'button' => $ar ? 'افتح المشروع' : 'Open project',
             ];
         }
-        // A sync reported as failed with no platform named still has to reach the Owner.
-        if (($block['freshness']['sync_failed'] ?? false) === true && ! in_array('failed', $sources, true)) {
-            $out[] = self::rankOf('bad', []) + [
-                'kind' => 'project', 'state' => 'bad', 'reason' => 'sync_failed', 'project_id' => $projectId, 'project' => $projectName,
-                'provider' => '', 'platform' => '', 'headline' => $ar ? 'المزامنة متوقفة' : 'Sync stopped', 'figure' => $ar ? 'الأرقام ممكن تكون ناقصة' : 'Figures may be incomplete',
-                'viz' => null, 'at_stake' => $spend, 'order' => 99, 'url' => MailDeepLinks::integrations($projectId), 'button' => $ar ? 'افتح الربط' : 'Open connection',
-            ];
-        }
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a stopped sync is reported in «ملخص الربط» ({@see linking()}), not here.
 
         return $out;
     }
@@ -1338,5 +1333,141 @@ final class OperationalDigestModel
         }
 
         return ['best' => $best, 'worst' => $worst];
+    }
+
+    /**
+     * The cause the budget data PROVES, or null: spend on the platform reached (or passed) its budget in the platform's own figures.
+     *
+     * @param  array<string,mixed>|null  $budget  the platform's `budgetPacingByProvider()` row
+     */
+    public static function provenCause(?array $budget, bool $ar): ?string
+    {
+        if ($budget === null || ! is_numeric($budget['budget'] ?? null) || ! is_numeric($budget['spent'] ?? null) || (float) $budget['budget'] <= 0) {
+            return null;
+        }
+        // Proof needs comparable figures: nothing refused, nothing withheld, budget and spend in one currency.
+        $bc = $budget['budget_currency'] ?? null;
+        $sc = $budget['spent_currency'] ?? null;
+        if (($budget['refusal'] ?? null) !== null || ($budget['spend_withheld'] ?? false) === true
+            || ! is_string($bc) || ! is_string($sc) || strcasecmp($bc, $sc) !== 0) {
+            return null;
+        }
+
+        return (float) $budget['spent'] >= (float) $budget['budget']
+            ? ($ar ? 'السبب: الإنفاق وصل الميزانية' : 'Cause: spend reached the budget')
+            : null;
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص الربط»: each platform whose source failed or is late, from the freshness engine.
+     * Reported apart from performance, short, at the end of the mail.
+     *
+     * @param  list<array<string,mixed>>  $cells
+     * @return list<array<string,string>>
+     */
+    private static function linking(array $block, array $cells, bool $ar, string $projectId): array
+    {
+        $out = [];
+        foreach ($cells as $c) {
+            if (($c['link'] ?? null) === null) {
+                continue;
+            }
+            $out[] = [
+                'provider' => (string) $c['provider'],
+                'platform' => (string) $c['name'],
+                'state' => (string) $c['link'],
+                'label' => $c['link'] === 'failed' ? ($ar ? 'المزامنة متوقفة' : 'Sync stopped') : ($ar ? 'البيانات متأخرة' : 'Data is late'),
+                'since' => self::lastSync($block),
+                'url' => MailDeepLinks::integrations($projectId),
+            ];
+        }
+        // The open connection alerts (token, sync, website measurement, tracking) — relocated here, never dropped.
+        foreach ((array) ($block['open_link_alerts'] ?? []) as $a) {
+            $say = AlertEventText::plain((string) ($a['type'] ?? ''), (array) ($a['context'] ?? []), $ar, (string) ($a['provider'] ?? '') !== '' ? AdPlatforms::name((string) $a['provider'], $ar ? 'ar' : 'en') : '');
+            $out[] = ['provider' => (string) ($a['provider'] ?? ''), 'platform' => '', 'state' => ($a['severity'] ?? '') === 'critical' ? 'failed' : 'stale',
+                'label' => $say['headline'], 'since' => '', 'url' => MailDeepLinks::integrations($projectId)];
+        }
+        $f = (array) ($block['freshness'] ?? []);
+        if ($out === [] && (($f['sync_failed'] ?? false) === true || in_array((string) ($f['state'] ?? ''), ['stale', 'sync_failed'], true))) {
+            $failed = ($f['sync_failed'] ?? false) === true || ($f['state'] ?? '') === 'sync_failed';
+            $out[] = ['provider' => '', 'platform' => '', 'state' => $failed ? 'failed' : 'stale',
+                'label' => $failed ? ($ar ? 'المزامنة متوقفة' : 'Sync stopped') : ($ar ? 'البيانات متأخرة' : 'Data is late'),
+                'since' => self::lastSync($block), 'url' => MailDeepLinks::integrations($projectId)];
+        }
+
+        return $out;
+    }
+
+    /** The date of the last successful sync, as the freshness engine recorded it — the evidence behind «متأخرة». */
+    private static function lastSync(array $block): string
+    {
+        $at = $block['freshness']['last_sync_at'] ?? null;
+
+        return is_string($at) && $at !== '' ? AlertEventText::ltr(substr($at, 0, 10)) : '';
+    }
+
+    /**
+     * Why a project has no figures for the period — only what the data proves: no platform is linked, the sync stopped (with
+     * its last successful date), the figures are late, or the linked platforms recorded no spend in the period.
+     */
+    public static function noDataReason(array $block, bool $ar): string
+    {
+        $f = (array) ($block['freshness'] ?? []);
+        $since = self::lastSync($block);
+        $sources = (array) ($f['sources'] ?? []);
+
+        $withheld = (int) (($block['totals'] ?? [])['spend_withheld_rows'] ?? 0) > 0;
+
+        return match (true) {
+            $withheld => $ar ? 'فيه إنفاق مسجّل بعملة ما لها سعر صرف، فما نعرضه كرقم' : 'Spend was recorded in a currency with no exchange rate, so it is not shown as a figure',
+            ($f['sync_failed'] ?? false) === true || ($f['state'] ?? '') === 'sync_failed' => ($ar ? 'المزامنة متوقفة' : 'The sync has stopped').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
+            ($f['state'] ?? '') === 'stale' => ($ar ? 'البيانات متأخرة' : 'The figures are late').($since !== '' ? ($ar ? '، آخر تحديث ' : ', last refreshed ').$since : ''),
+            $sources === [] => $ar ? 'ما فيه منصة إعلانية مربوطة بالمشروع' : 'No ad platform is linked to this project',
+            default => $ar ? 'ما فيه إنفاق مسجّل في المنصات المربوطة في هذه الفترة' : 'The linked platforms recorded no spend in this period',
+        };
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — best and weakest, judged PER OBJECTIVE GROUP on the group's own headline figure
+     * against the previous period: a project of sales and traffic campaigns is never ranked on one blended figure.
+     *
+     * @param  list<array<string,mixed>>  $projects
+     * @return array{best: list<array<string,mixed>>, worst: list<array<string,mixed>>}
+     */
+    private static function groupMovers(array $projects, bool $ar): array
+    {
+        $scored = [];
+        foreach ($projects as $pr) {
+            foreach ((array) $pr['groups'] as $g) {
+                $key = (string) ($g['headline_key'] ?? (self::HEADLINE[$g['objective']] ?? 'ctr'));
+                $now = $g['raw']['totals'][$key] ?? null;
+                $was = $g['raw']['previous'][$key] ?? null;
+                if (! is_numeric($now) || ! is_numeric($was) || (float) $was == 0.0) {
+                    continue;
+                }
+                $d = ((float) $now - (float) $was) / abs((float) $was);
+                if (abs($d) < 0.05) {
+                    continue;
+                }
+                $score = (self::FIG[$key][3] ?? false) ? -$d : $d;
+                $fig = null;
+                foreach ((array) $g['kpis'] as $k) {
+                    if (($k['key'] ?? null) === $key) {
+                        $fig = $k;
+                    }
+                }
+                $scored[] = [
+                    'name' => (string) $pr['name'], 'objective' => (string) $g['label'],
+                    'label' => self::FIG[$key][$ar ? 0 : 1] ?? $key,
+                    'value' => $fig['value'] ?? '', 'change' => $fig['change'] ?? '', 'score' => $score, 'good' => $score > 0,
+                ];
+            }
+        }
+        usort($scored, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+
+        return [
+            'best' => array_slice(array_values(array_filter($scored, static fn (array $r): bool => $r['good'])), 0, 3),
+            'worst' => array_slice(array_reverse(array_values(array_filter($scored, static fn (array $r): bool => ! $r['good']))), 0, 3),
+        ];
     }
 }

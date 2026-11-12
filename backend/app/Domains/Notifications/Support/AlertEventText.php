@@ -168,7 +168,8 @@ final class AlertEventText
                     'headline' => $ar ? "{$who} بدون نتائج" : "Spend on {$who} with no results",
                     'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
                     // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
-                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 خلال ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
+                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' ')
+                        .(($w = self::window($ctx, $ar)) !== '' ? '('.$w.')' : ($ar ? 'خلال ' : 'in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days')) : '',
                     'action' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
                     'link' => 'campaign',
                 ];
@@ -251,8 +252,23 @@ final class AlertEventText
         $thr = isset($ctx['threshold_pct']) ? (float) $ctx['threshold_pct'] : null;
 
         return ($ar ? 'قبل ' : 'Before ').$fmt($was).' ← '.($ar ? 'الآن ' : 'Now ').$fmt($now)
-            .($days > 0 ? ($ar ? " (آخر {$days} أيام)" : " (last {$days} days)") : '')
+            .(($w = self::window($ctx, $ar)) !== '' ? ' ('.$w.')' : ($days > 0 ? ($ar ? " (آخر {$days} أيام)" : " (last {$days} days)") : ''))
             .($thr !== null ? ($ar ? ' · حد التنبيه '.self::ltr(rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : ' · alert at '.rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : '');
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured period stated with its dates («أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر»),
+     * when the event carries them; an event written before the window was recorded keeps its «آخر N أيام».
+     */
+    public static function window(array $ctx, bool $ar): string
+    {
+        $from = $ctx['window_from'] ?? null;
+        $to = $ctx['window_to'] ?? null;
+        if (! is_string($from) || ! is_string($to) || $from === '' || $to === '') {
+            return '';
+        }
+
+        return DigestSchedule::periodLabel($from === $to ? 'daily' : 'range', $from, $to, $ar);
     }
 
     private static function anomaly(array $ctx, bool $ar): string
