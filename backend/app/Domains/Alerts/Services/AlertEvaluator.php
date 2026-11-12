@@ -194,7 +194,10 @@ final class AlertEvaluator
 
         foreach ($tenantIds as $tenantId) {
             $this->tenants->setTenantId((string) $tenantId);
-            AlertRule::query()->where('active', true)->get()
+            $rules = AlertRule::query()->where('active', true)->get();
+            // The tenant's switched-on types, from the read the sweep makes anyway (LINK-HEALTH-YESTERDAY-001 asks it per rule).
+            $this->activeRuleTypes[(string) $tenantId] = $rules->pluck('type')->map(static fn ($t): string => (string) $t)->unique()->values()->all();
+            $rules
                 ->each(function (AlertRule $rule) use ($now, &$raised) {
                     $raised += $this->evaluateRule($rule, $now);
                 });
@@ -225,7 +228,7 @@ final class AlertEvaluator
     {
         $now ??= Carbon::now();
         $breaches = match ($rule->type) {
-            'sync_failure' => $this->syncFailures($rule),
+            'sync_failure' => $this->syncFailures($rule, $now),
             'sync_outage' => $this->syncOutages($rule, $now),
             'measurement_outage' => $this->measurementOutages($rule, $now),
             'tracking_health' => $this->trackingHealth($rule, $now),
@@ -273,8 +276,13 @@ final class AlertEvaluator
         };
 
         // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
+        $openLinks = null;
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
             $breaches = $this->onlyWhereYesterdayMissing($rule, $breaches, $now);
+            // One read of the tenant's open events of this type serves the adoption below and the recovery after the raises.
+            $openLinks = AlertEvent::query()->where('tenant_id', $rule->tenant_id)->where('type', $rule->type)
+                ->whereIn('status', ['open', 'snoozed'])->orderByDesc('last_triggered_at')->get();
+            $this->adoptLegacyLinkEvents($rule, $breaches, $openLinks);
         }
 
         $raised = 0;
@@ -284,7 +292,7 @@ final class AlertEvaluator
             }
         }
 
-        $this->recoverCleared($rule, $breaches, $now);
+        $this->recoverCleared($rule, $breaches, $now, $openLinks);
 
         return $raised;
     }
@@ -301,7 +309,8 @@ final class AlertEvaluator
      *
      * @param  list<array<string,mixed>>  $breaches
      */
-    private function recoverCleared(AlertRule $rule, array $breaches, Carbon $now): void
+    /** @param  Collection<int, AlertEvent>|null  $openLinks  a link type's open events, read once by {@see evaluateRule()} */
+    private function recoverCleared(AlertRule $rule, array $breaches, Carbon $now, ?Collection $openLinks = null): void
     {
         if (! in_array($rule->type, self::PERIODIC, true)) {
             return;
@@ -312,8 +321,11 @@ final class AlertEvaluator
             $still[$this->dedupKey($rule, $b)] = true;
         }
 
-        $events = AlertEvent::query()
-            ->where('rule_id', $rule->id)
+        // LINK-HEALTH-YESTERDAY-001 — a link event is the tenant's, whichever rule raised it (one per connection).
+        $events = $openLinks !== null ? $openLinks->filter(fn (AlertEvent $e): bool => in_array($e->status, ['open', 'snoozed'], true))->values() : AlertEvent::query()
+            ->when(in_array($rule->type, LinkHealth::TYPES, true),
+                fn ($q) => $q->where('tenant_id', $rule->tenant_id)->where('type', $rule->type),
+                fn ($q) => $q->where('rule_id', $rule->id))
             ->whereIn('status', ['open', 'snoozed'])
             ->get();
         // The campaigns of the cleared performance events that are still running AND delivered yesterday: only those are told «recovered».
@@ -322,6 +334,18 @@ final class AlertEvaluator
             $ids = $events->filter(fn (AlertEvent $e): bool => $e->entity_type === UnifiedCampaign::class && ! isset($still[$e->dedup_key]))->pluck('entity_id')->unique()->values()->all();
             $running = $ids === [] ? new Collection : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get()->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now))->values();
             $live = $this->delivering($running, $now)->map(fn (UnifiedCampaign $c): string => (string) $c->id)->all();
+        }
+
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
+            $closable = $events->filter(fn (AlertEvent $e): bool => ! isset($still[$e->dedup_key]));
+            $this->linkHealth->prime($closable->where('entity_type', ProviderConnection::class)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->values()->all(), $now);
+            $pairs = [];
+            foreach ($closable->where('entity_type', Project::class) as $e) {
+                foreach ((array) (((array) $e->context)['sources'] ?? []) as $source) {
+                    $pairs[] = [(string) $e->entity_id, (string) ($source['provider'] ?? '')];
+                }
+            }
+            $this->linkHealth->primeProjects($pairs, $now);
         }
 
         $events->each(function (AlertEvent $event) use ($still, $rule, $now, $live): void {
@@ -345,8 +369,13 @@ final class AlertEvaluator
              * rules on a «stale» window or a run a later run made good) is closed without a word: no «تعافى» notice, no mail.
              */
             if (in_array($rule->type, LinkHealth::TYPES, true)) {
-                $this->resolve($event, $now);
-                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'yesterday_arrived', 'closed_at' => $now->toIso8601String()]])->save();
+                // Closed only on proof: yesterday arrived, or the link itself is gone. Anything else stays open — a rule that merely
+                // stopped proposing it (another project's rule, a quiet fortnight) is never a reason to close a real outage.
+                $why = $this->linkCloseReason($event, $now);
+                if ($why !== null) {
+                    $this->resolve($event, $now);
+                    $event->forceFill(['context' => (array) $event->context + ['closed_reason' => $why, 'closed_at' => $now->toIso8601String()]])->save();
+                }
 
                 return;
             }
@@ -446,6 +475,8 @@ final class AlertEvaluator
                 'last_triggered_at' => $now,
                 'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
                 'status' => 'open',
+                // LINK-HEALTH-YESTERDAY-001 — an escalation reaches the stored event (bell, Recommendations), not only the mail.
+                'severity' => $b['severity'] ?? $active->severity,
             ] + $this->anatomy($rule, $b))->save();
             if (($b['context']['digest_only'] ?? false) !== true) {
                 $this->notify($rule, $b);
@@ -535,7 +566,7 @@ final class AlertEvaluator
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
-            'severity' => $rule->severity === 'critical' ? 'error' : ($rule->severity === 'info' ? 'info' : 'warning'),
+            'severity' => ($sev = (string) ($b['severity'] ?? $rule->severity)) === 'critical' ? 'error' : ($sev === 'info' ? 'info' : 'warning'),
             'title' => $b['title'],
             'message' => $b['message'],
             // DIGESTS-VISUAL-V2-001 — the bell's Arabic: the rule's own when it wrote one, else the mail's wording of the same finding.
@@ -666,27 +697,32 @@ final class AlertEvaluator
     }
 
     /**
-     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last fortnight is a CANDIDATE, one per connection; the
+     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last month is a CANDIDATE, one per connection; the
      * one rule ({@see onlyWhereYesterdayMissing()}) keeps those whose yesterday did not arrive. A failed run that a later run
      * made good is therefore nothing, and a connection that simply stopped syncing (no failed run at all) is
      * still found. A connection the platform refused is the `token_expiry` card, never a second one here.
      */
-    private function syncFailures(AlertRule $rule): array
+    private function syncFailures(AlertRule $rule, ?Carbon $now = null): array
     {
+        $now ??= Carbon::now();
+        // The latest run per connection, for THIS rule's project when it has one (filtered inside, so another project's newer
+        // run never hides this project's connection).
         $latest = MetricSyncRun::query()
-            ->whereIn('id', function ($q) {
+            ->whereIn('id', function ($q) use ($rule, $now) {
                 $q->selectRaw('DISTINCT ON (connection_id) id')
                     ->from('metric_sync_runs')
                     ->whereNotNull('connection_id')
-                    ->where('created_at', '>=', Carbon::now()->subDays(14))
+                    ->where('created_at', '>=', $now->copy()->subDays(30))
+                    ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
                     ->orderByRaw('connection_id, started_at DESC NULLS LAST, created_at DESC');
             })
-            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get();
-        // One item per connection: a connection the platform refused is the `token_expiry` card; a removed one says nothing.
-        $dead = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
-            ->whereIn('status', ['error', 'disconnected', 'disabled', 'revoked'])->pluck('id')->map(static fn ($id): string => (string) $id)->all();
-        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $dead, true))->values();
+        // A removed link says nothing; a refused one is the `token_expiry` card — when the tenant watches tokens at all.
+        $watchesTokens = in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true);
+        $skip = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
+            ->whereIn('status', $watchesTokens ? ['error', 'disconnected', 'disabled', 'revoked'] : ['disconnected', 'disabled', 'revoked'])
+            ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $skip, true))->values();
 
         return $latest->map(fn (MetricSyncRun $r) => [
             'entity_type' => ProviderConnection::class,
@@ -893,6 +929,15 @@ final class AlertEvaluator
     {
         $this->linkHealth->prime(array_values(array_map(static fn (array $b): string => (string) $b['entity_id'],
             array_filter($breaches, static fn (array $b): bool => $b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null))), $now);
+        $pairs = [];
+        foreach ($breaches as $b) {
+            if ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
+                foreach ((array) ($b['context']['sources'] ?? []) as $source) {
+                    $pairs[] = [(string) $b['entity_id'], (string) ($source['provider'] ?? '')];
+                }
+            }
+        }
+        $this->linkHealth->primeProjects($pairs, $now);
         $out = [];
         foreach ($breaches as $b) {
             $context = (array) ($b['context'] ?? []);
@@ -930,6 +975,11 @@ final class AlertEvaluator
             $b['message'] = 'No data arrived for '.$day.($reading['last_day'] !== null ? '; the last day that arrived is '.$reading['last_day'] : '').'.'
                 .(isset($b['message']) ? ' '.$b['message'] : '');
             unset($context['digest_only']);
+            // One item per connection: where the tenant watches each connection (`sync_failure`), the project-level outage would
+            // restate those cards in the mail and the bell — it is kept for the digest's «ملخص الربط» only.
+            if ($rule->type === 'sync_outage' && $this->watchesConnections((string) $rule->tenant_id)) {
+                $context['digest_only'] = true;
+            }
             if (($reading['missing_days'] ?? 0) >= LinkHealth::ESCALATE_AFTER_DAYS) { // escalation needs a MEASURED persistence; a link never read is not «days missing»
                 $b['severity'] = 'critical';
             }
@@ -938,6 +988,89 @@ final class AlertEvaluator
         }
 
         return $out;
+    }
+
+    private function watchesConnections(string $tenantId): bool
+    {
+        return in_array('sync_failure', $this->activeRuleTypes($tenantId), true);
+    }
+
+    /** @var array<string, list<string>> */
+    private array $activeRuleTypes = [];
+
+    /** @return list<string> the rule types a tenant has switched on — one read per tenant per evaluator */
+    private function activeRuleTypes(string $tenantId): array
+    {
+        return $this->activeRuleTypes[$tenantId] ??= AlertRule::query()->where('tenant_id', $tenantId)->where('active', true)
+            ->distinct()->pluck('type')->map(static fn ($t): string => (string) $t)->values()->all();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — open link events written under the old per-RULE dedup key (before this rule) are the same fact as
+     * the per-tenant key now: the newest is rekeyed and kept (no second notice on deploy), any further copy closed silently.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @param  Collection<int, AlertEvent>  $open
+     */
+    private function adoptLegacyLinkEvents(AlertRule $rule, array $breaches, Collection $open): void
+    {
+        if ($breaches === [] || $open->isEmpty()) {
+            return;
+        }
+        foreach ($breaches as $b) {
+            $key = $this->dedupKey($rule, $b);
+            $same = $open->filter(fn (AlertEvent $e): bool => $e->entity_type === $b['entity_type'] && (string) $e->entity_id === (string) ($b['entity_id'] ?? ''))->values();
+            if ($same->isEmpty() || $same->every(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
+                continue;
+            }
+            $keep = $same->first(fn (AlertEvent $e): bool => $e->dedup_key === $key) ?? $same->first();
+            if ($keep->dedup_key !== $key) {
+                $keep->forceFill(['dedup_key' => $key])->save();
+            }
+            $same->reject(fn (AlertEvent $e): bool => $e->is($keep))->each(fn (AlertEvent $e) => $this->closeAsDuplicate($e));
+        }
+    }
+
+    private function closeAsDuplicate(AlertEvent $event): void
+    {
+        $now = Carbon::now();
+        $this->resolve($event, $now);
+        $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'same_link', 'closed_at' => $now->toIso8601String()]])->save();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — why an open link event may close, on PROOF only: its yesterday arrived (`yesterday_arrived`), or
+     * the link is gone (`link_removed`). Null keeps it open.
+     */
+    private function linkCloseReason(AlertEvent $event, Carbon $now): ?string
+    {
+        $ctx = (array) $event->context;
+        if ($event->entity_type === ProviderConnection::class && $event->entity_id !== null) {
+            if ($this->linkHealth->forConnection((string) $event->entity_id, $now)['arrived']) {
+                return 'yesterday_arrived';
+            }
+            $connection = ProviderConnection::query()->withoutGlobalScopes()->whereKey($event->entity_id)->first(['id', 'status']);
+            if ($connection === null || in_array((string) $connection->status, ['disconnected', 'disabled', 'revoked'], true)) {
+                return 'link_removed';
+            }
+            // A refused grant closes when the connection was reconnected (no longer refused) — the proof of that failure's end.
+            if ($event->type === 'token_expiry' && ! isset($ctx['expires_at']) && (string) $connection->status !== 'error') {
+                return 'reconnected';
+            }
+
+            return null;
+        }
+        if ($event->entity_type === Project::class && $event->entity_id !== null) {
+            foreach ((array) ($ctx['sources'] ?? []) as $source) {
+                if (! $this->linkHealth->forProjectProvider((string) $event->entity_id, (string) ($source['provider'] ?? ''), $now)['arrived']) {
+                    return null;
+                }
+            }
+
+            return 'yesterday_arrived';
+        }
+
+        return 'yesterday_arrived';
     }
 
     /**

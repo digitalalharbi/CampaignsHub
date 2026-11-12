@@ -436,6 +436,8 @@ final class DailyDigest
             'freshness' => $freshness,
             // LINK-HEALTH-YESTERDAY-001 — why a day shows no spend: the link, the campaigns' status, or the platform spent nothing.
             'no_data_state' => app(LinkHealth::class)->noDataState($tenantId, (string) $projectId, $to->copy(), Carbon::now()),
+            // …and every bound ad platform read by the same rule: «ملخص الربط» lists only those whose yesterday did not arrive.
+            'link_health' => app(LinkHealth::class)->projectReadings($tenantId, (string) $projectId, Carbon::now()),
             // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
             'open_alerts' => $this->openAlerts($projectId, $from, $to),
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the open connection alerts, for «ملخص الربط» only.

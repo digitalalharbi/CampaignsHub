@@ -236,4 +236,121 @@ final class LinkHealthYesterdayTest extends TestCase
         $this->assertStringContainsString('ما وصلت', $texts[0]);
         $this->assertStringContainsString('منتهية أو موقوفة', $texts[1]);
     }
+
+    // ── independent review fixes ─────────────────────────────────────────────
+
+    /** A campaign-STRUCTURE run reads names and ids, never a day's figures: it does not prove yesterday arrived. */
+    public function test_a_structure_run_never_counts_as_yesterday_arriving(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-11 04:00:00');
+        DB::table('integration_sync_runs')->insert(['id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'provider_connection_id' => $google->id, 'type' => 'structure', 'status' => 'success', 'started_at' => now(), 'finished_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->assertFalse(app(LinkHealth::class)->forConnection((string) $google->id, Carbon::now())['arrived']);
+    }
+
+    /** A website binding beside a healthy ad platform does not turn «campaigns ended» into «yesterday did not arrive». */
+    public function test_a_website_binding_does_not_make_every_no_data_day_a_link_problem(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-12 04:00:00');
+        $account = ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $google->id, 'provider' => 'ga4',
+            'account_type' => 'property', 'external_id' => 'ga-'.uniqid(), 'name' => 'site', 'status' => 'active']);
+        ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'ga4', 'purpose' => 'tracking', 'is_active' => true]);
+
+        $this->assertSame('not_running', app(LinkHealth::class)->noDataState((string) $this->tenant->id, (string) $this->project->id, Carbon::parse('2026-11-11', 'Asia/Riyadh'), Carbon::now()));
+        $this->assertSame(['google'], array_keys(app(LinkHealth::class)->projectReadings((string) $this->tenant->id, (string) $this->project->id, Carbon::now())));
+    }
+
+    /** A real outage stays open when a rule merely stops proposing it; it closes only on proof (yesterday arrived). */
+    public function test_an_unproven_link_event_stays_open_and_closes_only_when_yesterday_arrives(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-11 04:00:00');
+        $rule = $this->rule('sync_failure');
+        $this->sweep([$rule]);
+        $event = AlertEvent::withoutGlobalScopes()->sole();
+
+        // Three weeks on with no run at all (the old fortnight window dropped the candidate and closed the event silently):
+        // still open — nothing proves the data arrived.
+        Carbon::setTestNow(Carbon::parse('2026-11-30 05:00:00', 'UTC'));
+        $this->sweep([$rule]);
+        $this->assertSame('open', $event->refresh()->status);
+
+        $this->syncRun($google, '2026-11-30 04:00:00');
+        $this->sweep([$rule]);
+        $this->assertSame('resolved', $event->refresh()->status);
+        $this->assertSame('yesterday_arrived', $event->context['closed_reason']);
+    }
+
+    /** An outage open under the old per-rule key is adopted on the first sweep after deploy: no second event, no second notice. */
+    public function test_a_legacy_keyed_open_outage_is_adopted_not_announced_again(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-11 04:00:00');
+        $rule = $this->rule('sync_failure');
+        $old = AlertEvent::create(['tenant_id' => $this->tenant->id, 'rule_id' => $rule->id, 'type' => 'sync_failure', 'entity_type' => ProviderConnection::class,
+            'entity_id' => (string) $google->id, 'dedup_key' => hash('sha256', $rule->id.'|legacy'), 'severity' => 'warning', 'status' => 'open',
+            'context' => ['provider' => 'google'], 'last_triggered_at' => now()->subMinutes(10)]);
+        $notices = DB::table('app_notifications')->count();
+
+        $this->sweep([$rule]);
+
+        $this->assertSame(1, AlertEvent::withoutGlobalScopes()->whereIn('status', ['open', 'snoozed'])->count());
+        $this->assertSame('open', $old->refresh()->status, 'the same event, rekeyed');
+        $this->assertSame($notices, DB::table('app_notifications')->count(), 'not announced a second time');
+    }
+
+    /** An escalation reaches the stored event (the bell and the Recommendations page read it), not only the mail. */
+    public function test_an_escalation_is_stored_on_the_open_event(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-11 04:00:00');            // the 11th missing: one day
+        $rule = $this->rule('sync_failure');
+        $rule->forceFill(['cooldown_minutes' => 60])->save();
+        $this->sweep([$rule]);
+        $event = AlertEvent::withoutGlobalScopes()->sole();
+        $this->assertSame('warning', $event->severity);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-13 05:00:00', 'UTC'));   // the 12th missing too: two days
+        $this->sweep([$rule]);
+        $this->assertSame('critical', $event->refresh()->severity);
+    }
+
+    /** Where each connection is watched, the project-level outage adds no second item to the mail or the bell. */
+    public function test_a_project_outage_is_not_a_second_instant_item_where_connections_are_watched(): void
+    {
+        $google = $this->connection('google');
+        $this->syncRun($google, '2026-11-08 04:00:00');
+        // Figures last read four days ago: the freshness engine calls the project's source stale.
+        $account = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $google->id)->firstOrFail();
+        DB::table('daily_metrics')->insert(['id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->id, 'external_campaign_id' => (string) Str::uuid(), 'provider' => 'google', 'metric_key' => 'spend',
+            'metric_date' => '2026-11-08', 'value' => 10, 'project_currency' => 'SAR', 'data_freshness_at' => '2026-11-08 04:00:00', 'created_at' => now(), 'updated_at' => now()]);
+        $this->sweep([$this->rule('sync_failure'), $this->rule('sync_outage', (string) $this->project->id)]);
+
+        $open = AlertEvent::withoutGlobalScopes()->where('status', 'open')->get()->keyBy('type');
+        $this->assertTrue($open->has('sync_failure'));
+        // The project-level outage is kept for «ملخص الربط» only: no second instant notice in the bell or the mail.
+        $this->assertTrue((bool) ($open->get('sync_outage')?->context['digest_only'] ?? false));
+        $this->assertSame(1, DB::table('app_notifications')->where('type', 'sync_failed')->count());
+    }
+
+    /** «ملخص الربط» lists a platform only when its yesterday did not arrive, in the rule's words. */
+    public function test_the_digest_linking_section_follows_the_one_rule(): void
+    {
+        $google = $this->connection('google');
+        $snap = $this->connection('snapchat');
+        $this->syncRun($google, '2026-11-12 04:00:00');
+        $this->syncRun($snap, '2026-11-11 04:00:00');
+        $block = ['project_id' => (string) $this->project->id, 'link_health' => app(LinkHealth::class)->projectReadings((string) $this->tenant->id, (string) $this->project->id, Carbon::now()),
+            'freshness' => ['state' => 'stale', 'sync_failed' => true]];
+
+        $m = new \ReflectionMethod(OperationalDigestModel::class, 'linking');
+        $items = $m->invoke(null, $block, [['provider' => 'google', 'name' => 'Google', 'link' => 'failed']], true, (string) $this->project->id);
+
+        $this->assertSame(['snapchat'], array_column($items, 'provider'), 'only the platform whose yesterday is missing; the seven-day freshness is not a link verdict');
+        $this->assertSame(LinkHealth::text('not_synced', true), $items[0]['label']);
+    }
 }

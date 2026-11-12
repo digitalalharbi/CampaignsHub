@@ -49,6 +49,10 @@ final class AlertMailItem
         // ALERT-MAIL-DATED-BARS-001 — «قبل / الآن» named no period: each bar says which days it measured.
         if (is_array($viz) && $viz['type'] === 'before_now') {
             $viz += self::when($ctx, $ar);
+            // A recovery draws the movement that opened it in calm colours: it is over.
+            if ($recovered) {
+                $viz['resolved'] = true;
+            }
         }
         $target = self::target($type, $projectId, $ar);
         if ($target !== null && ! $recovered && ($c['secondary'] ?? '') === '') {

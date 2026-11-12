@@ -1388,32 +1388,37 @@ final class OperationalDigestModel
      */
     private static function linking(array $block, array $cells, bool $ar, string $projectId): array
     {
+        /*
+         * LINK-HEALTH-YESTERDAY-001 — «ملخص الربط» speaks the one rule: a platform is listed only when its yesterday did not
+         * arrive (state 1), with the day missing and the last day that arrived. The seven-day freshness reading is not a link
+         * verdict, and an open link event the rule did not keep is not listed either.
+         */
         $out = [];
-        foreach ($cells as $c) {
-            if (($c['link'] ?? null) === null) {
+        $listed = [];
+        foreach ((array) ($block['link_health'] ?? []) as $provider => $r) {
+            if (! is_array($r) || ($r['arrived'] ?? true)) {
                 continue;
             }
+            $listed[AdPlatforms::canonical((string) $provider)] = true;
             $out[] = [
-                'provider' => (string) $c['provider'],
-                'platform' => (string) $c['name'],
-                'state' => (string) $c['link'],
-                'label' => $c['link'] === 'failed' ? ($ar ? 'المزامنة متوقفة' : 'Sync stopped') : ($ar ? 'البيانات متأخرة' : 'Data is late'),
-                'since' => self::lastSync($block),
+                'provider' => (string) $provider,
+                'platform' => AdPlatforms::name((string) $provider, $ar ? 'ar' : 'en'),
+                'state' => ($r['missing_days'] ?? 0) >= LinkHealth::ESCALATE_AFTER_DAYS ? 'failed' : 'stale',
+                'label' => LinkHealth::text('not_synced', $ar),
+                'since' => is_string($r['last_day'] ?? null) ? AlertEventText::ltr((string) $r['last_day']) : '',
                 'url' => MailDeepLinks::integrations($projectId),
             ];
         }
-        // The open connection alerts (token, sync, website measurement, tracking) — relocated here, never dropped.
         foreach ((array) ($block['open_link_alerts'] ?? []) as $a) {
-            $say = AlertEventText::plain((string) ($a['type'] ?? ''), (array) ($a['context'] ?? []), $ar, (string) ($a['provider'] ?? '') !== '' ? AdPlatforms::name((string) $a['provider'], $ar ? 'ar' : 'en') : '');
-            $out[] = ['provider' => (string) ($a['provider'] ?? ''), 'platform' => '', 'state' => ($a['severity'] ?? '') === 'critical' ? 'failed' : 'stale',
-                'label' => $say['headline'], 'since' => '', 'url' => MailDeepLinks::integrations($projectId)];
-        }
-        $f = (array) ($block['freshness'] ?? []);
-        if ($out === [] && (($f['sync_failed'] ?? false) === true || in_array((string) ($f['state'] ?? ''), ['stale', 'sync_failed'], true))) {
-            $failed = ($f['sync_failed'] ?? false) === true || ($f['state'] ?? '') === 'sync_failed';
-            $out[] = ['provider' => '', 'platform' => '', 'state' => $failed ? 'failed' : 'stale',
-                'label' => $failed ? ($ar ? 'المزامنة متوقفة' : 'Sync stopped') : ($ar ? 'البيانات متأخرة' : 'Data is late'),
-                'since' => self::lastSync($block), 'url' => MailDeepLinks::integrations($projectId)];
+            $ctx = (array) ($a['context'] ?? []);
+            $provider = AdPlatforms::canonical((string) ($a['provider'] ?? ''));
+            if (($ctx['link_state'] ?? null) !== 'not_synced' || isset($listed[$provider])) {
+                continue;
+            }
+            $listed[$provider] = true;
+            $say = AlertEventText::plain((string) ($a['type'] ?? ''), $ctx, $ar, $provider !== '' ? AdPlatforms::name($provider, $ar ? 'ar' : 'en') : '');
+            $out[] = ['provider' => $provider, 'platform' => '', 'state' => ($a['severity'] ?? '') === 'critical' ? 'failed' : 'stale',
+                'label' => $say['headline'], 'since' => is_string($ctx['last_day'] ?? null) ? AlertEventText::ltr((string) $ctx['last_day']) : '', 'url' => MailDeepLinks::integrations($projectId)];
         }
 
         return $out;

@@ -392,7 +392,9 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $rule = $this->rule('roas_drop', ['pct' => 25, 'days' => 7]);
         foreach ([['roas_drop', UnifiedCampaign::class, (string) $paused->id], ['sync_outage', Project::class, (string) $project->id]] as [$type, $et, $eid]) {
             AlertEvent::create(['tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'rule_id' => $rule->id, 'type' => $type, 'entity_type' => $et, 'entity_id' => $eid,
-                'dedup_key' => Str::random(12), 'severity' => 'critical', 'priority' => 'P1', 'status' => 'open', 'context' => ['provider' => 'meta'], 'last_triggered_at' => now()]);
+                'dedup_key' => Str::random(12), 'severity' => 'critical', 'priority' => 'P1', 'status' => 'open',
+                // LINK-HEALTH-YESTERDAY-001 — a link event the one rule kept: yesterday did not arrive.
+                'context' => ['provider' => 'meta', 'link_state' => 'not_synced', 'required_day' => '2026-11-11', 'last_day' => '2026-11-10'], 'last_triggered_at' => now()]);
         }
 
         $day = Carbon::parse('2026-11-11', 'Asia/Riyadh');
@@ -402,7 +404,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $this->assertCount(1, $digest['projects'][0]['open_link_alerts']);
         $m = OperationalDigestModel::project($digest['projects'][0], 'ar', 1);
         $this->assertNotSame([], $m['linking']);
-        $this->assertStringContainsString('مزامنة', implode(' ', array_column($m['linking'], 'label')));
+        $this->assertStringContainsString('ما وصلت', implode(' ', array_column($m['linking'], 'label')));
     }
 
     // ── §2 — the period: yesterday, Riyadh, stated ───────────────────────────

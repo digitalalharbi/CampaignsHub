@@ -278,6 +278,7 @@ function fromAlert(item: Extract<ActionItem, { kind: 'alert' }>, ctx: FindingCon
      * reading (an old «expiring» access token, a run a later run made good) is not a link problem and shows nothing.
      */
     case 'sync_failure':
+    case 'sync_outage':
     case 'measurement_outage':
     case 'token_expiry':
       if (c.link_state !== 'not_synced') return null
@@ -287,7 +288,8 @@ function fromAlert(item: Extract<ActionItem, { kind: 'alert' }>, ctx: FindingCon
         subject: { type: 'connection', id: a.entity_type?.endsWith('ProviderConnection') ? a.entity_id : null, name: null, platform: str(c.provider) },
         evidence: { target: 'integrations', path: '/integrations' },
         nature: 'tracking',
-        action: a.type === 'token_expiry' && str(c.error) ? 'reconnect' : 'check_sync',
+        // Refused = a token card with no expiry, the same test the mail makes (`AlertEventText`).
+        action: a.type === 'token_expiry' && !str(c.expires_at) ? 'reconnect' : 'check_sync',
         facts: [
           ...(str(c.provider) ? [{ key: 'provider' as const, value: str(c.provider)! }] : []),
           ...(str(c.required_day) ? [{ key: 'missing_day' as const, value: str(c.required_day)! }] : []),

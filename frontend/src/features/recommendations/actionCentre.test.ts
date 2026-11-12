@@ -81,6 +81,14 @@ describe('what the action centre holds', () => {
 
     expect(items.map((i) => i.id)).toEqual(['alert:x2'])
   })
+
+  it('shows a project-level outage only where no connection-level link item exists', () => {
+    const items = buildActionCentre({
+      alerts: [alert({ id: 'p1', type: 'sync_outage', entity_type: 'Project', entity_id: 'p1', context: { link_state: 'not_synced' } })],
+    })
+
+    expect(items.map((i) => i.id)).toEqual(['alert:p1'])
+  })
 })
 
 describe('what it leaves out', () => {

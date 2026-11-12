@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Status;
 
 use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Support\AdPlatforms;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,12 @@ final class LinkHealth
     /** A run that reached the platform and read what it asked for (`DataFreshnessService` counts the same three). */
     private const SUCCEEDED = ['success', 'no_data', 'partial_mapping'];
 
+    /**
+     * The `integration_sync_runs` that bring DATA (a website's figures, a store's orders). A `structure` run reads campaign names
+     * and ids, never a day's figures, so it never proves that yesterday arrived.
+     */
+    private const DATA_RUNS = ['measurement', 'commerce'];
+
     /** Days missing at which the alert escalates to critical. */
     public const ESCALATE_AFTER_DAYS = 2;
 
@@ -70,6 +77,8 @@ final class LinkHealth
      */
     public function forConnection(string $connectionId, Carbon $now): array
     {
+        $this->forgetOtherSweeps($now);
+
         return $this->memo['c|'.$connectionId.'|'.$now->format('U.u')] ??= $this->readConnection($connectionId, $now);
     }
 
@@ -81,7 +90,10 @@ final class LinkHealth
      */
     public function prime(array $connectionIds, Carbon $now): void
     {
-        $ids = array_values(array_unique(array_filter($connectionIds)));
+        $this->forgetOtherSweeps($now);
+        $at = $now->format('U.u');
+        // Only what this sweep has not read yet.
+        $ids = array_values(array_filter(array_unique(array_filter($connectionIds)), fn (string $id): bool => ! isset($this->memo['c|'.$id.'|'.$at])));
         if ($ids === []) {
             return;
         }
@@ -99,7 +111,7 @@ final class LinkHealth
         $required = self::requiredDay($now)->toDateString();
         $short = array_values(array_filter($ids, static fn (string $id): bool => ($best[$id] ?? '') < $required));
         if ($short !== []) {
-            $finished = DB::table('integration_sync_runs')->whereIn('provider_connection_id', $short)->whereIn('status', self::SUCCEEDED)
+            $finished = DB::table('integration_sync_runs')->whereIn('provider_connection_id', $short)->whereIn('status', self::SUCCEEDED)->whereIn('type', self::DATA_RUNS)
                 ->groupBy('provider_connection_id')->selectRaw('provider_connection_id, MAX(finished_at) AS finished')->pluck('finished', 'provider_connection_id');
             foreach ($finished as $id => $at) {
                 if ($at !== null) {
@@ -113,6 +125,49 @@ final class LinkHealth
             $this->memo['c|'.$id.'|'.$now->format('U.u')] = $this->reading(($best[$id] ?? '') !== '' ? $best[$id] : null, $now);
         }
     }
+
+    /**
+     * Reads many (project, platform) pairs in one statement — a project-level outage names several platforms, a sweep many
+     * projects — so {@see forProjectProvider()} answers each from the memo.
+     *
+     * @param  list<array{0: string, 1: string}>  $pairs  [project id, provider]
+     */
+    public function primeProjects(array $pairs, Carbon $now): void
+    {
+        $this->forgetOtherSweeps($now);
+        $at = $now->format('U.u');
+        $pairs = array_values(array_filter($pairs, fn (array $p): bool => ! isset($this->memo['p|'.$p[0].'|'.$p[1].'|'.$at])));
+        $projects = array_values(array_unique(array_map(static fn (array $p): string => $p[0], $pairs)));
+        if ($projects === []) {
+            return;
+        }
+        $best = [];
+        $runs = DB::table('metric_sync_runs')->whereIn('project_id', $projects)->whereIn('status', self::SUCCEEDED)
+            ->whereNotNull('finished_at')->whereNotNull('window_end')->where('finished_at', '>=', $now->copy()->subDays(30))
+            ->get(['project_id', 'provider', 'window_start', 'window_end', 'finished_at']);
+        foreach ($runs as $run) {
+            $day = self::coveredDay($run);
+            $k = (string) $run->project_id.'|'.(string) $run->provider;
+            if ($day !== null && (! isset($best[$k]) || $day > $best[$k])) {
+                $best[$k] = $day;
+            }
+        }
+        foreach ($pairs as [$project, $provider]) {
+            $this->memo['p|'.$project.'|'.$provider.'|'.$now->format('U.u')] = $this->reading($best[$project.'|'.$provider] ?? null, $now);
+        }
+    }
+
+    /** Keeps the memo to ONE sweep, so a long-lived worker never grows it. */
+    private function forgetOtherSweeps(Carbon $now): void
+    {
+        $sweep = $now->format('U.u');
+        if ($this->sweep !== $sweep) {
+            $this->memo = [];
+            $this->sweep = $sweep;
+        }
+    }
+
+    private ?string $sweep = null;
 
     /** @var array<string, array{arrived: bool, required_day: string, last_day: ?string, missing_days: ?int}> One sweep (one `\$now`) reads each link once. */
     private array $memo = [];
@@ -134,7 +189,34 @@ final class LinkHealth
      */
     public function forProjectProvider(string $projectId, string $provider, Carbon $now): array
     {
+        $this->forgetOtherSweeps($now);
+
         return $this->memo['p|'.$projectId.'|'.$provider.'|'.$now->format('U.u')] ??= $this->reading($this->lastAdDay(fn ($q) => $q->where('project_id', $projectId)->where('provider', $provider)), $now);
+    }
+
+    /**
+     * Every ad platform bound to a project, read by the one rule — what the digest's «ملخص الربط» lists (only those whose
+     * yesterday did not arrive).
+     *
+     * @return array<string, array{arrived: bool, required_day: string, last_day: ?string, missing_days: ?int}>
+     */
+    public function projectReadings(string $tenantId, string $projectId, Carbon $now): array
+    {
+        $out = [];
+        foreach ($this->adProviders($tenantId, $projectId) as $provider) {
+            $out[$provider] = $this->forProjectProvider($projectId, $provider, $now);
+        }
+
+        return $out;
+    }
+
+    /** @return list<string> the ad platforms actively bound to the project (a website or store binding is not one) */
+    private function adProviders(string $tenantId, string $projectId): array
+    {
+        return array_values(array_filter(DB::table('project_integration_bindings')
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('is_active', true)
+            ->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all(),
+            static fn (string $p): bool => in_array(AdPlatforms::canonical($p), AdPlatforms::ORDER, true)));
     }
 
     /**
@@ -143,9 +225,8 @@ final class LinkHealth
      */
     public function noDataState(string $tenantId, string $projectId, Carbon $day, Carbon $now): ?string
     {
-        $providers = DB::table('project_integration_bindings')
-            ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('is_active', true)
-            ->distinct()->pluck('provider')->map(static fn ($p): string => (string) $p)->all();
+        // Ad platforms only: a website or store binding has no ad-metric runs and says nothing about why no AD spend shows.
+        $providers = $this->adProviders($tenantId, $projectId);
         if ($providers === []) {
             return null;
         }
@@ -181,7 +262,8 @@ final class LinkHealth
         $query = DB::table('metric_sync_runs')->whereIn('status', self::SUCCEEDED)->whereNotNull('finished_at')->whereNotNull('window_end');
         $scope($query);
         $best = null;
-        foreach ($query->orderByDesc('finished_at')->limit(50)->get(['window_start', 'window_end', 'finished_at']) as $run) {
+        // The same month of runs `prime()` reads, so the two paths always agree.
+        foreach ($query->where('finished_at', '>=', Carbon::now()->subDays(30))->get(['window_start', 'window_end', 'finished_at']) as $run) {
             $covered = self::coveredDay($run);
             if ($covered !== null) {
                 $best = $best === null ? $covered : max($best, $covered);
@@ -204,7 +286,7 @@ final class LinkHealth
     private function lastOtherDay(string $connectionId): ?string
     {
         $finished = DB::table('integration_sync_runs')
-            ->where('provider_connection_id', $connectionId)->whereIn('status', self::SUCCEEDED)
+            ->where('provider_connection_id', $connectionId)->whereIn('status', self::SUCCEEDED)->whereIn('type', self::DATA_RUNS)
             ->max('finished_at');
 
         return $finished === null ? null
