@@ -77,6 +77,7 @@ import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar
 import { useUi } from '@/stores/ui'
 import { reports as countedReports } from '@/lib/counted'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { promptDialog } from '@/stores/dialogs'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -179,7 +180,7 @@ export function ReportsPage() {
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reports', currentProjectId] })
-  const regen = useMutation({ mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
+  const regen = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
   /* REPORT-LIFECYCLE-MENU-001 — rename in place; duplicate to an independent report. Neither touches the original's link. */
   const rename = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => renameReport(currentProjectId!, id, name), onSuccess: invalidate })
   /*
@@ -193,7 +194,7 @@ export function ReportsPage() {
   const [rowNote, setRowNote] = useState<string | null>(null)
   const [editOriginal, setEditOriginal] = useState<ReportRow | null>(null)
   const refusal = (e: unknown) => setRowNote(toApiError(e).message || (ar ? 'تعذّر تنفيذ الإجراء.' : 'The action could not be completed.'))
-  const duplicate = useMutation({
+  const duplicate = useMutation({ meta: { feedback: 'none' },
     mutationFn: (id: string) => startDuplicate(currentProjectId!, id),
     onSuccess: (d) => {
       setRowNote(null)
@@ -229,7 +230,7 @@ export function ReportsPage() {
   })
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
   const drill = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => setReportPdfBreakdowns(currentProjectId!, id, { platform_drilldown: on }), onSuccess: invalidate })
-  const exp = useMutation({
+  const exp = useMutation({ meta: { feedback: 'none' },
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
     // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
     onSuccess: invalidate,
@@ -711,10 +712,10 @@ export function ReportsPage() {
           ar={ar}
           report={editOriginal}
           onClose={() => setEditOriginal(null)}
-          onRename={() => {
+          onRename={async () => {
             const r = editOriginal
             setEditOriginal(null)
-            const name = window.prompt(ar ? 'اسم التقرير:' : 'Report name:', r.name)?.trim()
+            const name = await promptDialog({ title: ar ? 'غيّر الاسم' : 'Rename the report', label: ar ? 'اسم التقرير' : 'Report name', initial: r.name })
             if (name && name !== r.name) rename.mutate({ id: r.id, name })
           }}
           onNames={() => { setNamesId(editOriginal.id); setEditOriginal(null) }}
@@ -2058,7 +2059,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                     {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <button type="button" data-testid={`share-copy-${s.id}`} onClick={() => copyCurrent.mutate(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
+                    <button type="button" data-testid={`share-copy-${s.id}`} disabled={copyCurrent.isPending} onClick={() => copyCurrent.mutate(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
                       {ar ? 'نسخ الرابط الحالي' : 'Copy current link'}
                     </button>
                     {(s.active || s.paused_at) && (
@@ -2098,12 +2099,12 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                           them to pick a date to express that is a step for nothing.
                         */}
                         <button
-                          onClick={() => renew.mutate({ id: s.id, until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) })}
+                          disabled={renew.isPending} onClick={() => renew.mutate({ id: s.id, until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) })}
                           className="text-xs font-semibold text-text-secondary hover:underline"
                         >
                           {ar ? 'تمديد شهر' : 'Extend a month'}
                         </button>
-                        <button onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
+                        <button disabled={revoke.isPending} onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
                       </>
                     )}
                   </div>

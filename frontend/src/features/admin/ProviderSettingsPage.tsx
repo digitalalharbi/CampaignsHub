@@ -287,7 +287,7 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
     mutationFn: () => saveIntegrationProvider(provider.key, { ...draft, environment }),
     onSuccess: () => { setDraft({}); void refresh() },
   })
-  const test = useMutation({ mutationFn: () => testIntegrationProvider(provider.key), onSuccess: refresh })
+  const test = useMutation({ meta: { feedback: 'none' }, mutationFn: () => testIntegrationProvider(provider.key), onSuccess: refresh })
   const toggle = useMutation({
     mutationFn: () => setIntegrationProviderEnabled(provider.key, !provider.enabled, reason || undefined),
     onSuccess: () => { setReason(''); void refresh() },
@@ -398,7 +398,7 @@ function ProviderDialog({ provider, ar, copy, onClose }: {
                       type="button"
                       aria-label={copy.clear}
                       data-testid={`provider-clear-${provider.key}-${field.key}`}
-                      onClick={() => forget.mutate(field.key)}
+                      disabled={forget.isPending} onClick={() => forget.mutate(field.key)}
                       className="shrink-0 rounded-xl border border-border p-2 text-text-muted hover:text-danger"
                     >
                       <Trash2 size={14} />

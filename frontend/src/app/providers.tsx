@@ -9,6 +9,9 @@ import { applyDocument, useUi } from '@/stores/ui'
 import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
 import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
 import { OverlayBoundary } from '@/components/OverlayBoundary'
+import { SaveFeedback } from '@/components/ui/SaveFeedback'
+import { DialogHost } from '@/components/ui/DialogHost'
+import { useSaveFeedback } from '@/stores/saveFeedback'
 import { QUERY_GC_TIME_MS, QUERY_STALE_TIME_MS } from '@/lib/query/swr'
 
 /**
@@ -23,6 +26,11 @@ import { QUERY_GC_TIME_MS, QUERY_STALE_TIME_MS } from '@/lib/query/swr'
  * success, which refetches regardless of this.
  */
 export { QUERY_STALE_TIME_MS, QUERY_GC_TIME_MS }
+
+/** A mutation reports its save state unless it opted out with `meta: { feedback: 'none' }`. */
+function reportsSave(meta: Record<string, unknown> | undefined): boolean {
+  return meta?.feedback !== 'none'
+}
 
 export const queryClient = new QueryClient({
   /*
@@ -40,9 +48,30 @@ export const queryClient = new QueryClient({
    * than saying nothing.
    */
   mutationCache: new MutationCache({
-    onError: (error) => {
-      const refusal = upgradeRefusalFrom(toApiError(error))
+    /*
+     * SAVE-STATE-001 — every save shows «يحفظ…» → «انحفظ» / «ما انحفظ + السبب», and the screen refreshes in place.
+     *
+     * One hook for hundreds of mutations. A mutation that is not a save (a sign-in, a sync, a test send, an export)
+     * sets `meta: { feedback: 'none' }` and keeps its own message — «انحفظ» after a sync would be a lie. A commercial
+     * refusal is answered by the upgrade dialog, so it is not also announced here.
+     */
+    onMutate: (_variables, mutation) => {
+      if (!reportsSave(mutation.meta)) return
+      useSaveFeedback.getState().begin()
+    },
+    onSuccess: (_data, _variables, _context, mutation) => {
+      if (!reportsSave(mutation.meta)) return
+      useSaveFeedback.getState().succeed()
+      /* Whatever the mutation did not refetch itself: the active screen asks again, so the saved value is what is drawn. */
+      void queryClient.invalidateQueries({ refetchType: 'active' }, { cancelRefetch: false })
+    },
+    onError: (error, _variables, _context, mutation) => {
+      const failure = toApiError(error)
+      const refusal = upgradeRefusalFrom(failure)
       if (refusal !== null) useUpgrade.getState().show(refusal)
+      if (!reportsSave(mutation.meta)) return
+      if (refusal !== null) useSaveFeedback.setState((s) => ({ pending: Math.max(0, s.pending - 1), notice: s.pending > 1 ? s.notice : null }))
+      else useSaveFeedback.getState().fail(failure.message)
     },
   }),
   defaultOptions: {
@@ -178,6 +207,8 @@ export function Providers({ children }: { children: ReactNode }) {
       */}
       <OverlayBoundary>
         <UpgradeRequiredDialog />
+        <DialogHost />
+        <SaveFeedback />
       </OverlayBoundary>
     </QueryClientProvider>
   )

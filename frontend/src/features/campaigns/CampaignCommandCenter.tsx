@@ -937,10 +937,10 @@ export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }:
       {a.proposed_action && <p className="mt-1 text-[11px] text-brand-700">الإجراء: {a.proposed_action}</p>}
       {canApprove && a.status !== 'approved' && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
         </div>
       )}
     </div>

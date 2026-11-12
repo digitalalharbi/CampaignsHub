@@ -159,7 +159,7 @@ export function LoginPage() {
   const google = oauthProviders.data?.providers.find((provider) => provider.provider === 'google')
   // Reserved until the server has answered; a failed lookup keeps the button, because nothing says Google cannot work.
   const googleRow = oauthProviders.isPending ? 'reserved' : oauthProviders.isError || google?.available === true ? 'button' : 'absent'
-  const googleSignIn = useMutation({
+  const googleSignIn = useMutation({ meta: { feedback: 'none' },
     // The page they were interrupted on, for the server to accept or refuse when Google answers: the browser decides nothing here.
     mutationFn: () => startOAuth('google', { redirect: safeRedirect(params.get('redirect'), '') || null }),
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
@@ -282,7 +282,7 @@ export function LoginPage() {
   })
 
   /** The password path. `portal: null`, always — the browser states no preference. */
-  const signIn = useMutation({
+  const signIn = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => login({ email: email.trim(), password, remember, portal: null }),
     onSuccess: async (user) => {
       signedInHere.current = true
