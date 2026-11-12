@@ -42,5 +42,6 @@ export const useSaveFeedback = create<SaveFeedbackState>((set, get) => ({
     set({ pending, notice: keep ? get().notice : pending > 0 ? { seq: ++seq, kind: 'saving' } : { seq: ++seq, kind: 'saved' } })
   },
   fail: (reason) => set((s) => ({ pending: Math.max(0, s.pending - 1), notice: { seq: ++seq, kind: 'failed', reason } })),
-  dismiss: () => set((s) => (s.pending > 0 ? s : { notice: null })),
+  // A failure is read and closed whatever else is in flight; «saved» and «saving» are never dismissed mid-request.
+  dismiss: () => set((s) => (s.notice?.kind === 'failed' || s.pending === 0 ? { notice: null } : s)),
 }))

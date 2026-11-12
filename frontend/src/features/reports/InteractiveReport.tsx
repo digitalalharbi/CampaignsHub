@@ -1722,7 +1722,7 @@ function BudgetSlide({ data }: { data: ReportData }) {
     <div>
       <Title sub="المخطط مقابل الإنفاق وسرعة الصرف">تحليل الميزانية</Title>
       <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" className="flex flex-col items-center justify-center gap-2">
+        <ChartCard title="الإنفاق من الميزانية" className="flex flex-col items-center justify-center gap-2">
           {consumed === null ? (
             /* A total that cannot be stated says so — a ring at 0% would be read as «nothing spent». */
             <p className="px-3 text-center text-xs text-text-muted" data-testid="report-budget-unavailable">
@@ -1746,7 +1746,7 @@ function BudgetSlide({ data }: { data: ReportData }) {
           <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
           {undrawable > 0 && (
             <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
-              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
+              {`${undrawable} منصة بلا إنفاق معلن — غير مرسومة`}
             </p>
           )}
         </ChartCard>

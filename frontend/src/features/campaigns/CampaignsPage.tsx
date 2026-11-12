@@ -1578,7 +1578,7 @@ export function CampaignsPage() {
       <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
       {launching && !canCreate && (
         <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          {ar ? 'حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
+          {ar ? 'إنشاء حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
       <LivePerformanceNotice variant="compact" />
@@ -1743,7 +1743,7 @@ function LandingAnswer({ answer, ar, range, currency }: { answer: ReturnType<typ
       {answer.needsAttention > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-attention">
           <TriangleAlert size={13} className="text-warning" />
-          {ar ? `${answer.needsAttention} تحتاج انتباهًا` : `${answer.needsAttention} need attention`}
+          {ar ? `${answer.needsAttention} تنبيه` : `${answer.needsAttention} need attention`}
         </span>
       )}
       {answer.healthy > 0 && (

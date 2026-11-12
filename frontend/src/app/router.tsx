@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -604,7 +604,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
             { path: 'portfolio', element: <PortfolioPage /> },
             // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
-            { path: 'projects', element: <Navigate to="/agency/clients" replace /> },
+            { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
             { path: 'projects/:projectId', element: <AgencyProjectToClientRedirect /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },

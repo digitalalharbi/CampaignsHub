@@ -208,7 +208,7 @@ export function ReportsPage() {
     onError: refusal,
   })
   /* «نسخ الرابط» — the link as it is. Nothing is created, and with several links the person picks which in the links dialog. */
-  const copyLink = useMutation({
+  const copyLink = useMutation({ meta: { feedback: 'none' },
     mutationFn: async (id: string): Promise<'copied' | 'none' | 'many' | 'unrecoverable'> => {
       const usable = (await listShares(currentProjectId!, id)).filter((x) => !x.revoked_at)
       if (usable.length === 0) return 'none'
@@ -1393,7 +1393,7 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
       draftId ? publishReportDraft(projectId, draftId, body) : createReport(projectId, { ...body, ...(seed?.sourceId ? { source_report_id: seed.sourceId } : {}) }),
     onSuccess: onCreated,
   })
-  const preview = useMutation({
+  const preview = useMutation({ meta: { feedback: 'none' },
     mutationFn: (body: Record<string, unknown>) => {
       const from = draftId ?? seed?.sourceId
       return previewReportDraft(projectId, { ...body, ...(from ? { source_report_id: from } : {}) })

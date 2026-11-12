@@ -175,7 +175,7 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
       {reading.unmeasured_lines > 0 && (
         <p data-testid="budget-reading-unmeasured" className="mt-2 text-[11px] text-text-muted">
           {ar
-            ? `${reading.unmeasured_lines} خطًا لا يمكن حساب سرعته (مصروف محجوب أو عملة مختلفة) وليس ضمن هذه القراءة.`
+            ? `${reading.unmeasured_lines} خطًا لا يمكن حساب سرعته (إنفاق محجوب أو عملة مختلفة) وليس ضمن هذه القراءة.`
             : `${reading.unmeasured_lines} line(s) could not be paced (withheld spend or a different currency) and are outside this reading.`}
         </p>
       )}

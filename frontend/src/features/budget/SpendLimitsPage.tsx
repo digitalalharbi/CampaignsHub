@@ -71,7 +71,7 @@ const BASIS: Record<string, { ar: string; en: string }> = {
     en: 'The withheld spend is in more than one currency, so it cannot be added into one figure.',
   },
   currency_mismatch: {
-    ar: 'الحد بعملة والإنفاق بأخرى — القسمة بينهما ليست نسبة استهلاك.',
+    ar: 'الحد بعملة والإنفاق بأخرى — القسمة بينهما ليست نسبة إنفاق.',
     en: 'The limit is in one currency and the spend in another — dividing them is not a utilisation.',
   },
   absent: { ar: 'لا يوجد إنفاق في هذه الفترة.', en: 'There is no spend in this period.' },

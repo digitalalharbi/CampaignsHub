@@ -67,7 +67,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   falling_rate: { ar: 'انخفاض معدل التحويل', en: 'Conversion rate falling' },
   period_comparison: { ar: 'مقارنة بالفترة السابقة', en: 'Compared with the previous period' },
   // الميزانية
-  budget_pace: { ar: 'سرعة استهلاك الميزانية', en: 'Budget pacing' },
+  budget_pace: { ar: 'سرعة صرف الميزانية', en: 'Budget pacing' },
   rising_cost: { ar: 'ارتفاع تكلفة النتيجة', en: 'Cost per result rising' },
   reallocation: { ar: 'إعادة توزيع الإنفاق', en: 'Spend worth reallocating' },
   budget_risk: { ar: 'تجاوز حدود الميزانية', en: 'Budget threshold crossed' },

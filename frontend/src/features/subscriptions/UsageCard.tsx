@@ -67,7 +67,7 @@ export function UsageCard({ ar }: { ar: boolean }) {
 
       <p className="mt-3 text-xs text-text-muted">
         {keys.length > 0 && (ar
-          ? 'استهلاك مفاتيح الذكاء الاصطناعي الخاصة بك يُدفع لمزوّدك مباشرة ولا يُخصم من رصيدك. '
+          ? 'استخدام مفاتيح الذكاء الاصطناعي الخاصة بك يُدفع لمزوّدك مباشرة ولا يُخصم من رصيدك. '
           : 'Usage on your own AI keys is paid to your provider directly and never taken from your balance. ')}
         {ar ? 'نُنبّهك عند 75% و90% و100% من كل حد شهري. الأسعار لا تشمل ضريبة القيمة المضافة.'
           : 'You are alerted at 75%, 90% and 100% of each monthly cap. Prices exclude VAT.'}

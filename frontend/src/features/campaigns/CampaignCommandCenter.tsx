@@ -112,7 +112,7 @@ function budgetRisk(
   if (result !== null && result.key !== null && result.value === 0) {
     return { text: ar ? `${resultLabel(result, true)}: 0 في الفترة` : `${resultLabel(result, false)}: 0 in the period`, tone: 'warning' }
   }
-  if (util === null) return { text: ar ? 'غير متاح — لا رقم مصروف يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
+  if (util === null) return { text: ar ? 'غير متاح — لا رقم إنفاق يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
 
   return { text: ar ? 'ضمن الحدود' : 'Within limits' }
 }
@@ -218,7 +218,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const resultDeltaKey = result.key as Sparkable | null
   const costDelta = result.key === 'conversions' ? d.cpa : result.key === 'clicks' ? d.cpc : null
 
-  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان الإنفاق بالميزانية، فيلزمهما رقم مصروف
+  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان الإنفاق بالميزانية، فيلزمهما رقم إنفاق
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
   const spendVsBudget = budgetComparableSpend(k, cur, summary.data?.currency ?? null)
@@ -226,11 +226,11 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   /* CAMPAIGN-BUDGET-TRUTH-001 — a «—» beside a stated budget says why, and an overrun says so. */
   const remainingSub = remaining !== null && remaining < 0 && utilization !== null
-    ? `تجاوزت الميزانية · استهلاك ${percent(utilization, 0)}`
+    ? `تجاوزت الميزانية · نسبة الإنفاق ${percent(utilization, 0)}`
     : utilization != null
-      ? `استهلاك ${percent(utilization, 0)}`
+      ? `نسبة الإنفاق ${percent(utilization, 0)}`
       : budget != null
-        ? 'بلا رقم مصروف يُقارن بالميزانية'
+        ? 'بلا رقم إنفاق يُقارن بالميزانية'
         : undefined
 
   /*
@@ -534,7 +534,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
+        <ChartCard title="الإنفاق من الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
           <div className="flex h-[190px] items-center justify-center">
             <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
           </div>

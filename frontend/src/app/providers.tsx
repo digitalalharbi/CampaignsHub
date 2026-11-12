@@ -62,7 +62,13 @@ export const queryClient = new QueryClient({
     onSuccess: (_data, _variables, _context, mutation) => {
       if (!reportsSave(mutation.meta)) return
       useSaveFeedback.getState().succeed()
-      /* Whatever the mutation did not refetch itself: the active screen asks again, so the saved value is what is drawn. */
+    },
+    /*
+     * Settled, not success: the mutation's own `onSuccess` has already run (a workspace switch clears the cache there, a
+     * delete navigates away), so what is refetched is what the screen still shows — and only after a request that worked.
+     */
+    onSettled: (_data, error, _variables, _context, mutation) => {
+      if (error !== null || !reportsSave(mutation.meta)) return
       void queryClient.invalidateQueries({ refetchType: 'active' }, { cancelRefetch: false })
     },
     onError: (error, _variables, _context, mutation) => {

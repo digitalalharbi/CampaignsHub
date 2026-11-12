@@ -256,6 +256,7 @@ export function LegacyClientSpaceRedirect() {
  */
 export function AgencyProjectToClientRedirect() {
   const { projectId = '' } = useParams()
+  const { search, hash } = useLocation()
   const project = useQuery({
     queryKey: ['legacy-project-client', projectId],
     queryFn: () => getData<{ client_workspace_id: string }>(`/projects/${projectId}`),
@@ -263,7 +264,14 @@ export function AgencyProjectToClientRedirect() {
   })
 
   if (project.isPending) return null
-  if (project.isError || !project.data?.client_workspace_id) return <Navigate to="/agency/clients" replace />
+  if (project.isError || !project.data?.client_workspace_id) return <Navigate to={`/agency/clients${search}${hash}`} replace />
 
-  return <Navigate to={`/agency/clients/${project.data.client_workspace_id}`} replace />
+  return <Navigate to={`/agency/clients/${project.data.client_workspace_id}${search}${hash}`} replace />
+}
+
+/** `/agency/projects` → `/agency/clients`, keeping the query string and hash like every other redirect here. */
+export function AgencyProjectsIndexRedirect() {
+  const { search, hash } = useLocation()
+
+  return <Navigate to={`/agency/clients${search}${hash}`} replace />
 }

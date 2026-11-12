@@ -74,7 +74,7 @@ describe('the campaign command centre over a partially-withheld spend', () => {
 
     // Utilisation cannot be drawn from a withheld spend, so its «استهلاك …%» caption is absent entirely
     // rather than «استهلاك 125%» (800 vs the 1,000 subset) or «استهلاك 0%» (the coalesced zero).
-    expect(screen.queryByText(/استهلاك/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/نسبة الإنفاق/)).not.toBeInTheDocument()
 
     // «المتبقي» falls to «—», not 800 − 1,000 and not the full 800.
     const remaining = screen.getByText('المتبقي').closest('div.rounded-2xl') as HTMLElement
@@ -137,7 +137,7 @@ describe('the command centre when reporting currency and budget currency differ'
     // 5,000 USD against an 800 SAR budget is not 625% consumed and not −4,200 remaining.
     const remaining = (await screen.findByText('المتبقي')).closest('div.rounded-2xl') as HTMLElement
     expect(within(remaining).getByText('—')).toBeInTheDocument()
-    expect(screen.queryByText(/استهلاك/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/نسبة الإنفاق/)).not.toBeInTheDocument()
   })
 
   it('still paces normally when the two currencies agree — the guard refuses units, not spend', async () => {
@@ -145,6 +145,6 @@ describe('the command centre when reporting currency and budget currency differ'
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
 
     // Same 5,000, now genuinely in the budget's currency: the comparison is available again.
-    expect(await screen.findByText(/استهلاك/)).toBeInTheDocument()
+    expect(await screen.findByText(/نسبة الإنفاق/)).toBeInTheDocument()
   })
 })

@@ -24,7 +24,7 @@ export function UsageMetersPage() {
       <header className="mb-5">
         <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{ar ? 'الاستخدام والرصيد' : 'Usage and credits'}</h1>
         <p className="mt-1 max-w-2xl text-sm text-text-secondary">
-          {ar ? 'ما يُقاس، ومن يدفع تكلفته، وتكلفته الفعلية، والحصة الشهرية لكل باقة. لا يُخصم شيء قبل إدخال التكلفة الفعلية وتفعيل الخصم، واستهلاك مفتاح العميل لا يُخصم أبدًا. أرصدة المستأجرين تُعدَّل من درج كل مستأجر.'
+          {ar ? 'ما يُقاس، ومن يدفع تكلفته، وتكلفته الفعلية، والحصة الشهرية لكل باقة. لا يُخصم شيء قبل إدخال التكلفة الفعلية وتفعيل الخصم، واستخدام مفتاح العميل لا يُخصم أبدًا. أرصدة المستأجرين تُعدَّل من درج كل مستأجر.'
             : 'What is metered, who pays for it, its actual cost and the monthly allowance per plan. Nothing is charged before the actual cost is entered and charging is on, and usage on a customer’s own key is never charged. Workspace balances are adjusted in each tenant’s drawer.'}
         </p>
       </header>

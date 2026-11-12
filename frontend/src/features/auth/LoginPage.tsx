@@ -266,7 +266,7 @@ export function LoginPage() {
   const identifier = phoneFieldValue(phone, dialCode) ?? phone
 
   /** The DEV-only mobile path. */
-  const startCode = useMutation({
+  const startCode = useMutation({ meta: { feedback: 'none' },
     mutationFn: (destination: string) => phoneSignInStart(destination),
     onSuccess: (r) => {
       setVerificationId(r.verification_id)
@@ -293,7 +293,7 @@ export function LoginPage() {
   })
 
   /** Check the code; the destination comes from memberships. */
-  const verifyCode = useMutation({
+  const verifyCode = useMutation({ meta: { feedback: 'none' },
     /*
      * The code travels as a VARIABLE, not out of the closure.
      *
