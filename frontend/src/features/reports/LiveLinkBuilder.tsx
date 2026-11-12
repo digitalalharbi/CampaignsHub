@@ -548,7 +548,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
               </select>
               {campaignObjective !== null && (
                 <div className="flex w-full flex-wrap items-center gap-1.5" data-testid="live-builder-extra-objectives">
-                  <span className="text-[11px] font-semibold text-text-muted">{ar ? 'أضف هدفًا' : 'Add an objective'}</span>
+                  <span className="text-xs font-semibold text-text-muted">{ar ? 'أضف هدفًا' : 'Add an objective'}</span>
                   {CANONICAL_OBJECTIVES.filter((o) => o.id !== campaignObjective).map((o) => {
                     const on = extraObjectives.includes(o.id)
 
@@ -569,7 +569,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                             setMetrics(OBJECTIVE_KPI_TEMPLATES[campaignObjective])
                           }
                         }}
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${on ? 'border-brand-600 bg-brand-500/10 text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${on ? 'border-brand-600 bg-brand-500/10 text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
                       >
                         {ar ? o.ar : o.en}
                       </button>
