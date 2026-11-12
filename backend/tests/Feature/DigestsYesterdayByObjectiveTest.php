@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -275,6 +276,85 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         Carbon::setTestNow(Carbon::parse(self::NOW_UTC, 'UTC')->addDay());
         $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($rule), 'and nothing the next day');
         $this->assertSame($notices, DB::table('app_notifications')->count());
+    }
+
+    // ── §7أ — LINKING-ALERT-NO-FALSE-EXPIRY-001 ──────────────────────────────
+
+    private function connection(string $provider, ?string $refresh, string $expiresIn = '+1 hour'): ProviderConnection
+    {
+        return app(TokenVault::class)->open(
+            tenantId: (string) $this->tenant->id, provider: $provider,
+            tokens: new OAuthTokens('AT', $refresh, Carbon::now()->modify($expiresIn)), connectionName: $provider.uniqid(),
+        );
+    }
+
+    /** Google's access token lasts an hour and renews from the refresh token: «قارب ينتهي» on it was false on a working connection. */
+    public function test_an_auto_renewing_connection_with_an_expiring_access_token_raises_nothing(): void
+    {
+        $c = $this->connection('google', 'RT');
+        $c->forceFill(['last_successful_sync_at' => Carbon::now()->subHour()])->save();
+
+        $rule = $this->rule('token_expiry', ['days' => 7]);
+        // The false «expiring» card already open from before this fix is closed with no «recovered» notice.
+        AlertEvent::create(['tenant_id' => $this->tenant->id, 'rule_id' => $rule->id, 'type' => 'token_expiry', 'entity_type' => get_class($c), 'entity_id' => (string) $c->id,
+            'dedup_key' => Str::random(12), 'severity' => 'warning', 'status' => 'open', 'context' => ['provider' => 'google', 'expires_at' => Carbon::now()->addHour()->toIso8601String()], 'last_triggered_at' => now()]);
+        $notices = DB::table('app_notifications')->count();
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($rule));
+        $this->assertSame(0, AlertEvent::where('status', 'open')->count());
+        $this->assertSame('renews_itself', AlertEvent::sole()->context['closed_reason']);
+        $this->assertSame($notices, DB::table('app_notifications')->count());
+    }
+
+    /** A renewal the platform refused (the connection is `error`) is a proven failure: one alert. */
+    public function test_a_refused_renewal_raises_one_alert(): void
+    {
+        $c = $this->connection('google', 'RT');
+        $c->forceFill(['status' => 'error', 'last_error' => 'invalid_grant'])->save();
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
+    }
+
+    /** One connection, three token rules (one per project): ONE card, not three. */
+    public function test_one_connection_is_one_alert_however_many_rules_watch_it(): void
+    {
+        $c = $this->connection('google', 'RT');
+        $c->forceFill(['status' => 'error', 'last_error' => 'invalid_grant'])->save();
+        $raised = 0;
+        foreach (['A', 'B', 'C'] as $name) {
+            $rule = $this->rule('token_expiry', ['days' => 7]);
+            $rule->forceFill(['project_id' => $this->project($name)->id])->save();
+            $raised += app(AlertEvaluator::class)->evaluateRule($rule);
+        }
+
+        $this->assertSame(1, $raised);
+        $this->assertSame(1, AlertEvent::where('type', 'token_expiry')->where('entity_id', (string) $c->id)->count());
+    }
+
+    /** One Google login linked to three projects is three connections — and ONE card when its grant is refused. */
+    public function test_one_platform_identity_is_one_card_across_its_project_connections(): void
+    {
+        $first = $this->connection('google', 'RT');
+        $first->forceFill(['status' => 'error', 'last_error' => 'invalid_grant', 'external_owner_id' => 'google-user-1', 'scope' => 'project_only'])->save();
+        foreach (['B', 'C'] as $name) {
+            $copy = $first->replicate();
+            $copy->forceFill(['id' => (string) Str::uuid(), 'connection_name' => 'google '.$name])->save();
+        }
+        $this->assertSame(3, ProviderConnection::withoutGlobalScopes()->where('provider', 'google')->count());
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
+    }
+
+    /** A credential that does NOT renew itself and really expires is recorded for «ملخص الربط», never sent instantly. */
+    public function test_a_non_renewing_credential_near_expiry_waits_for_the_morning_digest(): void
+    {
+        $this->connection('linkedin', null, '+3 days');
+        $notices = DB::table('app_notifications')->count();
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('token_expiry', ['days' => 7])));
+        $event = AlertEvent::where('type', 'token_expiry')->sole();
+        $this->assertTrue($event->context['digest_only']);
+        $this->assertSame($notices, DB::table('app_notifications')->count(), 'no instant notice');
     }
 
     /** ROAS is a sales figure: a traffic campaign with no revenue is never told its return fell. */

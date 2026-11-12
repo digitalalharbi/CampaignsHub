@@ -22,6 +22,7 @@ use App\Domains\Forms\Services\TrackingHealth;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -325,6 +326,13 @@ final class AlertEvaluator
              * completed, past its end date) is CLOSED without a word: «رجعت الأمور طبيعية» about an ended campaign is a
              * notification about an ended campaign, which the Owner's rules forbid. The context records why.
              */
+            // LINKING-ALERT-NO-FALSE-EXPIRY-001 — an «expiring» event on a connection that renews itself was never true: closed without a «recovered» notice.
+            if ($rule->type === 'token_expiry' && isset(((array) $event->context)['expires_at']) && ! isset(((array) $event->context)['error'])) {
+                $this->resolve($event, $now);
+                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'renews_itself', 'closed_at' => $now->toIso8601String()]])->save();
+
+                return;
+            }
             if ($event->entity_type === UnifiedCampaign::class && in_array($rule->type, self::CAMPAIGN_PERFORMANCE, true)
                 && ! in_array((string) $event->entity_id, $live, true)) {
                 $this->resolve($event, $now);
@@ -376,6 +384,14 @@ final class AlertEvaluator
 
     private function dedupKey(AlertRule $rule, array $b): string
     {
+        /*
+         * LINKING-ALERT-NO-FALSE-EXPIRY-001 — a connection's health is ONE fact per tenant, whichever rule found it: three token rules
+         * (one per project) produced three identical cards. Every other type stays keyed by its rule.
+         */
+        if ($rule->type === 'token_expiry') {
+            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '']));
+        }
+
         return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '']));
     }
 
@@ -410,8 +426,10 @@ final class AlertEvaluator
                 'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
                 'status' => 'open',
             ] + $this->anatomy($rule, $b))->save();
-            $this->notify($rule, $b);
-            $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
+            if (($b['context']['digest_only'] ?? false) !== true) {
+                $this->notify($rule, $b);
+                $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
+            }
 
             return false;
         }
@@ -422,8 +440,11 @@ final class AlertEvaluator
             return false;
         }
 
+        // LINKING-ALERT-NO-FALSE-EXPIRY-001 — a finding marked `digest_only` is recorded for the morning digest's «ملخص الربط», never sent instantly.
+        $digestOnly = ($b['context']['digest_only'] ?? false) === true;
+
         // Fresh alert.
-        $notification = $this->notify($rule, $b);
+        $notification = $digestOnly ? null : $this->notify($rule, $b);
         $taskId = $rule->create_task ? $this->openTask($rule, $b) : null;
 
         $event = AlertEvent::create([
@@ -442,7 +463,9 @@ final class AlertEvaluator
             'task_id' => $taskId,
             'last_triggered_at' => $now,
         ] + $this->anatomy($rule, $b));
-        $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
+        if (! $digestOnly) {
+            $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
+        }
 
         return true;
     }
@@ -776,11 +799,13 @@ final class AlertEvaluator
 
         /*
          * META-SESSION-190-001 — a connection whose token the provider already refused (`error`) needs the same act as one about to
-         * expire, sooner. It is named first and only once: an `error` row is not also reported as expiring.
+         * expire, sooner. It is named first and only once: an `error` row is not also reported as expiring. This is a PROVEN failure:
+         * `TokenVault::fresh()` marks a connection `error` when the platform refused the refresh, or the grant was revoked.
          */
-        $refused = ProviderConnection::query()
+        $refused = self::oneIdentityOnce(ProviderConnection::query()
             ->where('status', 'error')
-            ->get()
+            ->orderBy('id')
+            ->get())
             ->map(fn (ProviderConnection $c) => [
                 'entity_type' => ProviderConnection::class,
                 'entity_id' => (string) $c->id,
@@ -790,21 +815,50 @@ final class AlertEvaluator
                 'context' => ['provider' => $c->provider, 'error' => $c->last_error],
             ]);
 
-        $expiring = ProviderConnection::query()
+        /*
+         * LINKING-ALERT-NO-FALSE-EXPIRY-001 — `token_expires_at` is the ACCESS token's expiry. Google's lasts an hour and is renewed
+         * from the refresh token on the next call, so «قارب ينتهي» on it was false on every working Google connection. Only a
+         * credential that does NOT renew itself (no refresh token stored) has a real expiry to warn about, and that warning is not
+         * instant: it waits for the morning digest's «ملخص الربط» (`digest_only`). A renewal that FAILS is the `error` row above.
+         */
+        $vault = app(TokenVault::class);
+        $expiring = self::oneIdentityOnce(ProviderConnection::query()
             ->whereNotNull('token_expires_at')
             ->where('token_expires_at', '<=', $cutoff)
             ->where('status', '!=', 'error')
-            ->get()
+            ->orderBy('id')
+            ->get())
+            ->filter(static function (ProviderConnection $c) use ($vault): bool {
+                try {
+                    return $vault->stored($c)->refreshToken === null;
+                } catch (\Throwable) {
+                    // No readable credential: nothing proves an expiry, and the sync failure (if any) is reported by its own rule.
+                    return false;
+                }
+            })
             ->map(fn (ProviderConnection $c) => [
                 'entity_type' => ProviderConnection::class,
                 'entity_id' => (string) $c->id,
                 'project_id' => null,
                 'title' => 'Connection token expiring',
-                'message' => 'The '.$c->provider.' connection token expires '.optional($c->token_expires_at)->toDateString().'. Reconnect to avoid a sync gap.',
-                'context' => ['provider' => $c->provider, 'expires_at' => optional($c->token_expires_at)->toIso8601String()],
+                'message' => 'The '.$c->provider.' connection token expires '.optional($c->token_expires_at)->toDateString().' and does not renew itself. Reconnect to avoid a sync gap.',
+                'context' => ['provider' => $c->provider, 'expires_at' => optional($c->token_expires_at)->toIso8601String(), 'digest_only' => true],
             ]);
 
         return $refused->concat($expiring)->values()->all();
+    }
+
+    /**
+     * LINKING-ALERT-NO-FALSE-EXPIRY-001 — one card per platform IDENTITY: a Google login linked to three projects is three
+     * `project_only` connections (Production, 2026-11-12) and was three identical cards. Grouped by provider and the platform's
+     * own owner id; a connection with no owner id stands alone.
+     *
+     * @param  Collection<int, ProviderConnection>  $connections  ordered by id, so the same connection speaks for the group each sweep
+     * @return Collection<int, ProviderConnection>
+     */
+    private static function oneIdentityOnce(Collection $connections): Collection
+    {
+        return $connections->unique(static fn (ProviderConnection $c): string => $c->provider.'|'.((string) ($c->external_owner_id ?? '') !== '' ? (string) $c->external_owner_id : 'id:'.$c->id))->values();
     }
 
     /** @return list<array<string,mixed>> */
