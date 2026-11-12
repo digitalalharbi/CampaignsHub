@@ -29,7 +29,7 @@
     @else
         @php($rows = $viz['type'] === 'pace'
             ? [[$viz['plan_label'], $viz['plan'], '#b7c9c2'], [$viz['used_label'], $viz['used'], $viz['used'] > $viz['plan'] ? '#c0392b' : '#b45309']]
-            : [[($dir === 'rtl' ? 'قبل ' : 'Before ').$viz['before_label'], $viz['before'], '#b7c9c2'], [($dir === 'rtl' ? 'الآن ' : 'Now ').$viz['now_label'], $viz['now'], '#c0392b']])
+            : [[(isset($viz['before_when']) ? $viz['before_when'].($viz['before_label'] !== '' ? ' · ' : '') : ($dir === 'rtl' ? 'قبل ' : 'Before ')).$viz['before_label'], $viz['before'], '#b7c9c2'], [(isset($viz['now_when']) ? $viz['now_when'].' · ' : ($dir === 'rtl' ? 'الآن ' : 'Now ')).$viz['now_label'], $viz['now'], '#c0392b']])
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="viz" data-viz="{{ $viz['type'] }}" style="margin-top:6px;">
             @foreach ($rows as [$text, $pct, $colour])
                 <tr>

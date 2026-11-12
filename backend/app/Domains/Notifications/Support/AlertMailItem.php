@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Reports\Services\ReportObjectiveLens;
+use Illuminate\Support\Carbon;
 
 /**
  * DIGESTS-VISUAL-V2-001 — one alert, as the mail draws it: the words of `AlertEventText`, the PROBLEM drawn, one button.
@@ -43,7 +44,12 @@ final class AlertMailItem
             $c = self::forObjective($c, $type, $group, $ar);
         }
 
-        $viz = $recovered || ! empty($c['no_viz']) ? null : self::viz($type, $ctx, $ar);
+        // ALERT-VISUAL-EVERY-CARD-001 — a recovery draws the figure that opened it too (dated); with none, the ring and timeline.
+        $viz = ! empty($c['no_viz']) ? null : self::viz($type, $ctx, $ar);
+        // ALERT-MAIL-DATED-BARS-001 — «قبل / الآن» named no period: each bar says which days it measured.
+        if (is_array($viz) && $viz['type'] === 'before_now') {
+            $viz += self::when($ctx, $ar);
+        }
         $target = self::target($type, $projectId, $ar);
         if ($target !== null && ! $recovered && ($c['secondary'] ?? '') === '') {
             $c['url'] = $target[0];
@@ -152,6 +158,33 @@ final class AlertMailItem
         }
 
         return null;
+    }
+
+    /**
+     * The two periods a before/now card compares, in the reader's words: the alert's own window (`window_from`–`window_to`,
+     * complete Riyadh days ending yesterday) and the same number of days just before it. «أمس الأربعاء 11 نوفمبر» against
+     * «الثلاثاء 10 نوفمبر»; «4–10 نوفمبر» against «28 أكتوبر – 3 نوفمبر». Empty when the alert carries no window.
+     *
+     * @param  array<string,mixed>  $ctx
+     * @return array{before_when?: string, now_when?: string}
+     */
+    public static function when(array $ctx, bool $ar): array
+    {
+        $from = $ctx['window_from'] ?? null;
+        $to = $ctx['window_to'] ?? null;
+        if (! is_string($from) || ! is_string($to) || $from === '' || $to === '') {
+            return [];
+        }
+        $f = Carbon::parse($from);
+        $t = Carbon::parse($to);
+        $days = (int) $f->diffInDays($t) + 1;
+        $pf = $f->copy()->subDays($days);
+        $pt = $f->copy()->subDay();
+
+        return [
+            'before_when' => DigestSchedule::periodLabel($days === 1 ? 'daily' : 'range', $pf->toDateString(), $pt->toDateString(), $ar),
+            'now_when' => DigestSchedule::periodLabel($days === 1 ? 'daily' : 'range', $f->toDateString(), $t->toDateString(), $ar),
+        ];
     }
 
     /** @return array<string,mixed> */

@@ -361,6 +361,8 @@ final class DailyDigest
         $freshness = $this->freshnessFor($projectId, $from, $to);
 
         $block = [
+            // ALERT-MAIL-DATED-BARS-001 — the two periods every before/now card compares, so each bar names its days.
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'previous_from' => $prevFrom->toDateString(), 'previous_to' => $prevTo->toDateString()],
             // EMAIL-CANONICAL-METRICS-001 — the unit the web states for this window; null = the rows mix.
             'currency' => $unit,
             'objective' => count($groups) === 1 ? (string) $groups[0]['objective'] : ($mixedObjectives ? 'custom' : $lens->value()),

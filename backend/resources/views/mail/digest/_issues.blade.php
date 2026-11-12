@@ -19,9 +19,9 @@
                 @endif
                 <div style="font-size:13px; font-weight:700; color:{{ \App\Domains\Notifications\Support\DigestStatus::INK[$state] }}; line-height:1.5;">{{ $d['headline'] }}</div>
                 @if (! empty($d['cause']))<div data-block="cause" style="font-size:12px; color:#3d4742; line-height:1.5;">{{ $d['cause'] }}</div>@endif
-                @if ($d['viz'])
-                    @include('mail.digest._viz', ['viz' => $d['viz']])
-                @elseif ($d['figure'] !== '')
+                {{-- ALERT-VISUAL-EVERY-CARD-001 — always a graphic: the finding's own drawing, or the ring when it has none. --}}
+                @include('mail.partials.visual', ['viz' => $d['viz'], 'state' => $state, 'timeline' => $d['timeline'] ?? null, 'size' => 26])
+                @if (! $d['viz'] && $d['figure'] !== '')
                     <div style="font-size:12px; color:#3d4742; line-height:1.5;" dir="auto">{{ $d['figure'] }}</div>
                 @endif
             </td>

@@ -146,6 +146,9 @@
         <div data-block="linking" style="border-top:1px solid #e4e0d6; margin-top:12px; padding-top:8px;">
             <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:0 0 4px;">{{ $t['linking'] }}</div>
             @foreach ($m['linking'] as $li)
+                {{-- ALERT-VISUAL-EVERY-CARD-001 — each link drawn: the ring in its state, from the last update to today. --}}
+                @include('mail.partials.visual', ['viz' => null, 'state' => $li['state'] === 'failed' ? 'bad' : 'watch', 'size' => 22,
+                    'timeline' => ['from' => $li['since'] !== '' ? ($ar ? 'آخر تحديث ' : 'Last refreshed ').$li['since'] : '', 'to' => $ar ? 'اليوم' : 'Today']])
                 <div data-state="{{ $li['state'] }}" style="font-size:12px; color:#3d4742; line-height:1.6;">@if ($li['platform'] !== ''){{ $li['platform'] }} · @endif<span style="font-weight:700; color:{{ $li['state'] === 'failed' ? $S::INK['bad'] : $S::INK['watch'] }};">{{ $li['label'] }}</span>@if ($li['since'] !== '') <span style="color:#8b9a97;">· {{ $ar ? 'آخر تحديث' : 'last refreshed' }} {{ $li['since'] }}</span>@endif · <a href="{{ $li['url'] }}" style="color:#0b7a62; text-decoration:underline;">{{ $ar ? 'الربط' : 'Connections' }}</a></div>
             @endforeach
         </div>

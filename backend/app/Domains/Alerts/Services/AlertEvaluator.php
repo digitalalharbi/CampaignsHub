@@ -367,6 +367,8 @@ final class AlertEvaluator
         $titleAr = (string) ($event->context['title_ar'] ?? $title);
         $context = (array) $event->context;
         $context['recovered_at'] = $now->toIso8601String();
+        // ALERT-VISUAL-EVERY-CARD-001 — when it opened, so the recovery card's timeline can be drawn.
+        $context['opened_at'] ??= ($event->created_at ?? $now)->toIso8601String();
 
         $this->resolve($event, $now);
         $event->forceFill(['context' => $context])->save();
@@ -395,7 +397,9 @@ final class AlertEvaluator
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
             'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
             'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
-            'context' => [],
+            // ALERT-VISUAL-EVERY-CARD-001 — the figures and dates travel with the recovery, so its card draws them.
+            'context' => array_intersect_key($context, array_flip(['opened_at', 'recovered_at', 'window_from', 'window_to', 'provider',
+                'roas_current', 'roas_previous', 'cpa_current', 'cpa_previous', 'cpl_current', 'cpl_previous', 'ctr_current', 'ctr_previous', 'cpc_current', 'cpc_previous'])),
         ], 'info', $now, recovered: true);
     }
 
@@ -926,7 +930,7 @@ final class AlertEvaluator
             $b['message'] = 'No data arrived for '.$day.($reading['last_day'] !== null ? '; the last day that arrived is '.$reading['last_day'] : '').'.'
                 .(isset($b['message']) ? ' '.$b['message'] : '');
             unset($context['digest_only']);
-            if (($reading['missing_days'] ?? PHP_INT_MAX) >= LinkHealth::ESCALATE_AFTER_DAYS) {
+            if (($reading['missing_days'] ?? 0) >= LinkHealth::ESCALATE_AFTER_DAYS) { // escalation needs a MEASURED persistence; a link never read is not «days missing»
                 $b['severity'] = 'critical';
             }
             $b['context'] = $context;
