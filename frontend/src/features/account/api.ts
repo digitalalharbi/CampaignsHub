@@ -1,4 +1,4 @@
-import { afterSessionRotation, deleteData, getData, patchData, postData } from '@/lib/api/client'
+import { deleteData, getData, patchData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export interface ProfileInput {
@@ -40,8 +40,7 @@ export const getMe = () => getData<AuthUser>('/me')
 export const updateProfile = (input: ProfileInput) => patchData<AuthUser>('/me/profile', input)
 
 /** PATCH /api/me/password — returns { status }. */
-// The server regenerates the session on a password change — WEBKIT-SESSION-ROTATION-001.
-export const updatePassword = (input: PasswordInput) => afterSessionRotation(() => patchData<{ status: string }>('/me/password', input))
+export const updatePassword = (input: PasswordInput) => patchData<{ status: string }>('/me/password', input)
 
 export const getSessions = () => getData<SessionInfo>('/me/sessions')
 

@@ -251,45 +251,6 @@ async function primeCsrfCookie(): Promise<void> {
   }
 }
 
-/** The XSRF-TOKEN cookie as `document.cookie` shows it now, or null when there is none. */
-function readableXsrfToken(): string | null {
-  if (typeof document === 'undefined') return null
-
-  const pair = document.cookie.split('; ').find((c) => c.startsWith('XSRF-TOKEN='))
-
-  return pair === undefined ? null : pair.slice('XSRF-TOKEN='.length)
-}
-
-/**
- * WEBKIT-SESSION-ROTATION-001 — a call that REPLACES the session returns once the browser holds the new one.
- *
- * Signing in (and every other call that runs `session()->regenerate()`) answers with a new session cookie. On WebKit the
- * promise settles a moment BEFORE that `Set-Cookie` is committed — the same engine behaviour WEBKIT-CSRF-RACE-001 waits
- * out for the prime. The request the sign-in fires next, `/auth/memberships`, therefore left carrying the PRE-sign-in
- * guest session. `regenerate()` keeps that old id alive, so the server answered it as a guest — 401 — and its own
- * `Set-Cookie` put the guest id back in the jar over the signed-in one. Every request after it was a guest too: a
- * correct password, a 200 from `/auth/login`, and the person landed on «your session ended»
- * (`/login?reason=session&redirect=/switch`). CI caught it on webkit only, a different spec each time.
- *
- * The same response always re-sets XSRF-TOKEN as well (Laravel regenerates the token with the session, and the cookie is
- * encrypted with a fresh IV on every answer), and both cookies arrive in one header block. So the readable token
- * CHANGING is the signal that the new session cookie has landed too. Bounded at ~1s so a response that set no cookie
- * never freezes the page; on Chromium and Firefox the token has already changed by the first check and nothing waits.
- */
-export async function afterSessionRotation<T>(request: () => Promise<T>): Promise<T> {
-  const before = readableXsrfToken()
-  const result = await request()
-
-  // No token before means no session to have been confused with — nothing to wait out.
-  if (before === null) return result
-
-  for (let attempt = 0; attempt < 50 && readableXsrfToken() === before; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
-
-  return result
-}
-
 /*
  * CSRF-SELF-HEAL-001 — a refused token gets one fresh one, once.
  *

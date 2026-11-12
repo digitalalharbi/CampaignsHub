@@ -1,4 +1,4 @@
-import { afterSessionRotation, deleteData, ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { deleteData, ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export interface LoginInput {
@@ -57,9 +57,9 @@ export async function phoneSignInStart(phone: string): Promise<{
 
 export async function phoneSignInVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
   await ensureCsrfCookie()
-  const { user } = await afterSessionRotation(() => postData<{ user: AuthUser }>('/auth/phone/verify', {
+  const { user } = await postData<{ user: AuthUser }>('/auth/phone/verify', {
     verification_id: verificationId, code, remember,
-  }))
+  })
 
   return user
 }
@@ -77,8 +77,7 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
  */
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
-  // WEBKIT-SESSION-ROTATION-001 — resolve once the browser holds the signed-in session, not the guest one it replaced.
-  const { user } = await afterSessionRotation(() => postData<UserEnvelope>('/auth/login', input))
+  const { user } = await postData<UserEnvelope>('/auth/login', input)
   return user
 }
 
@@ -245,7 +244,7 @@ interface LinkedSignIn {
 /** Prove ownership with the account's password: the sign-in form's own check, then link and sign in. */
 export async function confirmLinkWithPassword(password: string): Promise<LinkedSignIn> {
   await ensureCsrfCookie()
-  return afterSessionRotation(() => postData<LinkedSignIn>('/auth/oauth/pending-link/password', { password }))
+  return postData<LinkedSignIn>('/auth/oauth/pending-link/password', { password })
 }
 
 /** Mail a one-time link to the account's own address. `delivery` is honest: `awaiting_credentials` means nothing left. */
@@ -257,7 +256,7 @@ export async function sendLinkEmail(): Promise<{ delivery: string; resend_after:
 /** Spend the mailed link — only works in the browser session that asked for it. */
 export async function confirmLinkWithEmail(token: string): Promise<LinkedSignIn> {
   await ensureCsrfCookie()
-  return afterSessionRotation(() => postData<LinkedSignIn>('/auth/oauth/pending-link/confirm-email', { token }))
+  return postData<LinkedSignIn>('/auth/oauth/pending-link/confirm-email', { token })
 }
 
 export async function cancelPendingLink(): Promise<void> {

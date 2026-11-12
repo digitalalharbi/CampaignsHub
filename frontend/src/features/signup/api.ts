@@ -1,4 +1,4 @@
-import { afterSessionRotation, ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 /**
@@ -133,14 +133,12 @@ export function fetchRegistration(id: string): Promise<RegistrationEnvelope> {
 
 export async function verifyRegistrationEmail(token: string): Promise<RegistrationEnvelope> {
   await ensureCsrfCookie()
-  // Signs in when this step provisions the workspace (`afterAdvance`) — WEBKIT-SESSION-ROTATION-001.
-  return afterSessionRotation(() => postData<RegistrationEnvelope>('/auth/registration/verify-email', { token }))
+  return postData<RegistrationEnvelope>('/auth/registration/verify-email', { token })
 }
 
 export async function verifyRegistrationMobile(id: string, code: string): Promise<RegistrationEnvelope> {
   await ensureCsrfCookie()
-  // Signs in when this step provisions the workspace (`afterAdvance`) — WEBKIT-SESSION-ROTATION-001.
-  return afterSessionRotation(() => postData<RegistrationEnvelope>(`/auth/registration/${id}/verify-mobile`, { code }))
+  return postData<RegistrationEnvelope>(`/auth/registration/${id}/verify-mobile`, { code })
 }
 
 export async function resendRegistrationChallenge(
