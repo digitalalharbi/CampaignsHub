@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 
 /**
@@ -20,7 +21,7 @@ use Illuminate\Support\Carbon;
  *
  * Awaiting credentials — LinkedIn's Marketing Developer Platform is an application, not a signup.
  */
-final class LinkedInConnector extends ApiAdvertisingConnector implements ReportsPeriodReach
+final class LinkedInConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsPeriodReach
 {
     /**
      * LINKEDIN-PAGE-001 — how many rows to ask for, because LinkedIn's own default is **ten**.
@@ -207,9 +208,40 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
 
     protected function fetchAds(OAuthTokens $tokens, string $adAccountId): array
     {
+        $creatives = $this->readAll($tokens, "adAccounts/{$adAccountId}/creatives", 'creatives', ['q' => 'criteria']);
+
+        /*
+         * X-LINKEDIN-CONTENT-001 — the sponsored post behind each creative, read where the grant allows it.
+         *
+         * A Sponsored Content creative names its post in `content.reference` (`urn:li:share:…` / `urn:li:ugcPost:…`). The
+         * post's words and media come from the Posts API, which LinkedIn gives only to `r_organization_social`, and its
+         * picture's file from the Images / Videos APIs, which need `rw_ads`. Both are asked; a refusal is recorded per
+         * creative as the reason, never as a made-up picture.
+         */
+        $references = [];
+        foreach ($creatives as $c) {
+            $ref = $c['content']['reference'] ?? null;
+            if (is_string($ref) && (str_starts_with($ref, 'urn:li:share:') || str_starts_with($ref, 'urn:li:ugcPost:'))) {
+                $references[] = $ref;
+            }
+        }
+
+        [$posts, $postReason] = $this->batchGet($tokens, 'posts', array_values(array_unique($references)), 'linkedin_post_scope_missing');
+
+        $mediaUrns = ['images' => [], 'videos' => []];
+        foreach ($posts as $post) {
+            $urn = $this->mediaUrnOf($post);
+            if ($urn !== null) {
+                $mediaUrns[str_starts_with($urn, 'urn:li:video:') ? 'videos' : 'images'][] = $urn;
+            }
+        }
+
+        [$images, $imageReason] = $this->batchGet($tokens, 'images', array_values(array_unique($mediaUrns['images'])), 'linkedin_media_scope_missing');
+        [$videos, $videoReason] = $this->batchGet($tokens, 'videos', array_values(array_unique($mediaUrns['videos'])), 'linkedin_media_scope_missing');
+
         $ads = [];
 
-        foreach ($this->readAll($tokens, "adAccounts/{$adAccountId}/creatives", 'creatives', ['q' => 'criteria']) as $c) {
+        foreach ($creatives as $c) {
             $id = $this->idFromUrn($c['id'] ?? null, 'sponsoredCreative');
             $campaignId = $this->idFromUrn($c['campaign'] ?? null, 'sponsoredCampaign');
 
@@ -232,15 +264,142 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 'destination_url' => $this->textAd($c)['landing_page'] ?? null,
                 // The creative IS the ad here, so a separate creative row would be the same thing
                 // twice under two names. CREATIVE-SYNC-MEDIA-001: a Text Ad states its own words inside
-                // the creative (readable with r_ads); a sponsored post's picture lives behind the post
-                // URN in `content.reference`, which the Posts and Images APIs only give to
-                // `r_organization_social` — a scope this connector does not hold and does not invent.
-                'creative' => $this->creativeFace($id, $c),
+                // the creative (readable with r_ads). X-LINKEDIN-CONTENT-001: every other creative is
+                // still CONTENT and gets its row — it was `null` before, so a sponsored post never
+                // reached the content library, the report or the live link at all.
+                'creative' => $this->creativeFace($id, $c)
+                    ?? $this->postFace($id, $c, $posts, $postReason, $images + $videos, $imageReason ?? $videoReason),
                 'raw' => (array) $c,
             ], static fn ($v) => $v !== null);
         }
 
         return $ads;
+    }
+
+    /**
+     * A Rest.li BATCH_GET (`?ids=List(…)`), refused or not.
+     *
+     * @param  list<string>  $urns
+     * @return array{0: array<string, array<string, mixed>>, 1: string|null} the results by URN, and the reason when refused
+     */
+    private function batchGet(OAuthTokens $tokens, string $resource, array $urns, string $refusedReason): array
+    {
+        $out = [];
+        $reason = null;
+
+        foreach (array_chunk($urns, 50) as $chunk) {
+            try {
+                $response = $this->api($tokens)
+                    ->withHeaders(['X-RestLi-Method' => 'BATCH_GET'])
+                    ->get($this->url($resource).'?ids=List('.implode(',', array_map('rawurlencode', $chunk)).')');
+            } catch (\Throwable) {
+                $reason ??= 'linkedin_media_unreadable';
+
+                continue;
+            }
+
+            if (in_array($response->status(), [401, 403], true)) {
+                return [$out, $refusedReason]; // the grant, not the item: asking again will not change it
+            }
+
+            try {
+                $body = $this->read($response, $resource);
+            } catch (\Throwable) {
+                $reason ??= 'linkedin_media_unreadable';
+
+                continue;
+            }
+
+            foreach ((array) ($body['results'] ?? []) as $urn => $item) {
+                if (is_array($item)) {
+                    $out[(string) $urn] = $item;
+                }
+            }
+        }
+
+        return [$out, $reason];
+    }
+
+    /** The image or video URN a post shows: `content.media.id`, or an article's `thumbnail`. */
+    private function mediaUrnOf(array $post): ?string
+    {
+        $content = (array) ($post['content'] ?? []);
+        $urn = $content['media']['id'] ?? $content['article']['thumbnail'] ?? null;
+
+        return is_string($urn) && (str_starts_with($urn, 'urn:li:image:') || str_starts_with($urn, 'urn:li:video:')) ? $urn : null;
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — a sponsored post's face: its words and picture when LinkedIn gave them, its identity and
+     * the reason when it did not. The file link is LinkedIn's signed `downloadUrl`; `CoverCache` copies it to our own
+     * storage (licdn is a copy-only host), so the card does not depend on a link that expires.
+     *
+     * @param  array<string, mixed>  $creative
+     * @param  array<string, array<string, mixed>>  $posts
+     * @param  array<string, array<string, mixed>>  $media
+     * @return array<string, mixed>
+     */
+    private function postFace(string $id, array $creative, array $posts, ?string $postReason, array $media, ?string $mediaReason): array
+    {
+        $reference = is_string($creative['content']['reference'] ?? null) ? $creative['content']['reference'] : null;
+        $post = $reference === null ? null : ($posts[$reference] ?? null);
+        $mediaUrn = $post === null ? null : $this->mediaUrnOf($post);
+        $file = $mediaUrn === null ? null : ($media[$mediaUrn] ?? null);
+        $isVideo = $mediaUrn !== null && str_starts_with($mediaUrn, 'urn:li:video:');
+
+        $https = static fn (mixed $u): ?string => is_string($u) && str_starts_with($u, 'https://') ? $u : null;
+        $download = $file === null ? null : $https($file['downloadUrl'] ?? null);
+        $still = $isVideo ? ($file === null ? null : $https($file['thumbnail'] ?? null)) : $download;
+        $expires = is_numeric($file['downloadUrlExpiresAt'] ?? null)
+            ? Carbon::createFromTimestampMs((int) $file['downloadUrlExpiresAt'])->toIso8601String()
+            : null;
+
+        $body = $post === null ? null : $this->littleText($post['commentary'] ?? null);
+        $content = (array) ($post['content'] ?? []);
+        $title = $content['media']['title'] ?? $content['article']['title'] ?? null;
+        $headline = is_string($title) && trim($title) !== '' ? trim($title) : null;
+
+        $reason = match (true) {
+            $reference === null => 'linkedin_no_post_reference',
+            $post === null => $postReason ?? 'linkedin_post_unreadable',
+            $mediaUrn !== null && $still === null => $mediaReason ?? 'linkedin_media_unreadable',
+            default => null,
+        };
+
+        return array_filter([
+            'external_id' => $id,
+            'name' => $headline ?? "Creative {$id}",
+            'headline' => $headline,
+            'body' => $body,
+            'format' => match (true) {
+                $mediaUrn !== null => $isVideo ? 'video' : 'image',
+                $body !== null => 'text_card',
+                default => null,
+            },
+            'thumbnail_url' => $still,
+            'asset_url' => $isVideo ? null : $download,
+            'video_url' => $isVideo ? $download : null,
+            'asset_expires_at' => $download === null ? null : $expires,
+            'destination_url' => is_string($content['article']['source'] ?? null) ? $content['article']['source'] : null,
+            'raw' => array_filter([
+                'reference' => $reference,
+                'media_urn' => $mediaUrn,
+                'media_reason' => $reason,
+            ], static fn ($v) => $v !== null),
+        ], static fn ($v) => $v !== null && $v !== []);
+    }
+
+    /** LinkedIn's «little» text: `@[Name](urn)` → `Name`, `{hashtag|\#|word}` → `#word`. */
+    private function littleText(mixed $text): ?string
+    {
+        if (! is_string($text) || trim($text) === '') {
+            return null;
+        }
+
+        $text = (string) preg_replace('/@\[([^\]]*)\]\([^)]*\)/u', '$1', $text);
+        $text = (string) preg_replace('/\{hashtag\|\\?#\|([^}]*)\}/u', '#$1', $text);
+
+        return trim($text) === '' ? null : trim($text);
     }
 
     /**
@@ -299,6 +458,73 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
     {
         /*
+         * LINKEDIN-RESULTS-001 — «Results» is the campaign's KEY RESULT, which LinkedIn chooses by the
+         * campaign's objective. The canonical `conversions` is the platform's own results figure (as
+         * TikTok's `conversion` is), and it was always `externalWebsiteConversions` — so an Engagement
+         * campaign with 1,067 engagements and a Website Visits campaign with 960 landing-page clicks
+         * both read «0 results» beside Campaign Manager's numbers. Each campaign's objective now names
+         * the field its results are read from; the other figures are stored under their own keys.
+         */
+        $objectives = $this->objectivesByCampaign($tokens, $adAccountId);
+
+        return $this->analytics($tokens, $adAccountId, $from, $to, 'CAMPAIGN', fn (mixed $pivot): ?string => $this->campaignIdFrom($pivot), $objectives);
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — daily figures per CREATIVE (`pivot=CREATIVE`), read with the same `r_ads_reporting`
+     * grant as the campaign figures. Without it no LinkedIn creative ever had a figure or a `last_active_at`, and the
+     * report, the live link and the content lists — which keep only content active in the period — dropped every one.
+     * The provider's creative id travels in `campaign_id`, as `ReportsCreativeInsights` defines the row; the result is
+     * read from the field the creative's own CAMPAIGN objective names, exactly as at the campaign grain.
+     */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $campaignObjectives = $this->objectivesByCampaign($tokens, $adAccountId);
+        $objectives = [];
+
+        foreach ($this->readAll($tokens, "adAccounts/{$adAccountId}/creatives", 'creatives', ['q' => 'criteria']) as $c) {
+            $id = $this->idFromUrn($c['id'] ?? null, 'sponsoredCreative');
+            $campaignId = $this->idFromUrn($c['campaign'] ?? null, 'sponsoredCampaign');
+
+            if ($id !== null) {
+                $objectives[$id] = $campaignId === null ? null : ($campaignObjectives[$campaignId] ?? null);
+            }
+        }
+
+        return $this->analytics($tokens, $adAccountId, $from, $to, 'CREATIVE', fn (mixed $pivot): ?string => $this->creativeIdFrom($pivot), $objectives);
+    }
+
+    /** @return array<string, string|null> campaign id → LinkedIn objective */
+    private function objectivesByCampaign(OAuthTokens $tokens, string $adAccountId): array
+    {
+        $objectives = [];
+        foreach ($this->fetchCampaigns($tokens, $adAccountId) as $campaign) {
+            $objectives[(string) $campaign['external_id']] = isset($campaign['objective']) ? strtoupper((string) $campaign['objective']) : null;
+        }
+
+        return $objectives;
+    }
+
+    /**
+     * One `adAnalytics` read at one pivot, mapped to canonical daily rows keyed by the pivot's entity id.
+     *
+     * @param  callable(mixed): ?string  $entityOf
+     * @param  array<string, string|null>  $objectives  entity id → objective
+     * @return list<array<string, mixed>>
+     */
+    private function analytics(OAuthTokens $tokens, string $adAccountId, string $from, string $to, string $pivot, callable $entityOf, array $objectives): array
+    {
+        /*
          * Paged like everything else (LINKEDIN-PAGE-001), and here the truncation was worst: one row
          * is one campaign on one day, so a month of a handful of campaigns exceeds ten rows
          * immediately. Reading the first page alone reported a fraction of the spend as though it
@@ -327,7 +553,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
 
         $reported = $this->readAll($tokens, 'adAnalytics', 'daily analytics', [
             'q' => 'analytics',
-            'pivot' => 'CAMPAIGN',
+            'pivot' => $pivot,
             'timeGranularity' => 'DAILY',
         ], [
             /*
@@ -342,23 +568,10 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
 
         $this->countRawInsightRows(count($reported));
 
-        /*
-         * LINKEDIN-RESULTS-001 — «Results» is the campaign's KEY RESULT, which LinkedIn chooses by the
-         * campaign's objective. The canonical `conversions` is the platform's own results figure (as
-         * TikTok's `conversion` is), and it was always `externalWebsiteConversions` — so an Engagement
-         * campaign with 1,067 engagements and a Website Visits campaign with 960 landing-page clicks
-         * both read «0 results» beside Campaign Manager's numbers. Each campaign's objective now names
-         * the field its results are read from; the other figures are stored under their own keys.
-         */
-        $objectives = [];
-        foreach ($this->fetchCampaigns($tokens, $adAccountId) as $campaign) {
-            $objectives[(string) $campaign['external_id']] = isset($campaign['objective']) ? strtoupper((string) $campaign['objective']) : null;
-        }
-
         $rows = [];
 
         foreach ($reported as $row) {
-            $campaignId = $this->campaignIdFrom($row['pivotValues'] ?? null);
+            $campaignId = $entityOf($row['pivotValues'] ?? null);
             $date = $this->dateFrom($row['dateRange'] ?? null);
 
             if ($campaignId === null || $date === null) {
@@ -456,6 +669,19 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
         foreach ($pivotValues as $urn) {
             if (is_string($urn) && str_contains($urn, 'sponsoredCampaign:')) {
                 return substr($urn, strrpos($urn, ':') + 1);
+            }
+        }
+
+        return null;
+    }
+
+    /** `["urn:li:sponsoredCreative:11"]` → `"11"`. */
+    private function creativeIdFrom(mixed $pivotValues): ?string
+    {
+        foreach (is_array($pivotValues) ? $pivotValues : [] as $urn) {
+            $id = $this->idFromUrn($urn, 'sponsoredCreative');
+            if ($id !== null) {
+                return $id;
             }
         }
 
