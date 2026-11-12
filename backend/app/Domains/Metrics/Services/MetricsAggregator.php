@@ -737,6 +737,10 @@ final class MetricsAggregator
         $rows = $this->campaignSetBase($from, $to)
             ->select('daily_metrics.unified_campaign_id')
             ->selectRaw(implode(', ', array_map(static fn ($e, $a) => "{$e} AS {$a}", $select, array_keys($select))))
+            // ALERT-OBJECTIVE-RESULT-001 — which figures were SENT for each campaign, and by which platforms, in the same
+            // statement: the sums above coalesce an absent metric to 0, and an unsent figure is «not reported», never «none».
+            ->selectRaw("STRING_AGG(DISTINCT daily_metrics.metric_key, ',') AS _sent_keys")
+            ->selectRaw("STRING_AGG(DISTINCT daily_metrics.provider, ',') AS _sent_providers")
             ->groupBy('daily_metrics.unified_campaign_id')
             ->get()
             ->keyBy(static fn ($r): string => (string) $r->unified_campaign_id);
@@ -748,20 +752,75 @@ final class MetricsAggregator
             ->pluck('objective', 'id');
 
         $lpv = $this->landingPageViewState($from, $to);
+        $platformSends = $this->metricsEachPlatformSends($rows->pluck('_sent_providers')->all(), $to);
 
         $out = [];
         foreach ((array) $this->campaignIds as $id) {
-            $row = $rows->get($id);
-            $figures = $this->withDerived($row === null ? [] : (array) $row);
+            $found = $rows->get($id);
+            $row = $found === null ? [] : (array) $found;
+            $sent = array_filter(explode(',', (string) ($row['_sent_keys'] ?? '')));
+            foreach (array_filter(explode(',', (string) ($row['_sent_providers'] ?? ''))) as $provider) {
+                $sent = [...$sent, ...($platformSends[$provider] ?? [])];
+            }
+            unset($row['_sent_keys'], $row['_sent_providers']);
+            $figures = $this->withDerived($row);
             $objective = $objectives->get($id);
             $state = $lpv[$id] ?? null;
+            $reported = [];
+            foreach (array_keys(self::PIVOT) as $key) {
+                $reported[$key] = in_array($key, $sent, true);
+            }
+            // Reach is null on this read (see above), so it is never the figure a result is judged on here.
+            $reported['reach'] = false;
             $out[$id] = $figures + ObjectiveResult::resolve(
                 ObjectiveResult::familyOf($objective === null ? null : (string) $objective),
                 $figures,
-                // Only the two keys traffic is decided by; every other family keeps the figures-only reading.
-                $state === null ? null : ['landing_page_views' => $state['measured'], 'clicks' => true] + array_fill_keys(array_keys(self::PIVOT), true),
+                // Every family is judged on what was SENT; landing page views only where they were measured.
+                self::resultReported($reported, $state),
                 ($state['partial'] ?? false) === true,
             );
+        }
+
+        return $out;
+    }
+
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 — the figures each platform SENDS at all, learned from what it wrote for this tenant over the last
+     * 90 days rather than from a hand-kept list that drifts from the connectors.
+     *
+     * Two different silences need telling apart. Meta drops a figure that is zero (`MetaConnector::mapInsightRow`), so a sales
+     * campaign with no purchase has no `conversions` row — that absence IS a zero, because Meta does send conversions. Snapchat and
+     * TikTok publish no engagement total and TikTok no installs at all; there the absence is «not reported», and a campaign judged
+     * on that figure has no result to be zero. A figure counts as sent for a campaign when the campaign has a row of it, or when a
+     * platform it ran on has written that figure for any campaign of this tenant in the lookback.
+     *
+     * @param  list<mixed>  $providerLists  comma lists of the platforms each campaign ran on
+     * @return array<string, list<string>> provider → metric keys it sends
+     */
+    private function metricsEachPlatformSends(array $providerLists, Carbon $to): array
+    {
+        $providers = [];
+        foreach ($providerLists as $list) {
+            foreach (array_filter(explode(',', (string) $list)) as $provider) {
+                $providers[$provider] = true;
+            }
+        }
+        if ($providers === []) {
+            return [];
+        }
+
+        $rows = DailyMetric::query()
+            ->withoutGlobalScope(ProjectScope::class)
+            ->whereIn('daily_metrics.provider', array_keys($providers))
+            ->whereBetween('daily_metrics.metric_date', [$to->copy()->subDays(90)->toDateString(), $to->toDateString()])
+            ->select('daily_metrics.provider', 'daily_metrics.metric_key')
+            ->distinct()
+            ->toBase()
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->provider][] = (string) $row->metric_key;
         }
 
         return $out;

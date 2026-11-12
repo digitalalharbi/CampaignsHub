@@ -148,7 +148,7 @@ final class AlertMailItem
             return ['type' => 'pace', 'used' => $s, 'plan' => 0, 'used_label' => ($ar ? 'بدون قياس' : 'Unmeasured').' '.AlertEventText::ltr($s.'%'), 'plan_label' => ($ar ? 'المقيس' : 'Measured').' '.AlertEventText::ltr((100 - $s).'%'), 'plan_value' => 100 - $s];
         }
         if (isset($ctx['spend'], $ctx['days']) && $type === 'no_results') {
-            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الإنفاق' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? 'النتائج' : 'Results').' 0'];
+            return ['type' => 'pace', 'used' => 100, 'plan' => 0, 'used_label' => ($ar ? 'الإنفاق' : 'Spend').' '.number_format((float) $ctx['spend']), 'plan_label' => ($ar ? (string) ($ctx['result_label']['ar'] ?? 'النتائج') : (string) ($ctx['result_label']['en'] ?? 'Results')).' 0'];
         }
 
         return null;
