@@ -73,6 +73,9 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->whereNumber('file')->middleware('throttle:60,1')->name('service-requests.file');
         Route::patch('/service-requests/{id}', [PlatformServiceRequestController::class, 'update'])
             ->middleware('throttle:60,1')->name('service-requests.update');
+        // PLATFORM-INBOX-ATTENTION-001 — answer the visitor: a client-visible reply on their tracking page, and an email.
+        Route::post('/service-requests/{id}/reply', [PlatformServiceRequestController::class, 'reply'])
+            ->middleware('throttle:20,1')->name('service-requests.reply');
 
         /*
          * MAIL-014 — what this installation's mail has actually done.
@@ -187,6 +190,10 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.terms');
         Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
             ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // PLATFORM-INBOX-ATTENTION-001 — a fresh challenge for an applicant stuck at a verification step. It sends; it
+        // never verifies, and the code is not shown to the administrator.
+        Route::post('/registrations/{registration}/resend-verification', [PlatformRegistrationController::class, 'resendVerification'])
+            ->middleware('throttle:10,1')->name('registrations.resend-verification');
         // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
         Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
             ->name('registration-verification-policy.show');
@@ -352,6 +359,17 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
         Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])
             ->name('integrations.review.update');
+
+        // PLATFORM-INBOX-ATTENTION-001 — the console screen for the three queues: counters, opening a row marks it
+        // read, and a reply goes by email to the address on the record (never one typed here), rate limited twice.
+        Route::get('/inbox/summary', [LegalInboxController::class, 'summary'])->name('inbox.summary');
+        Route::get('/legal/contact-messages/{message}', [LegalInboxController::class, 'showContactMessage'])->whereUuid('message')->name('legal.contact.show');
+        Route::post('/legal/contact-messages/{message}/reply', [LegalInboxController::class, 'replyContactMessage'])
+            ->whereUuid('message')->middleware('throttle:20,1')->name('legal.contact.reply');
+        Route::get('/legal/support-tickets/{ticket}', [LegalInboxController::class, 'showSupportTicket'])->whereUuid('ticket')->name('legal.tickets.show');
+        Route::post('/legal/support-tickets/{ticket}/reply', [LegalInboxController::class, 'replySupportTicket'])
+            ->whereUuid('ticket')->middleware('throttle:20,1')->name('legal.tickets.reply');
+        Route::get('/legal/data-requests/{dataRequest}', [LegalInboxController::class, 'showDataRequest'])->whereUuid('dataRequest')->name('legal.data-requests.show');
 
         Route::get('/legal/contact-messages', [LegalInboxController::class, 'contactMessages'])->name('legal.contact.index');
         Route::patch('/legal/contact-messages/{message}', [LegalInboxController::class, 'updateContactMessage'])->name('legal.contact.update');

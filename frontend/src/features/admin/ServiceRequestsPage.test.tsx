@@ -5,10 +5,10 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, fetchServiceRequests: vi.fn(), fetchServiceRequest: vi.fn(), updateServiceRequest: vi.fn() }
+  return { ...actual, fetchServiceRequests: vi.fn(), fetchServiceRequest: vi.fn(), updateServiceRequest: vi.fn(), replyToServiceRequest: vi.fn() }
 })
 
-import { fetchServiceRequest, fetchServiceRequests, updateServiceRequest, type ServiceRequestDetail, type ServiceRequestList } from './api'
+import { fetchServiceRequest, fetchServiceRequests, replyToServiceRequest, updateServiceRequest, type ServiceRequestDetail, type ServiceRequestList } from './api'
 
 const row = {
   id: '01JREQ', reference: 'REQ-2026-ABC123',
@@ -117,5 +117,20 @@ describe('ServiceRequestsPage', () => {
 
     expect(await screen.findByText('ما فيه طلبات')).toBeInTheDocument()
     expect(screen.queryByTestId('service-requests-table')).toBeNull()
+  })
+
+  /* PLATFORM-INBOX-ATTENTION-001 */
+  it('answers the requester and shows the email reply with its real delivery state', async () => {
+    vi.mocked(replyToServiceRequest).mockResolvedValue({
+      request: { ...detail, replies: [{ id: 'r1', author: 'Platform Owner', body: 'We can start next week.', delivery_status: 'sent', at: '2026-11-12T10:00:00Z' }] },
+    })
+    renderWithProviders(<ServiceRequestsPage />, { locale: 'en' })
+
+    fireEvent.click((await screen.findByTestId('service-request-REQ-2026-ABC123')).querySelector('button')!)
+    fireEvent.change(await screen.findByTestId('service-request-reply'), { target: { value: 'We can start next week.' } })
+    fireEvent.click(screen.getByTestId('service-request-reply-send'))
+
+    await waitFor(() => expect(replyToServiceRequest).toHaveBeenCalledWith('01JREQ', 'We can start next week.'))
+    expect(await screen.findByTestId('inbox-reply-delivery')).toHaveAttribute('data-status', 'sent')
   })
 })

@@ -11,6 +11,7 @@ use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\PlatformReplyMail;
 use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
 use App\Support\Frontend;
@@ -293,6 +294,15 @@ final class MailGallery
                 lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah',
                 path: '/client/requests/REQ-2026-0142', action: $ar ? 'فتح الطلب' : 'Open the request',
                 why: $ar ? 'وصلتك لأنك صاحب هذا الطلب.' : 'Sent because you filed this request.',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // PLATFORM-INBOX-ATTENTION-001 — an administrator's reply to somebody who wrote from the website.
+            'platform-reply' => (new PlatformReplyMail(
+                about: $ar ? 'استفسار عن الباقات' : 'A question about the plans',
+                body: $ar
+                    ? "شكرًا على تواصلك.\nباقة الفريق تناسب ثلاثة حسابات إعلانية أو أكثر.\n\nإذا رغبت نرتب لك عرضًا قصيرًا هذا الأسبوع."
+                    : "Thank you for writing.\nThe Team plan suits three or more ad accounts.\n\nIf you like, we can arrange a short demo this week.",
+                lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah', reference: 'CH-7Q2M4K',
             ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
             // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
