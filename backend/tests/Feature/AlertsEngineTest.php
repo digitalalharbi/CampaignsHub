@@ -346,6 +346,21 @@ final class AlertsEngineTest extends TestCase
         }
     }
 
+    /** The end date is read on the PROJECT's clock: a client on UTC whose campaign ends on the 12th is still running at 22:30 UTC. */
+    public function test_a_campaign_end_date_is_read_in_the_project_timezone_not_a_fixed_one(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-12 22:30:00', 'UTC'));
+        try {
+            ClientWorkspace::query()->withoutGlobalScopes()->whereKey($this->project->client_workspace_id)->update(['timezone' => 'UTC']);
+            $endsTodayInUtc = $this->campaign();
+            $endsTodayInUtc->forceFill(['ends_on' => '2026-11-12'])->save();
+
+            $this->assertTrue(AlertEvaluator::running($endsTodayInUtc->refresh(), Carbon::now()), 'still the 12th on the client\'s clock');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_budget_risk_respects_the_threshold(): void
     {
         $c = $this->campaign(budget: 1000);
