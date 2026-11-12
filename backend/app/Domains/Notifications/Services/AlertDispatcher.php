@@ -142,7 +142,9 @@ final class AlertDispatcher
                     if (! in_array($note['severity'] ?? '', self::ALERTABLE, true)) {
                         continue;
                     }
-                    if (! $delivered && ($note['kind'] ?? '') !== 'stale_data') {
+                    // LINK-HEALTH-YESTERDAY-001 — a link card is the alert engine's (yesterday did not arrive), never a seven-day
+                    // freshness reading sent as an instant mail; and a performance card needs a block that delivered.
+                    if (($note['kind'] ?? '') === 'stale_data' || ! $delivered) {
                         continue;
                     }
                     // …and a return-on-spend card only where the whole block is sales: ROAS is a sales figure.
@@ -224,8 +226,8 @@ final class AlertDispatcher
                         'detail' => $say['text'],
                         'context' => implode(' · ', array_values(array_filter([(string) ($block['project_name'] ?? ''), $platformName]))),
                         'action' => $say['action'],
-                        'url' => $projectId === '' ? MailDeepLinks::alerts() : (($note['kind'] ?? '') === 'stale_data' ? MailDeepLinks::integrations($projectId) : MailDeepLinks::platforms($projectId)),
-                        'button' => ($note['kind'] ?? '') === 'stale_data' ? ($locale === 'ar' ? 'افتح صفحة الربط' : 'Open the connections page') : ($locale === 'ar' ? 'افتح المنصات داخل النظام' : 'Open the platforms'),
+                        'url' => $projectId === '' ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId),
+                        'button' => $locale === 'ar' ? 'افتح المنصات داخل النظام' : 'Open the platforms',
                         // DIGESTS-CADENCE-BUDGETS-001 — what the card draws: the finding's own movement, or the stages it is about.
                         'rule' => (string) ($note['kind'] ?? ''),
                         'viz' => self::findingViz($note, $locale === 'ar', (array) ($block['window'] ?? [])),
