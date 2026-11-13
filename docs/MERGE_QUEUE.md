@@ -39,3 +39,7 @@ GitHub's own merge queue (`merge_group`) is not available here: the repository b
   `gate (firefox)` and `gate (webkit)` to be SUCCESS, so nothing lands without all three browsers.
 - A `merge-queue.yml` run is no longer started every 15 minutes; it runs when CI completes.
 
+**CI-TIER-002 (2026-11-13):** backend, firefox and webkit run 5 shards each (was 4); the long browser jobs are defined first and
+have no `needs`, so they start at once. Measured on #1054 (the first PR landed through the tier): CI 26.5 min, merge 7.8 min after
+CI ended, deploy 5 min, 41 min in all.
+
