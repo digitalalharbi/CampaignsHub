@@ -28,7 +28,7 @@ function Ring({ metric, size = 52 }: { metric: UsageMetric; size?: number }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-secondary)" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TONE[t]} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
       </svg>
-      <span className="tnum absolute text-[11px] font-bold text-text-primary">{metric.limit === null ? '∞' : `${Math.round(pct * 100)}%`}</span>
+      <span className="tnum absolute text-xs font-bold text-text-primary">{metric.limit === null ? '∞' : `${Math.round(pct * 100)}%`}</span>
     </span>
   )
 }
@@ -61,7 +61,7 @@ export function LimitRings({
             <Ring metric={u} />
             <span className="min-w-0">
               <span className="block truncate text-xs font-bold text-text-primary">{labelOf(metric)}</span>
-              <span className="tnum block truncate text-[11px] text-text-muted" dir="ltr">
+              <span className="tnum block truncate text-xs text-text-muted">
                 {fmt(u.used)} / {u.limit === null ? unlimited : fmt(u.limit)}
               </span>
             </span>

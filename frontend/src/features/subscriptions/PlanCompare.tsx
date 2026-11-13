@@ -51,7 +51,7 @@ export function PlanCompare({
               {ordered.map((p) => {
                 const v = p.limits[k]
 
-                return <td key={p.code} className="tnum p-1.5 text-center text-xs font-semibold" dir="ltr">{v === null ? unlimited : v === undefined ? <Minus size={13} className="mx-auto text-text-muted" aria-hidden /> : v.toLocaleString('en-US')}</td>
+                return <td key={p.code} className="p-1.5 text-center text-xs font-semibold"><span className="tnum">{v === null ? unlimited : v === undefined ? <Minus size={13} className="mx-auto text-text-muted" aria-hidden /> : v.toLocaleString('en-US')}</span></td>
               })}
             </tr>
           ))}

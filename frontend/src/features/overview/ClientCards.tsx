@@ -7,6 +7,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
 import { KpiSparkline } from '@/features/analytics/charts'
 import { money } from '@/features/analytics/format'
+import { days as countedDays } from '@/lib/counted'
 import { budgetRatio, coverDays, isNearEnd, orderClients, totalsOf } from './overviewMath'
 
 /**
@@ -21,12 +22,12 @@ import { budgetRatio, coverDays, isNearEnd, orderClients, totalsOf } from './ove
 const COPY = {
   ar: {
     title: 'كل العملاء', spend: 'الإنفاق', left: 'المتبقي', running: 'عملاء شغالين', near: 'قرّبت تخلص',
-    cover: (n: number) => (n === 0 ? 'خلصت' : `تكفي ${n} يوم`), noCover: 'بدون بيانات', of: 'من', mixed: 'عملات مختلفة', failed: 'ما قدرنا نحمّل العملاء.',
+    cover: (n: number) => (n === 0 ? 'خلصت' : `تكفي ${countedDays(n, 'ar')}`), noCover: 'بدون بيانات', of: 'من', mixed: 'عملات مختلفة', failed: 'ما قدرنا نحمّل العملاء.',
     open: (name: string) => `افتح ${name}`,
   },
   en: {
     title: 'All clients', spend: 'Spend', left: 'Remaining', running: 'Active clients', near: 'Running out',
-    cover: (n: number) => (n === 0 ? 'Used up' : `${n} days left`), noCover: 'No data', of: 'of', mixed: 'Mixed currencies', failed: 'Could not load the clients.',
+    cover: (n: number) => (n === 0 ? 'Used up' : `${countedDays(n, 'en')} left`), noCover: 'No data', of: 'of', mixed: 'Mixed currencies', failed: 'Could not load the clients.',
     open: (name: string) => `Open ${name}`,
   },
 }
@@ -58,7 +59,7 @@ function BudgetRing({ ratio, size = 46 }: { ratio: number | null; size?: number 
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={STROKE[tone]} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
         )}
       </svg>
-      <span className="tnum absolute text-[11px] font-bold text-text-primary">{ratio === null ? '—' : `${Math.round(ratio * 100)}%`}</span>
+      <span className="tnum absolute text-xs font-bold text-text-primary">{ratio === null ? '—' : `${Math.round(ratio * 100)}%`}</span>
     </span>
   )
 }
@@ -82,12 +83,12 @@ function ClientCard({ row, ar, onOpen, alerts }: { row: ClientBudgetRow; ar: boo
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
-          {alerts > 0 && <span className="tnum shrink-0 rounded-full bg-[var(--warning-background)] px-1.5 text-[10px] font-bold text-warning" title={ar ? 'تنبيهات' : 'Alerts'}>{alerts}</span>}
+          {alerts > 0 && <span className="tnum shrink-0 rounded-full bg-[var(--warning-background)] px-1.5 text-xs font-bold text-warning" title={ar ? 'تنبيهات' : 'Alerts'}>{alerts}</span>}
         </span>
         <span className={`block truncate text-xs font-semibold ${near ? 'text-warning' : 'text-text-secondary'}`}>
           {days === null ? t.noCover : t.cover(days)}
         </span>
-        <span className="tnum block truncate text-[11px] text-text-muted">
+        <span className="tnum block truncate text-xs text-text-muted">
           {money(row.spent, row.currency)} {t.of} {money(row.budget, row.currency)}
         </span>
       </span>
