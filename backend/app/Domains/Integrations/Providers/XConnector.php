@@ -33,6 +33,9 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     /** X answers synchronous DAY stats for at most seven days per request; longer windows are asked in pieces. */
     private const MAX_DAYS_PER_REQUEST = 7;
 
+    /** A runaway-cursor guard: 50 pages of 200 is 10,000 entities of one kind in one ad account. */
+    private const MAX_PAGES = 50;
+
     protected function platform(): string
     {
         return 'x';
@@ -65,14 +68,9 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/campaigns"), ['count' => 200]),
-            'campaigns',
-        );
-
         $campaigns = [];
 
-        foreach ((array) ($body['data'] ?? []) as $c) {
+        foreach ($this->allPages($tokens, "accounts/{$adAccountId}/campaigns", [], 'campaigns') as $c) {
             if (($c['id'] ?? null) === null) {
                 continue;
             }
@@ -98,14 +96,9 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
     protected function fetchAdSets(OAuthTokens $tokens, string $adAccountId): array
     {
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/line_items"), ['count' => 200]),
-            'line items',
-        );
-
         $items = [];
 
-        foreach ((array) ($body['data'] ?? []) as $l) {
+        foreach ($this->allPages($tokens, "accounts/{$adAccountId}/line_items", [], 'line items') as $l) {
             if (($l['id'] ?? null) === null || ($l['campaign_id'] ?? null) === null) {
                 continue;
             }
@@ -150,18 +143,15 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             $campaignOfLineItem[$lineItem['external_id']] = $lineItem['campaign_external_id'];
         }
 
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/promoted_tweets"), ['count' => 200]),
-            'promoted tweets',
-        );
+        $promoted = $this->allPages($tokens, "accounts/{$adAccountId}/promoted_tweets", [], 'promoted tweets');
 
         $ads = [];
         $tweets = $this->tweetsById($tokens, $adAccountId, array_values(array_filter(array_map(
             static fn ($p): ?string => is_array($p) && isset($p['tweet_id']) ? (string) $p['tweet_id'] : null,
-            (array) ($body['data'] ?? []),
+            $promoted,
         ))));
 
-        foreach ((array) ($body['data'] ?? []) as $p) {
+        foreach ($promoted as $p) {
             if (($p['id'] ?? null) === null) {
                 continue;
             }
@@ -292,19 +282,19 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
         foreach (array_chunk($tweetIds, self::ENTITIES_PER_CALL) as $chunk) {
             try {
-                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/tweets"), array_filter([
+                $rows = $this->allPages($tokens, "accounts/{$adAccountId}/tweets", array_filter([
                     'tweet_ids' => implode(',', $chunk),
                     'tweet_type' => 'PUBLISHED',
                     'timeline_type' => 'ALL',
                     'include_mentions_and_replies' => 'true',
                     'trim_user' => 'true',
                     'user_id' => $userId,
-                ], static fn ($v) => $v !== null)), 'tweets');
+                ], static fn ($v) => $v !== null), 'tweets');
             } catch (\Throwable) {
                 continue;
             }
 
-            foreach ((array) ($body['data'] ?? []) as $t) {
+            foreach ($rows as $t) {
                 $id = is_array($t) ? (string) ($t['id_str'] ?? $t['tweet_id'] ?? $t['id'] ?? '') : '';
                 if ($id === '') {
                     continue;
@@ -332,6 +322,47 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     }
 
     /**
+     * X-TWEET-CONTENT-001 — every page of a list endpoint, not only the first.
+     *
+     * docs.x.com/x-ads-api/fundamentals/pagination: «If a response has more than `count` entities, these endpoints will now
+     * return the first `count` entities and a `next_cursor` key»; the next page is asked with `cursor=<next_cursor>`, and
+     * `next_cursor` is `null` on the last page. `count` defaults to 200 (max 1,000). `GET accounts/:account_id/campaigns`,
+     * `line_items`, `promoted_tweets`, `promotable_users` and `tweets` each document `count` and `cursor`. Reading one page
+     * silently dropped every promoted tweet after the 200th — no row, no stats, no picture.
+     *
+     * @param  array<string, string>  $query
+     * @return list<array<string, mixed>>
+     */
+    private function allPages(OAuthTokens $tokens, string $path, array $query, string $what): array
+    {
+        $rows = [];
+        $cursor = null;
+        $seen = [];
+
+        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+            $body = $this->read(
+                $this->api($tokens)->get($this->url($path), array_filter(['count' => 200] + $query + ['cursor' => $cursor], static fn ($v) => $v !== null)),
+                $what,
+            );
+
+            foreach ((array) ($body['data'] ?? []) as $row) {
+                if (is_array($row)) {
+                    $rows[] = $row;
+                }
+            }
+
+            $next = $body['next_cursor'] ?? null;
+            if (! is_string($next) || $next === '' || isset($seen[$next])) {
+                break;
+            }
+            $seen[$next] = true;
+            $cursor = $next;
+        }
+
+        return $rows;
+    }
+
+    /**
      * The account's promotable users other than the FULL one (whose tweets the default read already asked for).
      *
      * @return list<string>
@@ -339,13 +370,13 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     private function promotableUserIds(OAuthTokens $tokens, string $adAccountId): array
     {
         try {
-            $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/promotable_users"), ['count' => 200]), 'promotable users');
+            $users = $this->allPages($tokens, "accounts/{$adAccountId}/promotable_users", [], 'promotable users');
         } catch (\Throwable) {
             return [];
         }
 
         $ids = [];
-        foreach ((array) ($body['data'] ?? []) as $u) {
+        foreach ($users as $u) {
             if (is_array($u) && isset($u['user_id']) && strtoupper((string) ($u['promotable_user_type'] ?? '')) !== 'FULL' && ! ($u['deleted'] ?? false)) {
                 $ids[] = (string) $u['user_id'];
             }
@@ -577,14 +608,9 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             $campaignOfLineItem[$lineItem['external_id']] = $lineItem['campaign_external_id'];
         }
 
-        $body = $this->read(
-            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/promoted_tweets"), ['count' => 200]),
-            'promoted tweets',
-        );
-
         $tweetOf = [];
         $currencyOf = [];
-        foreach ((array) ($body['data'] ?? []) as $p) {
+        foreach ($this->allPages($tokens, "accounts/{$adAccountId}/promoted_tweets", [], 'promoted tweets') as $p) {
             if (! is_array($p) || ($p['id'] ?? null) === null || ($p['tweet_id'] ?? null) === null) {
                 continue;
             }

@@ -189,6 +189,61 @@ final class XTweetContentTest extends TestCase
         $this->assertStringContainsString('did not return this post', (string) $preview['note_en']);
     }
 
+    /**
+     * docs.x.com/x-ads-api/fundamentals/pagination — `count` defaults to 200 and a fuller list answers with `next_cursor`.
+     * 250 promoted tweets arrive as 200 + 50; the tweets read for one chunk is itself split across two pages.
+     */
+    public function test_more_than_200_promoted_tweets_are_all_read_across_pages(): void
+    {
+        $promotedCalls = [];
+        $tweetPages = 0;
+
+        Http::fake(function (Request $r) use (&$promotedCalls, &$tweetPages) {
+            $u = $r->url();
+            parse_str((string) parse_url($u, PHP_URL_QUERY), $q);
+
+            if (str_contains($u, '/promoted_tweets')) {
+                $promotedCalls[] = $q;
+                $first = ($q['cursor'] ?? null) === null;
+                $range = $first ? range(1, 200) : range(201, 250);
+
+                return Http::response([
+                    'request' => ['params' => $q],
+                    'next_cursor' => $first ? 'c-page2' : null,
+                    'data' => array_map(static fn (int $n) => ['id' => "pt{$n}", 'tweet_id' => (string) (9000 + $n), 'line_item_id' => 'li1', 'entity_status' => 'ACTIVE'], $range),
+                ]);
+            }
+            if (str_contains($u, '/accounts/acc1/tweets')) {
+                $ids = explode(',', (string) ($q['tweet_ids'] ?? ''));
+                $first = ($q['cursor'] ?? null) === null;
+                // X may split even an id-scoped read: the first half now, the rest behind the cursor.
+                $half = array_chunk($ids, (int) ceil(count($ids) / 2));
+                $part = $first ? $half[0] : ($half[1] ?? []);
+                $tweetPages++;
+
+                return Http::response([
+                    'next_cursor' => $first && isset($half[1]) ? 'c-t-'.$ids[0] : null,
+                    'data' => array_map(static fn (string $id) => ['id_str' => $id, 'full_text' => "Post {$id}", 'tweet_type' => 'PUBLISHED'], $part),
+                ]);
+            }
+            if (str_contains($u, '/line_items')) {
+                return Http::response(['next_cursor' => null, 'data' => [['id' => 'li1', 'campaign_id' => 'c1', 'name' => 'L']]]);
+            }
+
+            return Http::response(['next_cursor' => null, 'data' => []]);
+        });
+
+        $c = $this->bound();
+        $ads = (new \ReflectionMethod($c, 'fetchAds'))->invoke($c, app(TokenVault::class)->stored($this->connection), 'acc1');
+
+        $this->assertCount(250, $ads, 'the promoted tweets after the 200th were dropped');
+        $this->assertSame('c-page2', $promotedCalls[1]['cursor'] ?? null);
+        $byTweet = array_column(array_column($ads, 'creative'), null, 'external_id');
+        $this->assertSame('Post 9250', $byTweet['9250']['body'] ?? null, 'the last page\'s tweet has its words');
+        $this->assertSame('Post 9020', $byTweet['9020']['body'] ?? null, 'the second half of a tweets chunk was behind its cursor');
+        $this->assertSame('c1', collect($ads)->firstWhere('external_id', 'pt250')['campaign_external_id'] ?? null);
+    }
+
     private function bound(): ApiAdvertisingConnector
     {
         foreach (PlatformCredentials::for('x')->requires() as $key) {
