@@ -74,6 +74,7 @@ export function askingDimension(statuses: IntegrationStatuses): StatusDimension 
  */
 export function sourceNeedsAction(connection: HubConnection): boolean {
   if (isDisconnected(connection)) return true
+  if (lacksGrantedScopes(connection)) return true
   const statuses = connection.statuses ?? null
   if (statuses !== null) return askingDimension(statuses) !== null
   // No server statuses (an older payload): the chip turns on exactly these two, so the count does too.
@@ -354,6 +355,17 @@ function RowState({ connection, ar }: { connection: HubConnection; ar: boolean }
   return <span className="contents" data-testid={chip} data-asks={asks}><Badge tone={copy.tone} data-testid={id}>{ar ? copy.ar : copy.en}</Badge></span>
 }
 
+/** LINKEDIN-SCOPES-001 — the recorded grant is proven short of what the product asks for: only a reconnect adds it. */
+export function lacksGrantedScopes(connection: HubConnection): boolean {
+  return (connection.missing_scopes ?? []).length > 0
+}
+
+/** The reconnect prompt for a grant short of a scope — plain and short, named per platform. */
+export function missingScopesCopy(connection: HubConnection, ar: boolean): string {
+  if (connection.provider === 'linkedin') return ar ? 'أعد ربط لينكدإن لمنح صلاحية قراءة المنشورات' : 'Reconnect LinkedIn to allow reading posts'
+  return ar ? 'أعد الربط لمنح الصلاحيات الناقصة' : 'Reconnect to grant the missing permissions'
+}
+
 function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthorise, onRelink, projectId, spend }: {
   connection: HubConnection
   ar: boolean
@@ -379,9 +391,10 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
    * no consent screen — its remedy is a new key — and a disconnected one is linked again, not renewed.
    */
   const reauthorisable = !gone && !disconnected && onReauthorise !== undefined && connection.status_profile?.auth !== 'api_key'
-  const reauthDue = statuses === null
+  const scopesShort = lacksGrantedScopes(connection)
+  const reauthDue = scopesShort || (statuses === null
     ? needsReauthorising(connection.connection_state)
-    : (statuses.authorisation.action?.code ?? '').startsWith('reauthorize')
+    : (statuses.authorisation.action?.code ?? '').startsWith('reauthorize'))
   const account = connection.provider_account ?? null
   const platformAccount = account === null ? null : (account.email ?? account.label)
   const accounts = connection.accounts ?? []
@@ -510,6 +523,13 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
           )}
         </div>
       </div>
+
+      {/* LINKEDIN-SCOPES-001 — a proven-short grant says what reconnecting adds; the row's primary button is the reconnect. */}
+      {!gone && scopesShort && (
+        <p className="mx-3 mb-2 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning" data-testid={`hub-missing-scopes-${connection.id}`}>
+          {missingScopesCopy(connection, ar)}
+        </p>
+      )}
 
       {/* Under the row: its linked accounts, one per line — then the five statuses and who authorised it. */}
       <div id={panelId} hidden={!expanded} className="min-w-0 flex-col gap-3 border-t border-border bg-surface-secondary/40 px-3 py-3 [&:not([hidden])]:flex" data-testid={panelId}>

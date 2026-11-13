@@ -191,6 +191,9 @@ final class OperationalDigestModel
                 $gPrev[(string) ($r['provider'] ?? '')] = (array) $r;
             }
             $gBlock = array_merge($block, ['platform_reported' => (array) ($g['platform_reported'] ?? []), 'reported' => (array) ($g['reported'] ?? [])]);
+            if (array_key_exists('platform_live', $g)) {
+                $gBlock['platform_live'] = (array) $g['platform_live'];
+            }
             $gCells = self::cells($gBlock, $gRows, $gPrev, $budgetBy, $sources, $go, $p, $ar, $id, $name, $days, $mixed ? self::objectiveLabel($go, $ar) : null);
             $cellSets[] = $gCells;
             $groups[] = self::group($g, $go, $gRows, $gPrev, $gCells, $p, $ar);
@@ -1018,6 +1021,15 @@ final class OperationalDigestModel
             $budgetCanon[AdPlatforms::canonical((string) $k)] = $r;
         }
 
+        // ALERT-DELIVERING-YESTERDAY-001 — the figures of the campaigns a decision may be about, per platform (DailyDigest::liveRows).
+        $live = null;
+        if (array_key_exists('platform_live', $block)) {
+            $live = [];
+            foreach ((array) $block['platform_live'] as $k => $r) {
+                $live[AdPlatforms::canonical((string) $k)] = (array) $r;
+            }
+        }
+
         $cells = [];
         foreach ($keys as $order => $key) {
             $row = $byProvider[$key] ?? [];
@@ -1038,6 +1050,7 @@ final class OperationalDigestModel
                 'results' => $resultKey !== null ? ($row[$resultKey] ?? null) : null,
                 'results_prev' => $resultKey !== null ? ($prev[$resultKey] ?? null) : null,
                 'results_reported' => $resultKey !== null && ($reportedFor[$resultKey] ?? true) !== false,
+                'live' => $live === null ? false : ($live[$key] ?? null),
                 'headline_now' => $row[$headlineKey] ?? null,
                 'headline_prev' => $prev[$headlineKey] ?? null,
                 'headline_lower_is_better' => $lower,
@@ -1054,7 +1067,9 @@ final class OperationalDigestModel
             $name = AdPlatforms::name($key, $ar ? 'ar' : 'en');
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
-                $issue = self::issue($verdict, $key, $name, $row, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine, (array) ($block['window'] ?? []));
+                // «صرف بدون نتائج» quotes the spend it was judged on: the live campaigns' (above), not the whole platform's.
+                $issueRow = $verdict['reason'] === 'no_results' && is_array($live[$key] ?? null) ? array_merge($row, ['spend' => $live[$key]['spend'] ?? ($row['spend'] ?? null), '_live' => true]) : $row;
+                $issue = self::issue($verdict, $key, $name, $issueRow, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine, (array) ($block['window'] ?? []));
                 $issue['objective'] = $groupLabel;
             }
             $cells[] = [
@@ -1223,7 +1238,10 @@ final class OperationalDigestModel
                 break;
             case 'no_results':
                 $headline = $ar ? 'صرف بدون نتائج' : 'Spend with no results';
-                $figure = ($ar ? 'صرف ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
+                // ALERT-CRITERIA-001 — the figure names the scope the verdict was judged on, so it cannot contradict the platform's
+                // own tiles (which include campaigns stopped mid-period): «الحملات الشغّالة: صرف … · طلبات 0».
+                $figure = (($row['_live'] ?? false) === true ? ($ar ? 'الحملات الشغّالة: ' : 'Running campaigns: ') : '')
+                    .($ar ? 'صرف ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
                 break;
             case 'pace_hot':
             case 'pace_slow':

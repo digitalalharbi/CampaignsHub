@@ -80,7 +80,7 @@ final class AlertsEngineTest extends TestCase
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'external_account_id' => (string) Str::uuid(), 'external_campaign_id' => (string) Str::uuid(),
             'unified_campaign_id' => $c->id, 'provider' => $provider, 'metric_key' => $key,
-            'metric_date' => Carbon::now()->subDays($daysAgo)->toDateString(), 'value' => $value,
+            'metric_date' => Carbon::now('Asia/Riyadh')->subDays($daysAgo)->toDateString(), 'value' => $value, // the client's calendar: «yesterday» is Riyadh's
             /*
              * Every money row a sync writes carries the unit it was converted INTO, and the budget
              * alert now reads the money contract's verdict rather than dividing two bare numbers —

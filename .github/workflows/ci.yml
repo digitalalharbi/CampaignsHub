@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # `labeled`: the Lander adds `full-gate` to the PR it is about to land, which starts the full three-browser run.
+    types: [opened, synchronize, reopened, labeled]
   # GitHub's own merge queue (a repository-ruleset option) builds each queued PR on this event, with no
   # token of ours involved. Inert until the ruleset enables it; see docs/MERGE_QUEUE.md.
   merge_group:
@@ -24,6 +26,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # CI-TIER-001: the longest jobs are defined first so the runner queue starts them first (webkit ~19 min, firefox ~17).
+  gate-webkit-shards:
+    name: gate shards (webkit)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate') }}
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: webkit
+      shards: '[1,2,3,4,5]'
+      total: 5
+      weights: '207:257:249:213:182'
+
+  gate-firefox-shards:
+    name: gate shards (firefox)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate') }}
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: firefox
+      shards: '[1,2,3,4,5]'
+      total: 5
+      weights: '207:274:250:198:179'
+  # CI-TIER-001 — the cheap run for every PR, the full three-browser gate for the PR that is about to land.
+  #
+  # Every open PR used to start all 24 jobs; GitHub's free plan runs 20 at once, so a run sat queued 35-45 minutes
+  # behind other PRs' runs (measured 2026-11-13: shards started +35..+45 min after the run did, then ran 16 minutes).
+  # A PR now runs backend + frontend + image + chromium. Firefox and WebKit run for a dispatch, a merge_group, or a PR
+  # labelled `full-gate` — which the Lander does to the one PR it is landing (`ch-scripts/fullgate.sh`, from
+  # `refresh.sh`). Otherwise they are SKIPPED, never green, and `waitpr.sh` / `merge-queue.yml` require `gate (firefox)`
+  # and `gate (webkit)` to be SUCCESS, so nothing lands without all three browsers.
+  #
+  # CI-TIER-002 — shard counts: backend 5, firefox 5, webkit 5 (was 4 each), so the slowest shard (webkit 19.4 min
+  # measured on #1054) drops to about 15; firefox and webkit weights are the measured 4-way weights re-cut at equal
+  # time. The long jobs are defined first and carry no `needs`, so the runner queue starts them at t=0.
   # CI-SPEED-001 — the backend check, as three kinds of job behind ONE name.
   #
   # `backend` used to be one job: autopilot + pint + larastan, then `php artisan test` over ~8,000 tests in one process
@@ -70,14 +104,14 @@ jobs:
         run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
   backend-tests:
-    name: backend (tests ${{ matrix.shard }}/4)
+    name: backend (tests ${{ matrix.shard }}/5)
     runs-on: ubuntu-latest
     strategy:
       # Every shard reports: «shard 2 failed» and «shards 2 and 3 failed» are different findings.
       fail-fast: false
       matrix:
-        # The shard count is written twice — here and as the `4` in the plan/verdict calls below. Change all of them.
-        shard: [1, 2, 3, 4]
+        # The shard count is written twice — here and as the `5` in the plan/verdict calls below. Change all of them.
+        shard: [1, 2, 3, 4, 5]
     services:
       postgres:
         image: postgres:16
@@ -113,8 +147,8 @@ jobs:
         run: python3 -m pip install --quiet pikepdf
       # Writes this shard's phpunit.xml (the repository's, with only <testsuites> narrowed to this shard's files) and
       # the evidence the `backend` verdict reads. Fails if PHPUnit lists nothing.
-      - name: Plan shard ${{ matrix.shard }}/4
-        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 4 "$RUNNER_TEMP/backend-evidence"
+      - name: Plan shard ${{ matrix.shard }}/5
+        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 5 "$RUNNER_TEMP/backend-evidence"
       - name: Tests
         env:
           DB_CONNECTION: pgsql
@@ -159,7 +193,7 @@ jobs:
           pattern: backend-shard-*
           path: ${{ runner.temp }}/backend-evidence
       - name: The shards ran the whole suite, exactly once
-        run: python3 .github/scripts/backend-shard.py verdict 4 "$RUNNER_TEMP/backend-evidence"
+        run: python3 .github/scripts/backend-shard.py verdict 5 "$RUNNER_TEMP/backend-evidence"
 
   frontend:
     runs-on: ubuntu-latest
@@ -276,23 +310,6 @@ jobs:
       shards: '[1,2,3,4]'
       total: 4
       weights: '262:347:281:226'
-  gate-firefox-shards:
-    name: gate shards (firefox)
-    uses: ./.github/workflows/gate-shards.yml
-    with:
-      browser: firefox
-      shards: '[1,2,3,4]'
-      total: 4
-      weights: '259:370:256:223'
-  gate-webkit-shards:
-    name: gate shards (webkit)
-    uses: ./.github/workflows/gate-shards.yml
-    with:
-      browser: webkit
-      shards: '[1,2,3,4]'
-      total: 4
-      weights: '259:342:279:228'
-
   gate-chromium:
     name: gate (chromium)
     if: ${{ always() }}
@@ -327,7 +344,7 @@ jobs:
 
   gate-firefox:
     name: gate (firefox)
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate')) }}
     needs: gate-firefox-shards
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -345,7 +362,7 @@ jobs:
           pattern: gate-shard-firefox-*
           path: ${{ runner.temp }}/gate-evidence
       - name: The shards ran the whole firefox suite, exactly once
-        run: python3 .github/scripts/gate-verdict.py firefox 4 "$RUNNER_TEMP/gate-evidence"
+        run: python3 .github/scripts/gate-verdict.py firefox 5 "$RUNNER_TEMP/gate-evidence"
       - name: Merged report
         if: always()
         uses: actions/upload-artifact@v4
@@ -359,7 +376,7 @@ jobs:
 
   gate-webkit:
     name: gate (webkit)
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate')) }}
     needs: gate-webkit-shards
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -377,7 +394,7 @@ jobs:
           pattern: gate-shard-webkit-*
           path: ${{ runner.temp }}/gate-evidence
       - name: The shards ran the whole webkit suite, exactly once
-        run: python3 .github/scripts/gate-verdict.py webkit 4 "$RUNNER_TEMP/gate-evidence"
+        run: python3 .github/scripts/gate-verdict.py webkit 5 "$RUNNER_TEMP/gate-evidence"
       - name: Merged report
         if: always()
         uses: actions/upload-artifact@v4
