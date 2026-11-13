@@ -62,8 +62,9 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $this->assertSame(CampaignObjective::Traffic, $map->resolve('snapchat', 'TRAFFIC'));
         $this->assertSame(CampaignObjective::Conversions, $map->resolve('openai_ads', 'conversions'));
         $this->assertSame(CampaignObjective::Conversions, $map->resolve('openai_ads', 'CONVERSIONS'));
-        // Snapchat's combined objective names no single result, so it stays unclassified.
-        $this->assertNull($map->resolve('snapchat', 'AWARENESS_AND_ENGAGEMENT'));
+        // OBJECTIVE-GAPS-001 (Owner, 2026-11-13) — Snap's combined objective is the awareness family:
+        // its result is reach, else impressions (Snap Ads API, Campaign Objective V2).
+        $this->assertSame(CampaignObjective::Awareness, $map->resolve('snapchat', 'AWARENESS_AND_ENGAGEMENT'));
         $this->assertSame(CampaignObjective::Traffic, $map->resolve('openai_ads', 'TRAFFIC'));
         $this->assertNull($map->resolve('openai_ads', 'SOMETHING_ELSE'));
         // A channel type is still not an objective.

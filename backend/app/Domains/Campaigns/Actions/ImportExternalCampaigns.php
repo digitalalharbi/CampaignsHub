@@ -99,7 +99,13 @@ final class ImportExternalCampaigns
                     'provider' => $account->provider,
                     'name' => (string) ($row['name'] ?? $externalId),
                     'status' => CampaignStatus::fromProvider($row['status'] ?? null)->value,
-                    'objective' => $row['objective'] ?? null,
+                    /*
+                     * OBJECTIVE-GAPS-001 — X's campaign object carries no objective; it is lifted from
+                     * the line items by `ImportExternalStructure`. A campaign sweep answering null must
+                     * not wipe that between two structure sweeps.
+                     */
+                    'objective' => $row['objective']
+                        ?? (in_array(strtolower((string) $account->provider), ['x', 'twitter'], true) ? $campaign->objective : null),
                     'daily_budget' => $row['daily_budget'] ?? null,
                     'lifetime_budget' => $row['lifetime_budget'] ?? null,
                     'currency' => $row['currency'] ?? $account->currency,

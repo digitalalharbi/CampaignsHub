@@ -866,6 +866,88 @@ final class AdPlatformStructureSyncTest extends TestCase
         $this->assertSame('text', ExternalCreative::withoutGlobalScopes()->value('format'));
     }
 
+    /**
+     * OBJECTIVE-GAPS-001 — X states the objective on the LINE ITEM, never on the campaign.
+     *
+     * docs.x.com/x-ads-api/campaign-management («Objective Based Campaigns»): «The parameter used on
+     * the line item write endpoints and returned on the read endpoints, is `objective`», and «Line
+     * items with different objectives are not allowed under the same campaign». Production: 66 X
+     * campaigns, none with an objective, all in the Unknown family.
+     */
+    public function test_x_takes_the_campaign_objective_from_its_line_items_when_they_agree(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([
+            ['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+            ['id' => 'li-2', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+        ]);
+
+        $run = app(AccountStructureSyncer::class)->sync($account);
+
+        $this->assertSame('success', $run->status, (string) $run->error);
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $this->assertSame('WEBSITE_CLICKS', $external->objective);
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $this->assertSame('traffic', $unified->objective);
+        $this->assertSame('platform', $unified->objective_source);
+
+        // A second sweep — the campaigns endpoint again answers no objective — does not undo it.
+        app(AccountStructureSyncer::class)->sync($account);
+        $this->assertSame('WEBSITE_CLICKS', $external->fresh()->objective);
+        $this->assertSame('traffic', $unified->fresh()->objective);
+    }
+
+    /** Line items that disagree leave the campaign for a person, and the disagreement is written down. */
+    public function test_x_line_items_that_disagree_leave_the_campaign_unclassified_and_recorded(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([
+            ['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+            ['id' => 'li-2', 'campaign_id' => 'cmp-x', 'objective' => 'REACH', 'entity_status' => 'ACTIVE'],
+        ]);
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $this->assertNull($external->objective);
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $this->assertSame('unset', $unified->objective_source);
+        $this->assertNotSame('traffic', $unified->objective);
+        $this->assertSame('REACH · WEBSITE_CLICKS', $unified->objective_platform_value);
+    }
+
+    /** A person's objective survives the line items' answer. */
+    public function test_x_line_items_never_overwrite_a_manual_objective(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE']]);
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $unified->forceFill(['objective' => 'sales', 'objective_source' => 'manual'])->save();
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $this->assertSame('sales', $unified->fresh()->objective);
+        $this->assertSame('manual', $unified->fresh()->objective_source);
+    }
+
+    /** @param list<array<string, mixed>> $lineItems */
+    private function fakeX(array $lineItems): void
+    {
+        Http::fake([
+            'ads-api.x.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cmp-x', 'name' => 'X Launch', 'entity_status' => 'ACTIVE'],
+            ]]),
+            'ads-api.x.com/*/line_items*' => Http::response(['data' => $lineItems]),
+            'ads-api.x.com/*/promoted_tweets*' => Http::response(['data' => []]),
+        ]);
+    }
+
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────
 
     /**

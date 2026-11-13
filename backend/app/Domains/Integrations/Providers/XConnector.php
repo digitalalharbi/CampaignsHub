@@ -116,6 +116,20 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                 'name' => (string) ($l['name'] ?? $l['id']),
                 'status' => strtolower((string) ($l['entity_status'] ?? 'unknown')),
                 'optimization_goal' => isset($l['goal']) ? strtolower((string) $l['goal']) : null,
+                /*
+                 * OBJECTIVE-GAPS-001 — X's objective lives HERE, not on the campaign.
+                 *
+                 * docs.x.com/x-ads-api/campaign-management («Objective Based Campaigns»): «The parameter
+                 * used on the line item write endpoints and returned on the read endpoints, is
+                 * `objective`» — APP_ENGAGEMENTS, APP_INSTALLS, FOLLOWERS, ENGAGEMENTS, REACH,
+                 * VIDEO_VIEWS, PREROLL_VIEWS, WEBSITE_CLICKS — and «Line items with different objectives
+                 * are not allowed under the same campaign». The campaign object carries none, which is
+                 * why 66 Production campaigns sat unclassified. `ImportExternalStructure` lifts the
+                 * agreed value onto the campaign; the `x` table in `PlatformObjectiveMap` translates it.
+                 */
+                'campaign_objective' => isset($l['objective']) && trim((string) $l['objective']) !== ''
+                    ? strtoupper(trim((string) $l['objective']))
+                    : null,
                 'bid_strategy' => isset($l['bid_strategy']) ? strtolower((string) $l['bid_strategy']) : null,
                 // X budgets the campaign; a line item carries a bid and a total, not a daily budget.
                 'daily_budget' => null,
