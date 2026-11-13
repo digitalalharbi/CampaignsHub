@@ -35,6 +35,10 @@ Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 // PAY-RECONCILE-001 — a payment the gateway took is settled even when its webhook was dropped after the gateway's retries.
 Schedule::command('subscriptions:reconcile-payments')->everyFifteenMinutes()->withoutOverlapping();
 
+// PLATFORM-PAYMENT-ALERTS-001 — tells the platform owner about customers stuck at payment or sign-up. Reads only; a
+// unique key per attempt makes a re-run inert. Offset from the reconcile sweep so a payment it settles is not reported.
+Schedule::command('platform:payment-alerts')->cron('7,22,37,52 * * * *')->withoutOverlapping();
+
 // FORMS-PDPL-001 — the evidence around a form submission expires; the consent record does not.
 Schedule::command('forms:purge-evidence')->dailyAt('02:30')->withoutOverlapping();
 

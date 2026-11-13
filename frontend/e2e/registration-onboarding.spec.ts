@@ -262,6 +262,25 @@ async function registerAndVerify(
   await signIn(page, email, 'secret1234')
 
   /*
+   * PROBE-CLOBBER-001 — the diagnostic below must not run while the sign-in is still in flight.
+   *
+   * Its `fetch('/api/v1/auth/me')` used to fire on the first `toPass` attempt, the instant the submit was clicked —
+   * while `/auth/login` was still being answered. That probe carried the GUEST session cookie. `regenerate()` keeps
+   * the guest id alive, so the probe got a guest answer, and its `Set-Cookie` wrote the guest id back into the jar.
+   * When that answer landed after the login's, it replaced the signed-in cookie: `/auth/memberships` → 401 twice, the
+   * app went to `/login?reason=session&redirect=/switch`, and the message blamed the product. The server log shows it
+   * every time: `/auth/login`, then an `/auth/me` that FINISHED after it, then the 401s. It failed on webkit because
+   * webkit's timing let the probe's answer arrive last. A different spec failed each time because the race moved.
+   *
+   * So first wait for the app to leave the sign-in form (polled on the URL, GATE-WK-NAV-001). It either reaches the wizard or settles somewhere else,
+   * including the `?reason=session` page a real failure lands on. Only then probe. A timeout here is not a verdict:
+   * the assertion below still runs and reports what it finds.
+   */
+  await expect(page)
+    .toHaveURL((u) => u.pathname !== '/login' || u.searchParams.has('reason'), { timeout: 20_000 })
+    .catch(() => undefined)
+
+  /*
    * When this lands anywhere but the wizard, say WHAT the application thought instead.
    *
    * CI has seen it once, on firefox, inside a 445-test run: «5 × /login, 38 × /agency» for an

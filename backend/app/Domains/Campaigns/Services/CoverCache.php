@@ -50,10 +50,11 @@ final class CoverCache
     /**
      * The CDNs whose media links are short-lived signed grants: Meta's `scontent-*.fbcdn.net` (`oe=`) and its
      * `facebook.com` / Instagram image hosts, TikTok's `*-sign.tiktokcdn.com` / `ibyteimg.com` (`x-expires`).
+     * X-LINKEDIN-CONTENT-001: LinkedIn's `media.licdn.com` `downloadUrl` is signed and carries `downloadUrlExpiresAt`.
      * Their links are COPIED, never handed to a browser. Snapchat's media host is deliberately absent — its link
      * is what draws today, and the Owner's report names it as the one platform that works.
      */
-    private const COPY_ONLY_HOSTS = ['fbcdn.net', 'facebook.com', 'fbsbx.com', 'cdninstagram.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'tiktokcdn-eu.com', 'ibyteimg.com', 'byteimg.com', 'byteoversea.com'];
+    private const COPY_ONLY_HOSTS = ['fbcdn.net', 'facebook.com', 'fbsbx.com', 'cdninstagram.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'tiktokcdn-eu.com', 'ibyteimg.com', 'byteimg.com', 'byteoversea.com', 'licdn.com', 'licdn-ei.com'];
 
     /** CREATIVE-VIDEO-FRAME-COVER-001 — where our copy came from: the platform's still, or a frame taken from the film. */
     public const SOURCE_PROVIDER = 'provider';
