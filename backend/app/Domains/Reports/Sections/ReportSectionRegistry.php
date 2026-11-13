@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Sections;
 
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use Closure;
 use InvalidArgumentException;
 
@@ -233,6 +234,102 @@ final class ReportSectionRegistry
                 payloadKeys: ['ga4_gap_reasons'],
                 view: 'website',
             ),
+            /*
+             * AUDIENCE-001 — the audience, one SHOW/HIDE per data type, drawn in the platforms view.
+             *
+             * OFF on a client-facing report until an operator switches it on (the spec: enabled by permission and by the
+             * data available), ON for an internal one; and available only where its data exists (absent otherwise). Targeting, paid delivery and site visitors are
+             * separate parts and never one field. `audience_spend` owns no payload: hidden (and always on a client
+             * report) it takes every money figure out of the audience parts — see AudienceReportSections.
+             */
+            new ReportSection(
+                key: 'audience_targeting',
+                titleAr: 'الجمهور المستهدف',
+                titleEn: 'Targeted audience',
+                payloadKeys: ['audience_targeting'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_regions',
+                titleAr: 'الجمهور الفعلي: المناطق',
+                titleEn: 'Delivered audience: regions',
+                payloadKeys: ['audience_regions'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_cities',
+                titleAr: 'الجمهور الفعلي: المدن',
+                titleEn: 'Delivered audience: cities',
+                payloadKeys: ['audience_cities'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_gender',
+                titleAr: 'الجمهور الفعلي: الجنس',
+                titleEn: 'Delivered audience: gender',
+                payloadKeys: ['audience_gender'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_age',
+                titleAr: 'الجمهور الفعلي: العمر',
+                titleEn: 'Delivered audience: age',
+                payloadKeys: ['audience_age'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_devices',
+                titleAr: 'الجمهور الفعلي: الأجهزة',
+                titleEn: 'Delivered audience: devices',
+                payloadKeys: ['audience_devices'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_placements',
+                titleAr: 'الجمهور الفعلي: مواضع الظهور',
+                titleEn: 'Delivered audience: placements',
+                payloadKeys: ['audience_placements'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_interests',
+                titleAr: 'الجمهور الفعلي: الاهتمامات',
+                titleEn: 'Delivered audience: interests',
+                payloadKeys: ['audience_interests'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_professional',
+                titleAr: 'المؤشرات المهنية (LinkedIn)',
+                titleEn: 'Professional facets (LinkedIn)',
+                payloadKeys: ['audience_professional'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_site',
+                titleAr: 'زوار الموقع حسب الدولة والجهاز',
+                titleEn: 'Site visitors by country & device',
+                payloadKeys: ['audience_site'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_spend',
+                titleAr: 'الإنفاق حسب تقسيم الجمهور',
+                titleEn: 'Spend by audience breakdown',
+                payloadKeys: [],
+                clientDefault: false,
+                view: 'platforms',
+            ),
             new ReportSection(
                 key: 'recommendations',
                 titleAr: 'الملاحظات والتوصيات',
@@ -374,6 +471,16 @@ final class ReportSectionRegistry
         foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $ga4) {
             $this->availableWhen($ga4, 'has_ga4_figures', static fn (SectionContext $c): bool => is_array($c->value($ga4)));
         }
+
+        // AUDIENCE-001 — a part with no data behind it is not a section, and never a zero.
+        foreach (AudienceReportSections::KEYS as $audience) {
+            $this->availableWhen($audience, 'has_audience_data', static fn (SectionContext $c): bool => is_array($c->value($audience)));
+        }
+        // The spend switch is a modifier: it means something only where a paid-delivery part is present.
+        $this->availableWhen('audience_spend', 'has_paid_delivery', static fn (SectionContext $c): bool => array_filter(
+            array_keys(AudienceReportSections::DELIVERY),
+            static fn (string $k): bool => is_array($c->value($k)),
+        ) !== []);
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 

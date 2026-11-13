@@ -149,6 +149,7 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { SiteAnalyticsTab } from './SiteAnalyticsTab'
+import { AudiencePanel } from '@/features/audience/AudiencePanel'
 import { AttributionPanel } from './AttributionPanel'
 import { WidgetSurface } from '@/features/widgets/WidgetSurface'
 import { useWidgetLayout } from '@/features/widgets/api'
@@ -194,6 +195,8 @@ const TAB_GROUPS = [
     ar: 'التفصيل', en: 'Breakdown',
     tabs: [
       { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
+      // AUDIENCE-001 — targeting, paid delivery, site visitors and unpaid, kept apart, per platform.
+      { id: 'audience', ar: 'الجمهور', en: 'Audience' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
       { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
@@ -797,6 +800,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         )}
         {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
         {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'audience' && <AudiencePanel projectId={currentProjectId} range={range} />}
         {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}

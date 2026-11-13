@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Support;
 
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
@@ -86,6 +87,8 @@ final class ChosenFigures
         'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons',
         // CONTENT-FORMAT-COMPARISON-001 — its own block, cut for its audience when built; only its money follows the KPI list, below.
         'content_format_comparison',
+        // AUDIENCE-001 — audience parts keep their own vocabulary (impressions as the share's denominator); only spend follows the KPI list, below.
+        'audience_targeting', 'audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional', 'audience_site',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */
@@ -473,6 +476,9 @@ final class ChosenFigures
         }
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
+        }
+        if ($hideSpend) {
+            $payload = AudienceReportSections::withoutMoney($payload);
         }
         if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
             $payload[ContentFormatComparison::KEY] = ContentFormatComparison::withoutMetrics($payload[ContentFormatComparison::KEY], array_keys($cut));

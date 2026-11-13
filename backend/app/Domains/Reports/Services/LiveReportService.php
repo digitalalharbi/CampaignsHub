@@ -24,6 +24,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
 use App\Domains\Reports\Measurement\StoreAnalyticsSection;
@@ -1278,6 +1279,8 @@ final class LiveReportService
 
         // GA4-REPORT-SECTIONS-001 — read against this link's OWN platform rows, so the link's source ceiling is the gap's too.
         $payload = array_merge($payload, $this->ga4Sections($share, $scope, $from, $to, (array) $payload['platforms'], $currency));
+        // AUDIENCE-001 — each audience data type a SHOW/HIDE of its own, cut for the reader on the server.
+        $payload = array_merge($payload, $this->audienceSections($share, $scope, $from, $to));
 
         /*
          * REPORT-ANALYTICAL-DEPTH-001 — the client's link says what it contains, and why anything is
@@ -2218,6 +2221,38 @@ final class LiveReportService
             ! $this->namesCampaigns($share), $this->ga4PlatformCeiling($share),
             // The link can only narrow what the report shows: its own list joins the report's.
             [...$report->sectionSettings()->ga4Hidden(), ...Ga4Visibility::normalise(((array) ($share->settings ?? []))['ga4_hidden'] ?? null)],
+        );
+    }
+
+    /**
+     * AUDIENCE-001 — the audience parts of a link, or nulls. The operator's switches (report AND link) decide
+     * each part; a client-facing report never carries money or campaign / ad-set names; a link narrower than
+     * its project by campaign carries none (see AudienceReportSections).
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>}  $scope
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function audienceSections(ReportShare $share, array $scope, Carbon $from, Carbon $to): array
+    {
+        $none = array_fill_keys(AudienceReportSections::KEYS, null);
+        if ($this->namesNothing($share, $scope)) {
+            return $none;
+        }
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
+        if ($report === null) {
+            return $none;
+        }
+        $surfaces = app(ReportSectionSurfaces::class);
+
+        return app(AudienceReportSections::class)->build(
+            (string) $share->tenant_id, $scope['project_id'], $from, $to,
+            (string) ($report->audience ?? 'client') !== 'internal',
+            static fn (string $key): bool => $surfaces->operatorAllows($key, $report, $share),
+            $this->ga4PlatformCeiling($share),
+            // Narrower than its accounts by campaign, ad set or ad: withheld, never leaked.
+            array_filter(array_intersect_key((array) ($share->scope ?? []), array_flip(['campaign_ids', 'ad_set_ids', 'ad_ids']))) !== [],
+            array_values(array_filter((array) (((array) ($share->scope ?? []))['account_ids'] ?? []), 'is_string')),
+            (bool) $share->hide_spend,
         );
     }
 
