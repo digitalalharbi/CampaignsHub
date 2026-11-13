@@ -45,7 +45,7 @@ test('a rule is edited, paused and removed from the rules tab', async ({ browser
   // Remove: an in-app dialog first; cancel keeps it, confirm removes it.
   await page.getByTestId(`alert-rule-delete-${id}`).click()
   await expect(page.getByTestId('dialog-body')).toBeVisible()
-  if (shots) await page.screenshot({ path: `${shots}/rules-delete-dialog.png`, fullPage: false })
+  if (shots) { await page.waitForTimeout(500); await page.screenshot({ path: `${shots}/rules-delete-dialog.png`, fullPage: false }) } // after the fade-in
   await page.getByTestId('dialog-cancel').click()
   await expect(row).toBeVisible()
   await page.getByTestId(`alert-rule-delete-${id}`).click()
