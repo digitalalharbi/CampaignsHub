@@ -252,7 +252,12 @@ final class AlertSweepBatchedReadsTest extends TestCase
         $after = $count();
 
         // Eighteen more campaigns. New breaches each cost their own event lookups, so the bound is well under one statement per campaign per read.
-        $this->assertLessThan(500, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
+        /*
+         * ALERT-DELIVERING-YESTERDAY-001 — 490 → 509 on this world: the eligibility read (platform statuses, one daily series per
+         * campaign set and clock, shared by every rule of the sweep) and one figures read per judgement window of «صرف بدون نتائج».
+         * All of it is per rule set, not per campaign — the growth bound below is unchanged and still holds (+34 for 18 campaigns).
+         */
+        $this->assertLessThan(550, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
         $this->assertLessThan($before + 18 * 2, $after, 'cost per campaign is back');
     }
 

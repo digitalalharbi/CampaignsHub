@@ -126,7 +126,8 @@ final class UnifiedDataSourceTest extends TestCase
             'threshold' => ['pct' => 25, 'days' => 7], 'cooldown_minutes' => 60, 'active' => true,
         ]);
 
-        app(AlertEvaluator::class)->evaluateRule($rule, Carbon::parse('2026-07-31'));
+        // 09:00 Riyadh on 28 Jul: «yesterday» is the 27th, the day it last spent, so the campaign is judged (ALERT-DELIVERING-YESTERDAY-001).
+        app(AlertEvaluator::class)->evaluateRule($rule, Carbon::parse('2026-07-28 06:00:00', 'UTC'));
 
         $event = AlertEvent::withoutGlobalScopes()->where('type', 'roas_drop')->firstOrFail();
 
@@ -412,7 +413,8 @@ final class UnifiedDataSourceTest extends TestCase
         app(UpsertDailyMetrics::class)->handle([
             $this->metric($date, 'spend', $spend),
             $this->metric($date, 'revenue', $revenue),
-            $this->metric($date, 'conversions', 0),
+            // ALERT-CRITERIA-001 — a ROAS comparison needs a previous window with enough orders to compare against.
+            $this->metric($date, 'conversions', 10),
         ]);
 
         app(TenantContext::class)->forget();
