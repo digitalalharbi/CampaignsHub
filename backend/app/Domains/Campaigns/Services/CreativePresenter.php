@@ -156,7 +156,9 @@ final class CreativePresenter
     {
         return $this->card($creative, $campaign) + [
             'copy' => [
-                'body' => $creative->body,
+                // CONTENT-TEXT-CTA-001 — a TikTok row synced before `ad_text` was written as the body still holds it in `raw`.
+                // Under `copy`, so every client surface's «نص الإعلان» switch removes it exactly as it removes the column.
+                'body' => $creative->body ?? (strtolower((string) $creative->provider) === 'tiktok' ? $this->plain(((array) ($creative->raw ?? []))['ad_text'] ?? null) : null),
                 'headline' => $creative->headline,
                 'description' => $creative->description,
                 'cta' => $creative->cta,
@@ -607,7 +609,8 @@ final class CreativePresenter
         }
 
         $raw = (array) ($creative->raw ?? []);
-        $body = $this->plain($creative->body) ?? $this->plain($raw['body'] ?? null);
+        // CONTENT-TEXT-CTA-001 — TikTok keeps the ad's text as `ad_text` in rows synced before it was written as the body.
+        $body = $this->plain($creative->body) ?? $this->plain($raw['body'] ?? null) ?? $this->plain($raw['ad_text'] ?? null);
         $headline = $this->plain($creative->headline) ?? $this->plain($creative->name);
 
         return $body === null && $headline === null ? null : ['headline' => $headline, 'body' => $body];
