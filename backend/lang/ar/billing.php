@@ -12,6 +12,8 @@ declare(strict_types=1);
 return [
     // PLAN-003 — the refusal carries the numbers, so «you have reached your limit» does not leave
     // somebody guessing what the limit was or how close they had been.
+    // PLAN-LIMITS-METER-001 — the refusal names the plan; the list of what is over travels in the response.
+    'plan_change_exceeds' => 'استخدامك الحالي أكبر من حدود باقة :plan. قلّل ما هو أعلى من الحد ثم غيّر الباقة. لن نحذف أي شيء.',
     'plan_limit_reached' => 'لقد بلغت حد باقتك من :metric (:used من :limit). قم بترقية باقتك لإضافة المزيد.',
 
     /*
