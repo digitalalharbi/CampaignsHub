@@ -625,6 +625,14 @@ final class CreativePresenter
      */
     private function storedReasonNote(ExternalCreative $creative): ?array
     {
+        // X-TWEET-CONTENT-001 — the Ads API answered and did not return this tweet (deleted, or out of every promotable user's reach).
+        if (strtolower((string) $creative->provider) === 'x' && (((array) ($creative->raw ?? []))['media_reason'] ?? null) === 'x_tweet_not_returned') {
+            return [
+                'note_ar' => 'إعلان إكس: لم تُرجع إكس هذه التغريدة عند طلبها من حساب الإعلانات، فلا نص ولا صورة لها — غالبًا حُذفت التغريدة.',
+                'note_en' => 'An X ad: X did not return this post when the ads account asked for it, so it has no text or picture — usually the post was deleted.',
+            ];
+        }
+
         if (strtolower((string) $creative->provider) === 'linkedin') {
             return $this->linkedinReasonNote((string) (((array) ($creative->raw ?? []))['media_reason'] ?? ''));
         }

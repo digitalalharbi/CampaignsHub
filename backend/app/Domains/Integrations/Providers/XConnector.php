@@ -196,68 +196,231 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     }
 
     /**
-     * CREATIVE-SYNC-MEDIA-001 — the promoted tweets' own words and picture, through the Ads API itself.
+     * CREATIVE-SYNC-MEDIA-001 / X-TWEET-CONTENT-001 — the promoted tweets' own words and picture, through the Ads API itself.
      *
-     * `GET /12/accounts/:account_id/tweets?tweet_ids=…&tweet_type=PUBLISHED` (docs.x.com/x-ads-api/creatives)
-     * answers on the host and with the OAuth 1.0a signing this connector already uses, so no second
-     * credential and no new scope: `full_text`, `card_uri` and `entities`. A photo is read from
-     * `entities.media[].media_url_https` where the answer carries one. The Ads API documents NO video file or
-     * `media_keys` resolution on this read (that is the X API v2 `expansions=attachments.media_keys`, a
-     * different host and credential this product does not hold), so a tweet's film is shown by its poster
-     * frame only when that field is present, and never as a file.
+     * `GET /12/accounts/:account_id/tweets` (docs.x.com/x-ads-api/creatives/reference, «Tweets») answers on the host and with the
+     * OAuth 1.0a signing this connector already uses — no second credential and no new scope. Three of its documented defaults
+     * hid exactly the tweets an advertiser promotes most, and on Production 49 promoted tweets came back with no row at all
+     * (stored as `format=text` with nothing else):
      *
-     * A refused read leaves the old minimal creative: the tweet id, as before.
+     *  - `timeline_type` defaults to `NULLCAST` — «Whether to return nullcasted (a.k.a. "Promoted-only") Tweets, organic Tweets,
+     *    or both». An ORGANIC post the advertiser promotes was never returned. Asked with `ALL`.
+     *  - `include_mentions_and_replies` defaults to `false` — «Whether to filter out mentions and replies». A promoted reply was
+     *    filtered out. Asked with `true`.
+     *  - `user_id` «Defaults to the FULL promotable user on the account». A tweet of another promotable user
+     *    (`GET accounts/:account_id/promotable_users`) is asked for again under that user's id.
+     *
+     * A tweet whose picture is in its CARD (website and app cards: `card_uri`, no `entities.media`) takes it from
+     * `GET accounts/:account_id/cards/all?card_uris=…` (`video_poster_url`, `wide_app_image`, or a `MEDIA` / `SWIPEABLE_MEDIA`
+     * component's `media_key` resolved through `GET accounts/:account_id/media_library/:media_key` — `poster_media_url`, else the
+     * image's `media_url`). A retweet promoted for another account (`retweeted_status`) is read from the original.
+     *
+     * A tweet X still does not return keeps its id and states why (`raw.media_reason = x_tweet_not_returned`); nothing is invented.
      *
      * @param  list<string>  $tweetIds
      * @return array<string, array<string, mixed>> keyed by tweet id
      */
     private function tweetsById(OAuthTokens $tokens, string $adAccountId, array $tweetIds): array
     {
+        $wanted = array_values(array_unique($tweetIds));
+        $found = $this->tweetsFor($tokens, $adAccountId, $wanted, null);
+
+        $missing = array_values(array_diff($wanted, array_keys($found)));
+        if ($missing !== []) {
+            foreach ($this->promotableUserIds($tokens, $adAccountId) as $userId) {
+                $found += $this->tweetsFor($tokens, $adAccountId, $missing, $userId);
+                $missing = array_values(array_diff($missing, array_keys($found)));
+                if ($missing === []) {
+                    break;
+                }
+            }
+        }
+
+        $cards = $this->cardFaces($tokens, $adAccountId, array_values(array_unique(array_filter(array_map(
+            static fn (array $t): ?string => $t['_still'] === null && is_string($t['_card_uri']) ? $t['_card_uri'] : null,
+            $found,
+        )))));
+
+        $out = [];
+        foreach ($found as $id => $t) {
+            $id = (string) $id; // a numeric tweet id becomes an int array key in PHP
+            $card = is_string($t['_card_uri']) ? ($cards[$t['_card_uri']] ?? null) : null;
+            $still = $t['_still'] ?? $card['still'] ?? null;
+            $isFilm = $t['_still'] !== null ? $t['_film'] : (bool) ($card['film'] ?? false);
+            $text = $t['_text'];
+
+            $out[$id] = array_filter([
+                'external_id' => $id,
+                'name' => "Tweet {$id}",
+                'headline' => $card['title'] ?? null,
+                'body' => $text,
+                // A photo is an image; a film is named a film but only its poster frame is stored.
+                'format' => $still === null ? ($text === null ? 'text' : 'text_card') : ($isFilm ? 'video' : 'image'),
+                'thumbnail_url' => $still,
+                'asset_url' => $isFilm ? null : $still,
+                'preview_url' => null,
+                'destination_url' => $card['destination'] ?? null,
+                'raw' => array_filter([
+                    'card_uri' => $t['_card_uri'],
+                    'card_type' => $card['type'] ?? null,
+                    'media_type' => $t['_media_type'] ?? ($card === null ? null : ($isFilm ? 'video' : ($still === null ? null : 'photo'))),
+                ], static fn ($v) => $v !== null),
+            ], static fn ($v) => $v !== null && $v !== []);
+        }
+
+        foreach (array_diff($wanted, array_map('strval', array_keys($out))) as $id) {
+            $out[(string) $id] = [
+                'external_id' => (string) $id,
+                'name' => "Tweet {$id}",
+                'format' => 'text',
+                'raw' => ['media_reason' => 'x_tweet_not_returned'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * One user's tweets for these ids, parsed. `null` user = the account's FULL promotable user (the endpoint's default).
+     *
+     * @param  list<string>  $tweetIds
+     * @return array<string, array{_text: ?string, _still: ?string, _film: bool, _media_type: ?string, _card_uri: ?string}>
+     */
+    private function tweetsFor(OAuthTokens $tokens, string $adAccountId, array $tweetIds, ?string $userId): array
+    {
         $out = [];
 
-        foreach (array_chunk(array_values(array_unique($tweetIds)), self::ENTITIES_PER_CALL) as $chunk) {
+        foreach (array_chunk($tweetIds, self::ENTITIES_PER_CALL) as $chunk) {
             try {
-                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/tweets"), [
+                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/tweets"), array_filter([
                     'tweet_ids' => implode(',', $chunk),
                     'tweet_type' => 'PUBLISHED',
+                    'timeline_type' => 'ALL',
+                    'include_mentions_and_replies' => 'true',
                     'trim_user' => 'true',
-                ]), 'tweets');
+                    'user_id' => $userId,
+                ], static fn ($v) => $v !== null)), 'tweets');
             } catch (\Throwable) {
                 continue;
             }
 
             foreach ((array) ($body['data'] ?? []) as $t) {
-                $id = is_array($t) ? (string) ($t['id_str'] ?? $t['id'] ?? '') : '';
-
+                $id = is_array($t) ? (string) ($t['id_str'] ?? $t['tweet_id'] ?? $t['id'] ?? '') : '';
                 if ($id === '') {
                     continue;
                 }
 
-                $text = is_string($t['full_text'] ?? null) && trim($t['full_text']) !== '' ? trim($t['full_text']) : (is_string($t['text'] ?? null) && trim($t['text']) !== '' ? trim($t['text']) : null);
-                $media = (array) (($t['extended_entities']['media'] ?? null) ?: ($t['entities']['media'] ?? []));
+                // A promoted retweet carries the post it promotes; its words and media are the original's.
+                $source = is_array($t['retweeted_status'] ?? null) ? $t['retweeted_status'] : $t;
+                $text = $this->plainText($source['full_text'] ?? null) ?? $this->plainText($source['text'] ?? null) ?? $this->plainText($t['full_text'] ?? null);
+                $media = (array) (($source['extended_entities']['media'] ?? null) ?: ($source['entities']['media'] ?? []));
                 $first = is_array($media[0] ?? null) ? $media[0] : [];
                 $still = is_string($first['media_url_https'] ?? null) && str_starts_with($first['media_url_https'], 'https://') ? $first['media_url_https'] : null;
-                $isFilm = in_array($first['type'] ?? null, ['video', 'animated_gif'], true);
+                $cardUri = $source['card_uri'] ?? $t['card_uri'] ?? null;
 
-                $out[$id] = array_filter([
-                    'external_id' => $id,
-                    'name' => "Tweet {$id}",
-                    'headline' => null,
-                    'body' => $text,
-                    // A photo is an image; a film is named a film but only its poster frame is stored.
-                    'format' => $still === null ? ($text === null ? 'text' : 'text_card') : ($isFilm ? 'video' : 'image'),
-                    'thumbnail_url' => $still,
-                    'asset_url' => $isFilm ? null : $still,
-                    'preview_url' => null,
-                    'raw' => array_filter([
-                        'card_uri' => is_string($t['card_uri'] ?? null) ? $t['card_uri'] : null,
-                        'media_type' => is_string($first['type'] ?? null) ? $first['type'] : null,
-                    ], static fn ($v) => $v !== null),
-                ], static fn ($v) => $v !== null && $v !== []);
+                $out[$id] = [
+                    '_text' => $text,
+                    '_still' => $still,
+                    '_film' => in_array($first['type'] ?? null, ['video', 'animated_gif'], true),
+                    '_media_type' => is_string($first['type'] ?? null) ? $first['type'] : null,
+                    '_card_uri' => is_string($cardUri) && $cardUri !== '' ? $cardUri : null,
+                ];
             }
         }
 
         return $out;
+    }
+
+    /**
+     * The account's promotable users other than the FULL one (whose tweets the default read already asked for).
+     *
+     * @return list<string>
+     */
+    private function promotableUserIds(OAuthTokens $tokens, string $adAccountId): array
+    {
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/promotable_users"), ['count' => 200]), 'promotable users');
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ((array) ($body['data'] ?? []) as $u) {
+            if (is_array($u) && isset($u['user_id']) && strtoupper((string) ($u['promotable_user_type'] ?? '')) !== 'FULL' && ! ($u['deleted'] ?? false)) {
+                $ids[] = (string) $u['user_id'];
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * The picture, title and destination of these cards, keyed by `card_uri`.
+     *
+     * @param  list<string>  $cardUris
+     * @return array<string, array{still: ?string, film: bool, title: ?string, destination: ?string, type: ?string}>
+     */
+    private function cardFaces(OAuthTokens $tokens, string $adAccountId, array $cardUris): array
+    {
+        $out = [];
+        $https = static fn (mixed $u): ?string => is_string($u) && str_starts_with($u, 'https://') ? $u : null;
+
+        foreach (array_chunk($cardUris, 200) as $chunk) {
+            try {
+                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/cards/all"), ['card_uris' => implode(',', $chunk)]), 'cards');
+            } catch (\Throwable) {
+                continue;
+            }
+
+            foreach ((array) ($body['data'] ?? []) as $c) {
+                if (! is_array($c) || ! is_string($c['card_uri'] ?? null)) {
+                    continue;
+                }
+
+                $poster = $https($c['video_poster_url'] ?? null);
+                $still = $poster ?? $https($c['wide_app_image'] ?? null) ?? $https($c['image'] ?? null);
+                $film = $poster !== null;
+
+                if ($still === null) {
+                    foreach ((array) ($c['components'] ?? []) as $component) {
+                        $key = $component['media_key'] ?? ((array) ($component['media_keys'] ?? []))[0] ?? null;
+                        if (is_array($component) && in_array($component['type'] ?? null, ['MEDIA', 'SWIPEABLE_MEDIA'], true) && is_string($key)) {
+                            $media = $this->mediaLibrary($tokens, $adAccountId, $key);
+                            $still = $https($media['poster_media_url'] ?? null) ?? (strtoupper((string) ($media['media_type'] ?? '')) === 'IMAGE' ? $https($media['media_url'] ?? null) : null);
+                            $film = $https($media['poster_media_url'] ?? null) !== null;
+                            break;
+                        }
+                    }
+                }
+
+                $out[$c['card_uri']] = [
+                    'still' => $still,
+                    'film' => $film,
+                    'title' => is_string($c['title'] ?? null) && trim($c['title']) !== '' ? trim($c['title']) : null,
+                    'destination' => $https($c['website_dest_url'] ?? null) ?? $https($c['website_url'] ?? null),
+                    'type' => is_string($c['card_type'] ?? null) ? $c['card_type'] : null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array<string, mixed> one media library object, or nothing when it cannot be read */
+    private function mediaLibrary(OAuthTokens $tokens, string $adAccountId, string $mediaKey): array
+    {
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/media_library/".rawurlencode($mediaKey))), 'media library');
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return is_array($body['data'] ?? null) ? $body['data'] : [];
+    }
+
+    private function plainText(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 
     protected function fetchInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
