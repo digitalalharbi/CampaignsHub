@@ -28,6 +28,8 @@ use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Performance\PerformanceRecorder;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Platform\Alerts\SettlementSource;
+use App\Domains\Platform\Alerts\UnavailableSettlementSource;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
@@ -69,6 +71,11 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        /*
+         * PLATFORM-PAYMENT-ALERTS-001 — no Moyasar settlement or payout data exists in this codebase, so the settlement
+         * check answers «unavailable» and raises nothing (BLOCKED_EXTERNAL_CREDENTIALS) until a real source is bound here.
+         */
+        $this->app->bind(SettlementSource::class, UnavailableSettlementSource::class);
         // PERF-RECOVERY-001 — whole-history availability is asked once per account per request.
         $this->app->scoped(CreativeResultAvailability::class);
         // PERF-RECOVERY-001 — the query count belongs to one request or one job.
