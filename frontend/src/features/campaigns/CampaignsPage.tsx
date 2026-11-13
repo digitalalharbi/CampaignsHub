@@ -7,7 +7,8 @@ import { listProjects } from '@/features/projects/api'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { portalBaseOf } from '@/app/portalPath'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
@@ -131,6 +132,7 @@ export function CampaignsPage() {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const navigate = useNavigate()
+  const location = useLocation()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
 
   const { currentProjectId: projectId } = useProject()
@@ -842,7 +844,7 @@ export function CampaignsPage() {
           <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
           <RangeTabs value={days} onChange={setDays} />
-          {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
+          {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }
         kpis={

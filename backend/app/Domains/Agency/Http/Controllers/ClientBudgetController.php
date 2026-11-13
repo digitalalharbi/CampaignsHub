@@ -78,6 +78,22 @@ final class ClientBudgetController extends Controller
 
         $projectsByClient = $projects->groupBy('client_workspace_id');
 
+        /*
+         * NAV-HOME-PLANS-001 — each client's last seven days of spend, for the home page's card line.
+         *
+         * ONE statement for every campaign on the screen (`timeseriesByCampaign`), folded into clients in memory —
+         * never a read per client, for the reason stated above. Same `value` the rows' `spent` is summed from, so a
+         * card's line and its figure cannot disagree; a client whose rollup mixes currencies gets no line, because a
+         * sum across two units is not a trend.
+         */
+        $seriesTo = $to->copy()->startOfDay();
+        $seriesFrom = $seriesTo->copy()->subDays(6);
+        $campaignIds = $pacingByProject->flatten(1)->pluck('campaign_id')->filter()->map(static fn (mixed $id): string => (string) $id)->unique()->values()->all();
+
+        $campaignSeries = $campaignIds === []
+            ? []
+            : app(MetricsAggregator::class)->forProjects($allProjectIds)->forCampaigns($campaignIds)->timeseriesByCampaign($seriesFrom, $seriesTo);
+
         $rows = [];
 
         foreach ($clients as $client) {
@@ -112,12 +128,25 @@ final class ClientBudgetController extends Controller
                 ->values()
                 ->all();
 
+            $rollup = $this->rollup->of($pacing);
+
+            $daily = array_fill(0, 7, 0.0);
+            foreach ($pacing as $pacingRow) {
+                foreach ($campaignSeries[(string) ($pacingRow['campaign_id'] ?? '')] ?? [] as $day) {
+                    $offset = (int) $seriesFrom->diffInDays(Carbon::parse((string) $day['date'])->startOfDay(), false);
+                    if ($offset >= 0 && $offset < 7) {
+                        $daily[$offset] += (float) ($day['spend'] ?? 0);
+                    }
+                }
+            }
+
             $rows[] = [
                 'client_id' => (string) $client->id,
                 'client_name' => $client->name,
                 'projects' => $clientProjects->count(),
                 'projects_breakdown' => $breakdown,
-            ] + $this->rollup->of($pacing);
+                'daily_spend_7d' => $rollup['currencies'] > 1 || $pacing === [] ? null : array_map(static fn (float $v): float => round($v, 2), $daily),
+            ] + $rollup;
         }
 
         /* Largest committed budget first — «where is the money» precedes every other question here. */

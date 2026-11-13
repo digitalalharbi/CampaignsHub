@@ -1,5 +1,5 @@
 import { BarChart3, BellRing, Bot, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, Plug, RectangleHorizontal, Rocket, Rows3, Settings, ShieldCheck, TrendingUp, Wallet, Workflow } from 'lucide-react'
-import type { NavGroup } from './SidebarNav'
+import type { NavGroup, NavLeaf } from './SidebarNav'
 
 /**
  * The advertiser portal's navigation (`/app`), grouped around its own purpose:
@@ -34,31 +34,44 @@ import type { NavGroup } from './SidebarNav'
  * ADV-CAMPAIGN-TABLES-001 gave each rung an operational table of its own (/ad-groups, /ads). Approvals, which had a
  * page and no entry, now has one.
  */
+/*
+ * NAV-HOME-PLANS-001 — the advertiser's share of the approved structure: الرئيسية · الحملات · النتائج · المالية ·
+ * العمليات, with «الإعدادات» in the account menu. No clients, requests or conversations here (REG-001). Every
+ * address and entitlement (`ent`) is unchanged; `/app/launch` and `/app/portfolio` are opened from «حملة جديدة» and
+ * the home page and are named in `appFoldedPaths`.
+ */
 export const appNavGroups: readonly NavGroup[] = [
   {
+    key: 'home',
+    ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
+    leaves: [{ to: '/app/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard, ent: 'dashboard' }],
+  },
+  {
     key: 'campaigns',
-    ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
+    ar: 'الحملات', en: 'Campaigns', icon: Megaphone,
     leaves: [
-      { to: '/app/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, ent: 'dashboard' },
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
-      { to: '/app/launch', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket, ent: 'campaigns' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
-      { to: '/app/ad-groups', ar: 'المجموعات', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
+      { to: '/app/ad-groups', ar: 'المجموعات الإعلانية', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
       { to: '/app/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
+      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
     ],
   },
   {
-    key: 'performance',
-    ar: 'الأداء', en: 'Performance', icon: TrendingUp,
+    key: 'results',
+    ar: 'النتائج', en: 'Results', icon: TrendingUp,
     leaves: [
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
-      { to: '/app/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers, ent: 'projects' },
-      { to: '/app/short-links', ar: 'الروابط', en: 'Links', icon: Link2, ent: 'campaigns' },
       { to: '/app/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList, ent: 'campaigns' },
-      { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },
+      { to: '/app/short-links', ar: 'روابط التتبع', en: 'Tracking links', icon: Link2, ent: 'campaigns' },
     ],
+  },
+  {
+    key: 'finance',
+    ar: 'المالية', en: 'Finance', icon: Wallet,
+    leaves: [{ to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' }],
   },
   {
     key: 'operations',
@@ -66,22 +79,35 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
-      { to: '/app/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow, ent: 'analytics' },
-      { to: '/app/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck, ent: 'analytics' },
-      { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics', end: true },
       { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
-      { to: '/app/spend-limits', ar: 'الميزانية', en: 'Budget', icon: Wallet, ent: 'analytics' },
-    ],
-  },
-  {
-    key: 'business',
-    ar: 'الحساب', en: 'Account', icon: Settings,
-    leaves: [
-      { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
-      { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
-      { to: '/app/settings', ar: 'الإعدادات', en: 'Settings', icon: Settings, ent: 'settings' },
+      { to: '/app/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck, ent: 'analytics' },
+      { to: '/app/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow, ent: 'analytics' },
+      { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics', end: true },
     ],
   },
 ]
 
-export const appNavLeafPaths: readonly string[] = appNavGroups.flatMap((g) => g.leaves.map((l) => l.to))
+/** «الإعدادات» — from the account menu and the phone's More sheet. */
+export const appSettingsGroup: NavGroup = {
+  key: 'settings',
+  ar: 'الإعدادات', en: 'Settings', icon: Settings,
+  leaves: [
+    { to: '/app/integrations', ar: 'التكاملات', en: 'Integrations', icon: Plug, ent: 'connections' },
+    { to: '/app/subscriptions', ar: 'الاشتراك', en: 'Subscription', icon: CreditCard, ent: 'subscriptions' },
+    { to: '/app/settings', ar: 'الإعدادات', en: 'Settings', icon: Settings, ent: 'settings' },
+  ],
+}
+
+export const appFoldedLeaves: readonly NavLeaf[] = [
+  { to: '/app/launch', ar: 'حملة جديدة', en: 'New campaign', icon: Rocket, ent: 'campaigns' },
+  { to: '/app/portfolio', ar: 'ملخص المشاريع', en: 'Projects summary', icon: Layers, ent: 'projects' },
+]
+export const appFoldedPaths: readonly string[] = appFoldedLeaves.map((l) => l.to)
+
+export const appAllGroups: readonly NavGroup[] = [
+  ...appNavGroups,
+  appSettingsGroup,
+  { key: 'folded', ar: 'أخرى', en: 'Other', icon: Layers, leaves: [...appFoldedLeaves] },
+]
+
+export const appNavLeafPaths: readonly string[] = [...appNavGroups, appSettingsGroup].flatMap((g) => g.leaves.map((l) => l.to))

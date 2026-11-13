@@ -118,7 +118,7 @@ const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'Addons
 const PlanMigrationPage = lazyPage(() => import('@/features/admin/PlanMigrationPage'), 'PlanMigrationPage')
 const UsageMetersPage = lazyPage(() => import('@/features/admin/UsageMetersPage'), 'UsageMetersPage')
 const TaxPage = lazyPage(() => import('@/features/admin/TaxPage'), 'TaxPage')
-const AgencyDashboardPage = lazyPage(() => import('@/features/agency/AgencyDashboardPage'), 'AgencyDashboardPage')
+const OverviewDashboard = lazyPage(() => import('@/features/overview/OverviewDashboard'), 'OverviewDashboard')
 const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
 const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
 const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
@@ -351,7 +351,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            * the advertiser portal simply never got one.
            */
           { index: true, element: <Navigate to="/app/dashboard" replace /> },
-          { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
+          { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -597,7 +597,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           element: <AgencyShell />,
           children: [
             { index: true, element: <Navigate to="/agency/dashboard" replace /> },
-            { path: 'dashboard', element: <AgencyDashboardPage /> },
+            { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },

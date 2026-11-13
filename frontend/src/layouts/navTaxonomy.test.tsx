@@ -41,7 +41,7 @@ describe('the agency rail as drawn', () => {
     expect(currentLinks[0]?.textContent).toContain('الإعلانات')
 
     const names = [...document.querySelectorAll('[data-testid="nav-group-campaigns"] ~ div a')].map((a) => a.textContent)
-    expect(names.slice(0, 6)).toEqual(['نظرة عامة', 'المشاريع', 'إطلاق الحملات', 'الحملات', 'المجموعات', 'الإعلانات'])
+    expect(names.slice(0, 3)).toEqual(['الحملات', 'المجموعات الإعلانية', 'الإعلانات'])
   })
 })
 

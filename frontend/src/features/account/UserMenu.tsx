@@ -6,11 +6,13 @@ import { signOutCompletely } from '@/features/auth/signOut'
 import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 import type { AuthUser } from '@/lib/api/types'
+import type { NavGroup, NavLeaf } from '@/layouts/SidebarNav'
 
 /**
- * PERSONAL settings only — this menu is the single entry point for them. Workspace/system settings live in
- * the sidebar (/settings) and are deliberately NOT repeated here; each entry is one distinct route.
+ * PERSONAL settings, plus — when a shell passes it — the workspace's «الإعدادات» group (NAV-HOME-PLANS-001: the
+ * integrations, team, subscription and settings pages left the rail for this menu). Each entry is one distinct route.
  *
  * Suffixes, not absolute paths (LOGIN-002). They used to be hard-coded to `/app/account/…`, so an
  * agency operator opening their own profile was sent out of the agency portal into the advertiser
@@ -44,8 +46,9 @@ function StatusBadge({ status }: { status?: AuthUser['status'] }) {
 }
 
 /** The shared menu body — identical whether opened from the topbar avatar or the sidebar card. */
-function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
+function MenuBody({ onNavigate, workspace }: { onNavigate: (to: string, absolute?: boolean) => void; workspace?: NavLeaf[] }) {
   const t = useT()
+  const ar = useUi((s) => s.locale) === 'ar'
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -78,6 +81,22 @@ function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
           {user?.workspace_name && <div className="mt-1 truncate text-[11px] text-text-muted">{user.workspace_name}</div>}
         </div>
       </div>
+
+      {workspace !== undefined && workspace.length > 0 && (
+        <div className="border-b border-border p-1.5" role="menu" aria-label={ar ? 'الإعدادات' : 'Settings'} data-testid="account-menu-workspace">
+          {workspace.map(({ to, ar: label, en, icon: Icon }) => (
+            <button
+              key={to}
+              role="menuitem"
+              onClick={() => onNavigate(to, true)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            >
+              <Icon size={16} className="shrink-0 text-text-muted" />
+              {ar ? label : en}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Options. */}
       <div className="p-1.5" role="menu">
@@ -113,7 +132,12 @@ function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
  * Unified account menu. Opens the SAME body from either the topbar avatar (`variant="topbar"`) or the
  * sidebar user card (`variant="sidebar"`). Closes on outside-click, Escape, or navigation.
  */
-export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sidebar'; collapsed?: boolean }) {
+export function AccountMenu({ variant, collapsed, workspace }: {
+  variant: 'topbar' | 'sidebar'
+  collapsed?: boolean
+  /** The portal's «الإعدادات» group and the same permission filter its rail applies. */
+  workspace?: { group: NavGroup; allow?: (leaf: NavLeaf) => boolean }
+}) {
   const t = useT()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -132,7 +156,8 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
 
   // Resolved against the CURRENT portal, so the account menu never walks the user out of it.
   const portalPath = usePortalPath()
-  const go = (to: string) => { setOpen(false); navigate(portalPath(to)) }
+  const go = (to: string, absolute?: boolean) => { setOpen(false); navigate(absolute ? to : portalPath(to)) }
+  const workspaceLeaves = workspace?.group.leaves.filter((l) => (workspace.allow ? workspace.allow(l) : true))
 
   return (
     <div ref={rootRef} className="relative">
@@ -170,7 +195,7 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
           id={menuId}
           className={`absolute z-50 ${variant === 'topbar' ? 'end-0 top-11' : 'bottom-full start-0 mb-2'}`}
         >
-          <MenuBody onNavigate={go} />
+          <MenuBody onNavigate={go} workspace={workspaceLeaves} />
         </div>
       )}
     </div>
