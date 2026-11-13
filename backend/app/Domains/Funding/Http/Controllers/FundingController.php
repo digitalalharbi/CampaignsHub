@@ -10,6 +10,7 @@ use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Services\AddFundingPayment;
+use App\Domains\Funding\Services\FundingAccountGuard;
 use App\Domains\Funding\Services\FundingBalance;
 use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\FundingSpendRefresher;
@@ -19,6 +20,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * FIN-LOOP-001 — the approved budget of each project: read by finance, project managers and the
@@ -122,6 +124,15 @@ final class FundingController extends Controller
             'starts_on' => ['sometimes', 'nullable', 'date', 'before_or_equal:'.now('Asia/Riyadh')->toDateString()],
             'alert_floor' => ['sometimes', 'numeric', 'min:0', 'max:1000000000'],
         ]);
+
+        // Switching to a prepaid budget makes the project's accounts exclusive to it.
+        if (($data['payment_method'] ?? null) === 'prepaid' && $funding->payment_method !== 'prepaid') {
+            $guard = app(FundingAccountGuard::class);
+            $taken = $guard->conflict($funding->project_id, $guard->accountsOf($funding->project_id));
+            if ($taken !== null) {
+                throw ValidationException::withMessages(['payment_method' => [__('funding.account_taken', ['project' => $taken['project']])]]);
+            }
+        }
 
         $before = $funding->only(array_keys($data));
         $funding->update($data);

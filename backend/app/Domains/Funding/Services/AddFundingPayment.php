@@ -42,6 +42,8 @@ final class AddFundingPayment
         private readonly AuditLogger $audit,
         private readonly TenantContext $tenant,
         private readonly FundingReach $reach,
+        private readonly FundingAccountGuard $accounts,
+        private readonly FundingNotifier $notifier,
     ) {}
 
     /**
@@ -81,6 +83,15 @@ final class AddFundingPayment
                 }
 
                 $isFirst = ! FundingPayment::query()->where('project_id', $project->id)->exists();
+
+                // One account feeds one budget: a project whose selected accounts already feed another budget
+                // cannot START one. A renewal is never blocked — the budget it adds to already exists.
+                if ($isFirst) {
+                    $taken = $this->accounts->conflict((string) $project->id, $this->accounts->accountsOf((string) $project->id));
+                    if ($taken !== null) {
+                        throw ValidationException::withMessages(['project_id' => [__('funding.account_taken', ['project' => $taken['project']])]]);
+                    }
+                }
                 if (! $isFirst) {
                     $this->refresher->refresh($funding);
                 }
@@ -128,6 +139,10 @@ final class AddFundingPayment
                     userId: $actor->id,
                     tenantId: $tenantId,
                 );
+
+                // Told only once the money is committed; a failed notice never undoes it.
+                $cycle = FundingPayment::query()->where('project_id', $project->id)->count();
+                DB::afterCommit(fn () => $this->notifier->added($payment, (int) $actor->id, $cycle));
 
                 return ['payment' => $payment, 'created' => true];
             });
