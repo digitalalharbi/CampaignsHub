@@ -181,7 +181,7 @@ function objectiveLabel(objective: string, ar: boolean): string {
 function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: boolean }) {
   return (
     <ChartCard
-      title={ar ? 'حالة محفظة العملاء' : 'The shape of the client book'}
+      title={ar ? 'حالة العملاء' : 'The shape of the client book'}
       subtitle={ar
         ? 'نسبة كل حالة من إجمالي العملاء داخل نطاقك.'
         : 'What share of the clients in your scope sits in each state.'}
