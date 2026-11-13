@@ -22,7 +22,7 @@ import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
 import { SidebarNav } from './SidebarNav'
-import { agencyNavGroups } from './agencyNav'
+import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
 import { PortalFrame } from './PortalFrame'
 import { useSectionTitle } from './sectionTitle'
@@ -159,12 +159,14 @@ function useAgencyAccent(): CSSProperties | undefined {
 
 export function AgencyShell() {
   const agencyAccent = useAgencyAccent()
+  const { can } = useProjectCapabilities()
+  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string }) => can(leaf.cap) }
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
 
   /* The tab says which screen it holds — it carried the marketing line on every one of them. */
-  useSectionTitle(agencyNavGroups)
+  useSectionTitle(agencyAllGroups)
 
   return (
     <PortalFrame
@@ -172,10 +174,10 @@ export function AgencyShell() {
       testId="agency-shell"
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
       tabs={AGENCY_TABS}
-      moreGroups={moreGroupsFrom(agencyNavGroups, AGENCY_TABS)}
+      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap))}
       // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
       // below it is read through that choice, and the drawer is no longer the phone's way in.
-      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" /></div>}
+      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" workspace={workspace} /></div>}
       drawerOpen={sidebarOpen}
       onDrawerClose={() => setSidebarOpen(false)}
       rail={
@@ -205,7 +207,7 @@ export function AgencyShell() {
               every section below it is read through that choice. */}
           <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
           <NavItems ar={ar} collapsed={sidebarCollapsed} />
-          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} workspace={workspace} />
         </>
       }
       drawer={
@@ -222,7 +224,7 @@ export function AgencyShell() {
           </div>
           <AgencyScopeSwitcher />
           <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
-          <AccountMenu variant="sidebar" />
+          <AccountMenu variant="sidebar" workspace={workspace} />
         </>
       }
       header={
@@ -267,7 +269,7 @@ export function AgencyShell() {
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <div className="ms-1"><AccountMenu variant="topbar" /></div>
+            <div className="ms-1"><AccountMenu variant="topbar" workspace={workspace} /></div>
           </div>
         </header>
       }
