@@ -196,8 +196,6 @@ final class ReportScopeTest extends TestCase
             'campaign' => [['campaign_ids' => [(string) $this->sales->getKey()]], 1000.0],
             'platform' => [['providers' => ['tiktok']], 400.0],
             'account' => [['account_ids' => [$this->metaAccount]], 1000.0],
-            'objective' => [['objectives' => ['awareness']], 400.0],
-            'path' => [['paths' => ['conversion']], 1000.0],
         ];
 
         foreach ($cases as $axis => [$input, $expected]) {
@@ -211,18 +209,22 @@ final class ReportScopeTest extends TestCase
     }
 
     /**
-     * Two axes that disagree produce NOTHING, not the union and not the wider of the two.
-     *
-     * `paths: [awareness]` with `objectives: [sales]` is a scope no campaign satisfies. Answering with
-     * either axis alone would be an accident of ordering, and answering with everything would be the
-     * failure this whole class exists to prevent.
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the objective and the marketing path choose KPIs; neither narrows a
+     * riyal. Every combination, including one no campaign «satisfies», keeps the whole in-scope spend.
      */
-    public function test_two_axes_that_cannot_both_be_satisfied_match_nothing(): void
+    public function test_objectives_and_paths_never_narrow_the_figures(): void
     {
-        $scope = $this->scope(['paths' => ['awareness'], 'objectives' => ['sales']]);
+        $all = $this->spendUnder($this->scope([]));
+        $this->assertEqualsWithDelta(1400.0, $all, 0.01);
 
-        $this->assertSame(['__none__'], $scope->objectivesIncludingPaths());
-        $this->assertEqualsWithDelta(0.0, $this->spendUnder($scope), 0.01);
+        foreach ([
+            ['objectives' => ['awareness']],
+            ['objectives' => ['sales'], 'objective_filter' => true],
+            ['paths' => ['conversion']],
+            ['paths' => ['awareness'], 'objectives' => ['sales']],
+        ] as $input) {
+            $this->assertEqualsWithDelta($all, $this->spendUnder($this->scope($input)), 0.01, (string) json_encode($input));
+        }
     }
 
     /** A path expands to the objectives on it — conversion covers sales AND leads. */

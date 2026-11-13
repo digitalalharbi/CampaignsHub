@@ -196,8 +196,7 @@ export function ReportScopePicker({
   const filters = {
     providers: value.providers,
     account_ids: value.account_ids,
-    // Only an explicit «filter campaigns by objective» narrows the list the operator picks campaigns from.
-    objectives: value.objective_filter ? value.objectives : undefined,
+    // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective never narrows the campaign list; it only chooses KPIs.
     destinations: value.destinations,
   }
   const options = useQuery({
@@ -432,27 +431,13 @@ export function ReportScopePicker({
         t={t}
       />
       {/*
-        REPORT-OBJECTIVE-TEMPLATE-001 — the chips above choose the report's measurement template (the funnel and KPIs it presents). They
-        never remove a platform or a campaign by themselves: filtering campaigns by their stored objective is this separate, explicit switch.
+        OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the chips above choose the report's KPIs, and nothing else: every
+        authorised platform, campaign and riyal stays in the report. The old «filter campaigns by objective» switch is gone.
       */}
       {(value.objectives?.length ?? 0) > 0 && (
-        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs" data-testid="scope-objective-filter-row">
-          <input
-            type="checkbox"
-            data-testid="scope-objective-filter"
-            checked={value.objective_filter === true}
-            onChange={(e) => onChange({ ...value, objective_filter: e.target.checked ? true : undefined })}
-            className="mt-0.5 h-4 w-4 accent-brand-600"
-          />
-          <span>
-            <b className="block font-semibold">{ar ? 'تصفية الحملات حسب الهدف' : 'Filter campaigns by objective'}</b>
-            <span className="text-text-secondary">
-              {ar
-                ? 'اتركه مغلقًا لتشمل كل المنصات والحملات المصرّح بها. عند تفعيله تُستبعد الحملات التي هدفها المسجّل خارج الأهداف المختارة.'
-                : 'Leave it off to include every authorised platform and campaign. When on, campaigns whose stored objective is outside the chosen ones are excluded.'}
-            </span>
-          </span>
-        </label>
+        <p className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary" data-testid="scope-objective-kpis-note">
+          {ar ? 'الهدف يحدد مؤشرات الأداء فقط — تبقى كل الحملات والإنفاق.' : 'The objective sets the KPIs only — every campaign and its spend stays.'}
+        </p>
       )}
 
       {(o.destinations?.length ?? 0) > 0 && (

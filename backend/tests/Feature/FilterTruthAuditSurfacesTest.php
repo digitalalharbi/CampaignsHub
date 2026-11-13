@@ -110,11 +110,12 @@ final class FilterTruthAuditSurfacesTest extends TestCase
         $this->assertSame(['USD'], $this->currencies($filtered));
     }
 
-    public function test_normalization_narrows_by_objective(): void
+    /** OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the objective chooses KPIs; it never narrows the figures. */
+    public function test_normalization_is_never_narrowed_by_objective(): void
     {
         $filtered = $this->fetchData('normalization', ['objective' => 'awareness']);
 
-        $this->assertSame(['AED'], $this->currencies($filtered));
+        $this->assertSame(['AED', 'USD'], $this->currencies($filtered));
     }
 
     /**
@@ -149,7 +150,8 @@ final class FilterTruthAuditSurfacesTest extends TestCase
             'provider' => 'meta',
         ])['filter_scope'];
 
-        $this->assertSame(['provider', 'objective', 'campaign'], $scope['applied']);
+        // The objective chooses KPIs and narrows nothing, so it is neither applied nor declined (OBJECTIVE-FILTERS-INCLUSIVE-001).
+        $this->assertSame(['provider', 'campaign'], $scope['applied']);
         $this->assertSame([], $scope['unapplied']);
     }
 
@@ -175,7 +177,7 @@ final class FilterTruthAuditSurfacesTest extends TestCase
         $scope = $body['meta']['filter_scope'];
 
         $this->assertSame(['provider'], $scope['applied']);
-        $this->assertSame(['objective', 'campaign'], $scope['unapplied']);
+        $this->assertSame(['campaign'], $scope['unapplied']);
     }
 
     public function test_attribution_names_the_axes_it_does_not_apply(): void
@@ -368,15 +370,12 @@ final class FilterTruthAuditSurfacesTest extends TestCase
     }
 
     /**
-     * The objective axis is DECLINED here, and declining is only honest when it is stated.
+     * The objective panels set the paths BESIDE each other and apply the platform and campaign axes.
      *
-     * `ObjectivePerformance` takes projects, campaigns, providers and accounts — there is no
-     * objective bound on it, and adding one would narrow a panel whose entire purpose is to set the
-     * paths BESIDE each other. «Performance by objective path», filtered to one objective, is a
-     * comparison of one, which reads exactly like a comparison of four. So the axis does not apply,
-     * and the response says which axes did.
+     * The objective chip used to be «declined» here. Since OBJECTIVE-FILTERS-INCLUSIVE-001 the objective is a KPI choice on every
+     * panel and never a data bound, so there is nothing to decline and nothing is said about it.
      */
-    public function test_the_objective_panels_declare_the_axis_they_decline(): void
+    public function test_the_objective_panels_apply_platform_and_campaign_and_never_narrow_by_objective(): void
     {
         foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend'] as $path) {
             $scope = $this->fetchBody($path, [
@@ -386,7 +385,8 @@ final class FilterTruthAuditSurfacesTest extends TestCase
             ])['meta']['filter_scope'];
 
             $this->assertSame(['provider', 'campaign'], $scope['applied'], $path);
-            $this->assertSame(['objective'], $scope['unapplied'], $path);
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective is a KPI choice everywhere now, so no panel «declines» it.
+            $this->assertSame([], $scope['unapplied'], $path);
         }
     }
 }

@@ -118,8 +118,8 @@ final class CampaignOptionsTest extends TestCase
         $this->assertSame(['Meta — Ramadan'], $names, 'the picker offered a campaign the platform filter excludes');
     }
 
-    /** And the objective axis narrows it too, on the campaign's own column. */
-    public function test_the_options_are_narrowed_by_the_objective_already_chosen(): void
+    /** OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chooses KPIs; the picker still offers every campaign. */
+    public function test_the_options_are_never_narrowed_by_the_objective(): void
     {
         $this->campaign('Sales push');
 
@@ -134,7 +134,7 @@ final class CampaignOptionsTest extends TestCase
 
         $names = array_column($this->fetchOptions('?objective=awareness')['options'], 'name');
 
-        $this->assertSame(['Brand week'], $names, 'the picker offered a campaign the objective filter excludes');
+        $this->assertEqualsCanonicalizing(['Brand week', 'Sales push'], $names, 'the objective removed a campaign from the picker');
     }
 
     /**

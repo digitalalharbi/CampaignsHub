@@ -134,17 +134,13 @@ final class EntityFilterTruthTest extends TestCase
         );
     }
 
-    /**
-     * The objective comes from the UNIFIED campaign, which is what the campaign grain filters on.
-     *
-     * The sales campaign's provider objective is `awareness` in this fixture. Asking for `sales` must
-     * return it; a reader of `external_campaigns.objective` would return the other squad instead, and
-     * the ad table would contradict the campaign table above it under one chip.
-     */
-    public function test_the_objective_axis_reads_the_unified_campaign_not_the_provider(): void
+    /** OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the objective chooses KPIs; every ad set stays in the drill-down. */
+    public function test_the_objective_never_removes_a_row_from_the_drill_down(): void
     {
-        $this->assertSame(['Riyadh · 18-34'], $this->names(['objective' => 'sales']));
-        $this->assertSame(['Jeddah · 25-44'], $this->names(['objective' => 'awareness']));
+        $all = $this->names([]);
+        $this->assertEqualsCanonicalizing(['Jeddah · 25-44', 'Riyadh · 18-34'], $all);
+        $this->assertSame($all, $this->names(['objective' => 'sales']));
+        $this->assertSame($all, $this->names(['objective' => 'awareness']));
     }
 
     public function test_the_platform_axis_narrows_the_drill_down(): void
@@ -194,7 +190,8 @@ final class EntityFilterTruthTest extends TestCase
             'provider' => 'snapchat',
         ])['filter_scope'];
 
-        $this->assertSame(['provider', 'objective', 'campaign'], $scope['applied']);
+        // The objective chooses KPIs and narrows nothing, so it is neither applied nor declined (OBJECTIVE-FILTERS-INCLUSIVE-001).
+        $this->assertSame(['provider', 'campaign'], $scope['applied']);
         $this->assertSame([], $scope['unapplied']);
     }
 

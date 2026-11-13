@@ -244,19 +244,44 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
         $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], $data['platform_order']);
     }
 
-    public function test_campaigns_are_filtered_by_objective_only_when_the_operator_chose_to(): void
+    /**
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — «لا يجيب تجاهل كل ريال ينصرف».
+     *
+     * The old «filter campaigns by objective» switch dropped every campaign whose stored objective
+     * was not the chosen one, and the riyals with it. Now an objective chooses the KPIs and nothing
+     * else: with the switch on or off, for sales, traffic and awareness alike, every in-scope
+     * campaign is counted and the report's total spend is the sum of all of them.
+     */
+    public function test_report_total_spend_is_every_in_scope_campaign_whatever_objective_is_chosen(): void
     {
         $this->seedFourObjectives();
-        $report = $this->objectiveReport(['objectives' => ['sales'], 'objective_filter' => true]);
 
-        $data = app(ReportGenerator::class)->generate($report);
+        foreach (['sales', 'traffic', 'awareness'] as $objective) {
+            foreach ([false, true] as $filterSwitch) {
+                $report = $this->objectiveReport(['objectives' => [$objective], 'objective_filter' => $filterSwitch]);
+                $data = app(ReportGenerator::class)->generate($report);
+                $label = "{$objective}, switch ".($filterSwitch ? 'on' : 'off');
 
-        $this->assertSame(['meta'], array_column($data['platforms'], 'provider'), 'an explicit «filter campaigns by objective» keeps its strict meaning');
-        $this->assertEquals(100.0, $data['kpis']['spend']);
+                $this->assertEquals(250.0, $data['kpis']['spend'], "{$label}: total spend is every in-scope campaign");
+                $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], array_column($data['platforms'], 'provider'), $label);
+                $this->assertSame($objective, $data['objective'], "{$label}: the objective chose the KPI template");
+                $this->assertSame(app(ReportTemplateEngine::class)->metricSet($objective), $data['metric_set'], "{$label}: the objective's own KPIs");
+            }
+        }
+    }
 
-        // The dashboard's own objective filter is unchanged.
-        $strict = app(MetricsAggregator::class)->forProjects([(string) $this->project->id])->forObjectives(['sales'])->byProvider(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
-        $this->assertSame(['meta'], array_column($strict, 'provider'));
+    /** The analytics objective filter chooses KPIs; the figures still count every campaign. */
+    public function test_the_analytics_objective_filter_never_removes_a_campaign_or_a_riyal(): void
+    {
+        $this->seedFourObjectives();
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+
+        foreach (['sales', 'traffic', 'awareness'] as $objective) {
+            $body = $this->actingAs($this->owner, 'sanctum')
+                ->getJson("/api/v1/projects/{$this->project->id}/metrics/summary?from=2026-08-01&to=2026-08-31&objective={$objective}")
+                ->assertOk()->json('data.current');
+            $this->assertEquals(250.0, $body['spend'] ?? null, "analytics, objective={$objective}");
+        }
     }
 
     public function test_an_existing_scope_with_objectives_and_no_flag_stops_dropping_platforms_and_moves_its_objective_to_the_report(): void
@@ -292,6 +317,32 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
 
         $share = ReportShare::withoutGlobalScopes()->findOrFail($id);
         $this->assertEqualsCanonicalizing(self::PROVIDERS, $share->scope['providers']);
+    }
+
+    /**
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 — a live link built with objective=sales as its ceiling still
+     * counts the traffic and the unclassified campaigns in its totals (Owner-approved for links
+     * already shared). The client rules stay: no campaign names, no money on a spend-hidden link.
+     */
+    public function test_a_live_link_with_the_sales_objective_still_counts_traffic_and_unclassified_spend(): void
+    {
+        $this->seedFourObjectives();
+        $share = $this->liveLink(['period_mode' => 'fixed']);
+        $share->forceFill(['scope' => ['objectives' => ['sales', 'conversions', 'purchases', 'add_to_cart']] + (array) $share->scope])->save();
+        [, $raw] = app(ShareService::class)->create(
+            Report::withoutGlobalScopes()->findOrFail($share->report_id),
+            ['scope' => $share->scope, 'mode' => 'live', 'hide_spend' => false],
+            null,
+        );
+
+        $payload = $this->getJson("/api/v1/reports/shared/{$raw}/live")->assertOk()->json('data');
+
+        $this->assertEquals(250.0, $payload['totals']['spend'], 'the traffic (50) and unclassified (100) spend are in the total');
+        $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], array_values(array_unique(array_column((array) ($payload['platforms'] ?? []), 'provider'))));
+        $json = (string) json_encode($payload, JSON_UNESCAPED_UNICODE);
+        foreach (['meta campaign', 'tiktok campaign', 'google_ads campaign', 'openai_ads campaign'] as $name) {
+            $this->assertStringNotContainsString($name, $json, 'a client link names no campaign');
+        }
     }
 
     public function test_a_fixed_live_link_keeps_exactly_its_saved_dates_whatever_the_reader_asks_and_whenever_they_open_it(): void
