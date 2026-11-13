@@ -1,7 +1,7 @@
 name: Production Performance
 
-# PERF-RECOVERY-001 — asks Production what it is slow at. Manual only. Reads the server's load and
-# `ops:perf-snapshot`, which writes nothing, calls no provider and prints no customer value.
+# Read-only facts pass: stopped provider connections + Moyasar settlements permission probe.
+# SQL runs inside BEGIN READ ONLY ... ROLLBACK. The single Moyasar call is a GET; the key is never printed.
 
 on:
   workflow_dispatch:
@@ -10,22 +10,6 @@ on:
         description: 'Hours of request and query counters to read'
         required: false
         default: '24'
-      reconcile_account:
-        description: 'Optional: an ad account (ours or the provider''s id) to reconcile — provider spend vs stored spend, read-only'
-        required: false
-        default: ''
-      reconcile_from:
-        description: 'Reconcile window start, YYYY-MM-DD'
-        required: false
-        default: ''
-      reconcile_to:
-        description: 'Reconcile window end, YYYY-MM-DD'
-        required: false
-        default: ''
-      tokens:
-        description: 'Optional: comma-separated link tokens to explain read-only (state + recent access log)'
-        required: false
-        default: ''
 
 concurrency:
   group: production-diagnostics
@@ -38,50 +22,49 @@ jobs:
     steps:
       - name: Snapshot on VPS
         uses: appleboy/ssh-action@v1.2.2
-        env:
-          HOURS: ${{ inputs.hours }}
-          TOKENS: ${{ inputs.tokens }}
-          RACCOUNT: ${{ inputs.reconcile_account }}
-          RFROM: ${{ inputs.reconcile_from }}
-          RTO: ${{ inputs.reconcile_to }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            echo "== FACTS-STOPPED $(date -u +%FT%TZ)"
+            $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F " | "' <<'SQL'
+            \set ON_ERROR_ROLLBACK on
+            \set ON_ERROR_STOP off
+            BEGIN READ ONLY;
+            \echo -- A1 project c36b2470: project | workspace | tenant | project_status
+            select p.name, w.name, t.name, p.status from projects p left join client_workspaces w on w.id=p.client_workspace_id left join tenants t on t.id=p.tenant_id where p.id::text like 'c36b2470%';
+            \echo -- A2 bindings: account_name | provider | masked_id | acct_type | acct_status | bind_active | purpose | conn_status | last_error | token_expires_at | last_ok_sync | acct_last_synced | conn_owner_name | conn_name
+            select ea.name, ea.provider, '****'||right(ea.external_id,4), ea.account_type, ea.status, b.is_active, b.purpose, pc.status, coalesce(pc.last_error,'-'), coalesce(pc.token_expires_at::text,'-'), coalesce(pc.last_successful_sync_at::text,'-'), coalesce(ea.last_synced_at::text,'-'), coalesce(u.name,'(no owner)'), pc.connection_name from project_integration_bindings b join external_accounts ea on ea.id=b.external_account_id join provider_connections pc on pc.id=ea.provider_connection_id left join users u on u.id=pc.created_by where b.project_id::text like 'c36b2470%' order by ea.provider, ea.name;
+            \echo -- B1 all stopped connections (status error/expired/revoked or token expired) : provider | status | n_conn | n_active_bindings
+            select pc.provider, pc.status, count(distinct pc.id), count(b.id) filter (where b.is_active) from provider_connections pc left join external_accounts ea on ea.provider_connection_id=pc.id left join project_integration_bindings b on b.external_account_id=ea.id where pc.status in ('error','expired','revoked') or (pc.token_expires_at is not null and pc.token_expires_at < now() and pc.status<>'connected') group by 1,2 order by 1,2;
+            \echo -- B2 project names with an active binding on a stopped connection: tenant | workspace | project | provider | status | last_ok_sync | n_accounts
+            select t.name, w.name, p.name, pc.provider, pc.status, coalesce(max(pc.last_successful_sync_at)::text,'-'), count(distinct ea.id) from project_integration_bindings b join projects p on p.id=b.project_id join tenants t on t.id=b.tenant_id left join client_workspaces w on w.id=p.client_workspace_id join external_accounts ea on ea.id=b.external_account_id join provider_connections pc on pc.id=ea.provider_connection_id where b.is_active and (pc.status in ('error','expired','revoked') or (pc.token_expires_at is not null and pc.token_expires_at < now() and pc.status<>'connected')) group by 1,2,3,4,5 order by 1,3,4;
+            \echo -- C1 owner project mapping by name: tenant | workspace | project | status | id8
+            select t.name, w.name, p.name, p.status, left(p.id::text,8) from projects p left join client_workspaces w on w.id=p.client_workspace_id join tenants t on t.id=p.tenant_id where p.name ~* 'نصل|حنكة|حنكه|رزه|رزة|razzah|smart|سمارت|nasel|hanka' or w.name ~* 'نصل|حنكة|حنكه|رزه|رزة|razzah|smart|سمارت|nasel|hanka' order by 1,3;
+            ROLLBACK;
             SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            echo "== MOYASAR-SETTLEMENTS-PROBE (GET only)"
+            $DC exec -T backend php -r '
+            $k = getenv("MOYASAR_SECRET_KEY");
+            if (!$k) { $c = @include "/var/www/html/bootstrap/cache/config.php"; $k = $c["services"]["moyasar"]["secret_key"] ?? null; }
+            if (!$k) { echo "no_secret_key_configured\n"; exit(0); }
+            echo "key_mode=", (strpos($k,"sk_live_")===0?"live":(strpos($k,"sk_test_")===0?"test":"unknown")), "\n";
+            $ch = curl_init("https://api.moyasar.com/v1/settlements?page=1");
+            curl_setopt_array($ch, [CURLOPT_USERPWD => $k.":", CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPGET => true]);
+            $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch);
+            echo "http_status=$code curl_err=", ($err ?: "-"), "\n";
+            $j = json_decode((string)$body, true);
+            if (is_array($j)) {
+              echo "top_level_fields=", implode(",", array_keys($j)), "\n";
+              if (isset($j["settlements"]) && is_array($j["settlements"])) { echo "settlements_on_page=", count($j["settlements"]), "\n"; if ($j["settlements"]) echo "settlement_fields=", implode(",", array_keys($j["settlements"][0])), "\n"; }
+              if (isset($j["meta"])) echo "meta=", json_encode($j["meta"]), "\n";
+              if (isset($j["type"])) echo "error_type=", $j["type"], "\n";
+            } else { echo "non_json_body_len=", strlen((string)$body), "\n"; }
+            ' 2>&1
+            echo "== END FACTS-STOPPED"
+            exit 0
