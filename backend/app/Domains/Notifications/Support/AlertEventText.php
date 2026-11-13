@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 
@@ -259,6 +260,23 @@ final class AlertEventText
         $who = $platform !== '' ? $platform : ($ar ? 'المنصة' : 'the platform');
         $num = static fn ($v, int $d = 2): string => number_format((float) $v, $d);
 
+        /*
+         * LINK-HEALTH-YESTERDAY-001 — a link item the one rule kept says ONE thing, in the same words on every surface: yesterday's
+         * data did not arrive (state 1), with the day missing and the last day that arrived. A refused grant asks for a reconnect.
+         */
+        if (in_array($type, LinkHealth::TYPES, true) && ($ctx['link_state'] ?? null) === 'not_synced') {
+            $refused = $type === 'token_expiry' && ! isset($ctx['expires_at']);
+
+            return [
+                'headline' => $platform !== '' ? ($ar ? "بيانات أمس ما وصلت من {$platform}" : "Yesterday's data did not arrive from {$platform}") : LinkHealth::text('not_synced', $ar),
+                'text' => $refused ? ($ar ? 'المنصة رفضت الربط، فالبيانات متوقفة.' : 'The platform refused the connection, so data has stopped.') : ($ar ? 'ما نجحت مزامنة تغطي اليوم كامل.' : 'No successful sync covered the whole day.'),
+                'numbers' => isset($ctx['required_day']) ? ($ar ? 'اليوم الناقص ' : 'Missing day ').self::ltr((string) $ctx['required_day'])
+                    .(isset($ctx['last_day']) && $ctx['last_day'] ? ($ar ? ' · آخر يوم وصل ' : ' · last day that arrived ').self::ltr((string) $ctx['last_day']) : '') : '',
+                'action' => $refused ? ($ar ? 'أعد ربط المنصة.' : 'Reconnect the platform.') : ($ar ? 'افحص المزامنة ← أعد الربط إن استمر.' : 'Check the sync, then reconnect if it persists.'),
+                'link' => 'integrations',
+            ];
+        }
+
         switch ($type) {
             case 'budget_risk':
                 if (isset($ctx['consumed'], $ctx['limit'])) {
@@ -316,7 +334,8 @@ final class AlertEventText
                     'headline' => $ar ? "{$who} بدون نتائج" : "Spend on {$who} with no results",
                     'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
                     // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
-                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 خلال ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days') : '',
+                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' ')
+                        .(($w = self::window($ctx, $ar)) !== '' ? '('.$w.')' : ($ar ? 'خلال ' : 'in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days')) : '',
                     'action' => self::noResultsAction($ctx, $ar),
                     'link' => 'campaign',
                 ];
@@ -417,8 +436,23 @@ final class AlertEventText
         $thr = isset($ctx['threshold_pct']) ? (float) $ctx['threshold_pct'] : null;
 
         return ($ar ? 'قبل ' : 'Before ').$fmt($was).' ← '.($ar ? 'الآن ' : 'Now ').$fmt($now)
-            .($days > 0 ? ($ar ? " (آخر {$days} أيام)" : " (last {$days} days)") : '')
+            .(($w = self::window($ctx, $ar)) !== '' ? ' ('.$w.')' : ($days > 0 ? ($ar ? " (آخر {$days} أيام)" : " (last {$days} days)") : ''))
             .($thr !== null ? ($ar ? ' · حد التنبيه '.self::ltr(rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : ' · alert at '.rtrim(rtrim(number_format($thr, 1), '0'), '.').'%') : '');
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured period stated with its dates («أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر»),
+     * when the event carries them; an event written before the window was recorded keeps its «آخر N أيام».
+     */
+    public static function window(array $ctx, bool $ar): string
+    {
+        $from = $ctx['window_from'] ?? null;
+        $to = $ctx['window_to'] ?? null;
+        if (! is_string($from) || ! is_string($to) || $from === '' || $to === '') {
+            return '';
+        }
+
+        return DigestSchedule::periodLabel($from === $to ? 'daily' : 'range', $from, $to, $ar);
     }
 
     private static function anomaly(array $ctx, bool $ar): string

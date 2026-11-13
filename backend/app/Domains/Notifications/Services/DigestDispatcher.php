@@ -8,7 +8,6 @@ use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
-use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
@@ -58,8 +57,11 @@ final class DigestDispatcher
     /** Ledger kind prefix of a send the person asked for, so it never competes with the scheduled one. */
     public const ON_DEMAND_PREFIX = 'now_';
 
-    /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
-    public const DAILY_WINDOW_DAYS = 7;
+    /**
+     * The daily email reports YESTERDAY, one whole day, compared with the day before — see {@see sendDaily()}.
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 (Owner, 2026-11-12) replaced EMAIL-DAILY-WINDOW-001's seven days.
+     */
+    public const DAILY_WINDOW_DAYS = 1;
 
     public function __construct(
         private readonly DigestScope $scope,
@@ -92,6 +94,11 @@ final class DigestDispatcher
      */
     public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null, bool $onDemand = false): string
     {
+        /*
+         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the Owner's correction of the paragraph above: the daily mail is read every
+         * morning as «what happened YESTERDAY», so it reports that one whole day (the reader's calendar day) against the day
+         * before it, and says the date. A rolling week belongs to the weekly mail.
+         */
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
@@ -153,10 +160,12 @@ final class DigestDispatcher
         $audience = ($row->client_workspace_id ?? null) !== null ? 'client' : 'agency';
         $day = ($now ?? Carbon::now())->copy()->setTimezone($timezone)->subDay();
 
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the monthly is the last COMPLETE month, as the scheduled one; never the month in progress.
+        $month = DigestSchedule::previousMonth($day->copy()->addDay());
         [$periodKey, $from, $to] = match ($kind) {
             'daily' => [$day->toDateString(), $day->copy()->endOfDay()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay(), $day->copy()->endOfDay()],
             'weekly' => [$day->copy()->endOfDay()->format('o-\WW'), $day->copy()->endOfDay()->subDays(6)->startOfDay(), $day->copy()->endOfDay()],
-            default => [$day->copy()->startOfMonth()->format('Y-m'), $day->copy()->startOfMonth()->startOfDay(), $day->copy()->endOfMonth()->endOfDay()],
+            default => [$month['from']->format('Y-m'), $month['from']->copy()->startOfDay(), $month['to']->copy()->endOfDay()],
         };
 
         $state = $this->send($user, $tenantId, $kind, $periodKey, $from, $to, $locale, $audience, onDemand: true);
@@ -319,7 +328,14 @@ final class DigestDispatcher
              */
             $digest['narrowing'] = $this->scope->narrowing($user, $tenantId);
 
-            if (($digest['sendable'] ?? false) !== true) {
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the per-project daily is an INVENTORY: every active project gets its own
+             * mail every morning, and a project with nothing to report says «لا بيانات» with the reason the data proves
+             * (no platform linked, the sync stopped, figures late, or no spend), instead of silently not arriving.
+             */
+            $inventory = $onlyProject !== null && $kind === 'daily' && ($digest['reason'] ?? null) === 'no_activity'
+                && $audience === 'agency' && (bool) config('mail.operational_digests');
+            if (($digest['sendable'] ?? false) !== true && ! $inventory) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
 
@@ -402,10 +418,10 @@ final class DigestDispatcher
         $projects = array_values((array) ($digest['projects'] ?? []));
 
         if (count($projects) === 1 || ($perProject && $projects !== [])) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest));
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 1), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest, $kind, $locale));
         }
 
-        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest));
+        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest, $kind, $locale));
     }
 
     /** The twelve hex characters that name a project inside a ledger period key (the column is 24 wide). */
@@ -419,14 +435,14 @@ final class DigestDispatcher
         return $onlyProject === null ? '' : '~'.$onlyProject;
     }
 
-    /** «2026-11-03 – 2026-11-09», each date isolated left-to-right so an Arabic line does not print it backwards. */
-    private static function periodLabel(array $digest): ?string
+    /** DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the period in words with its dates: «أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر», «أكتوبر 2026». */
+    public static function periodLabel(array $digest, string $kind = 'daily', string $locale = 'ar'): ?string
     {
         if (! isset($digest['date'], $digest['to_date'])) {
             return null;
         }
 
-        return AlertEventText::ltr((string) $digest['date']).' – '.AlertEventText::ltr((string) $digest['to_date']);
+        return DigestSchedule::periodLabel($kind, (string) $digest['date'], (string) $digest['to_date'], $locale === 'ar');
     }
 
     /**
