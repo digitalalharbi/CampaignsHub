@@ -61,7 +61,7 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'no_results_3', group: 'results', type: 'no_results', threshold: { days: 3 }, severity: 'warning',
-    name: { ar: 'إنفاق بلا نتائج 3 أيام', en: 'Spend with no results for 3 days' },
+    name: { ar: 'صرف بدون نتائج 3 أيام', en: 'Spend with no results for 3 days' },
     why: { ar: 'ينبّه حين تصرف حملة 3 أيام متتالية دون أي نتيجة.', en: 'Warns when a campaign spends for 3 days in a row with no result.' },
   }),
   build({
@@ -96,7 +96,7 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'launch_advance', group: 'results', type: 'launch_advance', severity: 'info',
-    name: { ar: 'حساب صار مؤهلًا لمرحلة إطلاق أفضل', en: 'Account earned a better launch stage' },
+    name: { ar: 'الحساب جاهز لمرحلة أقوى', en: 'Account earned a better launch stage' },
     why: { ar: 'ينبّه حين تدعم نتائج حساب أُطلقت له خطة مرحلةً أفضل مما كان عليه (مثل الانتقال من الزيارات إلى المبيعات). لا يغيّر شيئًا بنفسه.', en: 'Tells you when the synced results of an account a plan launched on now support a better stage than it had (for example traffic to sales). It changes nothing by itself.' },
     extra: { cooldown_minutes: 1440 },
   }),

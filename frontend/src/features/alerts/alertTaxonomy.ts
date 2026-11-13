@@ -109,16 +109,16 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
     en: 'Check attributed revenue and the purchase path before judging the creative.',
   },
   no_results: {
-    ar: 'تأكّد من تتبّع التحويلات أولًا — الإنفاق بلا نتائج قد يكون قياسًا معطّلًا.',
-    en: 'Check conversion tracking first — spend with no results can be broken measurement.',
+    ar: 'تأكّد من تتبّع التحويلات أولًا ← ثم المحتوى ← ثم الاستهداف.',
+    en: 'Check conversion tracking first → then the content → then targeting.',
   },
   sync_failure: {
     ar: 'افتح التكاملات وأعد المزامنة؛ الأرقام الأحدث من آخر مزامنة ناقصة.',
     en: 'Open Integrations and re-sync — figures newer than the last sync are missing.',
   },
   token_expiry: {
-    ar: 'أعد ربط الحساب قبل انتهاء التوكن، وإلا تتوقف المزامنة.',
-    en: 'Reconnect the account before the token expires, or syncing stops.',
+    ar: 'أعد ربط الحساب قبل ما تنتهي صلاحيته، وإلا تتوقف المزامنة.',
+    en: 'Reconnect the account before its access expires, or syncing stops.',
   },
   sync_outage: {
     ar: 'افتح العرض الحي للمصادر: المشروع كله متأخر أو فشلت مزامنته، والأرقام على الصفحات أقدم مما تبدو.',
@@ -129,8 +129,8 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
     en: 'Check the website connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
   },
   tracking_health: {
-    ar: 'افتح «سلامة التتبع» في صفحة النماذج: كل بند يقول ما الخلل وما المطلوب فعله.',
-    en: 'Open «Tracking health» on the Forms page — each finding says what is wrong and what to do about it.',
+    ar: 'افتح «حالة التتبع» في صفحة النماذج: كل بند يقول وش الخلل ووش المطلوب.',
+    en: 'Open «Tracking status» on the Forms page — each finding says what is wrong and what to do about it.',
   },
   launch_advance: {
     ar: 'افتح صفحة الإطلاق وانظر الاقتراح: لم يتغيّر شيء تلقائيًا، والقرار لك.',

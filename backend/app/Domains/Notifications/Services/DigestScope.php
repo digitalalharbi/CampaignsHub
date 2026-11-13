@@ -74,6 +74,26 @@ final class DigestScope
     }
 
     /**
+     * ALERT-RULES-MANAGE-001 — what this person may reach in this tenant, BEFORE their own digest preference.
+     *
+     * A named alert recipient is checked against the ceiling, not the preference: a preference narrows
+     * what a digest covers, and an alert rule that names somebody is a separate, explicit choice.
+     *
+     * @return list<string>
+     */
+    public function ceilingIdsFor(User $user, string $tenantId): array
+    {
+        $membership = Membership::query()
+            ->with('scopes')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $user->getKey())
+            ->where('status', 'active')
+            ->first();
+
+        return $membership === null ? [] : $this->ceilingFor($user, $membership, $tenantId);
+    }
+
+    /**
      * Whether this person's own preference NARROWED the digest, and by how much.
      *
      * PROJECT-DIGEST-SCOPE-001. A digest covering three of somebody's twelve projects reads exactly

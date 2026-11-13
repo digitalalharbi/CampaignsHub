@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { RegistrationsPage } from './RegistrationsPage'
 import type { AdminRegistration } from './api'
 import { renderWithProviders, signOut } from '@/test/utils'
+import { DialogHost } from '@/components/ui/DialogHost'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -138,15 +139,19 @@ describe('RegistrationsPage', () => {
 
   /** A waived gate without a justification is a hole in the record, so the change is abandoned. */
   it('abandons a gate change when the reviewer gives no reason', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('')
+    const prompt = vi.spyOn(window, 'prompt')
 
-    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+    renderWithProviders(<><RegistrationsPage /><DialogHost /></>, { route: '/admin/registrations', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('registration-row'))
     fireEvent.click(await screen.findByTestId('registration-gate-requires_approval'))
 
-    await waitFor(() => expect(prompt).toHaveBeenCalled())
+    // DIALOG-001 — the in-app dialog refuses an empty reason; cancelling abandons the change.
+    expect(await screen.findByTestId('dialog-confirm')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('dialog-cancel'))
+    await waitFor(() => expect(screen.queryByTestId('dialog-body')).toBeNull())
     expect(updateRegistrationTerms).not.toHaveBeenCalled()
+    expect(prompt).not.toHaveBeenCalled()
 
     prompt.mockRestore()
   })
@@ -162,23 +167,23 @@ describe('RegistrationsPage', () => {
   })
 
   it('carries a reason with a gate change that does go through', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Paid off-platform under an annual contract.')
     vi.mocked(updateRegistrationTerms).mockResolvedValue({
       registration: application(),
       policy: { requires_mobile: false, requires_approval: false, requires_payment: false },
     })
 
-    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+    renderWithProviders(<><RegistrationsPage /><DialogHost /></>, { route: '/admin/registrations', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('registration-row'))
     fireEvent.click(await screen.findByTestId('registration-gate-requires_approval'))
+
+    fireEvent.change(await screen.findByTestId('dialog-input'), { target: { value: 'Paid off-platform under an annual contract.' } })
+    fireEvent.click(screen.getByTestId('dialog-confirm'))
 
     await waitFor(() => expect(updateRegistrationTerms).toHaveBeenCalledWith('reg-1', {
       requires_approval: false,
       reason: 'Paid off-platform under an annual contract.',
     }))
-
-    prompt.mockRestore()
   })
 
   /** A decided application offers no actions — the decision has already been made. */

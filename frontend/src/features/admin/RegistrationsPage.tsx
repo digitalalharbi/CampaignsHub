@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { promptDialog } from '@/stores/dialogs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clock, CreditCard, Loader2, MailQuestion, ShieldAlert, X } from 'lucide-react'
 import {
@@ -278,10 +279,13 @@ function RegistrationDetail({ id, ar, copy, onChanged }: { id: string; ar: boole
                 checked={g.on}
                 disabled={settled || toggleGate.isPending}
                 onChange={(e) => {
-                  const why = window.prompt(copy.termsReason) ?? ''
-                  // No reason, no change: a waived gate without a justification is a hole in the record.
-                  if (why.trim() === '') return
-                  toggleGate.mutate({ gate: g.key, value: e.target.checked, why })
+                  const value = e.target.checked
+                  // DIALOG-001 — asked in an in-app dialog. No reason, no change: a waived gate without a
+                  // justification is a hole in the record.
+                  void promptDialog({ title: g.label, label: copy.termsReason, required: true }).then((why) => {
+                    if (why === null || why.trim() === '') return
+                    toggleGate.mutate({ gate: g.key, value, why })
+                  })
                 }}
               />
               {g.label}
