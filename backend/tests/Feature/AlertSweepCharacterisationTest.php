@@ -48,7 +48,8 @@ final class AlertSweepCharacterisationTest extends TestCase
 
         // The world has to reach every handler, or identity proves nothing about it.
         $sweeps = json_decode($now, true);
-        $fired = array_unique(array_column($sweeps['5_provider_stale']['alert_events'], 'type'));
+        // The notices (ALERT-CRITERIA-001) are event types raised under the no_results rule, not rule types of their own.
+        $fired = array_diff(array_unique(array_column($sweeps['5_provider_stale']['alert_events'], 'type')), AlertEvaluator::NOTICES);
         $periodic = AlertEvaluator::PERIODIC;
         sort($periodic);
         sort($fired);

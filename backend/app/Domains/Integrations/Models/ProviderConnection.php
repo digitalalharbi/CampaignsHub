@@ -17,7 +17,7 @@ final class ProviderConnection extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'credential_id', 'provider', 'connection_name', 'scope',
-        'external_owner_id', 'scopes', 'status', 'token_expires_at', 'last_health_check_at',
+        'external_owner_id', 'scopes', 'requested_scopes', 'status', 'token_expires_at', 'last_health_check_at',
         'last_successful_sync_at', 'last_error', 'created_by',
         /*
          * GADS-STALE-PICKER-001 — whether the LAST discovery produced a list, and why not.
@@ -33,6 +33,8 @@ final class ProviderConnection extends Model
 
     protected $casts = [
         'scopes' => 'array',
+        // LINKEDIN-SCOPES-001 — what the consent asked for; `scopes` is only what the provider said it granted.
+        'requested_scopes' => 'array',
         'token_expires_at' => 'datetime',
         'last_health_check_at' => 'datetime',
         'last_successful_sync_at' => 'datetime',

@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Services\AttentionBoard;
+use App\Domains\Alerts\Support\CampaignDelivery;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -19,6 +20,7 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
+use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Services\ReportObservations;
@@ -744,8 +746,49 @@ final class DailyDigest
                 'platform_rows' => $scoped->byProvider($from, $to),
                 'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
                 'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+                'platform_live' => $this->liveRows($campaignIds, $from, $to),
                 'funnel' => $scoped->funnel($from, $to)['stages'] ?? [],
             ];
+        }
+
+        return $out;
+    }
+
+    /** Figures that add up across judgement windows, for {@see liveRows()}. */
+    private const LIVE_SUMS = ['spend', 'impressions', 'clicks', 'conversions', 'purchases', 'revenue', 'leads', 'form_leads', 'installs'];
+
+    /**
+     * ALERT-DELIVERING-YESTERDAY-001 — per platform, the figures of the group's campaigns that a decision may be about: running by
+     * the platform's latest status and delivering on the period's last day, each over the days since it last started delivering
+     * ({@see CampaignDelivery}). «صرف بدون نتائج» in «يحتاج قرارك الآن» is judged on these, so a campaign stopped mid-period, or
+     * one «active» that delivered nothing, never makes its platform «spend with no results». A platform with no such campaign
+     * has no row, and no «no results» verdict.
+     *
+     * @param  list<string>  $campaignIds
+     * @return array<string, array<string, float>> provider → summed figures
+     */
+    private function liveRows(array $campaignIds, Carbon $from, Carbon $to): array
+    {
+        $models = UnifiedCampaign::query()->withoutGlobalScope(ProjectScope::class)->whereIn('id', $campaignIds)->get();
+        $days = max(1, (int) $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
+        $windows = [];
+        foreach (app(CampaignDelivery::class)->assess($models, Carbon::now(), $days, $to->toDateString()) as $id => $v) {
+            // Only a judged campaign speaks for its platform; one stopped, ended, not delivering or still learning does not.
+            if ($v['reason'] === null) {
+                $windows[(string) $v['from']][] = $id;
+            }
+        }
+
+        $out = [];
+        foreach ($windows as $since => $ids) {
+            foreach ($this->metrics->acrossProjects()->forCampaigns($ids)->byProvider(Carbon::parse($since), $to) as $row) {
+                $provider = (string) ($row['provider'] ?? '');
+                foreach (self::LIVE_SUMS as $key) {
+                    if (is_numeric($row[$key] ?? null)) {
+                        $out[$provider][$key] = ($out[$provider][$key] ?? 0.0) + (float) $row[$key];
+                    }
+                }
+            }
         }
 
         return $out;

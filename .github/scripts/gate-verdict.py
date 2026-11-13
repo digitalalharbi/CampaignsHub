@@ -28,8 +28,20 @@ with the verdict, so «which shard ran X, and how did it end» is one file.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
+
+
+def stable(test_id: str) -> str:
+    """The test's identity WITHOUT its position: `a.spec.ts:18:1 › title` becomes `a.spec.ts › title`.
+
+    The skip baseline and KNOWN_RACES name tests by `file:line:column › title`, and the line is wherever the test
+    happened to be when the baseline was read. Adding a comment above a skipping test then moved it, the gate saw a
+    «new» skip and a «vanished» one, and failed a change that had not touched the skip at all. The file and the
+    title are the identity; the position is not, so it is never compared.
+    """
+    return re.sub(r'^([^\s:]+\.spec\.ts):\d+:\d+(?= ›)', r'\1', test_id)
 
 
 def tests(report: dict) -> dict[str, dict]:
@@ -109,17 +121,18 @@ def main(browser: str, total: int, base: Path) -> None:
                 merged.append({'test': key, 'shard': i, 'status': status})
             print(f'shard {i}/{total}: {len(run)} tests')
 
-        allowed = set(json.loads(Path(__file__).with_name('gate-allowed-skips.json').read_text()).get(browser, []))
-        skipped = {r['test'].split('] ', 1)[1] for r in merged if r['status'] == 'skipped'}
-        for t in sorted((skipped - allowed) & KNOWN_RACES.get(browser, set())):
+        allowed = {stable(t) for t in json.loads(Path(__file__).with_name('gate-allowed-skips.json').read_text()).get(browser, [])}
+        skipped = {stable(r['test'].split('] ', 1)[1]) for r in merged if r['status'] == 'skipped'}
+        known_races = {stable(t) for t in KNOWN_RACES.get(browser, set())}
+        for t in sorted((skipped - allowed) & known_races):
             print(f'::warning::{t} SKIPPED in {browser} — a known race tolerated until its fix lands (KNOWN_RACES)')
-        for t in sorted(skipped - allowed - KNOWN_RACES.get(browser, set())):
+        for t in sorted(skipped - allowed - known_races):
             problems.append(f'{t} SKIPPED in {browser} but ran in the pre-sharding baseline — make it run, or add it to '
                             f'.github/scripts/gate-allowed-skips.json in review')
         for t in sorted(allowed - skipped):
             print(f'::notice::{t} is in the {browser} skip baseline but ran this time')
         print(f'{browser}: skipped {len(skipped)}; baseline {len(allowed)}; outside baseline {len(skipped - allowed)} '
-              f'(of which tolerated known races {len((skipped - allowed) & KNOWN_RACES.get(browser, set()))})')
+              f'(of which tolerated known races {len((skipped - allowed) & known_races)})')
 
         dropped = sorted(set(ref) - set(owner))
         extra = sorted(set(owner) - set(ref))
