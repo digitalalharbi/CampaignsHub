@@ -145,3 +145,15 @@ GA4-ALERTS-001. One matcher (`Ga4AttributionMatcher`), one visibility catalogue 
 UTM-tagged ad URLs and a store is the external prerequisite. Verify with `Ga4|Report|Alert|Digest|Guard` on `ptest.sh`,
 `npx tsc -b`, `npx vitest run`, and `e2e/ga4-store-analytics.spec.ts` on chromium. Safe next action: merge `origin/main` when the
 Lander lands the base branch (no rebase, no force-push).
+
+## Project budgets — FIN-LOOP-001 (branch `feat/finance-intake-ledger`, from `320606bc2`)
+
+Owner scope 2026-11-13 (`docs/FINANCE_SPEC_OWNER_2026-11-13.md`): the flow starts when finance adds a budget; one budget per
+project; quotes, receipts, reconciliation, settlements and per-platform allocation are out of scope by Owner decision.
+
+- PR 1 (this branch): `Funding` domain — add a budget in one step (client/project created once if missing), append-only amounts,
+  real spend per account-day (upsert, F07), remaining, pace, days left, `funding:refresh` at :20/:50, `/api/v1/funding`. Backend only.
+- Next, stacked: notifications to the project manager and finance (approved, running low, over; deduped, closed by a renewal);
+  the one-screen budgets page and add-budget step; the fixed monthly summary + XLSX/CSV export; daily/weekly mails (extend the
+  digest from #1026 once merged, do not duplicate it).
+- Verify: `zsh ~/Developer/ch-scripts/ptest.sh <worktree> --filter=FundingLedgerTest`.
