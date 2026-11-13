@@ -479,9 +479,18 @@ function largestEmptyRect(grid: Uint8Array, cols: number, rows: number): number 
   return best / (cols * rows)
 }
 
+/**
+ * REPORT-PDF-16-9-001 (master task 10) — a presentation page is a 16:9 slide, exactly the size of what is on it.
+ *
+ * It printed on A4 landscape (1.414) while `report-print.mjs` measures and fits every slide in Chromium's default 1280×720 viewport
+ * (16:9): the layout the gate approved was not the page that was printed, and the difference was blank space under every slide.
+ * 338.67mm × 190.5mm IS 1280×720 CSS px, so the printed page is the measured one, margin 0.
+ */
+export const SLIDE_PAGE = '338.67mm 190.5mm'
+
 function printCss(landscape: boolean): string {
   return `
-  @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 0; }
+  @page { size: ${landscape ? SLIDE_PAGE : 'A4 portrait'}; margin: 0; }
   html, body { background: var(--surface); }
   .report-print { background: var(--surface); color: var(--text-primary); }
   .report-slide {
