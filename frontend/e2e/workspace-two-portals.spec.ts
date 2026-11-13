@@ -67,7 +67,7 @@ test.describe('one session, two portals', () => {
 
     const tabB = await context.newPage()
     const calls = apiCallsOf(tabB)
-    await tabB.goto('/agency/projects?from=link')
+    await tabB.goto('/agency/portfolio?from=link')
 
     await expect(tabB.getByTestId('portal-entry-choice')).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByTestId('portal-entry-current')).toContainText('Two Portals Brand')
@@ -88,16 +88,16 @@ test.describe('one session, two portals', () => {
     await tabA.evaluate(() => window.localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: 'of-the-brand' } })))
 
     const tabB = await context.newPage()
-    await tabB.goto('/agency/projects?from=link')
+    await tabB.goto('/agency/portfolio?from=link')
     await tabB.locator('[data-testid^="portal-entry-switch-"]').first().click()
 
-    await expect(tabB).toHaveURL(/\/agency\/projects\?from=link/)
+    await expect(tabB).toHaveURL(/\/agency\/portfolio\?from=link/)
     await expect(shown(tabB, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByText(BRAND_PROJECT)).toHaveCount(0)
 
     // Propagation: the tab left behind is moved, on a full load, to the portal's front door.
     await expect(tabA).toHaveURL(/\/agency(\/|$)/, { timeout: 20_000 })
-    await tabA.goto('/agency/projects')
+    await tabA.goto('/agency/portfolio')
     await expect(shown(tabA, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabA.getByText(BRAND_PROJECT)).toHaveCount(0)
 
@@ -135,7 +135,7 @@ test.describe('one session, two portals', () => {
 
     // The other tab chooses, explicitly, through the switch.
     const tabB = await context.newPage()
-    await tabB.goto('/agency/projects')
+    await tabB.goto('/agency/portfolio')
     await tabB.getByTestId(`portal-entry-switch-${agency.id}`).click()
     await expect(shown(tabB, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     expect(tabA.url()).toContain('/app/projects')

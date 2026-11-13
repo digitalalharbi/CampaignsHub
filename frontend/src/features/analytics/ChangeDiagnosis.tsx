@@ -502,7 +502,7 @@ export function ChangeDiagnosis({
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
-            {title ?? (ar ? 'ما الذي تغيّر — ومن حرّكه' : 'What changed — and who moved it')}
+            {title ?? (ar ? 'أسباب التغيّر' : 'What changed — and who moved it')}
           </h3>
           <span className="text-xs text-text-muted">
             {ar ? 'مقابل ' : 'vs '}
@@ -622,7 +622,7 @@ export function ChangeDiagnosis({
       */}
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-3">
         <h3 className="mb-1 text-base font-bold text-text-primary">
-          {ar ? 'الأيام التي خرجت عن سلوك الفترة' : 'The days that departed from the period’s behaviour'}
+          {ar ? 'أيام غير معتادة' : 'The days that departed from the period’s behaviour'}
         </h3>
         {/*
           VISUAL-FIRST-001 — «I do not want any text details at all, except in a few simple places.»

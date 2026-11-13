@@ -148,7 +148,7 @@ function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting
   const [copied, setCopied] = useState(false)
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin', 'payment-settings'] })
 
-  const test = useMutation({ mutationFn: () => testPaymentProvider(provider.provider), onSettled: refresh })
+  const test = useMutation({ meta: { feedback: 'none' }, mutationFn: () => testPaymentProvider(provider.provider), onSettled: refresh })
   const activation = useMutation({
     mutationFn: (enabled: boolean) => setPaymentGatewayEnabled(provider.provider, enabled, enabled && provider.mode === 'live'),
     onSuccess: refresh,

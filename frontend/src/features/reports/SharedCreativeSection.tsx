@@ -104,7 +104,7 @@ const COPY = {
     of: 'من',
     attribution: 'المصدر: ما أبلغت عنه المنصة الإعلانية',
     confidence: { high: 'ثقة عالية', medium: 'ثقة متوسطة', insufficient_data: 'بيانات غير كافية' },
-    severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
+    severity: { warning: 'تنبيه', opportunity: 'فرصة', positive: 'تحسّن' },
     evidence: 'الأدلة',
     showing: 'المعروض',
     details: 'تفاصيل الإعلان',

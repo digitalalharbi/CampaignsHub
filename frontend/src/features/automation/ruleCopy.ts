@@ -31,7 +31,7 @@ export const STATUS_WORDS: Record<string, { ar: string; en: string; tone: 'succe
   notified: { ar: 'نُبِّه', en: 'Notified', tone: 'neutral' },
   blocked: { ar: 'أوقفته القواعد', en: 'Stopped by a rule', tone: 'warning' },
   failed: { ar: 'فشل التنفيذ', en: 'Failed', tone: 'danger' },
-  skipped_cooldown: { ar: 'تُخطّي — فترة التهدئة', en: 'Skipped — cooldown', tone: 'neutral' },
+  skipped_cooldown: { ar: 'تُخطّي — المدة بين التنبيهات', en: 'Skipped — cooldown', tone: 'neutral' },
   skipped_conflict: { ar: 'تُخطّي — تعارض', en: 'Skipped — conflict', tone: 'warning' },
   skipped_run_cap: { ar: 'تُخطّي — حدّ التشغيل', en: 'Skipped — run limit', tone: 'warning' },
   skipped_no_budget: { ar: 'تُخطّي — لا ميزانية يومية', en: 'Skipped — no daily budget', tone: 'neutral' },
