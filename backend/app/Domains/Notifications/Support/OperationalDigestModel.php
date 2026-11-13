@@ -1074,7 +1074,7 @@ final class OperationalDigestModel
             $issue = null;
             if (in_array($verdict['state'], ['bad', 'watch'], true)) {
                 // «صرف بدون نتائج» quotes the spend it was judged on: the live campaigns' (above), not the whole platform's.
-                $issueRow = $verdict['reason'] === 'no_results' && is_array($live[$key] ?? null) ? array_merge($row, ['spend' => $live[$key]['spend'] ?? ($row['spend'] ?? null)]) : $row;
+                $issueRow = $verdict['reason'] === 'no_results' && is_array($live[$key] ?? null) ? array_merge($row, ['spend' => $live[$key]['spend'] ?? ($row['spend'] ?? null), '_live' => true]) : $row;
                 $issue = self::issue($verdict, $key, $name, $issueRow, $prev, $budget, $headlineKey, $resultKey, $p, $ar, $projectId, $projectName, $order, $days, $mine);
                 $issue['objective'] = $groupLabel;
             }
@@ -1223,7 +1223,10 @@ final class OperationalDigestModel
                 break;
             case 'no_results':
                 $headline = $ar ? 'صرف بدون نتائج' : 'Spend with no results';
-                $figure = ($ar ? 'صرف ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
+                // ALERT-CRITERIA-001 — the figure names the scope the verdict was judged on, so it cannot contradict the platform's
+                // own tiles (which include campaigns stopped mid-period): «الحملات الشغّالة: صرف … · طلبات 0».
+                $figure = (($row['_live'] ?? false) === true ? ($ar ? 'الحملات الشغّالة: ' : 'Running campaigns: ') : '')
+                    .($ar ? 'صرف ' : 'Spent ').$p->money((float) ($row['spend'] ?? 0)).' · '.(self::FIG[$resultKey ?? 'conversions'][$ar ? 0 : 1] ?? '').' 0';
                 break;
             case 'pace_hot':
             case 'pace_slow':
