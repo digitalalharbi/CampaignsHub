@@ -23,6 +23,13 @@ describe('what kind of problem an alert is', () => {
     }
   })
 
+  // ALERT-CRITERIA-001 — the campaign notices sit beside the performance findings, never in «غير مصنّف».
+  it('files the campaign notices with performance', () => {
+    for (const type of ['campaign_stopped', 'not_spending']) {
+      expect(alertCategory(type), type).toBe('performance')
+    }
+  })
+
   it('files the plumbing together, because one person fixes all of it', () => {
     for (const type of ['sync_failure', 'token_expiry', 'report_failed']) {
       expect(alertCategory(type), type).toBe('data')

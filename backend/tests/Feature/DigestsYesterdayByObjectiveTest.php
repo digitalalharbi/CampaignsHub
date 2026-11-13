@@ -9,6 +9,7 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
+use App\Domains\Alerts\Support\CampaignDelivery;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -60,6 +61,10 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // The test mail channel lives beside its first user; loaded here so this file passes when it runs alone.
+        if (! class_exists(ConfiguredDigestEmailProvider::class, false)) {
+            require_once __DIR__.'/DigestDeliveryTest.php';
+        }
         Carbon::setTestNow(Carbon::parse(self::NOW_UTC, 'UTC'));
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-yd-'.uniqid(), 'status' => 'active']);
@@ -270,7 +275,8 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($rule));
         $event = AlertEvent::where('rule_id', $rule->id)->firstOrFail();
         $this->assertSame('resolved', $event->status);
-        $this->assertSame('campaign_not_running', $event->context['closed_reason']);
+        // ALERT-DELIVERING-YESTERDAY-001 — the one eligibility rule ({@see CampaignDelivery}) states why: stopped on the platform.
+        $this->assertSame(CampaignDelivery::INACTIVE, $event->context['closed_reason']);
         $this->assertSame($notices, DB::table('app_notifications')->count(), 'no «recovered» notice about a stopped campaign');
 
         Carbon::setTestNow(Carbon::parse(self::NOW_UTC, 'UTC')->addDay());

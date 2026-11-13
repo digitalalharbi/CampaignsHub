@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Status\LinkHealth;
 use App\Support\AdPlatforms;
+use Illuminate\Support\Carbon;
 
 /**
  * EMAIL-DIGESTS-OPERATIONAL-001 — an alert event, said the way an operator needs it.
@@ -42,8 +43,11 @@ final class AlertEventText
             : null;
 
         $platform = self::platformOf($ctx, $campaign, $ar);
-        $objective = $campaign !== null ? self::objectiveOf((string) $campaign->objective, $ar) : '';
-        $where = array_values(array_filter([$project, $platform, $objective], static fn (string $p): bool => $p !== ''));
+        $card = is_array($ctx['card'] ?? null) ? (array) $ctx['card'] : null;
+        $objective = $campaign !== null ? self::objectiveOf((string) $campaign->objective, $ar) : ($card !== null ? self::objectiveOf((string) ($card['objective'] ?? ''), $ar) : '');
+        // ALERT-CRITERIA-001 (§10أ) — where it is: project · platform · ad account · objective.
+        $account = $card !== null && ($card['accounts'] ?? []) !== [] ? ($ar ? 'الحساب ' : 'Account ').self::truncate(implode('، ', (array) $card['accounts'])) : '';
+        $where = array_values(array_filter([$project, $platform, $account, $objective], static fn (string $p): bool => $p !== ''));
         $recovered = str_starts_with((string) ($item['triggered_at'] ?? ''), 'recovered:');
 
         $say = $recovered
@@ -71,7 +75,7 @@ final class AlertEventText
             'title' => $say['headline'],
             'detail' => $say['text'],
             'context' => implode(' · ', $where),
-            'numbers' => $say['numbers'],
+            'numbers' => $card !== null && ! $recovered ? self::cardNumbers($card, $ar, $say['numbers']) : $say['numbers'],
             'figures' => $recovered ? null : AlertFigures::from($ctx, $ar),
             'action' => $say['action'],
             'url' => $url,
@@ -79,8 +83,119 @@ final class AlertEventText
                 ? ($ar ? 'افتح الربط' : 'Open the connections page')
                 : ($campaign !== null ? ($ar ? 'افتح الحملة' : 'Open the campaign') : ($ar ? 'افتح التنبيه' : 'Open the alert')),
             // The name as stored, last and quiet — never the headline.
-            'secondary' => $campaign !== null ? ($ar ? 'الحملة: ' : 'Campaign: ').self::truncate((string) $campaign->name) : '',
+            'secondary' => $campaign !== null || $card !== null
+                ? ($ar ? 'الحملة: ' : 'Campaign: ').self::truncate($campaign !== null ? (string) $campaign->name : (string) ($card['campaign'] ?? ''))
+                    .(($card['ad_set'] ?? null) !== null ? ($ar ? ' · المجموعة: ' : ' · Ad set: ').self::truncate((string) $card['ad_set']) : '')
+                : '',
         ];
+    }
+
+    /** The result's unit, by name (§10أ): what one of it is. */
+    public const UNITS = [
+        'conversions' => ['طلب', 'orders'], 'purchases' => ['طلب', 'orders'], 'leads' => ['عميل محتمل', 'leads'], 'form_leads' => ['عميل محتمل', 'leads'],
+        'landing_page_views' => ['زيارة صفحة', 'landing page views'], 'clicks' => ['نقرة', 'clicks'], 'video_views' => ['مشاهدة', 'video views'],
+        'installs' => ['تنزيل', 'installs'], 'engagements' => ['تفاعل', 'engagements'], 'impressions' => ['ظهور', 'impressions'], 'reach' => ['وصول', 'reach'],
+    ];
+
+    private const MONTHS_AR = [1 => 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+    /** «10–12 نوفمبر» / «Nov 10–12», Latin digits; one date when the period is one day. */
+    public static function period(?string $from, ?string $to, bool $ar): string
+    {
+        if ($to === null || $to === '') {
+            return '';
+        }
+        $t = Carbon::parse($to);
+        $f = $from !== null && $from !== '' ? Carbon::parse($from) : $t;
+        $month = static fn (Carbon $d): string => $ar ? self::MONTHS_AR[(int) $d->month] : $d->format('M');
+        if ($f->isSameDay($t)) {
+            return $ar ? $t->day.' '.$month($t) : $month($t).' '.$t->day;
+        }
+        if ($f->isSameMonth($t)) {
+            return $ar ? self::ltr($f->day.'–'.$t->day).' '.$month($t) : $month($t).' '.$f->day.'–'.$t->day;
+        }
+
+        return $ar ? $f->day.' '.$month($f).' – '.$t->day.' '.$month($t) : $month($f).' '.$f->day.' – '.$month($t).' '.$t->day;
+    }
+
+    /**
+     * The figures line every campaign alert carries (§10أ): spend WITH its currency, the result by its unit, the period's dates,
+     * and the campaign's status with since when. A figure we do not hold is left out, never written as 0.
+     *
+     * @param  array<string, mixed>  $card
+     */
+    private static function cardNumbers(array $card, bool $ar, string $fallback): string
+    {
+        $parts = [];
+        if (is_numeric($card['spend'] ?? null)) {
+            $cur = (string) ($card['currency'] ?? '');
+            $parts[] = ($ar ? 'الصرف ' : 'Spent ').self::ltr(number_format((float) $card['spend'], 2).($cur !== '' ? ' '.$cur : '')).($cur === '' ? ($ar ? ' (العملة غير موحّدة)' : ' (currency not single)') : '');
+        }
+        if (isset($card['result_key']) && is_numeric($card['result'] ?? null)) {
+            $unit = self::UNITS[(string) $card['result_key']] ?? null;
+            $parts[] = $unit !== null ? ($ar ? $unit[0].' ' : '').self::ltr(number_format((float) $card['result'])).($ar ? '' : ' '.$unit[1]) : self::ltr(number_format((float) $card['result']));
+        }
+        $period = self::period(isset($card['from']) ? (string) $card['from'] : null, isset($card['to']) ? (string) $card['to'] : null, $ar);
+        if ($period !== '') {
+            $parts[] = $period;
+        }
+        $status = (string) ($card['status'] ?? '');
+        if ($status === 'active' && ($card['active_since'] ?? null) !== null) {
+            $parts[] = ($ar ? 'شغّالة من ' : 'Running since ').self::period(null, (string) $card['active_since'], $ar);
+        } elseif ($status !== '' && $status !== 'active') {
+            $parts[] = ($ar ? 'الحالة: ' : 'Status: ').self::statusWord($status, $ar)
+                .(($card['last_delivered'] ?? null) !== null ? ($ar ? ' · آخر صرف ' : ' · last delivered ').self::period(null, (string) $card['last_delivered'], $ar) : '');
+        } elseif ($status === 'active' && ($card['last_delivered'] ?? null) !== null) {
+            $parts[] = ($ar ? 'شغّالة · آخر صرف ' : 'Running · last delivered ').self::period(null, (string) $card['last_delivered'], $ar);
+        }
+
+        return $parts === [] ? $fallback : implode(' · ', $parts);
+    }
+
+    private static function statusWord(string $status, bool $ar): string
+    {
+        return match ($status) {
+            'paused' => $ar ? 'موقوفة' : 'paused',
+            'completed' => $ar ? 'منتهية' : 'completed',
+            'archived' => $ar ? 'مؤرشفة' : 'archived',
+            'pending' => $ar ? 'قيد المراجعة' : 'pending',
+            default => $status,
+        };
+    }
+
+    /**
+     * «ما تصرف» — the reason, only what the stored setup PROVES, then what we checked and could not.
+     *
+     * @param  array<string, mixed>  $ctx
+     * @return array{text: string, action: string}
+     */
+    private static function notSpendingSay(array $ctx, bool $ar): array
+    {
+        $setup = (array) ($ctx['checks']['setup'] ?? []);
+        $ads = $setup['ads'] ?? null;
+        $bid = $setup['bid_limit'] ?? null;
+        $text = match ($ads) {
+            'rejected' => $ar ? 'كل إعلاناتها مرفوضة من المنصة، فما تقدر تصرف.' : 'Every ad was rejected by the platform, so it cannot deliver.',
+            'in_review' => $ar ? 'إعلاناتها كلها قيد المراجعة عند المنصة.' : 'All its ads are still in the platform\'s review.',
+            default => $ar ? 'الربط سليم والحملة شغّالة، لكن ما صرفت أمس.' : 'The connection is fine and the campaign is running, but it spent nothing yesterday.',
+        };
+        $facts = [];
+        if (is_string($bid) && $bid !== '') {
+            $facts[] = $ar ? 'حد مزايدة/تكلفة مستهدفة مفعّل ('.$bid.')' : 'a bid or cost cap is set ('.$bid.')';
+        }
+        $facts[] = $ar ? 'حجم الجمهور: غير متاح' : 'audience size: not available';
+        $facts[] = $ar ? 'رصيد الدفع: غير متاح' : 'payment balance: not available';
+        $text .= ' '.($ar ? 'تم فحص: ' : 'Checked: ').implode($ar ? '، ' : ', ', $facts).'.';
+
+        $action = match ($ads) {
+            'rejected' => $ar ? 'راجع سبب الرفض ← عدّل المحتوى ← أعد الإرسال للمراجعة' : 'Read the rejection reason → fix the content → resubmit for review',
+            'in_review' => $ar ? 'انتظر المراجعة ← تأكد من الحالة بعد ساعات' : 'Wait for the review → check the status in a few hours',
+            default => is_string($bid) && $bid !== ''
+                ? ($ar ? 'راجع حد المزايدة ← راجع الجمهور ← تحقق من رصيد الدفع' : 'Review the bid cap → review the audience → check the payment balance')
+                : ($ar ? 'راجع الجمهور والميزانية ← تحقق من رصيد الدفع' : 'Review the audience and budget → check the payment balance'),
+        };
+
+        return ['text' => $text, 'action' => $action];
     }
 
     /** A date or number kept left-to-right inside an Arabic sentence, so «2026-08-04» is not read backwards. */
@@ -120,15 +235,17 @@ final class AlertEventText
             default => '',
         });
 
+        // ALERT-CRITERIA-001 (§10أ) — solutions in the Owner's order: the content ← the tracking ← (the payment balance, only when
+        // proven) ← pause only if needed, last. Never «pause» first without an explicit reason.
         return match ($family) {
-            'traffic' => $ar ? 'تحقق من رابط الصفحة وسرعتها ← المحتوى.' : 'Check the landing page link and its speed, then the content.',
-            'awareness' => $ar ? 'تحقق من الاستهداف والميزانية ← المحتوى.' : 'Check the targeting and budget, then the content.',
-            'engagement' => $ar ? 'راجع المحتوى ← الجمهور.' : 'Review the content, then the audience.',
-            'video' => $ar ? 'راجع أول ثواني الفيديو ← الجمهور.' : 'Review the first seconds of the video, then the audience.',
-            'app' => $ar ? 'تحقق من رابط المتجر وتتبع التثبيت ← المحتوى.' : 'Check the store link and install tracking, then the content.',
-            'leads' => $ar ? 'تحقق من النموذج وتتبع التحويلات ← المحتوى، وأوقف الحملة إن لزم.' : 'Check the form and conversion tracking, then the content, and pause if needed.',
-            'sales' => $ar ? 'تحقق من تتبع التحويلات ثم المحتوى، وأوقف الحملة إن لزم.' : 'Check conversion tracking, then the content, and pause if needed.',
-            default => $ar ? 'راجع المحتوى والاستهداف، وأوقف الحملة إن لزم.' : 'Review the content and targeting, and pause if needed.',
+            'traffic' => $ar ? 'راجع المحتوى ← تحقق من رابط الصفحة وسرعتها ← أوقفها إن لزم' : 'Review the content → check the landing page link and its speed → pause only if needed',
+            'awareness' => $ar ? 'راجع المحتوى ← راجع الاستهداف والميزانية ← أوقفها إن لزم' : 'Review the content → review the targeting and budget → pause only if needed',
+            'engagement' => $ar ? 'راجع المحتوى ← راجع الجمهور ← أوقفها إن لزم' : 'Review the content → review the audience → pause only if needed',
+            'video' => $ar ? 'راجع أول ثواني الفيديو ← راجع الجمهور ← أوقفها إن لزم' : 'Review the video\'s first seconds → review the audience → pause only if needed',
+            'app' => $ar ? 'راجع المحتوى ← تحقق من رابط المتجر وتتبع التنزيل ← أوقفها إن لزم' : 'Review the content → check the store link and install tracking → pause only if needed',
+            'leads' => $ar ? 'راجع المحتوى ← تحقق من النموذج وتتبع التحويلات ← أوقفها إن لزم' : 'Review the content → check the form and conversion tracking → pause only if needed',
+            'sales' => $ar ? 'راجع المحتوى ← تحقق من تتبع التحويلات ← أوقفها إن لزم' : 'Review the content → check conversion tracking → pause only if needed',
+            default => $ar ? 'راجع المحتوى ← راجع الاستهداف ← أوقفها إن لزم' : 'Review the content → review the targeting → pause only if needed',
         };
     }
 
@@ -220,6 +337,24 @@ final class AlertEventText
                     'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' ')
                         .(($w = self::window($ctx, $ar)) !== '' ? '('.$w.')' : ($ar ? 'خلال ' : 'in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days')) : '',
                     'action' => self::noResultsAction($ctx, $ar),
+                    'link' => 'campaign',
+                ];
+            case 'campaign_stopped':
+                return [
+                    'headline' => $ar ? 'توقفت أمس' : 'Stopped yesterday',
+                    'text' => $ar ? 'المنصة تقول إنها موقوفة، وآخر صرف كان قبل أمس. نذكرها مرة وحدة.' : 'Its platform says it is not running, and it last delivered the day before yesterday. Said once.',
+                    'numbers' => '',
+                    'action' => $ar ? 'إذا الإيقاف مقصود ما تحتاج شي ← إذا لا، شغّلها من المنصة' : 'If the stop was intended, nothing to do → if not, restart it on the platform',
+                    'link' => 'campaign',
+                ];
+            case 'not_spending':
+                $ns = self::notSpendingSay($ctx, $ar);
+
+                return [
+                    'headline' => $ar ? "ما تصرف على {$who}" : "Not spending on {$who}",
+                    'text' => $ns['text'],
+                    'numbers' => '',
+                    'action' => $ns['action'],
                     'link' => 'campaign',
                 ];
             case 'sync_failure':
@@ -336,6 +471,10 @@ final class AlertEventText
         $locale = $ar ? 'ar' : 'en';
         if (isset($ctx['provider']) && is_string($ctx['provider']) && $ctx['provider'] !== '') {
             return AdPlatforms::name($ctx['provider'], $locale);
+        }
+        $fromCard = array_values(array_filter((array) ($ctx['card']['providers'] ?? []), 'is_string'));
+        if ($fromCard !== []) {
+            return implode($ar ? '، ' : ', ', array_map(static fn (string $p): string => AdPlatforms::name($p, $locale), $fromCard));
         }
         $platforms = $campaign !== null ? array_values(array_filter((array) $campaign->platforms, 'is_string')) : [];
 
