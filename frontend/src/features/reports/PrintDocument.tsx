@@ -7,6 +7,7 @@ import { hasPlatformMark } from '@/components/brand/PlatformMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { useEffect, type ReactNode } from 'react'
 import type { ReportData } from './InteractiveReport'
+import type { ObjectivePathsBlock } from '@/features/analytics/ObjectivePathCards'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand } from '@/lib/brand'
@@ -314,6 +315,7 @@ export function PrintDocument({
    * per result is stated only where the path was bought for a result — an awareness path prints «—»
    * rather than being ranked on a sales metric it was never asked about.
    */
+  const pathBlock = (data.objective_performance as { objective_paths?: ObjectivePathsBlock } | undefined)?.objective_paths
   const objectiveRows = ((data.objective_performance as { paths?: Row[] } | undefined)?.paths ?? [])
     .filter((p) => Number(p.spend ?? 0) > 0)
     .map((p: Row) => [
@@ -613,6 +615,26 @@ export function PrintDocument({
             head={['Objective', 'Spend', 'Impressions', 'Clicks', 'Results', 'Cost per result']}
             rows={objectiveRows}
           />
+          {/*
+            OBJECTIVE-PATHS-001 — where ad sets bought different things (a store and branches): the one
+            total spend, each objective's share of it and its own result. ROAS on the sales row only.
+          */}
+          {pathBlock?.mixed && (
+            <>
+              <h3>Spend by objective — total {money(Number(pathBlock.total_spend), currency)}</h3>
+              <Table
+                head={['Objective', 'Spend', 'Share', 'Result', 'Cost per result', 'ROAS']}
+                rows={pathBlock.paths.map((p) => [
+                  p.label.en,
+                  money(Number(p.spend), currency),
+                  p.share === null ? '—' : `${nfmt(p.share * 100, { maximumFractionDigits: 0 })}%`,
+                  p.result === null ? '—' : `${p.result_label?.en ?? ''} ${nfmt(p.result)}`,
+                  p.cost_per_result === null ? '—' : money(p.cost_per_result, currency),
+                  p.family === 'sales' && p.roas !== null ? `${nfmt(p.roas, { maximumFractionDigits: 2 })}×` : '—',
+                ])}
+              />
+            </>
+          )}
         </section>
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />

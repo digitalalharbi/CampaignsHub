@@ -69,6 +69,39 @@ final class DigestsObjectiveKpisTest extends TestCase
         $this->assertStringNotContainsString('العائد على الإنفاق', $awHtml);
     }
 
+    /**
+     * OBJECTIVE-PATHS-001 — a project whose ad sets bought a store and branches: ONE total, then each
+     * objective's share and its own result; ROAS on the sales row only.
+     */
+    public function test_a_project_with_two_objective_paths_states_one_total_and_roas_on_sales_only(): void
+    {
+        $d = DigestDemo::payload(8, 6);
+        $block = $d['projects'][0];
+        $block['objective_paths'] = [
+            'total_spend' => 1000.0, 'spend_withheld_rows' => 0, 'mixed' => true, 'mixed_campaigns' => 1,
+            'paths' => [
+                ['family' => 'sales', 'label' => ['ar' => 'المبيعات', 'en' => 'Sales'], 'spend' => 600.0, 'share' => 0.6, 'roas' => 5.0,
+                    'result' => 30.0, 'result_label' => ['ar' => 'الطلبات', 'en' => 'Orders']],
+                ['family' => 'traffic', 'label' => ['ar' => 'الزيارات', 'en' => 'Traffic'], 'spend' => 400.0, 'share' => 0.4, 'roas' => null,
+                    'result' => 2400.0, 'result_label' => ['ar' => 'زيارات الصفحة', 'en' => 'Landing page views']],
+            ],
+        ];
+
+        $m = OperationalDigestModel::project($block, 'ar', 7);
+        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project'))->render();
+        $paths = substr($html, (int) strpos($html, 'data-block="objective-paths"'), 6000);
+
+        $this->assertSame(1, substr_count($html, 'data-block="objective-paths"'));
+        $this->assertSame(1, substr_count($paths, 'data-total'), 'the total is stated once');
+        $this->assertStringContainsString('data-path="sales"', $paths);
+        $this->assertStringContainsString('data-path="traffic"', $paths);
+        $traffic = substr($paths, (int) strpos($paths, 'data-path="traffic"'), 900);
+        $traffic = substr($traffic, 0, (int) strpos($traffic, '</tr>'));
+        $this->assertStringNotContainsString('×', $traffic, 'the visits row carries no ROAS');
+        $sales = substr($paths, (int) strpos($paths, 'data-path="sales"'), 900);
+        $this->assertStringContainsString('×', substr($sales, 0, (int) strpos($sales, '</tr>')));
+    }
+
     public function test_the_portfolio_has_a_tile_row_per_objective_and_never_a_figure_across_unlike_ones(): void
     {
         $m = OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), 'ar', 'daily');

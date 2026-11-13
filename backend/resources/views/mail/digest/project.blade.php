@@ -94,6 +94,25 @@
     @endif
 
     {{-- One block PER OBJECTIVE: its own tiles, its platforms with the objective's own figure, its funnel. Unlike objectives are never averaged. --}}
+    {{-- OBJECTIVE-PATHS-001 — one total spend; under it each objective's share and its own result. ROAS on sales only. --}}
+    @if ($m['objective_paths'] ?? null)
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="objective-paths" style="border:1px solid #e4e0d6; border-radius:12px; margin:0 0 10px;">
+            <tr><td style="padding:10px 12px;">
+                <div style="font-size:11px; color:#8b9a97;">{{ $ar ? 'إجمالي الإنفاق' : 'Total spend' }}</div>
+                <div style="font-size:18px; font-weight:800; color:#0b1a16;" dir="ltr" data-total>{{ $m['objective_paths']['total'] }}</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;">
+                    @foreach ($m['objective_paths']['paths'] as $op)
+                        <tr data-path="{{ $op['family'] }}">
+                            <td width="30%" style="padding:3px 0; font-size:12px; font-weight:800; color:#0b1a16;">{{ $op['label'] }} <span style="color:#8b9a97; font-weight:700;" dir="ltr">{{ $op['share'] }}%</span></td>
+                            <td width="22%" style="padding:3px 4px; font-size:12px;" dir="ltr">{{ $op['spend'] }}</td>
+                            <td style="padding:3px 4px; font-size:12px;">{{ $op['result'] }}</td>
+                            <td width="16%" style="padding:3px 0; font-size:12px; text-align:{{ $endSide }};" dir="ltr">{{ $op['roas'] ?? '' }}</td>
+                        </tr>
+                    @endforeach
+                </table>
+            </td></tr>
+        </table>
+    @endif
     @foreach ($m['groups'] as $g)
         @include('mail.digest._group', ['g' => $g])
     @endforeach
