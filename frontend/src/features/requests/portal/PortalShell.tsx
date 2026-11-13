@@ -7,7 +7,7 @@ import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { useUi } from '@/stores/ui'
 import { portalLogout } from '../clientPortalApi'
 import { signOutCompletely } from '@/features/auth/signOut'
-import { PORTAL_MORE_ORDER, PORTAL_PRIMARY, PortalNav, useVisiblePortalNav } from './portalNav'
+import { PortalNav, PortalSectionPages, useVisiblePortalSections } from './portalNav'
 import { useClientSpacePath } from './clientSpace'
 import { brandStyle, useClientBranding } from './useClientBranding'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
@@ -42,23 +42,19 @@ export function PortalShell({
   const branding = useClientBranding()
 
   /*
-   * The four a client opens the portal for, resolved against THEIR space (MOBILE-APP-001).
+   * CLIENT-PORTAL-THREE-SECTIONS-001 — the phone bar is the portal's three sections (MOBILE-APP-001 kept).
    *
-   * `PORTAL_NAV` holds suffixes, not paths — `/invoices`, resolved to `/portal/clients/acme/invoices`
-   * or `/client/invoices` depending on where the visitor is. Building the bar from that same array
-   * keeps the phone and the desktop strip the same navigation, and `spaceTo` keeps a tap from
-   * dropping somebody out of their brand's space.
-   *
-   * Home, requests, campaigns and reports: what is happening and how it is going. Quotes, invoices,
-   * messages, files and profile are in More — the paperwork, which is looked up rather than watched.
+   * «الأداء», «بانتظار اعتمادك», «طلباتي» are always visible; the More sheet lists EVERY page grouped by
+   * its section, so nothing a client used before is more than two taps away. Suffixes are resolved with
+   * `spaceTo`, so a tap never drops somebody out of their brand's space.
    */
-  const visibleNav = useVisiblePortalNav()
-  const byTo = new Map(visibleNav.map((i) => [i.to, i]))
-  const tabs = PORTAL_PRIMARY.map((to) => byTo.get(to))
-    .filter((i): i is NonNullable<typeof i> => i !== undefined)
-    .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
-  const moreItems = PORTAL_MORE_ORDER.map((to) => byTo.get(to)).filter((i): i is NonNullable<typeof i> => i !== undefined)
-    .map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end }))
+  const sections = useVisiblePortalSections()
+  const tabs = sections.filter((s) => s.key !== 'more')
+    .map((s) => ({ to: spaceTo(s.items[0].to), ar: s.ar, en: s.en, icon: s.icon, end: s.items[0].end }))
+  const moreGroups = sections.map((s) => ({
+    key: s.key, ar: s.ar, en: s.en,
+    items: s.items.map((i) => ({ to: spaceTo(i.to), ar: i.ar, en: i.en, icon: i.icon, end: i.end })),
+  }))
   // The primary mark if the agency uploaded one; otherwise the platform's own.
   const uploaded = branding?.logos.find((l) => l.kind === 'primary_horizontal' || l.kind === 'client_logo')
 
@@ -149,16 +145,17 @@ export function PortalShell({
         *
         * On a phone it was a scrollable row of nine tabs, most of them off-screen, with no indication
         * that scrolling was even possible — the section you wanted was usually the one you could not
-        * see. Below `md` the bottom bar replaces it: four destinations always visible, the other five
-        * in the More sheet. Above `md` the strip is unchanged.
+        * see. Below `md` the bottom bar replaces it: the three sections always visible, every page in the
+        * More sheet grouped by section. Above `md` the strip shows the sections (CLIENT-PORTAL-THREE-SECTIONS-001).
         */}
-      {nav && <div className="hidden md:block"><PortalNav ar={ar} /></div>}
+      {nav && <PortalNav ar={ar} />}
 
       {/* SHELL-001 — the content box takes the slack so the footer sinks rather than stranding space. */}
       <main className="flex min-w-0 flex-1 flex-col">
         <div
-          className="mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-8"
+          className="mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 py-4 sm:px-6 sm:py-5"
         >
+          {nav && <PortalSectionPages ar={ar} />}
           {children}
         </div>
         <div className={`px-4 sm:px-6 ${nav ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
@@ -169,7 +166,7 @@ export function PortalShell({
       {nav && (
         <MobileTabBar
           tabs={tabs}
-          moreGroups={[{ key: 'portal', ar: 'كل الأقسام', en: 'All sections', items: moreItems }]}
+          moreGroups={moreGroups}
         />
       )}
     </div>

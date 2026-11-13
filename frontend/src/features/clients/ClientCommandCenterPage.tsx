@@ -19,6 +19,8 @@ import { projectStatusLabel } from '@/features/projects/ProjectsPage'
 import { TabBilling } from './TabBilling'
 import { TabDelivery } from './delivery/TabDelivery'
 import { TabPortal } from './portal/TabPortal'
+import { TabContentApprovals } from './portal/TabContentApprovals'
+import { useAuth } from '@/stores/auth'
 import { TabMessages } from './TabMessages'
 import { TabActivity } from './TabActivity'
 import { TabAnalytics } from './TabAnalytics'
@@ -32,7 +34,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { toApiError } from '@/lib/api/client'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 
-type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'delivery' | 'portal' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
+type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'delivery' | 'portal' | 'approvals' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
 export function ClientCommandCenterPage() {
   const portalTo = usePortalPath()
@@ -46,6 +48,8 @@ export function ClientCommandCenterPage() {
   const [params] = useSearchParams()
   const [tab, setTab] = useState<Tab>(params.get('tab') === 'delivery' ? 'delivery' : 'overview')
   const [editing, setEditing] = useState(false)
+  // CLIENT-CONTENT-APPROVAL-001 — read before any early return: hooks run in the same order every render.
+  const canContent = useAuth((s) => s.hasPermission('content.view'))
   const query = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
 
   if (query.isPending) return <div className="mx-auto max-w-5xl"><div className="h-64 animate-pulse rounded-2xl bg-surface-secondary" /></div>
@@ -95,6 +99,7 @@ export function ClientCommandCenterPage() {
     ...(d.can.view_reports ? [{ key: 'delivery' as Tab, label: lang === 'ar' ? 'التسليم الدوري' : 'Periodic delivery' }] : []),
     { key: 'billing' as Tab, label: lang === 'ar' ? 'الاشتراكات' : 'Billing' },
     { key: 'messages' as Tab, label: lang === 'ar' ? 'المحادثات' : 'Conversations' },
+    ...(canContent ? [{ key: 'approvals' as Tab, label: lang === 'ar' ? 'للاعتماد' : 'Approvals' }] : []),
     ...(d.can.manage_settings || d.can.manage_team ? [{ key: 'portal' as Tab, label: lang === 'ar' ? 'بوابة العميل' : 'Client portal' }] : []),
     ...(d.can.manage_team ? [{ key: 'team' as Tab, label: t('tab_team') }] : []),
     ...(d.can.manage_files ? [{ key: 'files' as Tab, label: t('tab_files') }] : []),
@@ -194,6 +199,7 @@ export function ClientCommandCenterPage() {
 
           {tab === 'billing' && <TabBilling clientId={d.id} canManage={d.can.manage_settings} />}
           {tab === 'delivery' && d.can.view_reports && <TabDelivery clientId={d.id} projects={d.projects} />}
+          {tab === 'approvals' && canContent && <TabContentApprovals d={d} />}
           {tab === 'portal' && <TabPortal d={d} />}
           {tab === 'messages' && <TabMessages clientId={d.id} />}
           {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { PortfolioPerformance } from './PortfolioPerformance'
-import { PortalNav } from './portalNav'
+import { PortalNav, PortalSectionPages } from './portalNav'
 import { ProviderMark } from '@/components/ProviderMark'
 import { renderWithProviders } from '@/test/utils'
 import type { PortalOverview } from './portalOverviewApi'
@@ -139,14 +139,20 @@ describe('the portal navigation follows the agency’s visibility switches', () 
     vi.mocked(fetchPortalVisibility).mockResolvedValue([
       { slug: 'razzahavenu', mode: 'managed', capabilities: {}, visibility: { invoices: false, messages: false, reports: true, requests: true, campaigns: true, files: true } },
     ])
-    renderWithProviders(<PortalNav ar={false} />, { locale: 'en', route: '/portal/razzahavenu' })
+    renderWithProviders(<><PortalNav ar={false} /><PortalSectionPages ar={false} /></>, { locale: 'en', route: '/portal/razzahavenu/requests' })
 
-    await waitFor(() => expect(screen.queryByText('Invoices')).toBeNull())
-    expect(screen.queryByText('Quotes')).toBeNull()
-    expect(screen.queryByText('Messages')).toBeNull()
-    expect(screen.getByText('Reports')).toBeInTheDocument()
+    // CLIENT-PORTAL-THREE-SECTIONS-001 — the three sections and «More» lead; a section the agency switched
+    // off entirely is not offered, and inside one, a switched-off page is not either.
+    await waitFor(() => expect(screen.queryByText('Messages')).toBeNull())
+    expect(screen.getByText('Performance')).toBeInTheDocument()
+    expect(screen.getByText('My requests')).toBeInTheDocument()
+    expect(screen.getByText('More')).toBeInTheDocument()
+    // «Awaiting you» still offers content approvals (content is on by default) — but not quotes.
+    expect(screen.getByText('Awaiting you')).toBeInTheDocument()
     expect(screen.getByText('Requests')).toBeInTheDocument()
-    expect(screen.getByText('Profile')).toBeInTheDocument()
+    expect(screen.getByText('Files')).toBeInTheDocument()
+    expect(screen.queryByText('Quotes')).toBeNull()
+    expect(screen.queryByText('Invoices')).toBeNull()
   })
 })
 

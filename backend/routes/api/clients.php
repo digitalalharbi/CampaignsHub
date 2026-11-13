@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientReportsControll
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTaxonomyController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTeamController;
+use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ContentApprovalsController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +59,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::get('/{client}/portal-users', [ClientPortalUsersController::class, 'index'])->name('portal-users.index');
     Route::post('/{client}/portal-users', [ClientPortalUsersController::class, 'store'])->name('portal-users.store');
     Route::delete('/{client}/portal-users/{membership}', [ClientPortalUsersController::class, 'destroy'])->name('portal-users.destroy');
+
+    // CLIENT-CONTENT-APPROVAL-001 — content put before the client in «بانتظار اعتمادك».
+    Route::get('/{client}/content-approvals', [ContentApprovalsController::class, 'index'])->name('content-approvals.index');
+    Route::post('/{client}/content-approvals', [ContentApprovalsController::class, 'store'])->name('content-approvals.store');
+    Route::post('/{client}/content-approvals/{approval}/withdraw', [ContentApprovalsController::class, 'withdraw'])->name('content-approvals.withdraw');
 
     // Files (read-only over existing private stores) + secure streamed download.
     Route::get('/{client}/files', [ClientFilesController::class, 'index'])->name('files.index');

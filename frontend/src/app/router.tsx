@@ -55,6 +55,7 @@ const ClientNewRequestPage = lazyPage(() => import('@/features/requests/portal/C
 const ClientRequestDetailPage = lazyPage(() => import('@/features/requests/portal/ClientRequestDetailPage'), 'ClientRequestDetailPage')
 const ClientDashboardPage = lazyPage(() => import('@/features/requests/portal/ClientDashboardPage'), 'ClientDashboardPage')
 const ClientQuotesPage = lazyPage(() => import('@/features/requests/portal/ClientQuotesPage'), 'ClientQuotesPage')
+const ClientApprovalsPage = lazyPage(() => import('@/features/requests/portal/ClientApprovalsPage'), 'ClientApprovalsPage')
 const ClientQuoteDetailPage = lazyPage(() => import('@/features/requests/portal/ClientQuoteDetailPage'), 'ClientQuoteDetailPage')
 const ClientInvoicesPage = lazyPage(() => import('@/features/requests/portal/ClientInvoicesPage'), 'ClientInvoicesPage')
 const ClientInvoiceDetailPage = lazyPage(() => import('@/features/requests/portal/ClientInvoiceDetailPage'), 'ClientInvoiceDetailPage')
@@ -247,6 +248,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/requests', element: <ClientRequestsPage /> },
   { path: '/portal/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/invoices', element: <ClientInvoicesPage /> },
@@ -277,6 +279,8 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/:clientSlug/requests', element: <ClientRequestsPage /> },
   { path: '/portal/:clientSlug/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
+  // CLIENT-PORTAL-THREE-SECTIONS-001 — «بانتظار اعتمادك». Every page above keeps its path.
+  { path: '/portal/:clientSlug/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/:clientSlug/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/:clientSlug/invoices', element: <ClientInvoicesPage /> },

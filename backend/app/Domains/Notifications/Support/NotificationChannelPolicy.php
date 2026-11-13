@@ -72,6 +72,7 @@ final class NotificationChannelPolicy
         'Domains/Messaging/Services/MessagingService.php',
         'Domains/Reports/Jobs/GenerateReportJob.php',
         'Domains/Requests/Services/RequestJourneyService.php',
+        'Domains/Requests/Services/ClientRequestManagerNotifier.php',
         'Domains/Requests/Services/RequestNotifier.php',
         'Domains/Settings/Http/Controllers/NotificationChannelTestController.php',
         'Domains/Subscriptions/Notifications/SubscriptionNotifier.php',
