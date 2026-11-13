@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,7 +23,7 @@ use Illuminate\Support\Carbon;
  * Awaiting credentials — and X Ads access is a separate approval tier that a normal developer account
  * does not carry.
  */
-final class XConnector extends ApiAdvertisingConnector
+final class XConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
 {
     private const MICRO = 1_000_000;
 
@@ -318,14 +319,14 @@ final class XConnector extends ApiAdvertisingConnector
      * @param  list<string>  $chunk
      * @return list<array<string, mixed>>
      */
-    private function fetchStatsPiece(OAuthTokens $tokens, string $adAccountId, array $chunk, ReportingWindow $piece): array
+    private function fetchStatsPiece(OAuthTokens $tokens, string $adAccountId, array $chunk, ReportingWindow $piece, string $entity = 'CAMPAIGN', bool $countRaw = true): array
     {
         $rows = [];
         $from = $piece->startAt()->toDateString();
 
         $body = $this->read(
             $this->api($tokens)->get($this->url("stats/accounts/{$adAccountId}"), [
-                'entity' => 'CAMPAIGN',
+                'entity' => $entity,
                 'entity_ids' => implode(',', $chunk),
                 'granularity' => 'DAY',
                 /*
@@ -354,7 +355,9 @@ final class XConnector extends ApiAdvertisingConnector
 
         // X returns one record per ENTITY, each carrying its own day series — so the unit here is
         // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
-        $this->countRawInsightRows(count($entities));
+        if ($countRaw) {
+            $this->countRawInsightRows(count($entities));
+        }
 
         foreach ($entities as $entity) {
             $campaignId = (string) ($entity['id'] ?? '');
@@ -371,6 +374,102 @@ final class XConnector extends ApiAdvertisingConnector
         }
 
         return $rows;
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — daily figures per CREATIVE, the promoted tweet's tweet.
+     *
+     * X answers stats for `entity=PROMOTED_TWEET` exactly as for campaigns (same metric groups, same twenty-id and
+     * seven-day bounds, same account-timezone window). Before this, X was asked only at the CAMPAIGN grain, so no X
+     * creative ever had a figure or a `last_active_at`, and every surface that lists content active in the period —
+     * the report, the live link, the content library — dropped all of them.
+     *
+     * The creative is the TWEET (`external_creatives.external_creative_id` = tweet id, see `fetchAds`), and one tweet
+     * can be promoted by several line items, so promotions are summed per tweet and day, the provider's creative id
+     * travelling in `campaign_id` as `ReportsCreativeInsights` defines the row. The money is labelled with the
+     * currency of the campaign each promotion belongs to (the X account states none); a tweet whose promotions spend
+     * in two currencies keeps its counts and has its money withheld rather than added across currencies.
+     */
+    public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult
+    {
+        try {
+            return SyncResult::of($this->fetchCreativeInsights($this->tokens(), $adAccountId, $from, $to));
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function fetchCreativeInsights(OAuthTokens $tokens, string $adAccountId, string $from, string $to): array
+    {
+        $currencyOfCampaign = [];
+        foreach ($this->fetchCampaigns($tokens, $adAccountId) as $c) {
+            if (is_string($c['currency'] ?? null) && preg_match('/^[A-Za-z]{3}$/', $c['currency']) === 1) {
+                $currencyOfCampaign[$c['external_id']] = strtoupper($c['currency']);
+            }
+        }
+
+        $campaignOfLineItem = [];
+        foreach ($this->fetchAdSets($tokens, $adAccountId) as $lineItem) {
+            $campaignOfLineItem[$lineItem['external_id']] = $lineItem['campaign_external_id'];
+        }
+
+        $body = $this->read(
+            $this->api($tokens)->get($this->url("accounts/{$adAccountId}/promoted_tweets"), ['count' => 200]),
+            'promoted tweets',
+        );
+
+        $tweetOf = [];
+        $currencyOf = [];
+        foreach ((array) ($body['data'] ?? []) as $p) {
+            if (! is_array($p) || ($p['id'] ?? null) === null || ($p['tweet_id'] ?? null) === null) {
+                continue;
+            }
+            $tweetOf[(string) $p['id']] = (string) $p['tweet_id'];
+            $campaign = $campaignOfLineItem[(string) ($p['line_item_id'] ?? '')] ?? null;
+            $currencyOf[(string) $p['id']] = $campaign === null ? null : ($currencyOfCampaign[$campaign] ?? null);
+        }
+
+        if ($tweetOf === []) {
+            return [];
+        }
+
+        $window = ReportingWindow::localDays($this->accountTimezone($adAccountId), $from, $to);
+        $rows = [];
+        $currencies = [];
+
+        foreach ($window->chunked(self::MAX_DAYS_PER_REQUEST) as $piece) {
+            foreach (array_chunk(array_keys($tweetOf), self::ENTITIES_PER_CALL) as $chunk) {
+                foreach ($this->fetchStatsPiece($tokens, $adAccountId, array_map('strval', $chunk), $piece, 'PROMOTED_TWEET', countRaw: false) as $row) {
+                    $promoted = (string) $row['campaign_id'];
+                    $tweet = $tweetOf[$promoted] ?? null;
+                    if ($tweet === null) {
+                        continue;
+                    }
+                    $key = $tweet.'|'.$row['date'];
+                    $rows[$key] ??= ['campaign_id' => $tweet, 'date' => $row['date']];
+                    $currencies[$key][] = $currencyOf[$promoted] ?? null;
+
+                    foreach ($row as $metric => $value) {
+                        if (in_array($metric, ['campaign_id', 'date'], true) || ! is_numeric($value)) {
+                            continue;
+                        }
+                        $rows[$key][$metric] = ($rows[$key][$metric] ?? 0.0) + (float) $value;
+                    }
+                }
+            }
+        }
+
+        foreach ($rows as $key => $row) {
+            $distinct = array_values(array_unique($currencies[$key] ?? []));
+            if (count($distinct) === 1 && $distinct[0] !== null) {
+                $rows[$key] = ['currency' => $distinct[0], ...$row];
+            } elseif (count($distinct) > 1) {
+                unset($rows[$key]['spend'], $rows[$key]['revenue']); // two currencies are never added together
+            }
+        }
+
+        return array_values($rows);
     }
 
     /** The ad account's own timezone, as discovery recorded it — never defaulted (see ReportingWindow). */

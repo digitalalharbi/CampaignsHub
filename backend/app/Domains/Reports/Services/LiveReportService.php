@@ -35,15 +35,18 @@ use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ClientAccountRows;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportDataFreshness;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Reports\Support\ReportScope;
@@ -478,6 +481,27 @@ final class LiveReportService
         $destinations = app(CampaignDestinations::class)->for($ids);
 
         return ($results->configured() ? $results->over($rows, $destinations) : $none) + ['leads' => $leads->leadBreakdown($rows, $destinations)];
+    }
+
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the KPI cards a live link shows; see the note where it is called.
+     *
+     * @return list<string>
+     */
+    private function visibleKpis(ReportShare $share): array
+    {
+        $report = $share->report;
+        $listed = ChosenFigures::listed($report, $share);
+        // The objective fallback is for reports that carry the objective choice this change introduced; every link made before it keeps
+        // «all of them» when nobody chose a list (a saved report's inferred `campaign_objective` is not a choice made for its link).
+        if ($listed !== [] || $report === null || ! ReportObjectives::chosenForLink($report)) {
+            return $listed;
+        }
+
+        return array_values(array_diff(
+            ReportObjectives::kpis($report),
+            HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue),
+        ));
     }
 
     /**
@@ -1223,10 +1247,12 @@ final class LiveReportService
              * of merely blanking a number — a blank card still tells the reader a figure exists and
              * is being withheld.
              */
-            'metrics' => array_values(array_filter(
-                (array) ($share->scope['metrics'] ?? []),
-                static fn ($m): bool => is_string($m) && $m !== '',
-            )),
+            /*
+             * Master task 10 (REPORT-MULTI-OBJECTIVE-001) — ONE reader for every surface: the link's own list, else the report's own
+             * (`ChosenFigures::listed`, the chain its PDF is cut by), else the KPIs of the report's objective(s) — one, or «زيارات + مبيعات»
+             * as the union of both presets — less the money this link hides. A link with none of these still means «all of them».
+             */
+            'metrics' => $this->visibleKpis($share),
             'available' => [
                 // WEBSITE-TAB-001 — the platform chips are AD platforms: the website is a measurement source with a tab of its own.
                 'providers' => self::withoutMeasurement($scope['providers']),

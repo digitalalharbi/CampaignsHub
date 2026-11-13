@@ -399,6 +399,32 @@ final class ReportTemplateEngine
         return false;
     }
 
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the KPIs of a report measured against SEVERAL objectives (master task 10: «الهدف يقبل أكثر من هدف»).
+     *
+     * Each objective keeps its own preset; the report shows their ordered union, so «زيارات + مبيعات» states the traffic figures and the sales
+     * figures side by side and never folds two objectives' results into one number. One objective is exactly `metricSet()`.
+     *
+     * @param  list<string>  $objectives  report objectives (template keys), in the operator's order
+     * @return list<string>
+     */
+    public function metricSetForMany(array $objectives, ?string $destination = null): array
+    {
+        $objectives = array_values(array_unique(array_filter($objectives, static fn ($o): bool => is_string($o) && $o !== '')));
+        if (count($objectives) <= 1) {
+            return $this->metricSet($objectives[0] ?? 'custom', $destination);
+        }
+
+        $union = [];
+        foreach ($objectives as $objective) {
+            foreach ($this->metricSet($objective, $destination) as $metric) {
+                $union[$metric] = true;
+            }
+        }
+
+        return array_keys($union);
+    }
+
     public function metricSet(string $objective, ?string $destination = null): array
     {
         /*

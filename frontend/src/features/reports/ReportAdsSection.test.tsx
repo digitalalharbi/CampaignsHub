@@ -223,7 +223,7 @@ describe('the reading of the ads grid', () => {
 /**
  * Owner row 97 — a deck SLIDE cannot grow, and what it could not hold must be stated.
  *
- * The continuous report scrolls; a slide is a fixed A4 landscape page, and the layout gate refuses
+ * The continuous report scrolls; a slide is a fixed 16:9 page, and the layout gate refuses
  * to ship one whose content had to be shrunk below 0.85 to fit. On an estate with five objective
  * groups the ads slide measured 0.355 with 108 clipped elements — unreadable, and it BLOCKED the
  * export of the client PDF entirely, on both forms identically.

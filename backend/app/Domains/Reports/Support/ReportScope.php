@@ -246,6 +246,16 @@ final class ReportScope
         return $this->objectiveFilter ? null : ReportObjectiveLens::fromScopeObjectives($this->objectives)?->value();
     }
 
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — every measurement template the scope's objective choice names (none when it filters by objective).
+     *
+     * @return list<string>
+     */
+    public function objectiveTemplates(): array
+    {
+        return $this->objectiveFilter ? [] : ReportObjectiveLens::templatesOf($this->objectives);
+    }
+
     public function isUnbounded(): bool
     {
         return $this->toArray() === [];

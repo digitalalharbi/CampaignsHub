@@ -266,8 +266,8 @@ What each provider can do lives in one place: `ProviderCatalogue`, one declarati
 | tiktok | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | no | no | no | yes |
 | meta | ads | ad_account | oauth | yes | no | yes | yes | yes | yes | yes | yes | yes | no | no | yes |
 | google | ads | ad_account | oauth | yes | yes | yes | no | no | yes | yes | no | yes | no | no | yes |
-| x | ads | ad_account | oauth | yes | no | no | no | no | no | no | no | no | no | no | yes |
-| linkedin | ads | ad_account | oauth | yes | yes | yes | no | no | no | no | no | yes | no | no | yes |
+| x | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | no | no | no | yes |
+| linkedin | ads | ad_account | oauth | yes | yes | yes | no | no | no | no | yes | yes | no | no | yes |
 | openai_ads | ads | ad_account | api_key | yes | no | no | no | no | no | yes | no | no | no | no | yes |
 | salla | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | yes | no | yes |
 | zid | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | no | no | yes |

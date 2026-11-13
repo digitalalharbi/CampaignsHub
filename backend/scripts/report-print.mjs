@@ -90,8 +90,8 @@ try {
     path: out,
     printBackground: true,
     preferCSSPageSize: true,
-    landscape,
-    format: 'A4',
+    // REPORT-PDF-16-9-001 — the page is the CSS @page size: a 16:9 slide for a presentation, A4 portrait for the deck's portrait form.
+    ...(landscape ? {} : { format: 'A4' }),
     margin: { top: '0', bottom: '0', left: '0', right: '0' },
     // Tagged/accessible PDF → logical reading order in the text layer (searchable/copyable Arabic,
     // screen-reader friendly) + a document outline. Addresses the RTL text-layer, not just visuals.
