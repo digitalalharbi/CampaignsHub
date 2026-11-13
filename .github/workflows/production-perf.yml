@@ -51,37 +51,139 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            echo "== FACTS-LINKEDIN-SCOPES $(date -u +%FT%TZ)"
+            $DC exec -T backend sh -c 'cat /var/www/html/REVISION 2>/dev/null; git -C /var/www/html log -1 --format=%h 2>/dev/null' || true
+            $DC exec -T backend sh -c 'cd /var/www/html && php' <<'PHP'
+            <?php
+            // FACTS-LINKEDIN-SCOPES — read-only. DB inside a READ ONLY transaction that is rolled back; LinkedIn GET only; no refresh.
+            require 'vendor/autoload.php';
+            $app = require 'bootstrap/app.php';
+            $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+            use Illuminate\Support\Facades\DB;
+            use Illuminate\Support\Facades\Http;
+
+            $secrets = [];
+            $red = function ($s) use (&$secrets): string {
+                $s = (string) $s;
+                foreach ($secrets as $x) {
+                    if (is_string($x) && strlen($x) > 8) {
+                        $s = str_replace($x, '[TOKEN]', $s);
+                    }
+                }
+                $s = (string) preg_replace('~(https?://[^\s"\'?]+)\?[^\s"\']*~', '$1?[QUERY-REDACTED]', $s);
+                $s = (string) preg_replace('~[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}~', '[EMAIL]', $s);
+                return $s;
+            };
+            $trim = function ($v) use (&$trim) {
+                if (is_array($v)) { return array_map($trim, $v); }
+                if (is_string($v) && mb_strlen($v) > 160) { return mb_substr($v, 0, 160).'…[+'.(mb_strlen($v) - 160).' chars]'; }
+                return $v;
+            };
+            $show = function (string $label, $resp) use ($red, $trim) {
+                $json = $resp->json();
+                $body = is_array($json) ? json_encode($trim($json), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : mb_substr((string) $resp->body(), 0, 600);
+                echo "## {$label}\nstatus: ".$resp->status()."\n";
+                foreach (['x-restli-error-response', 'x-li-responseorigin', 'x-restli-protocol-version'] as $h) {
+                    if ($resp->header($h) !== '') { echo "header {$h}: ".$resp->header($h)."\n"; }
+                }
+                echo "body: ".$red($body)."\n\n";
+                return is_array($json) ? $json : [];
+            };
+
+            DB::beginTransaction();
+            DB::statement('SET TRANSACTION READ ONLY');
+            try {
+                echo "== (1) scopes the authorise URL asks for, on Production\n";
+                $cfg = DB::table('provider_configurations')->where('provider', 'linkedin')->get(['environment', 'scopes', 'enabled', 'updated_at']);
+                foreach ($cfg as $r) { echo "provider_configurations override: env={$r->environment} enabled=".var_export($r->enabled, true)." scopes=".($r->scopes ?? 'NULL')." updated={$r->updated_at}\n"; }
+                if ($cfg->isEmpty()) { echo "provider_configurations: no linkedin row (catalogue default applies)\n"; }
+                echo "catalogue default: ".implode(' ', App\Domains\Integrations\Catalogue\ProviderCatalogue::get('linkedin')->scopes)."\n";
+                echo "effective (ProviderConfigurationService::scopes): ".implode(' ', app(App\Domains\Integrations\Configuration\ProviderConfigurationService::class)->scopes('linkedin'))."\n";
+                try {
+                    $creds = App\Domains\Integrations\OAuth\PlatformCredentials::for('linkedin');
+                    $url = app(App\Domains\Integrations\OAuth\PlatformOAuth::class)->authorizationUrl($creds, 'STATE');
+                    parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+                    echo "authorizationUrl host+path: ".strtok($url, '?')."\n";
+                    echo "authorizationUrl scope param (literal): ".var_export($q['scope'] ?? null, true)."\n";
+                    echo "authorizationUrl params present: ".implode(',', array_keys($q))."\n";
+                    echo "LinkedIn-Version pinned: ".$creds->get('version')."  api_base: ".$creds->apiBase()."\n";
+                } catch (Throwable $e) { echo "authorizationUrl: ".get_class($e).' '.$red($e->getMessage())."\n"; }
+
+                echo "\n== (2) LinkedIn connections: granted scopes\n";
+                $conns = DB::table('provider_connections')->where('provider', 'linkedin')->orderBy('created_at')->get();
+                $vault = app(App\Domains\Integrations\OAuth\TokenVault::class);
+                foreach ($conns as $c) {
+                    $line = "connection {$c->id} status={$c->status} removed=".($c->removed_at ?? '-')." created={$c->created_at} updated={$c->updated_at} token_expires={$c->token_expires_at}";
+                    echo $line."\n  provider_connections.scopes column: ".($c->scopes ?? 'NULL')."\n";
+                    try {
+                        $model = App\Domains\Integrations\Models\ProviderConnection::withoutGlobalScopes()->find($c->id);
+                        $t = $vault->stored($model);
+                        $secrets[] = $t->accessToken; $secrets[] = (string) $t->refreshToken;
+                        echo "  token payload scope: ".var_export($t->scope, true)."\n";
+                        echo "  token raw.scope (as LinkedIn returned): ".var_export($t->raw['scope'] ?? null, true)."\n";
+                        echo "  token raw keys: ".implode(',', array_keys($t->raw))."  has_refresh=".($t->refreshToken ? 'yes' : 'no')."  expires_at=".($t->expiresAt?->toIso8601String() ?? 'null')."  expired=".($t->isExpired() ? 'yes' : 'no')."\n";
+                    } catch (Throwable $e) { echo "  token: ".get_class($e).' '.$red($e->getMessage())."\n"; }
+                    $acc = DB::table('external_accounts')->where('provider_connection_id', $c->id)->where('account_type', 'ad_account')->count();
+                    echo "  ad accounts: {$acc}\n";
+                }
+
+                echo "\n== creative reasons (linkedin, non-demo): connection | media_reason | format | has_picture | has_body | n\n";
+                $rows = DB::select("select a.provider_connection_id conn, coalesce(c.raw->>'media_reason','-') reason, coalesce(c.format,'NULL') fmt, (coalesce(c.thumbnail_url,c.asset_url) is not null) pic, (coalesce(c.body,'')<>'') body, count(*) n from external_creatives c left join external_accounts a on a.id=c.external_account_id where c.provider='linkedin' and coalesce(c.is_demo,false)=false group by 1,2,3,4,5 order by 1,2");
+                foreach ($rows as $r) { echo "{$r->conn} | {$r->reason} | {$r->fmt} | ".var_export($r->pic, true).' | '.var_export($r->body, true)." | {$r->n}\n"; }
+
+                echo "\n== (3) one creative, the live chain\n";
+                $cr = DB::selectOne("select c.id, c.external_creative_id, c.raw->>'reference' ref, c.raw->>'media_reason' reason, c.last_synced_at, a.external_id acct, a.provider_connection_id conn from external_creatives c join external_accounts a on a.id=c.external_account_id where c.provider='linkedin' and coalesce(c.is_demo,false)=false and c.raw->>'media_reason'='linkedin_post_scope_missing' order by c.last_synced_at desc nulls last limit 1");
+                if ($cr === null) { echo "no creative with linkedin_post_scope_missing\n"; }
+                else {
+                    echo "creative row {$cr->id} external_creative_id={$cr->external_creative_id} account={$cr->acct} connection={$cr->conn} stored_reason={$cr->reason} stored_ref={$cr->ref} last_synced={$cr->last_synced_at}\n\n";
+                    $model = App\Domains\Integrations\Models\ProviderConnection::withoutGlobalScopes()->find($cr->conn);
+                    $t = $vault->stored($model);
+                    $secrets[] = $t->accessToken;
+                    if ($t->isExpired()) { echo "TOKEN EXPIRED at ".$t->expiresAt?->toIso8601String()." — calls below may 401 (no refresh attempted: refresh is a POST)\n"; }
+                    $creds = App\Domains\Integrations\OAuth\PlatformCredentials::forConnection($model);
+                    $base = $creds->apiBase();
+                    $headers = ['LinkedIn-Version' => (string) $creds->get('version'), 'X-Restli-Protocol-Version' => '2.0.0'];
+                    echo "headers sent: LinkedIn-Version={$headers['LinkedIn-Version']} X-Restli-Protocol-Version=2.0.0 Authorization=Bearer [TOKEN]\n\n";
+                    $get = fn (string $url, array $extra = []) => Http::withToken($t->accessToken)->withHeaders($headers + $extra)->timeout(25)->get($url);
+
+                    $creativeUrn = 'urn:li:sponsoredCreative:'.$cr->external_creative_id;
+                    $u = "{$base}/adAccounts/{$cr->acct}/creatives/".rawurlencode($creativeUrn);
+                    $cj = $show("A. GET /rest/adAccounts/{acct}/creatives/{urn}  -> ".$red($u), $get($u));
+                    $ref = $cj['content']['reference'] ?? $cr->ref;
+                    echo "reference used: ".var_export($ref, true)."\n\n";
+                    $mediaUrn = null;
+                    if (is_string($ref)) {
+                        $u = "{$base}/posts?ids=List(".rawurlencode($ref).")";
+                        $pj = $show("B1. GET /rest/posts?ids=List(..) X-RestLi-Method: BATCH_GET  (exact connector call)  -> ".$red($u), $get($u, ['X-RestLi-Method' => 'BATCH_GET']));
+                        $u = "{$base}/posts/".rawurlencode($ref);
+                        $pj2 = $show("B2. GET /rest/posts/{encoded urn}  (single GET, for comparison)  -> ".$red($u), $get($u));
+                        $post = $pj['results'][$ref] ?? ($pj2['id'] ?? null ? $pj2 : null);
+                        if (is_array($post)) {
+                            $content = (array) ($post['content'] ?? []);
+                            $mediaUrn = $content['media']['id'] ?? $content['article']['thumbnail'] ?? null;
+                            echo "post author: ".var_export($post['author'] ?? null, true)."  media urn: ".var_export($mediaUrn, true)."\n\n";
+                        }
+                    }
+                    if (is_string($mediaUrn)) {
+                        $res = str_starts_with($mediaUrn, 'urn:li:video:') ? 'videos' : 'images';
+                        $u = "{$base}/{$res}?ids=List(".rawurlencode($mediaUrn).")";
+                        $show("C1. GET /rest/{$res}?ids=List(..) X-RestLi-Method: BATCH_GET  (exact connector call)  -> ".$red($u), $get($u, ['X-RestLi-Method' => 'BATCH_GET']));
+                        $u = "{$base}/{$res}/".rawurlencode($mediaUrn);
+                        $show("C2. GET /rest/{$res}/{encoded urn}  (single GET)  -> ".$red($u), $get($u));
+                    } else {
+                        echo "C. media call not reached (no post / no media urn)\n";
+                    }
+                }
+            } catch (Throwable $e) {
+                echo "PROBE ERROR: ".get_class($e).' '.$red($e->getMessage())."\n";
+            } finally {
+                DB::rollBack();
+                echo "\n(rolled back; read-only)\n";
+            }
+            PHP
+            echo "== END FACTS-LINKEDIN-SCOPES"
+            exit 0
