@@ -43,9 +43,9 @@ const COPY = {
     resolve: 'إغلاق', snooze: 'تأجيل', create_task: 'إنشاء مهمة', task_created: 'أُنشئت المهمة',
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
-    new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'المدة بين التنبيهات (دقائق)',
+    new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'المدة بين التنبيهات',
     channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'احفظ', load_error: 'تعذّر تحميل الخيارات', err_title: 'يرجى تصحيح الأخطاء التالية',
-    threshold_hint: 'الحد (اختياري): نسبة/أيام/قيمة حسب النوع.',
+    threshold_hint: 'الحد اختياري (نسبة أو أيام حسب النوع). المدة بالدقائق.',
     prefs_title: 'قنوات الإشعار وساعات الهدوء', ch_in_app: 'داخل التطبيق', ch_email: 'البريد', ch_whatsapp: 'واتساب',
     quiet: 'ساعات الهدوء', quiet_enabled: 'تفعيل ساعات الهدوء', from: 'من', to: 'إلى', saved: 'تم الحفظ',
     delivery_note: 'التسليم صادق: لا تُسجَّل أي رسالة كـ«مُرسلة» قبل ربط مزوّد حقيقي.',
@@ -76,9 +76,9 @@ const COPY = {
     resolve: 'Resolve', snooze: 'Snooze', create_task: 'Create task', task_created: 'Task created',
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
-    new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Time between alerts (minutes)',
+    new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Time between alerts',
     channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save', load_error: 'Could not load options', err_title: 'Please fix the following errors',
-    threshold_hint: 'Threshold (optional): pct / days / value depending on type.',
+    threshold_hint: 'Threshold is optional (percent or days by type). Time is in minutes.',
     prefs_title: 'Notification channels & quiet hours', ch_in_app: 'In-app', ch_email: 'Email', ch_whatsapp: 'WhatsApp',
     quiet: 'Quiet hours', quiet_enabled: 'Enable quiet hours', from: 'From', to: 'To', saved: 'Saved',
     delivery_note: 'Honest delivery: nothing is logged as "sent" before a real provider is wired.',
@@ -106,8 +106,8 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   token_expiry: { ar: 'صلاحية الربط تنتهي', en: 'Connection access expiring' },
   report_failed: { ar: 'فشل التقرير', en: 'Report failed' },
   sla_warning: { ar: 'تحذير SLA', en: 'SLA warning' },
-  lead_unassigned: { ar: 'عميل محتمل بلا مسؤول', en: 'Lead with no owner' },
-  lead_no_contact: { ar: 'لم يُتواصل مع العميل المحتمل', en: 'Lead not contacted' },
+  lead_unassigned: { ar: 'مهتم بدون مسؤول', en: 'Lead with no owner' },
+  lead_no_contact: { ar: 'ما أحد تواصل مع المهتم', en: 'Lead not contacted' },
   lead_follow_up_overdue: { ar: 'متابعة متأخرة', en: 'Follow-up overdue' },
   /* Same wording as the taxonomy option the picker reads — one name for one type. */
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
@@ -816,7 +816,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     <div className="flex flex-col gap-3">
     <details data-testid="rule-presets-fold" open={rules.length === 0} className="rounded-2xl border border-border bg-surface [&>summary]:cursor-pointer">
       <summary className="px-3.5 py-2 text-xs font-semibold text-text-secondary">{locale === 'ar' ? 'قواعد جاهزة' : 'Ready-made rules'}</summary>
-      <RulePresets rules={rules} busy={createM.isPending} ar={locale === 'ar'} onAdd={(rule) => createM.mutate(rule)} />
+      <RulePresets rules={rules} busy={createM.isPending} ar={locale === 'ar'} onAdd={(rule) => createM.mutate(rule)} bare />
     </details>
     <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_300px]">
       <div className="flex min-w-0 flex-col gap-1.5">

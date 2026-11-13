@@ -45,7 +45,7 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'budget_100', group: 'money', type: 'budget_risk', threshold: { ratio: 1 }, severity: 'critical',
-    name: { ar: 'الميزانية استُنفدت', en: 'Budget exhausted' },
+    name: { ar: 'خلصت الميزانية', en: 'Budget exhausted' },
     why: { ar: 'تنبيه حرج مع مهمة عند بلوغ الميزانية 100%.', en: 'A critical alert with a task the moment a budget is fully spent.' },
     extra: { create_task: true, cooldown_minutes: 1440 },
   }),
@@ -90,8 +90,8 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'tracking_health', group: 'health', type: 'tracking_health', severity: 'warning',
-    name: { ar: 'سلامة تتبع العملاء المحتملين', en: 'Lead tracking health' },
-    why: { ar: 'ينبّه حين يتعطل نموذج، أو تفشل تحويلات مباشرة، أو تُبلغ منصة بعملاء أكثر مما في مركز العملاء. كل تنبيه يحمل خطورته وما المطلوب.', en: 'Warns when a form breaks, live conversions fail, or a platform reports more leads than the Leads Centre holds. Each alert carries its own severity and what to do.' },
+    name: { ar: 'حالة تتبع المهتمين', en: 'Lead tracking health' },
+    why: { ar: 'ينبّه حين يتعطل نموذج، أو تفشل تحويلات مباشرة، أو تُبلغ منصة بمهتمين أكثر مما في مركز العملاء. كل تنبيه يحمل خطورته وما المطلوب.', en: 'Warns when a form breaks, live conversions fail, or a platform reports more leads than the Leads Centre holds. Each alert carries its own severity and what to do.' },
     extra: { cooldown_minutes: 1440 },
   }),
   build({
@@ -102,8 +102,8 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'lead_unassigned_60', group: 'leads', type: 'lead_unassigned', threshold: { minutes: 60 }, severity: 'warning',
-    name: { ar: 'عميل محتمل بلا مسؤول ساعة', en: 'Lead unassigned for an hour' },
-    why: { ar: 'ينبّه حين يبقى عميل محتمل جديد بلا مسؤول ساعة كاملة.', en: 'Warns when a new lead has had nobody assigned for a full hour.' },
+    name: { ar: 'مهتم بدون مسؤول ساعة', en: 'Lead unassigned for an hour' },
+    why: { ar: 'ينبّه حين يبقى مهتم جديد بدون مسؤول ساعة كاملة.', en: 'Warns when a new lead has had nobody assigned for a full hour.' },
     extra: { cooldown_minutes: 120 },
   }),
 ]
@@ -111,6 +111,6 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
 export const TEMPLATE_GROUPS: Array<{ key: RuleTemplate['group']; ar: string; en: string }> = [
   { key: 'money', ar: 'الميزانية', en: 'Budget' },
   { key: 'results', ar: 'النتائج', en: 'Results' },
-  { key: 'health', ar: 'سلامة البيانات', en: 'Data health' },
-  { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
+  { key: 'health', ar: 'الربط والبيانات', en: 'Connections and data' },
+  { key: 'leads', ar: 'المهتمين', en: 'Leads' },
 ]
