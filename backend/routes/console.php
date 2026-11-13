@@ -87,6 +87,8 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes()->withoutOverlapping(
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
 // FIN-LOOP-001 — count the spend the sync just stored against each project's approved budget (idempotent per account-day).
 Schedule::command('funding:refresh')->cron('20,50 * * * *')->withoutOverlapping();
+// FIN-LOOP-001 — fix last month's budget summary once; daily so a missed day is caught; a fixed month is never rewritten.
+Schedule::command('funding:close-month')->dailyAt('02:40')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 // PERF-SYNC-ISOLATION-001 — the half-hourly sweep above asks 3 days back; this daily pass re-asks the
 // fortnight in which providers restate (late attribution, corrected spend). Same command, same

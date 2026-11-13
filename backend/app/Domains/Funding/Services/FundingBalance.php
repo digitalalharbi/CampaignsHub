@@ -22,6 +22,45 @@ final class FundingBalance
 {
     public function __construct(private readonly FundingSpendRefresher $refresher) {}
 
+    /**
+     * The remaining day by day, for the chart: renewals show as steps up, spend as the slope down.
+     * At most the last 180 days; each point carries the amount added that day, if any.
+     *
+     * @return list<array{date: string, approved: float, spent: float, remaining: float|null, added: float}>
+     */
+    public function series(ProjectFunding $funding, ?Carbon $today = null): array
+    {
+        // Plain calendar dates on one clock: Riyadh's «today», compared day by day with stored dates.
+        $today = Carbon::parse(($today ?? Carbon::today('Asia/Riyadh'))->toDateString());
+        $from = $this->refresher->countsFrom($funding);
+        if ($from === null) {
+            return [];
+        }
+
+        $added = DB::table('funding_payments')->where('project_id', $funding->project_id)
+            ->selectRaw('paid_on, SUM(amount_sar) AS a')->groupBy('paid_on')->pluck('a', 'paid_on')
+            ->mapWithKeys(static fn ($v, $k): array => [Carbon::parse((string) $k)->toDateString() => (float) $v])->all();
+        $spent = DB::table('funding_spend_days')->where('project_id', $funding->project_id)->where('spend_date', '>=', $from->toDateString())
+            ->selectRaw('spend_date, SUM(amount_sar) AS s')->groupBy('spend_date')->pluck('s', 'spend_date')
+            ->mapWithKeys(static fn ($v, $k): array => [Carbon::parse((string) $k)->toDateString() => (float) $v])->all();
+
+        $start = $from->copy()->max($today->copy()->subDays(179));
+        $approved = array_sum(array_filter($added, static fn ($v, $d): bool => $d < $start->toDateString(), ARRAY_FILTER_USE_BOTH));
+        $spentCum = array_sum(array_filter($spent, static fn ($v, $d): bool => $d < $start->toDateString(), ARRAY_FILTER_USE_BOTH));
+        $prepaid = $funding->payment_method === 'prepaid';
+
+        $points = [];
+        for ($d = $start->copy(); $d->lte($today); $d->addDay()) {
+            $key = $d->toDateString();
+            $approved += $added[$key] ?? 0.0;
+            $spentCum += $spent[$key] ?? 0.0;
+            $points[] = ['date' => $key, 'approved' => round($approved, 2), 'spent' => round($spentCum, 2),
+                'remaining' => $prepaid ? round($approved - $spentCum, 2) : null, 'added' => round($added[$key] ?? 0.0, 2)];
+        }
+
+        return $points;
+    }
+
     /** @return array<string, mixed> */
     public function of(ProjectFunding $funding, ?Carbon $today = null): array
     {
