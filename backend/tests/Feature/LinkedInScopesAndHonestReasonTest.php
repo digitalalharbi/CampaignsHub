@@ -17,8 +17,10 @@ use App\Domains\Integrations\OAuth\PlatformOAuth;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Integrations\Status\ConnectionFacts;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
+use App\Domains\Integrations\Support\IntegrationTruth;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -213,6 +215,34 @@ final class LinkedInScopesAndHonestReasonTest extends TestCase
 
         $this->assertFalse(InsightsAuthorisation::grantedBy('meta', ConnectionFacts::fromModel($never)->scopes));
         $this->assertTrue(InsightsAuthorisation::grantedBy('meta', ConnectionFacts::fromModel($asked)->scopes));
+    }
+
+    /**
+     * SyncSweepCharacterisationTest records `scopes = []` for Meta and Snapchat now that the vault no longer restates the
+     * request as a grant. An UNKNOWN grant must not read as a missing one: every status these connections show stays as it was.
+     */
+    public function test_meta_and_snapchat_with_no_returned_scope_still_read_as_connected_with_nothing_missing(): void
+    {
+        foreach (['meta', 'snapchat'] as $provider) {
+            foreach (PlatformCredentials::for($provider)->requires() as $key) {
+                config()->set("ad_platforms.platforms.{$provider}.{$key}", "test-{$key}");
+            }
+            $connection = app(TokenVault::class)->open(
+                tenantId: $this->tenant->id,
+                provider: $provider,
+                tokens: new OAuthTokens('AT-secret', 'RT', Carbon::now()->addDays(30), null),
+                connectionName: $provider,
+            );
+
+            $this->assertSame([], $connection->scopes, "{$provider}: no grant returned is recorded as unknown");
+            $this->assertNotSame([], $connection->requested_scopes, "{$provider}: the request is kept apart");
+            $this->assertSame(
+                IntegrationTruth::CONNECTED,
+                IntegrationStatusResolver::connectionTruth(ConnectionFacts::fromModel($connection)),
+                "{$provider}: an unknown grant must not read as «reconnect»",
+            );
+            $this->assertSame([], GrantedScopes::missing($connection), "{$provider}: no reconnect prompt");
+        }
     }
 
     /** @return list<array<string,mixed>> */
