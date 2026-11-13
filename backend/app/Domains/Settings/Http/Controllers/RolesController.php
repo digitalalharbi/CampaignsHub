@@ -44,7 +44,7 @@ final class RolesController extends Controller
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $tenantId = $this->tenantId();
         $editable = WorkspaceRolePresets::editableKeys();
-        $mine = $request->user()->permissionKeys()->all();
+        $mine = WorkspaceRolePresets::heldBy($request->user());
 
         $stored = Role::query()->where('tenant_id', $tenantId)
             ->whereIn('slug', WorkspaceRolePresets::ORDER)
@@ -112,7 +112,7 @@ final class RolesController extends Controller
 
             // Nobody grants what they do not hold: only ADDED keys are checked, removing one narrows.
             $added = array_values(array_diff($wanted, $before));
-            $mine = $request->user()->permissionKeys()->all();
+            $mine = WorkspaceRolePresets::heldBy($request->user());
             $beyond = $request->user()->is_platform_admin ? [] : array_values(array_diff($added, $mine));
             abort_if($beyond !== [], 403, 'You can only grant permissions you hold yourself.');
 

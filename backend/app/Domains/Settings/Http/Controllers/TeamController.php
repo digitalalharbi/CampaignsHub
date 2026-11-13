@@ -357,7 +357,7 @@ final class TeamController extends Controller
 
         $actor = $request->user();
         if (! $actor->is_platform_admin) {
-            abort_if($keys->diff($actor->permissionKeys())->isNotEmpty(), 403, 'You can only assign a role whose permissions you hold yourself.');
+            abort_if($keys->diff(WorkspaceRolePresets::heldBy($actor))->isNotEmpty(), 403, 'You can only assign a role whose permissions you hold yourself.');
         }
 
         return $role ?? WorkspaceRolePresets::ensure($tenantId, $slug);

@@ -7,6 +7,8 @@ namespace App\Domains\Projects\Access;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Context\MembershipContext;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 
 /**
@@ -31,6 +33,9 @@ final class ProjectReach
 {
     /** @var array<string, list<string>|null> one answer per reader for the life of this instance */
     private array $memo = [];
+
+    /** @var array<string, bool> per membership: an agency member with no named client and no `clients.view_all` */
+    private array $unscoped = [];
 
     /** @var array<string, list<string>> */
     private array $keys = [];
@@ -113,11 +118,42 @@ final class ProjectReach
      *
      * @return list<string>|null
      */
+    /**
+     * TEAM-ROLE-PRESETS-001 — an agency member whose membership names no client, and who does not hold
+     * `clients.view_all`, gets no TENANT-WIDE project reach from `projects.view.all`; the projects they
+     * are explicitly a member of (`project_memberships`) still open, exactly as before.
+     *
+     * The agency's own rule (ADR 0002, `ClientScopeResolver::reachableClientIds`, the team page's
+     * «لا يصل إلى أي عميل») is that no named client is not «every client». This class treated an
+     * unscoped membership as having no ceiling at all, so a freshly invited project manager — whose
+     * role holds `projects.view.all` and whose clients have not been chosen yet — read every project
+     * in the agency. Only the agency portal: a solo workspace has no clients to name, and its members
+     * keep the tenant-wide reach they always had.
+     */
+    public function agencyMemberWithoutClients(): bool
+    {
+        $membership = $this->context->membership();
+        if ($membership === null || $membership->portal !== Portal::Agency
+            || $this->context->clientScopeIds() !== [] || $this->context->projectScopeIds() !== []) {
+            return false;
+        }
+
+        $key = (string) $membership->getKey();
+        if (! array_key_exists($key, $this->unscoped)) {
+            $user = $membership->user;
+            $this->unscoped[$key] = $user instanceof User
+                && ! $user->is_platform_admin
+                && ! $user->hasPermission(ClientScopeResolver::ALL_CLIENTS);
+        }
+
+        return $this->unscoped[$key];
+    }
+
     public function idsFor(User $user): ?array
     {
         $ceiling = $this->ceilingProjectIds();
 
-        if ($this->holds($user, 'projects.view.all')) {
+        if ($this->holds($user, 'projects.view.all') && ! $this->agencyMemberWithoutClients()) {
             return $ceiling;
         }
 

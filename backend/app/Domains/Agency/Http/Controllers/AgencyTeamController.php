@@ -271,7 +271,17 @@ final class AgencyTeamController extends Controller
     private function coverage(Request $request, Collection $memberships): array
     {
         $query = ClientWorkspace::query()->whereNull('archived_at')->orderBy('name');
-        $this->access->restrictQuery($query, $request->user());
+        /*
+         * The NAMED list first: a membership that names clients outranks `clients.view_all`
+         * (`ClientScopeResolver`), so a confined reader whose role carries the key still sees only
+         * their own clients' people. An empty list falls back to the owner / roster grants.
+         */
+        $named = $this->scopes->reachableClientIds($request->user());
+        if ($named !== null && $named !== []) {
+            $query->whereIn('id', $named);
+        } else {
+            $this->access->restrictQuery($query, $request->user());
+        }
         $clients = $query->get(['id', 'name']);
 
         if ($clients->isEmpty()) {
