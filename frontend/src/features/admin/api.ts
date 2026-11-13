@@ -1814,7 +1814,7 @@ export interface PlatformAlertRow {
 export interface PlatformAlertList {
   alerts: PlatformAlertRow[]
   counts: { open: number; critical: number; by_kind: Record<string, number> }
-  settlement_check: 'available' | 'BLOCKED_EXTERNAL_CREDENTIALS'
+  settlement_check: 'available' | 'BLOCKED_EXTERNAL_CREDENTIALS' | 'refused_by_gateway' | 'no_settlement_history'
 }
 
 export function fetchPlatformAlerts(scope: 'open' | 'all' = 'open'): Promise<PlatformAlertList> {

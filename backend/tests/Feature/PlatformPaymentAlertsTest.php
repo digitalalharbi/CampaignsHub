@@ -261,7 +261,7 @@ final class PlatformPaymentAlertsTest extends TestCase
         $payment->forceFill(['status' => 'paid', 'paid_at' => now(), 'provider_payment_id' => 'pay_s1'])->save();
         $this->settledInvoice($payment);
 
-        $this->travelTo($this->t0->copy()->addDays(6));
+        $this->travelTo($this->t0->copy()->addDays(9));
         $this->artisan('platform:payment-alerts')->expectsOutputToContain('Settlement check: BLOCKED_EXTERNAL_CREDENTIALS')->assertSuccessful();
 
         $this->assertSame(0, PlatformAlert::query()->where('kind', PlatformAlert::UNSETTLED)->count());
@@ -277,24 +277,35 @@ final class PlatformPaymentAlertsTest extends TestCase
             /** @var list<string>|null */
             public ?array $settled = [];
 
+            public function state(): string
+            {
+                return self::AVAILABLE;
+            }
+
             public function isAvailable(): bool
             {
                 return true;
             }
 
-            public function settled(string $provider, array $providerPaymentIds): ?array
+            public function settled(string $provider, array $providerPaymentIds, Carbon $since): ?array
             {
                 return $this->settled;
+            }
+
+            public function coverage(): array
+            {
+                // A history that covers the payment's period: a settlement exists after it.
+                return ['settlements' => 1, 'latest_at' => now()->toIso8601String(), 'since' => now()->subDays(9)->toIso8601String()];
             }
         };
         $this->app->instance(SettlementSource::class, $source);
 
-        $this->travelTo($this->t0->copy()->addDays(3));
+        $this->travelTo($this->t0->copy()->addDays(6));
         $this->sweep();
         $this->assertSame(0, PlatformAlert::query()->where('kind', PlatformAlert::UNSETTLED)->count(), 'before the expected period, nothing');
 
         $source->settled = null;
-        $this->travelTo($this->t0->copy()->addDays(5));
+        $this->travelTo($this->t0->copy()->addDays(8));
         $this->sweep();
         $this->assertSame(0, PlatformAlert::query()->where('kind', PlatformAlert::UNSETTLED)->count(), 'an unreadable source is not «unsettled»');
 
