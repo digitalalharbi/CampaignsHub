@@ -870,14 +870,14 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate text-sm font-semibold text-text-primary">{r.name}</span>
-                  <span className="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">{TYPE_LABEL[r.type as AlertType]?.[locale] ?? r.type}</span>
-                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${sevBadge[r.severity]}`}>{sevLabel(r.severity, c)}</span>
+                  <span className="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-xs font-semibold text-text-secondary">{TYPE_LABEL[r.type as AlertType]?.[locale] ?? r.type}</span>
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ${sevBadge[r.severity]}`}>{sevLabel(r.severity, c)}</span>
                 </span>
                 {/*
                   The channels in the reader's language, from the engine that already fed the picker — never
                   the raw option keys; a key that has no option falls back to itself rather than disappearing.
                 */}
-                <span className="truncate text-[11px] text-text-muted">
+                <span className="truncate text-xs text-text-muted">
                   {r.threshold ? `${c.threshold} ${thresholdText(r.threshold)} · ` : ''}
                   <Clock size={10} className="inline" aria-hidden /> {r.cooldown_minutes} {locale === 'ar' ? 'د' : 'min'}
                   {' · '}{(r.channels ?? []).map((k) => channelLabel(k, channelTax.options, locale)).join(' · ')}{r.create_task ? ` · ${c.create_task_toggle}` : ''}
@@ -898,7 +898,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               >
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${r.active ? 'start-[18px]' : 'start-0.5'}`} />
               </button>
-              <span className="hidden w-12 shrink-0 text-[10px] font-semibold text-text-muted sm:inline">{r.active ? c.running : c.paused}</span>
+              <span className="hidden w-12 shrink-0 text-xs font-semibold text-text-muted sm:inline">{r.active ? c.running : c.paused}</span>
               <button type="button" data-testid={`alert-rule-edit-${r.id}`} aria-label={`${c.edit} ${r.name}`} title={c.edit} disabled={busyRow(r.id)} onClick={() => startEdit(r)}
                 className="shrink-0 rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50"><Pencil size={14} /></button>
               <button type="button" data-testid={`alert-rule-delete-${r.id}`} aria-label={`${c.remove} ${r.name}`} title={c.remove} disabled={busyRow(r.id)} onClick={() => void remove(r)}
@@ -945,7 +945,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               onChange={(e) => setForm((f) => ({ ...f, cooldown_minutes: Number(e.target.value) }))} className={input} />
           </label>
         </div>
-        <span className="-mt-1 text-[11px] font-normal text-text-muted">{c.threshold_hint}</span>
+        <span className="-mt-1 text-xs font-normal text-text-muted">{c.threshold_hint}</span>
         <SelectField
           label={c.severity}
           value={form.severity ?? 'warning'}
@@ -986,7 +986,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           <label className="flex items-center gap-2 text-xs text-text-secondary">
             <input type="checkbox" data-testid="alert-rule-rcpt-manager" disabled={!form.project_id} checked={rcpt.project_manager}
               onChange={(e) => setRcpt({ ...rcpt, project_manager: e.target.checked })} />
-            {c.rcpt_manager}{!form.project_id && <span className="text-[10px] text-text-muted">({c.rcpt_manager_hint})</span>}
+            {c.rcpt_manager}{!form.project_id && <span className="text-xs text-text-muted">({c.rcpt_manager_hint})</span>}
           </label>
           <MultiSelectField
             label={c.rcpt_people}
@@ -999,7 +999,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             maxSelections={20}
             bulkActions={false}
           />
-          {form.recipients === null || form.recipients === undefined ? <span className="text-[11px] text-text-muted">{c.rcpt_default}</span> : null}
+          {form.recipients === null || form.recipients === undefined ? <span className="text-xs text-text-muted">{c.rcpt_default}</span> : null}
         </fieldset>
         <label className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
           <input type="checkbox" checked={form.create_task} onChange={(e) => setForm((f) => ({ ...f, create_task: e.target.checked }))} />

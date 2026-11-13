@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Alerts\Services;
 
+use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
@@ -50,6 +51,7 @@ final class AlertEventMailer
         private readonly NotificationChoices $choices,
         private readonly MailSendGate $gate,
         private readonly MailUnsubscribes $unsubscribes,
+        private readonly AlertRuleRecipients $recipients,
     ) {}
 
     /**
@@ -68,6 +70,42 @@ final class AlertEventMailer
             return $counts;
         }
 
+        /*
+         * ALERT-RULES-MANAGE-001 — the rule decides two things before anybody's preferences are read.
+         *
+         * Its channels: a rule saved without «email» sends no email. The channel list was stored and shown and never
+         * read, so a rule switched to in-app only kept emailing — a setting that looks configured and does nothing.
+         * Its recipients: a rule that names people (the project's manager, named members) is mailed to them, each
+         * re-checked against their membership now; a rule that names nobody keeps the default — everybody in scope
+         * who chose alert email. Every person still passes their own choices, quiet hours and repeat limit below.
+         */
+        $defaultItems = [];
+        $namedItems = []; // userId => list of items
+        $namedUsers = [];
+        $rules = [];
+        foreach ($items as $item) {
+            $ruleId = (string) ($item['rule_id'] ?? '');
+            $rule = $ruleId === '' ? null : ($rules[$ruleId] ??= AlertRule::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->find($ruleId));
+            if ($rule !== null && is_array($rule->channels) && ! in_array('email', $rule->channels, true)) {
+                $counts['rule_channel_off'] = ($counts['rule_channel_off'] ?? 0) + 1;
+
+                continue;
+            }
+            $named = $rule === null ? null : $this->recipients->resolve($rule, isset($item['project_id']) ? (string) $item['project_id'] : null);
+            if ($named === null) {
+                $defaultItems[] = $item;
+
+                continue;
+            }
+            foreach ($named as $user) {
+                if ($onlyUserId !== null && (int) $user->getKey() !== $onlyUserId) {
+                    continue;
+                }
+                $namedUsers[(int) $user->getKey()] = $user;
+                $namedItems[(int) $user->getKey()][] = $item;
+            }
+        }
+
         $rows = DB::table('notification_preferences')
             ->where('tenant_id', $tenantId)
             ->whereNull('client_workspace_id')
@@ -75,59 +113,98 @@ final class AlertEventMailer
             ->when($onlyUserId !== null, fn ($q) => $q->where('user_id', $onlyUserId))
             ->get();
 
+        /** @var array<int, array{user: User, locale: string, eligible: list<array<string,mixed>>}> $bundles */
+        $bundles = [];
+        $locales = [];
         foreach ($rows as $row) {
+            $locales[(int) $row->user_id] = (string) ($row->locale ?? 'ar');
+            if ($defaultItems === []) {
+                continue;
+            }
             $user = User::query()->find($row->user_id);
             if ($user === null || $user->email === null) {
                 continue;
             }
-            $userId = (int) $user->getKey();
-            $locale = (string) ($row->locale ?? 'ar');
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
-            $eligible = [];
-
-            foreach ($items as $item) {
+            $inScope = [];
+            foreach ($defaultItems as $item) {
                 $projectId = $item['project_id'] ?? null;
                 if ($projectId !== null && ! in_array((string) $projectId, $projectIds, true)) {
                     $counts['out_of_scope']++;
 
                     continue;
                 }
-                $type = (string) $item['notification_type'];
-                if ($this->choices->chose($userId, $tenantId, $type, 'email') === false) {
-                    $counts['switched_off']++;
-
-                    continue;
-                }
-                if (! $this->choices->meetsImportance($userId, $tenantId, $type, (string) $item['severity'])) {
-                    $counts['below_importance'] = ($counts['below_importance'] ?? 0) + 1;
-
-                    continue;
-                }
-                if ($this->choices->rhythm($userId, $tenantId, $type) !== 'immediate') {
-                    $counts['held_for_digest']++;
-
-                    continue;
-                }
-                if ($this->choices->inQuietHours($userId, $tenantId, $now)) {
-                    $counts['held_by_quiet_hours']++;
-
-                    continue;
-                }
-                if ($this->repeatedTooOften($user, $item, $now)) {
-                    $this->holdRepeat($tenantId, $user, $item, $now);
-                    $counts['repeat_limit'] = ($counts['repeat_limit'] ?? 0) + 1;
-
-                    continue;
-                }
-                $eligible[] = $item + ['period_key' => $this->periodKey($item)];
+                $inScope[] = $item;
             }
+            $bundles[(int) $user->getKey()] = ['user' => $user, 'locale' => $locales[(int) $user->getKey()], 'eligible' => $this->eligible($user, $tenantId, $inScope, $now, $counts)];
+        }
 
-            foreach ($this->deliver($user, $tenantId, $eligible, $locale, $now) as $state => $n) {
+        // Named recipients were scope-checked when the rule resolved them; their own choices still apply.
+        foreach ($namedItems as $userId => $list) {
+            $user = $namedUsers[$userId];
+            if ($user->email === null) {
+                continue;
+            }
+            $eligible = $this->eligible($user, $tenantId, $list, $now, $counts);
+            if (isset($bundles[$userId])) {
+                $bundles[$userId]['eligible'] = array_merge($bundles[$userId]['eligible'], $eligible);
+            } else {
+                $bundles[$userId] = ['user' => $user, 'locale' => $locales[$userId] ?? 'ar', 'eligible' => $eligible];
+            }
+        }
+
+        foreach ($bundles as $bundle) {
+            foreach ($this->deliver($bundle['user'], $tenantId, $bundle['eligible'], $bundle['locale'], $now) as $state => $n) {
                 $counts[$state] = ($counts[$state] ?? 0) + $n;
             }
         }
 
         return $counts;
+    }
+
+    /**
+     * The items this person should be emailed now, after their own choices; each refusal is counted, never silent.
+     *
+     * @param  list<array<string,mixed>>  $items
+     * @param  array<string,int>  $counts
+     * @return list<array<string,mixed>>
+     */
+    private function eligible(User $user, string $tenantId, array $items, Carbon $now, array &$counts): array
+    {
+        $userId = (int) $user->getKey();
+        $eligible = [];
+        foreach ($items as $item) {
+            $type = (string) $item['notification_type'];
+            if ($this->choices->chose($userId, $tenantId, $type, 'email') === false) {
+                $counts['switched_off']++;
+
+                continue;
+            }
+            if (! $this->choices->meetsImportance($userId, $tenantId, $type, (string) $item['severity'])) {
+                $counts['below_importance'] = ($counts['below_importance'] ?? 0) + 1;
+
+                continue;
+            }
+            if ($this->choices->rhythm($userId, $tenantId, $type) !== 'immediate') {
+                $counts['held_for_digest']++;
+
+                continue;
+            }
+            if ($this->choices->inQuietHours($userId, $tenantId, $now)) {
+                $counts['held_by_quiet_hours']++;
+
+                continue;
+            }
+            if ($this->repeatedTooOften($user, $item, $now)) {
+                $this->holdRepeat($tenantId, $user, $item, $now);
+                $counts['repeat_limit'] = ($counts['repeat_limit'] ?? 0) + 1;
+
+                continue;
+            }
+            $eligible[] = $item + ['period_key' => $this->periodKey($item)];
+        }
+
+        return $eligible;
     }
 
     /** @param  list<array<string,mixed>>  $eligible */
