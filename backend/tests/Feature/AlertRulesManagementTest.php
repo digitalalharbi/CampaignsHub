@@ -96,6 +96,11 @@ final class AlertRulesManagementTest extends TestCase
         $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/alerts/rules/{$rule->id}", ['threshold' => ['pctt' => 20]])->assertStatus(422);
         $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/alerts/rules/{$rule->id}", ['cooldown_minutes' => 1])->assertStatus(422);
         $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/alerts/rules/{$rule->id}", ['name' => 'x'])->assertStatus(422);
+        // NOT NULL columns are optional on edit, never null — and an edit cannot empty the channels.
+        foreach (['active', 'create_task', 'severity', 'cooldown_minutes'] as $key) {
+            $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/alerts/rules/{$rule->id}", [$key => null])->assertStatus(422);
+        }
+        $this->actingAs($owner, 'sanctum')->patchJson("/api/v1/alerts/rules/{$rule->id}", ['channels' => []])->assertStatus(422);
 
         $this->assertSame(['pct' => 20], $rule->fresh()->threshold);
         $this->assertSame('CPA watch', $rule->fresh()->name);
@@ -193,6 +198,11 @@ final class AlertRulesManagementTest extends TestCase
         $this->assertNotContains((int) $memberB->id, $options, 'cannot see project A');
         $this->assertNotContains((int) $clientLogin->id, $options, 'a client-portal login is never an alert recipient');
         $this->assertNotContains((int) $stranger->id, $options, 'another workspace');
+
+        // A member who ALSO holds a client-portal login is judged by their staff membership, never the portal one.
+        $this->grantMembership($memberB, $this->agency, Portal::ClientPortal, 'member', [(string) $this->clientA->id]);
+        $options = array_column($this->actingAs($owner, 'sanctum')->getJson('/api/v1/alerts/rules/recipients?project='.$this->projectA->id)->assertOk()->json('data'), 'id');
+        $this->assertNotContains((int) $memberB->id, $options, 'a client-portal scope does not widen a staff member');
 
         $rule = $this->rule((string) $this->projectA->id);
         $url = "/api/v1/alerts/rules/{$rule->id}";

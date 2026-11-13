@@ -738,7 +738,6 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     queryFn: () => listRuleRecipients(form.project_id ?? null),
     retry: false,
   })
-  const reset = () => { setForm(EMPTY_RULE); setThresholdRaw(''); setEditing(null) }
   const refresh = () => qc.invalidateQueries({ queryKey: ['alert-rules'] })
   /*
    * One create path, two ways to reach it — the form, and the suggestion below the empty list.
@@ -754,12 +753,18 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   })
   const updateM = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: AlertRulePatch }) => updateAlertRule(id, patch),
-    onSuccess: (_d, v) => { void refresh(); if (editing && v.id === editing.id && v.patch.name !== undefined) reset() },
+    onSuccess: () => { void refresh(); reset() },
+  })
+  // Pause / resume is its own mutation, so a refused toggle on one row never lands in the edit form's errors.
+  const toggleM = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => updateAlertRule(id, { active }),
+    onSuccess: () => { void refresh() },
   })
   const deleteM = useMutation({
     mutationFn: (id: string) => deleteAlertRule(id),
     onSuccess: (_d, id) => { void refresh(); if (editing?.id === id) reset() },
   })
+  function reset() { setForm(EMPTY_RULE); setThresholdRaw(''); setEditing(null); updateM.reset(); createM.reset() }
   const rules = q.data?.rules ?? []
   /*
    * The server bounds this list (newest first). Saying so is not a footnote: a truncated list
@@ -773,7 +778,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     ? (() => { const api = toApiError(formError); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: f === 'name' ? 'rule-name' : f, message: m[0] }] : [])) : [] })()
     : []
   const saving = createM.isPending || updateM.isPending
-  const busyRow = (id: string) => (updateM.isPending && updateM.variables?.id === id) || (deleteM.isPending && deleteM.variables === id)
+  const busyRow = (id: string) => (updateM.isPending && updateM.variables?.id === id) || (toggleM.isPending && toggleM.variables?.id === id) || (deleteM.isPending && deleteM.variables === id)
   const projects = projectsQ.data ?? []
   const projectName = (id: string | null) => (id ? projects.find((p) => p.id === id)?.name ?? '' : c.account_wide)
   const people = recipientsQ.data ?? []
@@ -783,10 +788,12 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     setForm((f) => ({ ...f, recipients: !next.project_manager && next.user_ids.length === 0 ? null : next }))
 
   const startEdit = (r: AlertRule) => {
+    updateM.reset()
     setEditing(r)
     setForm({
       type: r.type as AlertType, name: r.name, severity: r.severity, cooldown_minutes: r.cooldown_minutes,
-      channels: r.channels ?? [], create_task: r.create_task, active: r.active, project_id: r.project_id, recipients: r.recipients ?? null,
+      // A rule stored without channels uses the default (in-app + email); an edit must not turn that into «none».
+      channels: r.channels ?? ['in_app', 'email'], create_task: r.create_task, active: r.active, project_id: r.project_id, recipients: r.recipients ?? null,
     })
     setThresholdRaw(thresholdText(r.threshold))
   }
@@ -795,11 +802,23 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   }
   const submit = () => {
     if (editing) {
-      updateM.mutate({ id: editing.id, patch: {
-        name: form.name, severity: form.severity, cooldown_minutes: form.cooldown_minutes, channels: form.channels,
-        create_task: form.create_task, project_id: form.project_id ?? null, recipients: form.recipients ?? null,
-        threshold: parseThreshold(thresholdRaw, form.type) ?? null,
-      } })
+      /*
+       * Only what changed is sent. Sending every field re-checked untouched recipients on a simple rename, and a
+       * person who had since lost the project turned «rename» into a refusal about somebody nobody edited.
+       */
+      const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      const threshold = parseThreshold(thresholdRaw, form.type) ?? null
+      const patch: AlertRulePatch = {}
+      if (form.name !== editing.name) patch.name = form.name
+      if (form.severity !== editing.severity) patch.severity = form.severity
+      if (form.cooldown_minutes !== editing.cooldown_minutes) patch.cooldown_minutes = form.cooldown_minutes
+      if (!same(form.channels, editing.channels ?? ['in_app', 'email'])) patch.channels = form.channels
+      if (form.create_task !== editing.create_task) patch.create_task = form.create_task
+      if ((form.project_id ?? null) !== editing.project_id) patch.project_id = form.project_id ?? null
+      if (!same(form.recipients, editing.recipients)) patch.recipients = form.recipients ?? null
+      if (!same(threshold, editing.threshold)) patch.threshold = threshold
+      if (Object.keys(patch).length === 0) { reset(); return }
+      updateM.mutate({ id: editing.id, patch })
     } else {
       createM.mutate({ ...form, threshold: parseThreshold(thresholdRaw, form.type) })
     }
@@ -893,7 +912,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                 title={r.active ? c.pause : c.resume}
                 data-testid={`alert-rule-toggle-${r.id}`}
                 disabled={busyRow(r.id)}
-                onClick={() => updateM.mutate({ id: r.id, patch: { active: !r.active } })}
+                onClick={() => toggleM.mutate({ id: r.id, active: !r.active })}
                 className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${r.active ? 'bg-success' : 'bg-border'}`}
               >
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${r.active ? 'start-[18px]' : 'start-0.5'}`} />
