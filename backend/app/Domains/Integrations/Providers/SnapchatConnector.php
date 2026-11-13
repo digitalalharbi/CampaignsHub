@@ -1253,8 +1253,9 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         $regions = function (array $geos) use ($tokens): array {
             $out = [];
             foreach ($geos as $g) {
-                $names = $tokens === null || ! isset($g['country_code']) ? [] : $this->regionNames($tokens, (string) $g['country_code']);
-                foreach ((array) ($g['region_id'] ?? []) as $id) {
+                $ids = (array) ($g['region_id'] ?? []);
+                $names = $tokens === null || $ids === [] || ! isset($g['country_code']) ? [] : $this->regionNames($tokens, (string) $g['country_code']);
+                foreach ($ids as $id) {
                     $out[] = $names[(string) $id] ?? (string) $id;
                 }
             }
@@ -1283,7 +1284,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             'regions' => $regions($include),
             'postal_codes' => $postal > 0 ? $postal : null,
             'radius_m' => $radii,
-            'excluded_countries' => array_values(array_filter($countries($exclude), static fn (string $c): bool => ! array_filter($exclude, static fn (array $g): bool => ($g['country_code'] ?? null) === $c && ((array) ($g['region_id'] ?? [])) !== []))),
+            // A country is excluded whole only by an EXCLUDE geo that names no region and no postal code of it.
+            'excluded_countries' => $countries(array_values(array_filter($exclude, static fn (array $g): bool => ((array) ($g['region_id'] ?? [])) === [] && ((array) ($g['postal_code'] ?? [])) === []))),
             'excluded_regions' => $regions($exclude),
             'age_min' => $demographics['min_age'] ?? null,
             'age_max' => $demographics['max_age'] ?? null,
@@ -1312,6 +1314,12 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return ['region'];
     }
 
+    /** «Delivery Insights are only available on days when there are at least 30 impressions» (measurement docs). */
+    public function audienceMinimumImpressions(): int
+    {
+        return 30;
+    }
+
     public function audienceSourceField(string $dimension): string
     {
         return 'snapchat:adsquads/{id}/stats granularity=TOTAL report_dimension='.$dimension.' (estimated, days ≥30 impressions)';
@@ -1327,20 +1335,28 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             return SyncResult::of([]);
         }
 
-        $rows = [];
-        $calls = 0;
-        $skipped = 0;
         try {
             $tokens = $this->tokens();
             $timezone = $this->accountTimezone($adAccountId);
-            foreach ($delivering as $squadId => $days) {
-                foreach (array_values(array_unique($days)) as $day) {
-                    if ($calls >= self::AUDIENCE_MAX_CALLS) {
-                        $skipped++;
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
 
-                        continue;
-                    }
-                    $calls++;
+        $rows = [];
+        $calls = 0;
+        $skipped = 0;
+        $failed = 0;
+        $firstFailure = null;
+        foreach ($delivering as $squadId => $days) {
+            foreach (array_values(array_unique($days)) as $day) {
+                if ($calls >= self::AUDIENCE_MAX_CALLS) {
+                    $skipped++;
+
+                    continue;
+                }
+                $calls++;
+                // One refused question costs that question only; a rate limit stops the sweep and keeps what it read.
+                try {
                     $window = ReportingWindow::localDays($timezone, $day, $day);
                     $body = $this->read($this->api($tokens)->get($this->url("adsquads/{$squadId}/stats").'?'.http_build_query([
                         'granularity' => 'TOTAL',
@@ -1350,13 +1366,25 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                         'end_time' => $window->endIso(),
                     ])), "{$dimension} breakdown");
                     $rows = [...$rows, ...self::mapAudienceStats($body, (string) $squadId, $day, $dimension)];
+                } catch (\Throwable $e) {
+                    $failed++;
+                    $firstFailure ??= $e->getMessage();
+                    if (preg_match('/\b429\b|rate limit|too many requests/i', $e->getMessage()) === 1) {
+                        break 2;
+                    }
                 }
             }
-        } catch (\Throwable $e) {
-            return SyncResult::failed($e->getMessage());
         }
 
-        return SyncResult::of($rows, $skipped > 0 ? "{$skipped} (ad squad, day) question(s) left for the next sweep" : null);
+        if ($failed > 0 && $rows === []) {
+            return SyncResult::failed((string) $firstFailure);
+        }
+        $notes = array_filter([
+            $skipped > 0 ? "{$skipped} (ad squad, day) question(s) left for the next sweep" : null,
+            $failed > 0 ? "{$failed} question(s) refused: ".$firstFailure : null,
+        ]);
+
+        return SyncResult::of($rows, $notes === [] ? null : implode('; ', $notes));
     }
 
     /**

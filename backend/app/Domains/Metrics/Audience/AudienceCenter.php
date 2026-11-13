@@ -104,13 +104,12 @@ final class AudienceCenter
                 'kind' => 'targeting',
                 'provider' => (string) $r->provider,
                 'level' => 'ad_set',
-                'ad_set_id' => (string) $r->id,
                 'settings' => is_array($settings) ? (array_intersect_key($settings, array_flip(self::TARGETING_KEYS)) ?: null) : null,
                 'not_stored' => $cap['targeting_lost'] ?? [],
                 'synced_at' => $r->last_synced_at === null ? null : Carbon::parse((string) $r->last_synced_at)->toIso8601String(),
             ];
             if (! $clientFacing) {
-                $item += ['ad_set' => (string) $r->name, 'campaign' => (string) $r->campaign_name, 'account_id' => (string) $r->external_account_id];
+                $item += ['ad_set_id' => (string) $r->id, 'ad_set' => (string) $r->name, 'campaign' => (string) $r->campaign_name, 'account_id' => (string) $r->external_account_id];
             }
             $items[] = $item;
         }

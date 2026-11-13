@@ -412,7 +412,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
       return <Ga4Slide slide={slide} data={data} paged={paged} />
     // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
     case '__audience_delivery': case '__audience_targeting': case '__audience_site':
-      return <AudienceSlideBody type={slide.type} range={slide.range} payload={data as unknown as AudienceParts} />
+      return <AudienceSlideBody type={slide.type} range={slide.range} payload={data as unknown as AudienceParts} named={Array.isArray(data.report_sections) ? (data.report_sections as string[]) : []} />
     case '__formats': case '__formats_table':
       return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>

@@ -126,6 +126,11 @@ final class AudienceCenterTest extends TestCase
                 return ['region'];
             }
 
+            public function audienceMinimumImpressions(): int
+            {
+                return 1;
+            }
+
             public function audienceSourceField(string $dimension): string
             {
                 return 'test:'.$dimension;
@@ -362,6 +367,11 @@ final class AudienceCenterTest extends TestCase
             public function audienceDimensions(): array
             {
                 return ['region'];
+            }
+
+            public function audienceMinimumImpressions(): int
+            {
+                return 1;
             }
 
             public function audienceSourceField(string $dimension): string

@@ -25,6 +25,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -125,6 +126,8 @@ final class AudienceSlice2Test extends TestCase
         DB::table('entity_daily_metrics')->insert([
             $this->entityDay($tenant, $project, $account, $set, '2026-11-12', 50),
             $this->entityDay($tenant, $project, $account, $set, '2026-11-11', 0),
+            // Below the provider's floor (the fake says 30): never asked.
+            $this->entityDay($tenant, $project, $account, $set, '2026-11-10', 12),
             $this->entityDay($tenant, $other['project'], $account, $other['set'], '2026-11-12', 70),
         ]);
         $connector = new class implements ReportsAudienceBreakdowns
@@ -135,6 +138,11 @@ final class AudienceSlice2Test extends TestCase
             public function audienceDimensions(): array
             {
                 return ['region'];
+            }
+
+            public function audienceMinimumImpressions(): int
+            {
+                return 30;
             }
 
             public function audienceSourceField(string $dimension): string
@@ -149,11 +157,24 @@ final class AudienceSlice2Test extends TestCase
                 return SyncResult::of([]);
             }
         };
-        $run = MetricSyncRun::withoutGlobalScopes()->create(['tenant_id' => $tenant->id, 'project_id' => $project->id, 'external_account_id' => $account->id, 'provider' => 'snapchat', 'status' => 'running', 'window_start' => '2026-11-11', 'window_end' => '2026-11-12']);
+        $run = MetricSyncRun::withoutGlobalScopes()->create(['tenant_id' => $tenant->id, 'project_id' => $project->id, 'external_account_id' => $account->id, 'provider' => 'snapchat', 'status' => 'running', 'window_start' => '2026-11-10', 'window_end' => '2026-11-12']);
 
-        app(AudienceBreakdownSync::class)->sync($connector, $account, $run, Carbon::parse('2026-11-11'), Carbon::parse('2026-11-12'));
+        app(AudienceBreakdownSync::class)->sync($connector, $account, $run, Carbon::parse('2026-11-10'), Carbon::parse('2026-11-12'));
+        $this->assertSame(['sq-1' => ['2026-11-12']], $connector->asked, 'only delivering days at or above the floor, only this project');
 
-        $this->assertSame(['sq-1' => ['2026-11-12']], $connector->asked, 'only delivering days, only this project');
+        // A failed or empty sweep is throttled on the attempt itself: the provider is not asked again within the window.
+        $connector->asked = ['untouched' => []];
+        $again = app(AudienceBreakdownSync::class)->sync($connector, $account, $run, Carbon::parse('2026-11-10'), Carbon::parse('2026-11-12'));
+        $this->assertSame('throttled', $again['state']);
+        $this->assertSame(['untouched' => []], $connector->asked);
+
+        // Once the throttle has passed, a (squad, day) already stored is not asked again.
+        Cache::flush();
+        DB::table('audience_breakdown_rows')->insert(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'project_id' => $project->id, 'external_account_id' => $account->id,
+            'provider' => 'snapchat', 'dimension' => 'region', 'value' => 'R', 'source_field' => 't', 'external_entity_id' => 'sq-1', 'metric_date' => '2026-11-12',
+            'synced_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now()]);
+        app(AudienceBreakdownSync::class)->sync($connector, $account, $run, Carbon::parse('2026-11-10'), Carbon::parse('2026-11-12'));
+        $this->assertSame([], $connector->asked, 'a stored (squad, day) is not asked twice');
     }
 
     // ------------------------------------------------------------------ file export
@@ -213,6 +234,7 @@ final class AudienceSlice2Test extends TestCase
         $this->assertStringNotContainsString('SECRET_ADSET', $body);
         $this->assertStringNotContainsString('CAMP_', $body);
         $this->assertStringNotContainsString((string) $set, $body, 'no internal ids');
+        $this->assertStringNotContainsString('ad_set_id', $body);
         $this->assertNull($on->json('data.projects.0.reading.capabilities'));
         $this->assertStringNotContainsString('OTHER_CLIENT_REGION', $body, 'another client of the same agency is never read');
         $this->assertCount(1, $on->json('data.projects'));

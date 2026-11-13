@@ -101,6 +101,12 @@ describe('audience pages of the deck and the PDF', () => {
     expect(withAudienceSlides<S>([], { report_sections: ['kpis'] })).toEqual([])
   })
 
+  it('a page never draws a part the server did not name', () => {
+    renderWithProviders(<AudienceSlideBody type="__audience_delivery" range={[0, 3]} payload={{ audience_regions: { groups: [meta] }, audience_age: { groups: [snap] } }} named={['audience_age']} />)
+    expect(screen.queryByTestId('audience-delivery-meta-region')).toBeNull()
+    expect(screen.getByTestId('audience-delivery-snapchat-region')).toBeInTheDocument()
+  })
+
   it('a delivery page draws its own slice of cards', () => {
     renderWithProviders(<AudienceSlideBody type="__audience_delivery" range={[1, 2]} payload={{ audience_regions: { groups: [meta, snap] } }} />)
     expect(screen.queryByTestId('audience-delivery-meta-region')).toBeNull()

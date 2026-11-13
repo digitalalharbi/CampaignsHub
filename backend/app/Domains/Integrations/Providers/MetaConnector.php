@@ -1215,6 +1215,11 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
         return ['region'];
     }
 
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
     public function audienceSourceField(string $dimension): string
     {
         return 'meta:insights.level=adset.breakdowns='.$dimension;

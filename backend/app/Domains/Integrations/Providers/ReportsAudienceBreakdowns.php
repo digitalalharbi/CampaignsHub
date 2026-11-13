@@ -20,6 +20,9 @@ interface ReportsAudienceBreakdowns
     /** @return list<string> the dimensions this provider is asked for, e.g. ['region'] */
     public function audienceDimensions(): array;
 
+    /** A day below this many impressions has no breakdown at this provider (Snapchat: 30), so it is never asked about. */
+    public function audienceMinimumImpressions(): int;
+
     /** The provider field each dimension is read from, for provenance (e.g. `meta:insights.breakdowns=region`). */
     public function audienceSourceField(string $dimension): string;
 

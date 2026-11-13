@@ -23,7 +23,7 @@ export interface TargetingItem {
   kind: 'targeting'
   provider: string
   level: 'ad_set'
-  ad_set_id: string
+  ad_set_id?: string
   ad_set?: string
   campaign?: string
   settings: Record<string, unknown> | null

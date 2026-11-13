@@ -1954,6 +1954,7 @@ final class ClientPortalController
         /** @var ClientWorkspace $workspace */
         $workspace = array_values($models)[0];
         abort_unless(PortalVisibility::allows($workspace, 'dashboard') && PortalVisibility::allows($workspace, 'audience'), 403, 'The audience is not available for this space.');
+        $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
 
         $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
         $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);

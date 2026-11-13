@@ -39,7 +39,7 @@ final class AudienceCapabilities
             'snapchat' => [
                 'dimensions' => ['region' => ['targeting' => true, 'delivery' => 'stored'], 'city' => ['targeting' => false, 'delivery' => 'unknown'], 'gender' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'age' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'device' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'placement' => ['targeting' => true, 'delivery' => 'unknown'], 'interests' => ['targeting' => false, 'delivery' => 'unknown'], 'professional' => ['targeting' => false, 'delivery' => 'unavailable_provider']],
                 'targeting_stored' => ['countries', 'regions', 'postal_codes (count)', 'radius_m', 'excluded_countries', 'excluded_regions', 'age_min', 'age_max', 'gender', 'languages', 'placements'],
-                'targeting_lost' => ['metros', 'circle centres', 'interests'],
+                'targeting_lost' => ['metros', 'excluded postal codes', 'circle centres', 'interests'],
                 'source' => 'GET /v1/adsquads/{id}/stats granularity=TOTAL report_dimension=region (estimated; days with at least 30 impressions)',
                 'docs' => 'https://developers.snap.com/api/marketing-api/Ads-API/measurement',
             ],

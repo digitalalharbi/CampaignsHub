@@ -34,9 +34,9 @@ export function PortalAudience({ from, to }: { from?: string; to?: string }) {
         <div key={project.id} data-testid={`portal-audience-${project.id}`} className="flex min-w-0 flex-col gap-2">
           {projects.length > 1 && <h3 className="text-sm font-bold text-text-primary">{project.name}</h3>}
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {reading.paid_delivery.groups.map((g) => <DeliveryGroupCard key={`${g.provider}-${g.dimension}`} group={g} locale={locale} />)}
-            {reading.targeting.items.length > 0 && <TargetingList items={reading.targeting.items} locale={locale} />}
-            {reading.site_events.groups.map((g) => <SiteGroupCard key={g.dimension} group={g} locale={locale} />)}
+            {(reading.paid_delivery?.groups ?? []).map((g) => <DeliveryGroupCard key={`${g.provider}-${g.dimension}`} group={g} locale={locale} />)}
+            {(reading.targeting?.items?.length ?? 0) > 0 && <TargetingList items={reading.targeting.items} locale={locale} />}
+            {(reading.site_events?.groups ?? []).map((g) => <SiteGroupCard key={g.dimension} group={g} locale={locale} />)}
           </div>
         </div>
       ))}

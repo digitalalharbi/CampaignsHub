@@ -140,8 +140,8 @@ export function TargetingList({ items, locale }: { items: TargetingItem[]; local
         <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">{t(locale, 'إعداد — ليس تسليمًا', 'A setting — not delivery')}</span>
       </header>
       <ul className="flex flex-col gap-2">
-        {shown.map((i) => (
-          <li key={i.ad_set_id} className="min-w-0">
+        {shown.map((i, n) => (
+          <li key={`${i.provider}-${i.ad_set_id ?? n}`} className="min-w-0">
             <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-text-primary">
               <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: platformColor(i.provider) }} aria-hidden />
               <span className="min-w-0 truncate">{i.ad_set ?? t(locale, 'مجموعة إعلانية', 'Ad set')}</span>
@@ -190,10 +190,12 @@ export function AudienceReportBlocks({ payload, locale }: { payload: AudiencePar
 }
 
 /** AUDIENCE-001 — one printed page of the audience: a slice of the delivery cards, of the targeting, or the site. */
-export function AudienceSlideBody({ type, range, payload }: { type: string; range?: [number, number]; payload: AudienceParts }) {
+export function AudienceSlideBody({ type, range, payload, named }: { type: string; range?: [number, number]; payload: AudienceParts; named?: readonly string[] }) {
   const [from, to] = range ?? [0, Number.MAX_SAFE_INTEGER]
+  // Only the parts the server NAMED: the page ranges were counted over that list, and nothing else is drawn.
+  const shown = (k: string) => named === undefined || named.includes(k)
   if (type === '__audience_delivery') {
-    const groups = AUDIENCE_DELIVERY_PARTS.flatMap((k) => payload[k]?.groups ?? []).slice(from, to)
+    const groups = AUDIENCE_DELIVERY_PARTS.filter(shown).flatMap((k) => payload[k]?.groups ?? []).slice(from, to)
     return (
       <div data-testid="audience-slide-delivery">
         <h2 className="mb-1 text-2xl font-extrabold tracking-tight text-text-primary">الجمهور: التسليم المدفوع</h2>
@@ -206,7 +208,7 @@ export function AudienceSlideBody({ type, range, payload }: { type: string; rang
     return (
       <div data-testid="audience-slide-targeting">
         <h2 className="mb-3 text-2xl font-extrabold tracking-tight text-text-primary">الجمهور المستهدف</h2>
-        <TargetingList items={(payload.audience_targeting?.items ?? []).slice(from, to)} locale="ar" />
+        <TargetingList items={shown('audience_targeting') ? (payload.audience_targeting?.items ?? []).slice(from, to) : []} locale="ar" />
       </div>
     )
   }
@@ -214,7 +216,7 @@ export function AudienceSlideBody({ type, range, payload }: { type: string; rang
     return (
       <div data-testid="audience-slide-site">
         <h2 className="mb-3 text-2xl font-extrabold tracking-tight text-text-primary">زوار الموقع حسب الدولة والجهاز</h2>
-        <div className="grid grid-cols-2 gap-3">{(payload.audience_site?.groups ?? []).map((g) => <SiteGroupCard key={g.dimension} group={g} locale="ar" />)}</div>
+        <div className="grid grid-cols-2 gap-3">{(shown('audience_site') ? payload.audience_site?.groups ?? [] : []).map((g) => <SiteGroupCard key={g.dimension} group={g} locale="ar" />)}</div>
       </div>
     )
   }

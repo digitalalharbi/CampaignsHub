@@ -12,6 +12,7 @@ use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
@@ -37,10 +38,15 @@ final class AudienceBreakdownSync
     public function sync(ReportsAudienceBreakdowns $connector, ExternalAccount $account, MetricSyncRun $run, Carbon $from, Carbon $to): array
     {
         $projectId = (string) $run->project_id;
+        // Throttled on the last ATTEMPT, not the last stored row: a sweep that stores nothing (no day reached the provider's
+        // floor, or every question was refused) must not be asked again every thirty minutes.
+        $attemptKey = 'audience-attempt|'.$account->getKey().'|'.$projectId;
         $last = DB::table('audience_breakdown_rows')->where('external_account_id', $account->getKey())->where('project_id', $projectId)->max('synced_at');
-        if ($last !== null && Carbon::parse((string) $last)->gt(now()->subMinutes(self::MIN_INTERVAL_MINUTES))) {
-            return ['state' => 'throttled', 'last_synced_at' => Carbon::parse((string) $last)->toIso8601String()];
+        $attempted = Cache::get($attemptKey);
+        if (is_string($attempted) || ($last !== null && Carbon::parse((string) $last)->gt(now()->subMinutes(self::MIN_INTERVAL_MINUTES)))) {
+            return ['state' => 'throttled', 'last_synced_at' => $last === null ? null : Carbon::parse((string) $last)->toIso8601String()];
         }
+        Cache::put($attemptKey, now()->toIso8601String(), now()->addMinutes(self::MIN_INTERVAL_MINUTES));
 
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())->where('project_id', $projectId)
@@ -56,7 +62,7 @@ final class AudienceBreakdownSync
         foreach (DB::table('entity_daily_metrics')
             ->where('tenant_id', (string) $account->tenant_id)->where('project_id', $projectId)
             ->where('external_account_id', (string) $account->getKey())->where('entity_type', 'ad_set')
-            ->where('impressions', '>', 0)->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->where('impressions', '>=', max(1, $connector->audienceMinimumImpressions()))->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->get(['entity_id', 'metric_date']) as $d) {
             $ext = $byId[(string) $d->entity_id] ?? null;
             if ($ext !== null) {
@@ -66,8 +72,22 @@ final class AudienceBreakdownSync
 
         $out = [];
         foreach ($connector->audienceDimensions() as $dimension) {
+            // A (ad set, day) already stored for this dimension is not asked again, so a capped sweep moves on to the rest.
+            $stored = [];
+            foreach (DB::table('audience_breakdown_rows')->where('project_id', $projectId)->where('external_account_id', (string) $account->getKey())
+                ->where('dimension', $dimension)->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+                ->distinct()->get(['external_entity_id', 'metric_date']) as $r) {
+                $stored[(string) $r->external_entity_id.'|'.substr((string) $r->metric_date, 0, 10)] = true;
+            }
+            $ask = [];
+            foreach ($delivering as $ext => $days) {
+                $left = array_values(array_filter(array_unique($days), static fn (string $d): bool => ! isset($stored[$ext.'|'.$d])));
+                if ($left !== []) {
+                    $ask[$ext] = $left;
+                }
+            }
             try {
-                $result = $connector->audienceBreakdown((string) $account->external_id, $dimension, $from->toDateString(), $to->toDateString(), $delivering);
+                $result = $connector->audienceBreakdown((string) $account->external_id, $dimension, $from->toDateString(), $to->toDateString(), $ask);
             } catch (Throwable $e) {
                 $out[$dimension] = ['state' => 'failed', 'reason' => Str::limit((string) ProviderErrorText::forStorage($e->getMessage()), 300)];
 

@@ -1151,6 +1151,11 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
         return array_keys(self::AUDIENCE_DIMENSION);
     }
 
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
     public function audienceSourceField(string $dimension): string
     {
         return 'tiktok:report/integrated/get report_type=AUDIENCE data_level=AUCTION_ADGROUP dimension='.(self::AUDIENCE_DIMENSION[$dimension] ?? $dimension);

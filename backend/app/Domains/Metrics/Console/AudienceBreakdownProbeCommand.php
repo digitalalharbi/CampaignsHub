@@ -27,24 +27,25 @@ final class AudienceBreakdownProbeCommand extends Command
 {
     protected $signature = 'audience:breakdown-probe {account} {--project=} {--from=} {--to=} {--dimension=region}';
 
-    protected $description = 'Read-only: print one ad account\'s paid-delivery breakdown for a window (writes nothing)';
+    protected $description = 'Read-only: print one ad account\'s paid-delivery breakdown for a window (stores no breakdown; a token refresh may be saved as on any provider call)';
 
     public function handle(AdvertisingConnectorRegistry $registry): int
     {
         $ref = (string) $this->argument('account');
-        $account = ExternalAccount::withoutGlobalScopes()->where('account_type', 'ad_account')
-            ->where(fn ($q) => $q->where('external_id', $ref)->orWhere('id', preg_match('/^[0-9a-f-]{36}$/i', $ref) === 1 ? $ref : '00000000-0000-0000-0000-000000000000'))
-            ->first();
         $from = (string) $this->option('from');
         $to = (string) ($this->option('to') ?: $from);
         $project = (string) $this->option('project');
-        if ($account === null || $from === '' || $project === '') {
-            $this->error('Name an ad account, --project and --from.');
+        if ($from === '' || $project === '' || preg_match('/^[0-9a-f-]{36}$/i', $project) !== 1) {
+            $this->error('Name an ad account, --project (its id) and --from.');
 
             return self::FAILURE;
         }
-        $bound = DB::table('project_integration_bindings')->where('project_id', $project)->where('external_account_id', $account->getKey())->where('is_active', true)->exists();
-        if (! $bound) {
+        // Resolved THROUGH the project's active bindings, so the same provider id in another tenant can never be picked.
+        $boundIds = DB::table('project_integration_bindings')->where('project_id', $project)->where('is_active', true)->pluck('external_account_id')->map(static fn ($v): string => (string) $v)->all();
+        $account = ExternalAccount::withoutGlobalScopes()->where('account_type', 'ad_account')->whereIn('id', $boundIds)
+            ->where(fn ($q) => $q->where('external_id', $ref)->orWhere('id', preg_match('/^[0-9a-f-]{36}$/i', $ref) === 1 ? $ref : '00000000-0000-0000-0000-000000000000'))
+            ->first();
+        if ($account === null) {
             $this->error('That account is not actively bound to that project.');
 
             return self::FAILURE;
@@ -68,7 +69,7 @@ final class AudienceBreakdownProbeCommand extends Command
             ->where('c.external_account_id', $account->getKey())->where('s.project_id', $project)->pluck('s.external_id', 's.id');
         $delivering = [];
         foreach (DB::table('entity_daily_metrics')->where('project_id', $project)->where('external_account_id', $account->getKey())
-            ->where('entity_type', 'ad_set')->where('impressions', '>', 0)->whereBetween('metric_date', [$from, $to])->get(['entity_id', 'metric_date']) as $d) {
+            ->where('entity_type', 'ad_set')->where('impressions', '>=', max(1, $probe->audienceMinimumImpressions()))->whereBetween('metric_date', [$from, $to])->get(['entity_id', 'metric_date']) as $d) {
             if (isset($sets[(string) $d->entity_id])) {
                 $delivering[(string) $sets[(string) $d->entity_id]][] = substr((string) $d->metric_date, 0, 10);
             }
