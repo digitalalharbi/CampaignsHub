@@ -54,22 +54,50 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-XLI2 $(date -u +%FT%TZ)"
-            $DC exec -T backend sh -c 'git log -1 --format=%h 2>/dev/null; cat /var/www/html/REVISION 2>/dev/null; date; php -r "echo date_default_timezone_get(),PHP_EOL;"' || true
-            $DC exec -T backend php artisan schedule:list 2>/dev/null | grep -E "integrations:sync|creative|covers" || true
+            echo "== FACTS-MEDIA $(date -u +%FT%TZ)"
+            $DC exec -T backend sh -c 'cat /var/www/html/REVISION 2>/dev/null; date -u' || true
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F " | "' <<'SQL'
+            \set ON_ERROR_ROLLBACK on
+            \set ON_ERROR_STOP off
             BEGIN READ ONLY;
-            \echo -- x creatives without a face: project | format | has_card_uri | media_type | has_body | raw_keys | source_updated | last_synced | n
-            select project_id, coalesce(format,'NULL'), (raw ? 'card_uri'), coalesce(raw->>'media_type','-'), (coalesce(body,'')<>''), coalesce((select string_agg(k, ',' order by k) from jsonb_object_keys(coalesce(raw,'{}'::jsonb)) k),'-'), max(source_updated_at)::date, max(last_synced_at)::date, count(*) from external_creatives where provider='x' and coalesce(is_demo,false)=false and coalesce(thumbnail_url, asset_url) is null and coalesce(format,'')<>'text_card' group by 1,2,3,4,5,6 order by 1;
-            \echo -- x creatives WITH a face, same projects: project | format | has_card_uri | media_type | n
-            select project_id, coalesce(format,'NULL'), (raw ? 'card_uri'), coalesce(raw->>'media_type','-'), count(*) from external_creatives where provider='x' and coalesce(is_demo,false)=false and (coalesce(thumbnail_url, asset_url) is not null or format='text_card') group by 1,2,3,4 order by 1;
-            \echo -- x accounts per project (bound): project | accounts | distinct connections
-            select b.project_id, count(*), count(distinct a.provider_connection_id) from project_integration_bindings b join external_accounts a on a.id=b.external_account_id where b.provider='x' and b.is_active group by 1;
-            \echo -- x ads of faceless creatives: project | promoted ads | ad status sample
-            select a.project_id, count(*), min(a.status) from external_ads a join external_creatives c on c.id=a.creative_id where c.provider='x' and coalesce(c.thumbnail_url, c.asset_url) is null and coalesce(c.format,'')<>'text_card' group by 1;
-            \echo -- x structure sync error lines (last 5 runs with errors): when | left(error,160)
-            select created_at, left(coalesce(error,''),160) from metric_sync_runs where provider='x' and error is not null order by created_at desc limit 5;
+            \echo -- M1 bound accounts: provider | acct4 | proj8 | acct_status | last_structure_sync | last_metrics_sync | conn_status | credential_type | delivered30
+            select a.provider, right(a.external_id,4), left(b.project_id::text,8), a.status, a.last_structure_synced_at, a.last_synced_at, pc.status, pc.credential_type,
+              exists(select 1 from external_creatives c join creative_daily_metrics m on m.creative_id=c.id where c.external_account_id=a.id and m.metric_date>=current_date-30 and (m.impressions>0 or m.spend>0))
+            from project_integration_bindings b join external_accounts a on a.id=b.external_account_id left join provider_connections pc on pc.id=a.provider_connection_id
+            where b.is_active order by 1,2;
+            \echo -- M2 coverage per bound account: provider | acct4 | proj8 | scope | creatives | text | image | video | thumb | cover_copied | dest_or_cta | external_only | external_expired | no_media | last_creative_sync
+            with acc as (select distinct a.id, a.provider, right(a.external_id,4) m4, left(b.project_id::text,8) p8 from project_integration_bindings b join external_accounts a on a.id=b.external_account_id where b.is_active),
+            cr as (select c.*, exists(select 1 from creative_daily_metrics m where m.creative_id=c.id and m.metric_date>=current_date-30 and (m.impressions>0 or m.spend>0)) act from external_creatives c where coalesce(c.is_demo,false)=false),
+            u as (select acc.provider, acc.m4, acc.p8, 'all' sc, cr.* from acc join cr on cr.external_account_id=acc.id union all select acc.provider, acc.m4, acc.p8, '30d', cr.* from acc join cr on cr.external_account_id=acc.id and cr.act)
+            select u.provider, m4, p8, sc, count(*),
+              count(*) filter (where coalesce(body,'')<>'' or coalesce(headline,'')<>''),
+              count(*) filter (where asset_url is not null),
+              count(*) filter (where video_url is not null),
+              count(*) filter (where thumbnail_url is not null),
+              count(*) filter (where cover_path is not null),
+              count(*) filter (where destination_url is not null or cta is not null),
+              count(*) filter (where cover_path is null and coalesce(thumbnail_url,asset_url) is not null),
+              count(*) filter (where cover_path is null and coalesce(thumbnail_url,asset_url) is not null and asset_expires_at < now()),
+              count(*) filter (where coalesce(thumbnail_url,asset_url,video_url,cover_path) is null),
+              max(last_synced_at)
+            from u group by 1,2,3,4 order by 1,2,3,4;
+            \echo -- M3 creatives without account id: provider | n | delivered30
+            select provider, count(*), count(*) filter (where exists(select 1 from creative_daily_metrics m where m.creative_id=c.id and m.metric_date>=current_date-30)) from external_creatives c where external_account_id is null and coalesce(is_demo,false)=false group by 1 order by 1;
+            \echo -- M4 ads per account: provider | acct4 | ads | ads_with_creative | ads_with_dest | last_structure
+            select a.provider, right(a.external_id,4), count(ad.*), count(ad.creative_id), count(ad.destination_url), max(ad.last_structure_synced_at) from external_ads ad join external_campaigns ec on ec.id=ad.external_campaign_id join external_accounts a on a.id=ec.external_account_id where coalesce(ad.is_demo,false)=false and a.id in (select external_account_id from project_integration_bindings where is_active) group by 1,2 order by 1,2;
+            \echo -- M5 missing reasons (no media, delivered30): provider | format | media_reason | cover_state | cover_error | n
+            select provider, coalesce(format,'NULL'), coalesce(raw->>'media_reason','-'), coalesce(cover_state,'-'), coalesce(cover_error,'-'), count(*) from external_creatives c where coalesce(is_demo,false)=false and cover_path is null and exists(select 1 from creative_daily_metrics m where m.creative_id=c.id and m.metric_date>=current_date-30 and (m.impressions>0 or m.spend>0)) group by 1,2,3,4,5 order by 1,6 desc;
+            \echo -- M6 format by provider (delivered30): provider | format | n | with_text | with_any_media
+            select provider, coalesce(format,'NULL'), count(*), count(*) filter (where coalesce(body,'')<>'' or coalesce(headline,'')<>''), count(*) filter (where coalesce(thumbnail_url,asset_url,video_url,cover_path) is not null) from external_creatives c where coalesce(is_demo,false)=false and exists(select 1 from creative_daily_metrics m where m.creative_id=c.id and m.metric_date>=current_date-30 and (m.impressions>0 or m.spend>0)) group by 1,2 order by 1,3 desc;
+            \echo -- M7 connections: provider | credential_type | status | scopes | metadata_keys | n
+            select provider, credential_type, status, coalesce(scopes::text,'NULL'), coalesce((select string_agg(k, ',' order by k) from jsonb_object_keys(coalesce(metadata,'{}'::jsonb)) k),'-'), count(*) from provider_connections where id in (select provider_connection_id from external_accounts where id in (select external_account_id from project_integration_bindings where is_active)) group by 1,2,3,4,5 order by 1;
+            \echo -- M8 scope overrides: provider | scopes
+            select provider, coalesce(scopes::text,'NULL') from provider_configurations order by 1;
+            \echo -- M9 last sync runs per provider: provider | status | creative_status | finished | error120
+            select distinct on (provider) provider, status, coalesce(creative_status,'-'), finished_at, left(coalesce(error, creative_error, ''),120) from metric_sync_runs where coalesce(is_demo,false)=false order by provider, created_at desc;
+            \echo -- M10 last success per provider: provider | last_success | runs_7d | failed_7d
+            select provider, max(finished_at) filter (where status='success'), count(*) filter (where created_at>now()-interval '7 days'), count(*) filter (where created_at>now()-interval '7 days' and status='failed') from metric_sync_runs group by 1 order by 1;
             ROLLBACK;
             SQL
-            echo "== END FACTS-XLI"
+            echo "== END FACTS-MEDIA"
             exit 0
