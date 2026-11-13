@@ -6,7 +6,7 @@ namespace App\Domains\Alerts\Services;
 
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
-use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Alerts\Support\CampaignDelivery;
 use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
@@ -27,7 +27,6 @@ use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
-use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
@@ -182,13 +181,20 @@ final class AlertEvaluator
         $tenantIds = DB::table('alert_rules')->where('active', true)->distinct()->pluck('tenant_id');
         $previous = $this->tenants->tenantId();
 
-        foreach ($tenantIds as $tenantId) {
-            $this->tenants->setTenantId((string) $tenantId);
-            AlertRule::query()->where('active', true)->get()
-                ->each(function (AlertRule $rule) use ($now, &$raised) {
-                    $raised += $this->evaluateRule($rule, $now);
-                });
-            $this->flushMail((string) $tenantId, $now);
+        $this->inSweep = true;
+        try {
+            foreach ($tenantIds as $tenantId) {
+                $this->tenants->setTenantId((string) $tenantId);
+                $this->delivery()->forget();
+                AlertRule::query()->where('active', true)->get()
+                    ->each(function (AlertRule $rule) use ($now, &$raised) {
+                        $raised += $this->evaluateRule($rule, $now);
+                    });
+                $this->flushMail((string) $tenantId, $now);
+            }
+        } finally {
+            $this->inSweep = false;
+            $this->delivery()->forget();
         }
 
         $this->tenants->setTenantId($previous);
@@ -214,6 +220,10 @@ final class AlertEvaluator
     public function evaluateRule(AlertRule $rule, ?Carbon $now = null): int
     {
         $now ??= Carbon::now();
+        // A sweep reads each campaign set's delivery once for all its rules; a single rule evaluated alone reads afresh.
+        if (! $this->inSweep) {
+            $this->delivery()->forget();
+        }
         $breaches = match ($rule->type) {
             'sync_failure' => $this->syncFailures($rule),
             'sync_outage' => $this->syncOutages($rule, $now),
@@ -305,6 +315,11 @@ final class AlertEvaluator
                 if (isset($still[$event->dedup_key])) {
                     return;
                 }
+                // ALERT-DELIVERING-YESTERDAY-001 — yesterday's figures not proven yet (a late or failed sync): no verdict either way.
+                if (($this->ineligible[(string) $rule->id][(string) $event->entity_id] ?? null) === CampaignDelivery::DATA_PENDING
+                    || (($this->noResultsState[(string) $rule->id][(string) $event->entity_id]['reason'] ?? null) === CampaignDelivery::DATA_PENDING)) {
+                    return;
+                }
                 $quiet = $this->notApplicable($rule, $event);
                 if ($quiet !== null) {
                     $this->closeQuietly($event, $quiet, $now);
@@ -325,6 +340,12 @@ final class AlertEvaluator
      */
     private function notApplicable(AlertRule $rule, AlertEvent $event): ?string
     {
+        // ALERT-DELIVERING-YESTERDAY-001 — a campaign the performance rules no longer ask about (stopped, ended, not delivering
+        // yesterday) did not recover either: its open ROAS / cost / anomaly alert closes with the reason, silently.
+        $ineligible = $this->ineligible[(string) $rule->id][(string) $event->entity_id] ?? null;
+        if ($ineligible !== null) {
+            return $ineligible;
+        }
         if ($rule->type !== 'no_results') {
             return null;
         }
@@ -358,6 +379,54 @@ final class AlertEvaluator
      * @var array<string, array<string, array{reason: ?string, result_key: ?string}>>
      */
     private array $noResultsState = [];
+
+    /**
+     * ALERT-DELIVERING-YESTERDAY-001 — per rule, the campaigns the last sweep of a ROAS, cost or anomaly rule did not ask
+     * about, and why ({@see CampaignDelivery}).
+     *
+     * @var array<string, array<string, string>>
+     */
+    private array $ineligible = [];
+
+    private bool $inSweep = false;
+
+    private ?CampaignDelivery $delivery = null;
+
+    private function delivery(): CampaignDelivery
+    {
+        return $this->delivery ??= app(CampaignDelivery::class);
+    }
+
+    /** @return array{min_spend?: mixed, min_impressions?: mixed} the rule's own minimum sample, when it states one */
+    private static function sample(AlertRule $rule): array
+    {
+        return array_intersect_key((array) ($rule->threshold ?? []), ['min_spend' => true, 'min_impressions' => true]);
+    }
+
+    /**
+     * The campaigns a performance rule may judge — running by the platform's latest status and, unless `$statusOnly`,
+     * delivering yesterday — with the others recorded for {@see notApplicable()}.
+     *
+     * @param  Collection<int, UnifiedCampaign>  $campaigns
+     * @return Collection<int, UnifiedCampaign>
+     */
+    private function eligibleOnly(AlertRule $rule, Collection $campaigns, Carbon $now, int $days, bool $statusOnly = false): Collection
+    {
+        $verdicts = $this->delivery()->assess($campaigns, $now, $days, null, self::sample($rule));
+        $skipped = [];
+        $kept = $campaigns->filter(static function (UnifiedCampaign $c) use ($verdicts, $statusOnly, &$skipped): bool {
+            $reason = $verdicts[(string) $c->getKey()]['reason'] ?? null;
+            if ($reason === null || ($statusOnly && in_array($reason, [CampaignDelivery::NOT_DELIVERING, CampaignDelivery::LEARNING, CampaignDelivery::DATA_PENDING], true))) {
+                return true;
+            }
+            $skipped[(string) $c->getKey()] = $reason;
+
+            return false;
+        })->values();
+        $this->ineligible[(string) $rule->id] = $skipped;
+
+        return $kept;
+    }
 
     private function recover(AlertRule $rule, AlertEvent $event, Carbon $now): void
     {
@@ -967,37 +1036,55 @@ final class AlertEvaluator
         return $crossed === [] ? null : max($crossed);
     }
 
-    /** @return list<array<string,mixed>> */
+    /**
+     * «صرف بدون نتائج» — a campaign that ran yesterday and whose spend since it last started running brought none of its result.
+     *
+     * ALERT-DELIVERING-YESTERDAY-001 — «كرم النخيل» kept being told this about campaigns that were stopped: the window was
+     * «the last N days» on the server's clock, so a campaign paused three days ago still «spent with no results» on what it
+     * spent before the pause, and an adopted campaign's stored `active` outlived its pause on the platform. Who qualifies is
+     * now {@see CampaignDelivery}: running by the platform's latest status, and delivering (spend or impressions) YESTERDAY on
+     * the client's clock. The judgement is the spend from the day it last (re)started delivering through yesterday, capped to
+     * the rule's `days`, with 0 of its objective's result. An open alert on a campaign that no longer qualifies closes quietly.
+     *
+     * @return list<array<string,mixed>>
+     */
     private function noResults(AlertRule $rule, Carbon $now): array
     {
-        $days = (int) ($rule->threshold['days'] ?? 3);
-        $from = $now->copy()->subDays($days);
+        $days = max(1, (int) ($rule->threshold['days'] ?? 3));
         $out = [];
 
         $campaigns = UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get();
-        $figures = $this->campaignMetrics($campaigns)->figuresByCampaign($from, $now);
-        $clock = app(ReportingTimezone::class);
+        $verdicts = $this->delivery()->assess($campaigns, $now, $days, null, self::sample($rule));
         $state = [];
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $days, $now, $clock, &$out, &$state) {
-            $id = (string) $c->getKey();
-            /*
-             * OBJECTIVE-RESULT-001 — «صرف بدون نتائج» is a PERFORMANCE alert, so only a RUNNING campaign
-             * qualifies (MASTER_FINAL §هـ): a paused or completed one, or one past its end date, is not
-             * a performance problem — the Ettifaq vs Ajman campaign that had ended was alerted as one.
-             * «Past its end date» is the client's day: at 01:30 in Riyadh yesterday's end date has passed,
-             * though the server's UTC clock still says it is today.
-             */
-            $today = $now->copy()->setTimezone($clock->forProject((string) $c->project_id))->toDateString();
-            $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
-            if ($c->status !== CampaignStatus::Active->value || $ended) {
-                $state[$id] = ['reason' => 'campaign_inactive', 'result_key' => null];
+        /*
+         * One figures read per judgement window: campaigns that started delivering on the same day share it, so a sweep reads
+         * at most `days` windows, never one per campaign.
+         */
+        $windows = [];
+        foreach ($verdicts as $id => $v) {
+            if ($v['reason'] !== null) {
+                // OBJECTIVE-RESULT-001 + ALERT-DELIVERING-YESTERDAY-001 — ended, stopped, or not running yesterday: not a performance problem.
+                $state[$id] = ['reason' => $v['reason'], 'result_key' => null];
 
+                continue;
+            }
+            $windows[$v['from'].'|'.$v['to']][] = $id;
+        }
+        $figures = [];
+        foreach ($windows as $key => $ids) {
+            [$from, $to] = explode('|', $key);
+            $figures += $this->metrics->acrossProjects()->forCampaigns($ids)->figuresByCampaign(Carbon::parse($from), Carbon::parse($to));
+        }
+
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $verdicts, &$out, &$state) {
+            $id = (string) $c->getKey();
+            if (! isset($figures[$id])) {
                 return;
             }
-
+            $v = $verdicts[$id];
             $totals = $figures[$id];
             $spend = (float) $totals['spend'];
 
@@ -1026,9 +1113,11 @@ final class AlertEvaluator
                     'entity_id' => (string) $c->id,
                     'project_id' => (string) $c->project_id,
                     'title' => 'Spending with no results',
-                    'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' in the last '.$days.' days.',
+                    'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' from '.$v['from'].' to '.$v['to'].' ('.$v['days'].' days).',
                     // `conversions` keeps its name for the readers of this context; it now holds the objective's result.
-                    'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $days,
+                    // `days` is the days JUDGED (since it last started delivering), not the rule's ceiling.
+                    'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $v['days'], 'from' => $v['from'], 'to' => $v['to'],
+                        'active_since' => $v['active_since'], 'campaign_status' => $v['status'], 'checks' => $v['checks'],
                         'result_key' => $totals['result_key'], 'result_family' => $totals['result_family'] ?? null, 'result_label' => $totals['result_label'] ?? null],
                 ];
             }
@@ -1048,9 +1137,13 @@ final class AlertEvaluator
         $prevFrom = $now->copy()->subDays($days * 2);
         $prevTo = $now->copy()->subDays($days + 1);
 
-        $campaigns = UnifiedCampaign::query()
+        // ALERT-DELIVERING-YESTERDAY-001 — a stopped campaign's ROAS is not a decision to make.
+        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get(), $now, $days);
+        if ($campaigns->isEmpty()) {
+            return [];
+        }
         $metrics = $this->campaignMetrics($campaigns);
         $current = $metrics->figuresByCampaign($curFrom, $now);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
@@ -1116,10 +1209,17 @@ final class AlertEvaluator
 
         $out = [];
 
-        $campaigns = UnifiedCampaign::query()
-            ->where('status', 'active')
+        /*
+         * ALERT-DELIVERING-YESTERDAY-001 — running by the platform's latest status too, not only by our stored word: an adopted
+         * campaign paused on its platform kept `active` here. Delivery yesterday is NOT required: a running campaign whose
+         * spend collapsed to nothing is exactly what this rule exists to notice.
+         */
+        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get(), $now, 1, statusOnly: true);
+        if ($campaigns->isEmpty()) {
+            return [];
+        }
         $metrics = $this->campaignMetrics($campaigns);
         $series = $metrics->timeseriesByCampaign($from, $now);
         $timeline = new ChangeTimeline($metrics);
@@ -1520,9 +1620,13 @@ final class AlertEvaluator
         $prevTo = $now->copy()->subDays($days + 1);
         $label = strtoupper($key);
 
-        $campaigns = UnifiedCampaign::query()
+        // ALERT-DELIVERING-YESTERDAY-001 — only a campaign running and delivering yesterday has a cost worth a decision.
+        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get(), $now, $days);
+        if ($campaigns->isEmpty()) {
+            return [];
+        }
         $metrics = $this->campaignMetrics($campaigns);
 
         // Either window holding withheld money has no comparable cost — no verdict, no alert.

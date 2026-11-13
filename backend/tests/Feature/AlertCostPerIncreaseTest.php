@@ -107,9 +107,9 @@ final class AlertCostPerIncreaseTest extends TestCase
         // Previous window (8–14 days ago): 100 spend / 10 conversions = CPA 10.
         $this->converted($c, 'spend', 100, 10);
         $this->converted($c, 'conversions', 10, 10);
-        // Current window (0–7 days ago): 100 spend / 4 conversions = CPA 25 — a 150% rise.
-        $this->converted($c, 'spend', 100, 3);
-        $this->converted($c, 'conversions', 4, 3);
+        // Current window (0–7 days ago): 100 spend / 4 conversions = CPA 25 — a 150% rise. Delivered yesterday, so it is judged.
+        $this->converted($c, 'spend', 100, 1);
+        $this->converted($c, 'conversions', 4, 1);
 
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
 
@@ -190,8 +190,8 @@ final class AlertCostPerIncreaseTest extends TestCase
         $c = $this->campaign();
         $this->converted($c, 'spend', 100, 10);
         $this->converted($c, 'leads', 20, 10);         // CPL 5
-        $this->converted($c, 'spend', 200, 3);
-        $this->converted($c, 'leads', 10, 3);          // CPL 20 — a 300% rise
+        $this->converted($c, 'spend', 200, 1);
+        $this->converted($c, 'leads', 10, 1);          // CPL 20 — a 300% rise, delivered yesterday
 
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpl_increase')));
     }
