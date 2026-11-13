@@ -272,12 +272,12 @@ async function registerAndVerify(
    * every time: `/auth/login`, then an `/auth/me` that FINISHED after it, then the 401s. It failed on webkit because
    * webkit's timing let the probe's answer arrive last. A different spec failed each time because the race moved.
    *
-   * So first wait for the app to leave the sign-in form. It either reaches the wizard or settles somewhere else,
+   * So first wait for the app to leave the sign-in form (polled on the URL, GATE-WK-NAV-001). It either reaches the wizard or settles somewhere else,
    * including the `?reason=session` page a real failure lands on. Only then probe. A timeout here is not a verdict:
    * the assertion below still runs and reports what it finds.
    */
-  await page
-    .waitForURL((u) => u.pathname !== '/login' || u.searchParams.has('reason'), { timeout: 20_000 })
+  await expect(page)
+    .toHaveURL((u) => u.pathname !== '/login' || u.searchParams.has('reason'), { timeout: 20_000 })
     .catch(() => undefined)
 
   /*
