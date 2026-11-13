@@ -44,14 +44,15 @@ export interface ObjectivePathsBlock {
   paths: ObjectivePath[]
 }
 
+// Distinct hues, so the split bar reads at a glance (two greens side by side did not).
 const TONE: Record<string, string> = {
-  sales: 'bg-brand-600',
-  traffic: 'bg-brand-400',
-  awareness: 'bg-brand-300',
-  engagement: 'bg-brand-200',
-  video: 'bg-brand-200',
-  leads: 'bg-success',
-  app: 'bg-warning',
+  sales: 'bg-brand-500',
+  traffic: 'bg-info',
+  awareness: 'bg-purple',
+  engagement: 'bg-teal',
+  video: 'bg-brand-gold',
+  leads: 'bg-warning',
+  app: 'bg-danger',
   unknown: 'bg-border',
 }
 
