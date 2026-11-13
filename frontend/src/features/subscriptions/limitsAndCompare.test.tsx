@@ -19,7 +19,7 @@ describe('a ring per limit', () => {
     renderWithProviders(<LimitRings usage={{ clients: { limit: 4, used: 1, remaining: 3 }, projects: { limit: null, used: 9, remaining: null } }} labelOf={(m) => m} unlimited="Unlimited" ar={false} />)
 
     expect(screen.getByTestId('limit-ring-clients').textContent).toContain('1 / 4')
-    expect(screen.getByTestId('limit-ring-projects').textContent).toContain('Unlimited')
+    expect(screen.getByTestId('limit-ring-projects').textContent).toContain('9 / ∞')
     expect(screen.queryByTestId('limit-advice')).toBeNull()
   })
 

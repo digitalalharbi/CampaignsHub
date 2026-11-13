@@ -57,12 +57,12 @@ export function LimitRings({
     <section data-testid="limit-rings" aria-label={ar ? 'الحدود' : 'Limits'} className="rounded-2xl border border-border bg-surface p-3">
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {entries.map(([metric, u]) => (
-          <li key={metric} data-testid={`limit-ring-${metric}`} data-state={thresholdOf(u)} className="flex min-w-0 items-center gap-2 rounded-xl bg-surface-secondary/50 p-2">
+          <li key={metric} title={u.limit === null ? unlimited : undefined} data-testid={`limit-ring-${metric}`} data-state={thresholdOf(u)} className="flex min-w-0 items-center gap-2 rounded-xl bg-surface-secondary/50 p-2">
             <Ring metric={u} />
             <span className="min-w-0">
               <span className="block truncate text-xs font-bold text-text-primary">{labelOf(metric)}</span>
               <span className="tnum block truncate text-xs text-text-muted">
-                {fmt(u.used)} / {u.limit === null ? unlimited : fmt(u.limit)}
+                {fmt(u.used)} / {u.limit === null ? '∞' : fmt(u.limit)}
               </span>
             </span>
           </li>

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { CircleDollarSign, Hourglass, Users, Wallet } from 'lucide-react'
 import { fetchClientBudgets, type ClientBudgetRow } from '@/features/agency/api'
 import { listAlertEvents } from '@/features/alerts/api'
-import { StatCard } from '@/components/ui/StatCard'
+import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
 import { KpiSparkline } from '@/features/analytics/charts'
 import { money } from '@/features/analytics/format'
@@ -130,12 +130,12 @@ export function ClientCards({ ar, onOpenClient }: { ar: boolean; onOpenClient: (
 
   return (
     <section data-testid="overview-all-clients" aria-label={t.title} className="grid min-w-0 grid-cols-1 gap-2">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <StatCard testid="overview-spend" label={t.spend} value={fig(totals.spent)} trailing={icon(CircleDollarSign)} />
         <StatCard testid="overview-remaining" label={t.left} value={fig(totals.remaining)} trailing={icon(Wallet)} />
         <StatCard testid="overview-running" label={t.running} value={totals.running} trailing={icon(Users)} />
         <StatCard testid="overview-near" label={t.near} value={totals.nearEnd} tone={totals.nearEnd > 0 ? 'warning' : 'neutral'} trailing={icon(Hourglass)} />
-      </div>
+      </StatGrid>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {ordered.map((row) => (
           <ClientCard key={row.client_id} row={row} ar={ar} onOpen={onOpenClient} alerts={alertsByClient.get(row.client_id) ?? 0} />
