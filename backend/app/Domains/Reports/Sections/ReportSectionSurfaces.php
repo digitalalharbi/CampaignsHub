@@ -11,6 +11,7 @@ use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
@@ -207,6 +208,8 @@ final class ReportSectionSurfaces
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the KPI list read BEFORE resolution: a hidden KPI section takes `metric_set` with it.
+        $tableKpis = $this->tableKpis($payload, $report);
         // REPORT-FORMAT-COMPARE-COMPACT-001 — before resolving, so a comparison left with no family of the report's objective is no section.
         if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
             $payload[ContentFormatComparison::KEY] = ContentFormatComparison::forReportObjectives($payload[ContentFormatComparison::KEY], ReportObjectives::of($report));
@@ -271,8 +274,44 @@ final class ReportSectionSurfaces
             $payload['metric_set'] = $picked;
         }
 
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the comparison's ONE table, rows = this report's KPI list (after the composer chose it).
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY]['table'] = ContentFormatComparison::table($payload[ContentFormatComparison::KEY], $picked ?? $tableKpis);
+        }
+
         // REPORT-GENERIC-LABELS-001 — last, on the one call every surface makes: a hidden name leaves every key and sentence.
         return GenericNames::for($report, $share)->apply($payload);
+    }
+
+    /**
+     * REPORT-FORMAT-COMPARE-TABLE-001 — the KPI rows of the comparison table: the report's own KPI cards (the document's `metric_set`,
+     * the objective's preset or the operator's choice), else the presets of the report's objectives, else those of the families the
+     * comparison keeps. One list, `ReportTemplateEngine::METRIC_SETS` — never a second mapping.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function tableKpis(array $payload, Report $report): array
+    {
+        foreach (['metric_set', 'metrics'] as $key) {
+            $list = $payload[$key] ?? null;
+            if (is_array($list) && $list !== [] && array_is_list($list) && array_filter($list, 'is_string') === $list) {
+                return $list;
+            }
+        }
+        $kpis = ReportObjectives::kpis($report);
+        if ($kpis !== []) {
+            return $kpis;
+        }
+        $templates = [];
+        foreach ((array) ($payload[ContentFormatComparison::KEY]['objectives'] ?? []) as $objective) {
+            $template = array_search($objective['family'] ?? null, ContentFormatComparison::TEMPLATE_FAMILY, true);
+            if (is_string($template)) {
+                $templates[] = $template;
+            }
+        }
+
+        return $templates === [] ? [] : app(ReportTemplateEngine::class)->metricSetForMany($templates);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -350,5 +351,93 @@ final class ReportSettingsAuditTest extends TestCase
         // No objective chosen: every family that has formats.
         $this->report->forceFill(['campaign_objective' => null])->saveQuietly();
         $this->assertSame(['sales', 'awareness'], array_column($apply($this->report->fresh())['content_format_comparison']['objectives'], 'family'));
+    }
+
+    // ---- REPORT-FORMAT-COMPARE-TABLE-001: one table, a column per type, a row per KPI of the report -----------------
+
+    /** @param array<string, float|null> $m */
+    private static function fmt(string $format, array $m, int $creatives = 4, bool $small = false): array
+    {
+        $metrics = array_fill_keys(ContentFormatComparison::TABLE_KEYS, null);
+
+        return ['format' => $format, 'creatives' => $creatives, 'spend' => $m['spend'] ?? null, 'small_sample' => $small, 'metrics' => array_replace($metrics, $m)];
+    }
+
+    private function sales(): array
+    {
+        return ['family' => 'sales', 'formats' => [
+            self::fmt('video', ['spend' => 1000, 'impressions' => 50000, 'clicks' => 900, 'add_to_cart' => null, 'purchases' => 40, 'revenue' => 4200, 'roas' => 4.2, 'cpm' => 20, 'ctr' => 0.018, 'cpc' => 1.11]),
+            self::fmt('image', ['spend' => 500, 'impressions' => 40000, 'clicks' => 400, 'add_to_cart' => null, 'purchases' => 10, 'revenue' => 1050, 'roas' => 2.1, 'cpm' => 12.5, 'ctr' => 0.01, 'cpc' => 1.25]),
+            self::fmt('carousel', ['spend' => 0, 'impressions' => 0, 'clicks' => 0, 'purchases' => 0]),
+        ]];
+    }
+
+    public function test_the_comparison_is_one_table_whose_rows_are_the_reports_kpis_and_never_empty(): void
+    {
+        $payload = ['metric_set' => ['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'], 'content_format_comparison' => ['currency' => 'SAR', 'objectives' => [$this->sales()]]];
+        $table = app(ReportSectionSurfaces::class)->apply($payload, $this->report, null, 'preview')['content_format_comparison']['table'];
+
+        $this->assertSame(['spend', 'impressions', 'clicks', 'purchases', 'revenue', 'roas'], $table['rows'], 'rows are the report KPIs; add to cart answered by no type is no row');
+        $this->assertSame(['video', 'image'], array_column($table['formats'], 'format'), 'a type with nothing in any row is no column');
+        $this->assertEquals(4.2, $table['cells']['roas']['video']);
+        $this->assertEquals(2.1, $table['cells']['roas']['image']);
+        $this->assertSame('higher', $table['better']['roas']);
+        $this->assertArrayNotHasKey('spend', $table['better'], 'spend names no winner');
+        $this->assertSame(['roas', 'purchases', 'conversions', 'revenue', 'cpa'], $table['verdict_order']);
+        $this->assertSame('العائد على الإنفاق', $table['labels']['roas']['ar']);
+    }
+
+    public function test_a_traffic_report_compares_types_on_the_traffic_set(): void
+    {
+        $this->report->forceFill(['campaign_objective' => 'traffic'])->saveQuietly();
+        $traffic = ['family' => 'traffic', 'formats' => $this->sales()['formats']];
+        $table = app(ReportSectionSurfaces::class)->apply(['content_format_comparison' => ['objectives' => [$traffic]]], $this->report->fresh(), null, 'preview')['content_format_comparison']['table'];
+
+        // KPI-SET-PER-OBJECTIVE-001 — spend, impressions, clicks, CTR, CPM, frequency, CPC; frequency of a group of creatives is unknown → no row.
+        $this->assertSame(['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'cpc'], $table['rows']);
+        $this->assertSame('lower', $table['better']['cpm']);
+    }
+
+    public function test_a_client_table_has_no_money_row(): void
+    {
+        $block = ContentFormatComparison::forAudience(['currency' => 'SAR', 'objectives' => [$this->sales()]], true, false, false);
+        $payload = ['metric_set' => ['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas', 'cpa', 'cpm'], 'content_format_comparison' => $block];
+        $table = app(ReportSectionSurfaces::class)->apply($payload, $this->report, null, 'preview')['content_format_comparison']['table'];
+
+        foreach (['spend', 'roas', 'cpa', 'cpm'] as $money) {
+            $this->assertNotContains($money, $table['rows'], "a client table carries {$money}");
+        }
+        $this->assertContains('purchases', $table['rows']);
+    }
+
+    public function test_several_families_merge_by_type_with_ratios_rebuilt_from_sums(): void
+    {
+        $this->report->forceFill(['campaign_objective' => 'custom', 'config' => ['objectives' => ['sales', 'traffic']]])->saveQuietly();
+        $traffic = ['family' => 'traffic', 'formats' => [self::fmt('video', ['spend' => 1000, 'impressions' => 50000, 'clicks' => 2100, 'ctr' => 0.042, 'reach' => 9000])]];
+        $sales = $this->sales();
+        $sales['formats'][0]['metrics']['reach'] = 7000;
+        $table = app(ReportSectionSurfaces::class)->apply(
+            ['metric_set' => ['spend', 'clicks', 'ctr', 'reach'], 'content_format_comparison' => ['objectives' => [$sales, $traffic]]],
+            $this->report->fresh(), null, 'preview',
+        )['content_format_comparison']['table'];
+
+        $this->assertEquals(2000, $table['cells']['spend']['video']);
+        $this->assertEqualsWithDelta(3000 / 100000, $table['cells']['ctr']['video'], 1e-9, 'CTR is summed clicks over summed impressions, not an average of CTRs');
+        $this->assertNull($table['cells']['reach']['video'] ?? null, 'reach is never added across families');
+    }
+
+    public function test_a_sales_table_names_conversions_where_no_type_reports_a_purchase(): void
+    {
+        $sales = $this->sales();
+        foreach ($sales['formats'] as $i => $f) {
+            $sales['formats'][$i]['metrics']['conversions'] = $f['metrics']['purchases'];
+            $sales['formats'][$i]['metrics']['purchases'] = null;
+        }
+        $table = app(ReportSectionSurfaces::class)->apply(
+            ['metric_set' => ['spend', 'purchases', 'roas'], 'content_format_comparison' => ['objectives' => [$sales]]], $this->report, null, 'preview',
+        )['content_format_comparison']['table'];
+
+        $this->assertSame(['spend', 'conversions', 'roas'], $table['rows'], 'orders fall back to conversions, named as conversions');
+        $this->assertSame('التحويلات', $table['labels']['conversions']['ar']);
     }
 }

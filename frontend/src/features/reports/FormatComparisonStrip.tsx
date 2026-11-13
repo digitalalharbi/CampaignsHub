@@ -1,98 +1,99 @@
 import { Num } from '@/components/ui/Num'
-import { kindName, metricText, RESULT_WORDS } from '@/features/content/ContentTypesComparison'
-import type { FormatComparisonObjective, FormatComparisonPayload } from '@/features/content/api'
-import { LOWER_IS_BETTER, present, stripFormats, stripMetrics, type StripMetric } from './formatStrip'
+import { money, num, percent, ratio } from '@/features/analytics/format'
+import { kindName } from '@/features/content/ContentTypesComparison'
+import type { FormatComparisonPayload } from '@/features/content/api'
+import { drawnTable, rowWinner, verdictOf, type DrawnTable } from './formatStrip'
 
-export { stripFormats, stripHasFigures, stripMetrics } from './formatStrip'
+export { drawnTable, tableHasFigures } from './formatStrip'
 
 /**
- * REPORT-FORMAT-COMPARE-COMPACT-001 (Owner 2026-11-13: «أحتاجها صغيرة، متوازية، واضحة، بلا حشو مربعات كبيرة») — the report's
- * «مقارنة أنواع المحتوى»: ONE block per report, the formats side by side as small equal cards.
- *
- * The server already kept only the families of the report's own objective(s) (`ContentFormatComparison::forReportObjectives`),
- * so a sales report compares formats on sales. Here a figure is drawn only where it exists: a metric no format answered (null,
- * or zero everywhere) has no line on any card, a card with nothing to say is not drawn, and a missing cell is absent — never
- * «—», never a zero. Each line carries a thin bar against the best format on that metric, so the comparison reads at a glance.
+ * REPORT-FORMAT-COMPARE-TABLE-001 (Owner 2026-11-13) — the report's «مقارنة أنواع المحتوى»: ONE professional table per report.
+ * A column per content type, side by side; a row per KPI of the report's objective (its KPI cards' list); the best type of each
+ * row carries a quiet highlight and a thin bar; one line under the table states the verdict, only where the data and the sample
+ * allow it. No row or column of nothing, no 0, no «—». On a phone the table scrolls inside its own box, never the page.
  */
-const WORDS: Record<Exclude<StripMetric, 'results'>, { ar: string; en: string }> = {
-  cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost/result' },
-  ctr: { ar: 'نسبة النقر', en: 'CTR' },
-  conversion_rate: { ar: 'التحويل', en: 'CVR' },
-  roas: { ar: 'العائد', en: 'ROAS' },
+function figure(kind: string | undefined, value: number, currency: string | null): string {
+  switch (kind) {
+    case 'money': return money(value, currency)
+    case 'rate': return percent(value, 1)
+    case 'multiplier': return ratio(value)
+    case 'ratio': return value.toFixed(2)
+    default: return num(value)
+  }
 }
 
-function ObjectiveStrip({ objective, ar, hidesMoney, currency, labelled }: { objective: FormatComparisonObjective; ar: boolean; hidesMoney: boolean; currency: string | null; labelled: boolean }) {
-  const metrics = stripMetrics(objective, hidesMoney)
-  const formats = stripFormats(objective, metrics)
-  if (metrics.length === 0 || formats.length === 0) return null
-  const resultWord = RESULT_WORDS[objective.result_metric ?? ''] ?? { ar: 'النتائج', en: 'Results' }
-  const word = (m: StripMetric) => (m === 'results' ? (ar ? resultWord.ar : resultWord.en) : (ar ? WORDS[m].ar : WORDS[m].en))
-  const best: Partial<Record<StripMetric, number>> = {}
-  const top: Partial<Record<StripMetric, number>> = {}
-  for (const m of metrics) {
-    const values = formats.map((f) => f[m]).filter(present)
-    top[m] = Math.max(...values)
-    if (values.length > 1) best[m] = LOWER_IS_BETTER.includes(m) ? Math.min(...values) : Math.max(...values)
-  }
-  const winner = objective.winner?.format ?? null
+function Verdict({ t, ar, currency }: { t: DrawnTable; ar: boolean; currency: string | null }) {
+  const v = verdictOf(t)
+  if (!v) return null
+  const label = t.table.labels?.[v.row] ?? { ar: v.row, en: v.row }
+  const kind = t.table.kinds?.[v.row]
+  const better = t.table.better?.[v.row]
+  const word = ar ? (better === 'lower' ? 'أقل' : 'أعلى') : (better === 'lower' ? 'lowest' : 'highest')
 
   return (
-    <div data-testid={`format-strip-objective-${objective.family}`} className="min-w-0">
-      {labelled && <p className="mb-1.5 text-xs font-semibold text-text-secondary">{ar ? objective.label.ar : objective.label.en}</p>}
-      <ul className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(8.25rem, 1fr))' }}>
-        {formats.map((f) => (
-          <li
-            key={f.format}
-            data-testid={`format-strip-card-${f.format}`}
-            className={`min-w-0 rounded-xl border px-2.5 py-2 ${f.format === winner ? 'border-success/60 bg-success/5' : 'border-border bg-surface'}`}
-          >
-            <div className="mb-1 flex min-w-0 items-baseline justify-between gap-1">
-              <span className="truncate text-sm font-bold text-text-primary">{kindName(f.format, ar)}</span>
-              <span className="shrink-0 text-xs text-text-muted"><Num>{`${f.creatives}`}</Num></span>
-            </div>
-            {f.format === winner && <span data-testid="format-strip-winner" className="mb-1 inline-block rounded-md bg-success/15 px-1.5 text-xs font-semibold text-success">{ar ? 'الأنسب للهدف' : 'Best fit'}</span>}
-            <dl className="flex flex-col gap-1">
-              {metrics.filter((m) => present(f[m])).map((m) => {
-                const v = f[m] as number
-                const width = top[m] ? Math.max(6, Math.round((v / (top[m] as number)) * 100)) : 0
-                const leads = best[m] !== undefined && v === best[m]
-
-                return (
-                  <div key={m} data-testid={`format-strip-cell-${m}`} className="min-w-0">
-                    <div className="flex items-baseline justify-between gap-1">
-                      <dt className="truncate text-xs text-text-secondary">{word(m)}</dt>
-                      <dd className={`shrink-0 text-xs font-semibold ${leads ? 'text-success' : 'text-text-primary'}`}><Num>{metricText(m, v, currency)}</Num></dd>
-                    </div>
-                    <div className="mt-0.5 h-1 rounded-full bg-surface-hover" aria-hidden>
-                      <div className={`h-1 rounded-full ${leads ? 'bg-success' : 'bg-brand-600/70'}`} style={{ width: `${width}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </dl>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <p data-testid="format-table-verdict" className="text-xs text-text-secondary">
+      <span className="font-semibold text-text-primary">{kindName(v.winner, ar)}</span>
+      {ar ? ` ${word} ${label.ar}: ` : ` has the ${word} ${label.en}: `}
+      <Num>{`${figure(kind, v.winnerValue, currency)} ${ar ? 'مقابل' : 'vs'} ${figure(kind, v.runnerValue, currency)}`}</Num>
+      {` (${kindName(v.runnerUp, ar)})`}
+    </p>
   )
 }
 
 export function FormatComparisonStrip({ data, ar, client, title = true }: { data: FormatComparisonPayload; ar: boolean; client: boolean; title?: boolean }) {
   const hidesMoney = client || data.spend_hidden === true
-  // Only the objectives with a figure to draw — and a label only when more than one of THOSE remains.
-  const objectives = (Array.isArray(data?.objectives) ? data.objectives : []).filter((o) => {
-    const m = stripMetrics(o, hidesMoney)
-
-    return m.length > 0 && stripFormats(o, m).length > 0
-  })
-  if (objectives.length === 0) return null
+  const t = drawnTable(data, hidesMoney)
+  if (!t) return null
+  const currency = hidesMoney ? null : data.currency
 
   return (
     <section data-testid="report-format-strip" className="flex min-w-0 flex-col gap-2">
       {title && <h3 className="text-sm font-extrabold tracking-tight text-text-primary">{ar ? 'مقارنة أنواع المحتوى' : 'Content types'}</h3>}
-      {objectives.map((o) => (
-        <ObjectiveStrip key={o.family} objective={o} ar={ar} hidesMoney={hidesMoney} currency={hidesMoney ? null : data.currency} labelled={objectives.length > 1} />
-      ))}
+      <div className="min-w-0 overflow-x-auto rounded-xl border border-border" data-testid="format-table-scroll">
+        <table data-testid="format-table" className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-surface-hover/60">
+              <th scope="col" className="px-2.5 py-2 text-start font-semibold text-text-secondary">{ar ? 'المؤشر' : 'KPI'}</th>
+              {t.formats.map((f) => (
+                <th key={f.format} scope="col" data-testid={`format-col-${f.format}`} className="px-2.5 py-2 text-center font-bold text-text-primary">
+                  {kindName(f.format, ar)}
+                  <span className="ms-1 font-normal text-text-muted"><Num>{`(${f.creatives})`}</Num></span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {t.rows.map((row) => {
+              const winner = rowWinner(t, row)
+              const values = t.formats.map((f) => t.cell(row, f.format)).filter((v): v is number => v !== null)
+              const top = Math.max(...values)
+              const label = t.table.labels?.[row] ?? { ar: row, en: row }
+
+              return (
+                <tr key={row} data-testid={`format-row-${row}`} className="border-t border-border">
+                  <th scope="row" className="whitespace-nowrap px-2.5 py-1.5 text-start font-medium text-text-secondary">{ar ? label.ar : label.en}</th>
+                  {t.formats.map((f) => {
+                    const v = t.cell(row, f.format)
+                    const wins = winner === f.format
+
+                    return (
+                      <td key={f.format} data-testid={`format-cell-${row}-${f.format}`} data-winner={wins ? 'true' : undefined} className={`px-2.5 py-1.5 text-center align-middle ${wins ? 'bg-success/10 font-bold text-success' : 'text-text-primary'}`}>
+                        {v === null ? null : (
+                          <>
+                            <Num>{figure(t.table.kinds?.[row], v, currency)}</Num>
+                            {winner !== null && <div aria-hidden className={`mx-auto mt-0.5 h-0.5 rounded-full ${wins ? 'bg-success' : 'bg-border'}`} style={{ width: `${Math.max(8, Math.round((v / top) * 100))}%` }} />}
+                          </>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Verdict t={t} ar={ar} currency={currency} />
     </section>
   )
 }

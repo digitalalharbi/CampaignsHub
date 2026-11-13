@@ -48,9 +48,11 @@ test.describe('content format comparison', () => {
 
     const block = page.getByTestId('report-format-comparison')
     await expect(block).toBeVisible({ timeout: 30000 })
-    // REPORT-FORMAT-COMPARE-COMPACT-001 — one compact strip of small parallel cards, no charts or tables, no «—» filler.
+    // REPORT-FORMAT-COMPARE-TABLE-001 — ONE table: a column per content type, a row per KPI of the report, no «—» filler.
     await expect(block.getByTestId('report-format-strip')).toHaveCount(1)
-    expect(await block.locator('[data-testid^="format-strip-card-"]').count()).toBeGreaterThan(1)
+    await expect(block.getByTestId('format-table')).toHaveCount(1)
+    expect(await block.locator('[data-testid^="format-col-"]').count()).toBeGreaterThan(1)
+    expect(await block.locator('[data-testid^="format-row-"]').count()).toBeGreaterThan(1)
     await expect(block).not.toContainText(/الإنفاق|Spend|تكلفة النتيجة|Cost\/result|—/)
     await expect(block.getByTestId('format-cards')).toHaveCount(0)
   })
@@ -96,6 +98,6 @@ test.describe('content format comparison', () => {
     await expect(slide.first()).toBeVisible({ timeout: 30000 })
     // ONE page per report, whatever the objectives (REPORT-FORMAT-COMPARE-COMPACT-001).
     await expect(slide).toHaveCount(1)
-    await expect(slide.getByTestId('report-format-strip')).toBeVisible()
+    await expect(slide.getByTestId('format-table')).toBeVisible()
   })
 })

@@ -1,5 +1,5 @@
 import type { FormatComparisonPayload } from '@/features/content/api'
-import { stripHasFigures } from './formatStrip'
+import { tableHasFigures } from './formatStrip'
 import { isClientAudience } from './reportAudience'
 /**
  * REPORT-SECTION-SURFACES-001 — the page draws the sections the server resolved, and nothing else.
@@ -288,7 +288,7 @@ export function withFormatComparisonSlides<S extends { id: string; type: string;
   if (!Array.isArray(list) || !(list as string[]).includes('content_format_comparison') || block == null) return slides
   // A page only when the strip would draw a figure for THIS reader (a client's copy has no cost to show) — never a title alone.
   const hidesMoney = isClientAudience(data.audience ?? undefined) || block.spend_hidden === true
-  if (stripHasFigures(block as FormatComparisonPayload, hidesMoney)) {
+  if (tableHasFigures(block as FormatComparisonPayload, hidesMoney)) {
     slides.push({ id: '__formats', type: '__formats', order: 9989, visible: true } as S)
   }
 
