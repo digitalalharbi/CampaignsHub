@@ -10,6 +10,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Support\ClientAccountRows;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\HiddenMoney;
@@ -355,6 +356,17 @@ final class ShareService
         foreach (['kpis', 'totals'] as $scalars) {
             if (isset($data[$scalars]) && is_array($data[$scalars])) {
                 $stripMoney($data[$scalars]);
+            }
+        }
+        /*
+         * Master task 10 — one rule for a link's content words and media, snapshot as live. `sanitizeLive`'s builder applies `ContentCopy`
+         * to every content list; the snapshot link applied it to none, so a saved report's link published the ad copy and the films its
+         * own switches withheld on the live link of the same share.
+         */
+        // Only once the operator configured the panel: a snapshot link made before it keeps the words it has always shown.
+        foreach ($share->creativeVisibility()->creatives ? [...self::CREATIVE_SECTIONS, 'ads_groups', 'ads_platform_groups'] : [] as $section) {
+            if (! empty($data[$section]) && is_array($data[$section])) {
+                $data[$section] = ContentCopy::rows($data[$section], $share->creativeVisibility());
             }
         }
         foreach (['platforms', 'campaigns', 'timeseries', 'daily_rows', 'budget', ...self::CREATIVE_SECTIONS] as $section) {

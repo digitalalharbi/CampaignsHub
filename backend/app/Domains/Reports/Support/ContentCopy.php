@@ -37,6 +37,42 @@ final class ContentCopy
     }
 
     /**
+     * Master task 10 (REPORT-OPENABLE-OPTIONS-001) — «ما يمكن فتحه» on the report's own content lists, as on the creative endpoints.
+     *
+     * `SharedCreativeView` honoured `video`, `image_zoom` and `download` on the content endpoints only; the gallery in the link's own payload
+     * (ranked ads, groups, roster) still carried every film, so «تشغيل الفيديو» off left the video playing there. Applied once the operator has
+     * configured the section (`creatives` on): a link created before the panel existed keeps the gallery it has always shown — changing what
+     * an already-shared client link draws is the Owner's decision, recorded in the ledger. The COVER is never touched: a hidden film still
+     * shows its poster, which is «المعروض يظهر بغلافه».
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function media(array $row, CreativeVisibility $visibility): array
+    {
+        if (! $visibility->creatives || ! is_array($row['preview'] ?? null)) {
+            return $row;
+        }
+
+        if (! $visibility->video) {
+            $row['preview']['video_url'] = null;
+            if (is_array($row['preview']['cards'] ?? null)) {
+                $row['preview']['cards'] = array_map(static function ($card) {
+                    if (is_array($card)) {
+                        $card['video_url'] = null;
+                    }
+
+                    return $card;
+                }, $row['preview']['cards']);
+            }
+        }
+        $row['preview']['can_zoom'] = $visibility->imageZoom;
+        $row['preview']['can_download'] = $visibility->download;
+
+        return $row;
+    }
+
+    /**
      * Walk content rows — ranked ads, groups of them at any depth, the roster — and remove the copy
      * each card may not publish, from the row's own fields and from its preview's cards.
      *
@@ -51,6 +87,7 @@ final class ContentCopy
             }
 
             $row = self::card($row, $visibility);
+            $row = self::media($row, $visibility);
 
             if (isset($row['preview']['cards']) && is_array($row['preview']['cards'])) {
                 $row['preview']['cards'] = array_map(
