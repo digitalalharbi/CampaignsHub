@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Campaigns\Models\CreativeGroup;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
@@ -321,6 +322,75 @@ final class SharedLinkCopyLeakTest extends TestCase
                 $this->assertSame([], $this->leaked($this->printed($share, $layout)), "{$mode}/{$layout}: the PDF platform pages print words the link hides");
             }
         }
+    }
+
+    // ---- the reviewer's findings on the same endpoints: hidden money and campaign names ---------------------------
+
+    /**
+     * Money the platform reported and we could not convert (a USD account with no USD→SAR rate — every Snapchat account on
+     * Production) lives in `spend_original`/`revenue_original`. The summary's alerts, spend-by-kind and image-against-video
+     * sections, and the detail's per-platform siblings, carried it on a link hiding spend and revenue.
+     */
+    public function test_a_link_hiding_money_publishes_no_withheld_original_on_the_summary_or_the_detail(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->getKey());
+        app(ProjectContext::class)->setProjectId((string) $this->project->getKey());
+        $group = CreativeGroup::create(['project_id' => $this->project->getKey(), 'name' => 'G', 'method' => 'manual']);
+        $money = [];
+        foreach (['image' => 'https://cdn.example.test/m1.jpg', 'video' => 'https://cdn.example.test/m2.jpg'] as $format => $asset) {
+            $c = $this->creative(['name' => "Money {$format}", 'format' => $format, 'asset_url' => $asset, 'thumbnail_url' => $asset,
+                'video_url' => $format === 'video' ? 'https://cdn.example.test/m2.mp4' : null, 'creative_group_id' => $group->getKey()]);
+            $money[] = $c;
+            foreach ([2, 12] as $daysAgo) {
+                DB::table('creative_daily_metrics')->insert([
+                    'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+                    'creative_id' => $c->getKey(), 'campaign_id' => $this->campaign->getKey(), 'metric_date' => now()->subDays($daysAgo)->toDateString(),
+                    'spend' => null, 'spend_original' => 4125.37, 'revenue' => null, 'revenue_original' => 9876.54, 'original_currency' => 'USD',
+                    'impressions' => 20000, 'clicks' => 300, 'conversions' => 9, 'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        }
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+        $hidden = ['4125.3', '9876.5', '8250.7', '19753.0', '"USD"'];
+        $found = static fn (string $body): array => array_values(array_filter($hidden, static fn (string $h): bool => str_contains($body, $h)));
+
+        [, $shown] = $this->link($this->switches(), 'live');
+        $this->assertNotSame([], $found($this->raw($shown, '/creatives/summary')), 'the withheld originals never reached the summary — nothing is proved');
+
+        [, $token] = $this->link($this->switches(['spend' => false, 'revenue' => false]), 'live');
+        $this->assertSame([], $found($this->raw($token, '/creatives/summary')), '/creatives/summary publishes money the link hides');
+        foreach ($money as $c) {
+            $detail = $this->raw($token, '/creatives/'.$c->getKey());
+            $this->assertStringContainsString('by_platform', $detail);
+            $this->assertSame([], $found($detail), '/creatives/{id} publishes money the link hides');
+        }
+    }
+
+    /** CLIENT-REPORT-ENTITY-BOUNDARY-001 — a finding names the content, never the campaign it ran in. */
+    public function test_the_summary_findings_name_no_campaign(): void
+    {
+        app(TenantContext::class)->setTenantId((string) $this->tenant->getKey());
+        app(ProjectContext::class)->setProjectId((string) $this->project->getKey());
+        $this->campaign->forceFill(['name' => 'CampaignNameMustNotTravel'])->save();
+        // Strong clicks, weak conversion against three peers on the same path: a peer finding about this creative.
+        foreach ([[900, 1], [250, 30], [240, 28], [260, 31]] as $i => [$clicks, $conversions]) {
+            $c = $this->creative(['name' => "Peer {$i}", 'format' => 'image', 'asset_url' => "https://cdn.example.test/p{$i}.jpg"]);
+            DB::table('creative_daily_metrics')->insert([
+                'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),
+                'creative_id' => $c->getKey(), 'campaign_id' => $this->campaign->getKey(), 'metric_date' => now()->subDays(3)->toDateString(),
+                'spend' => 200, 'impressions' => 12000, 'clicks' => $clicks, 'conversions' => $conversions, 'revenue' => 400,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        app(ProjectContext::class)->forget();
+        app(TenantContext::class)->forget();
+
+        [, $token] = $this->link($this->switches(), 'live');
+        $response = $this->getJson("/api/v1/reports/shared/{$token}/creatives/summary")->assertOk();
+        $this->assertNotSame([], (array) $response->json('data.insights.items'), 'no finding was produced — nothing is proved');
+        $this->assertStringNotContainsString('CampaignNameMustNotTravel', (string) $response->getContent(), 'a finding names the campaign');
+        $this->assertStringNotContainsString((string) $this->campaign->getKey(), (string) $response->getContent(), 'a finding carries the campaign id');
     }
 
     public function test_the_csv_and_xlsx_of_a_link_hiding_the_copy_carry_none_of_it(): void

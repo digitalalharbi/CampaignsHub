@@ -173,7 +173,8 @@ final class SharedCreativeView
             }
         }
 
-        return $this->redactSummary($payload, $visibility) + [
+        // SHARE-COPY-LEAK-001 review — the summary's money companions at every depth, not only where a section was named.
+        return self::withoutMoneyCompanions($this->redactSummary($payload, $visibility), $visibility) + [
             'applied' => self::clientApplied($applied),
             'available' => $this->available($share),
             'permissions' => $visibility->toArray(),
@@ -245,7 +246,7 @@ final class SharedCreativeView
             $detail = PreviousComparison::stripCreativeRow($detail);
         }
 
-        return [
+        return self::withoutMoneyCompanions([
             'creative' => $this->redactRow($detail, $visibility),
             'period' => ['from' => $applied['from'], 'to' => $applied['to'], 'days' => $days],
             ...($comparing ? ['previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()]] : []),
@@ -278,7 +279,7 @@ final class SharedCreativeView
                 'note_en' => 'Figures as the ad platform reported them, inside its own attribution window.',
             ],
             'permissions' => $visibility->toArray(),
-        ];
+        ], $visibility);
     }
 
     /**
@@ -738,13 +739,6 @@ final class SharedCreativeView
          * leaves the halves, and a signal on a hidden metric keeps its direction and loses its values —
          * «CPM rose» is delivery context the client may see; «13.00 against 10.00» is the spend.
          */
-        $signalMetric = static fn (string $key): string => match (true) {
-            // Its two values are the spend of each period.
-            $key === 'spend_without_results' => 'spend',
-            str_ends_with($key, '_decay') => substr($key, 0, -6),
-            default => $key,
-        };
-
         foreach ($visibility->hiddenMetrics() as $metric) {
             foreach (['metrics', 'previous'] as $bag) {
                 foreach (['early', 'late'] as $half) {
@@ -756,14 +750,7 @@ final class SharedCreativeView
         }
 
         if (isset($row['fatigue']['signals']) && is_array($row['fatigue']['signals'])) {
-            $row['fatigue']['signals'] = array_map(static function ($signal) use ($visibility, $signalMetric) {
-                if (is_array($signal) && $visibility->hides($signalMetric((string) ($signal['key'] ?? '')))) {
-                    $signal['current'] = null;
-                    $signal['previous'] = null;
-                }
-
-                return $signal;
-            }, $row['fatigue']['signals']);
+            $row['fatigue']['signals'] = self::redactSignals($row['fatigue']['signals'], $visibility);
         }
 
         /*
@@ -863,6 +850,74 @@ final class SharedCreativeView
     }
 
     /**
+     * A fatigue signal on a hidden metric keeps its direction and loses its two values — FATIGUE-REAL-SIGNALS-001.
+     *
+     * One definition for the row's own signals and the copy an alert carries beside it.
+     *
+     * @param  array<int|string, mixed>  $signals
+     * @return array<int|string, mixed>
+     */
+    private static function redactSignals(array $signals, CreativeVisibility $visibility): array
+    {
+        $signalMetric = static fn (string $key): string => match (true) {
+            // Its two values are the spend of each period.
+            $key === 'spend_without_results' => 'spend',
+            str_ends_with($key, '_decay') => substr($key, 0, -6),
+            default => $key,
+        };
+
+        return array_map(static function ($signal) use ($visibility, $signalMetric) {
+            if (is_array($signal) && $visibility->hides($signalMetric((string) ($signal['key'] ?? '')))) {
+                $signal['current'] = null;
+                $signal['previous'] = null;
+            }
+
+            return $signal;
+        }, $signals);
+    }
+
+    /**
+     * SHARE-COPY-LEAK-001 review — CLIENT-REPORT-MONEY-REDACTION-001 at every depth of a payload.
+     *
+     * `redactRow` removes a hidden figure's ORIGINAL (`spend_original`, its withheld-row count and the currency name) from a row's
+     * own bags. The summary and the detail also carry money beside sections that are not rows — each fatigue alert's provenance,
+     * the spend split by kind, the image-against-video aggregates, the per-platform siblings — and on Production those originals
+     * are where the money IS (USD accounts with no USD→SAR rate). Every key here is money and nothing else, so it is removed
+     * wherever it appears rather than section by section.
+     *
+     * @param  array<int|string, mixed>  $node
+     * @return array<int|string, mixed>
+     */
+    private static function withoutMoneyCompanions(array $node, CreativeVisibility $visibility): array
+    {
+        $keys = array_merge(
+            $visibility->spend ? [] : CreativeVisibility::MONEY_COMPANIONS['spend'],
+            $visibility->revenue ? [] : CreativeVisibility::MONEY_COMPANIONS['revenue'],
+            ! $visibility->spend && ! $visibility->revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
+        );
+        if ($keys === []) {
+            return $node;
+        }
+
+        $walk = static function (array $node) use (&$walk, $keys): array {
+            foreach ($node as $key => $value) {
+                if (is_string($key) && in_array($key, $keys, true)) {
+                    unset($node[$key]);
+
+                    continue;
+                }
+                if (is_array($value)) {
+                    $node[$key] = $walk($value);
+                }
+            }
+
+            return $node;
+        };
+
+        return $walk($node);
+    }
+
+    /**
      * A carousel's cards obey the same switches as the creative's own copy (§15.12).
      *
      * Each card carries its own headline, body, call to action and destination — the same four things
@@ -957,6 +1012,10 @@ final class SharedCreativeView
                 if (! $visibility->spend) {
                     $alert['spend'] = null;
                 }
+                // SHARE-COPY-LEAK-001 review — the alert carries its own copy of the signals; a spend signal's two values are the spend.
+                if (is_array($alert['signals'] ?? null)) {
+                    $alert['signals'] = self::redactSignals($alert['signals'], $visibility);
+                }
 
                 return $alert;
             }, $payload['fatigue']['alerts']['items']);
@@ -1048,6 +1107,12 @@ final class SharedCreativeView
             if (! $visibility->spend) {
                 $item['spend'] = null;
             }
+            /*
+             * SHARE-COPY-LEAK-001 review — CLIENT-REPORT-ENTITY-BOUNDARY-001 on the findings too. `CreativeInsights::subject()` names the
+             * campaign (internal id and name) on every finding; the rows reach the builder before any boundary, and no client surface
+             * draws either. Removed, not relabelled: a client link names content and platforms, never campaigns.
+             */
+            unset($item['campaign_id'], $item['campaign_name']);
 
             $items[] = $item;
         }
@@ -1195,7 +1260,8 @@ final class SharedCreativeView
 
             if (is_array($metrics)) {
                 foreach ($visibility->hiddenMetrics() as $metric) {
-                    unset($metrics[$metric], $metrics['reported'][$metric]);
+                    // The availability map and the window's halves go with the figure, as on the row (`redactRow`).
+                    unset($metrics[$metric], $metrics['reported'][$metric], $metrics['availability'][$metric], $metrics['decay']['early'][$metric], $metrics['decay']['late'][$metric]);
                 }
             }
 
