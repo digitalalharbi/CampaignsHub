@@ -783,6 +783,65 @@ final class AdPlatformStructureSyncTest extends TestCase
     }
 
     /**
+     * TIKTOK-CAMPAIGN-STATUS-001 — TikTok says `ENABLE` / `DISABLE`, and the campaign follows it on every sync.
+     *
+     * The generic vocabulary only knew `enabled` / `disabled`, so every TikTok campaign landed `unknown` (11 on «حلويات برديسي»,
+     * one spending), and the visible campaign kept the status it was adopted with for ever. A campaign the sync adopted follows
+     * the platform; one somebody authored does not; a value TikTok has not documented stays `unknown` and is logged by name.
+     */
+    public function test_tiktok_campaign_status_maps_and_the_adopted_campaign_follows_it(): void
+    {
+        $this->configure('tiktok');
+        $account = $this->account('tiktok');
+        Log::spy();
+        // ONE fake reading a variable: `Http::fake` merges stubs and the first match wins, so a second fake would be ignored.
+        $list = [];
+        Http::fake([
+            'business-api.tiktok.com/*/campaign/get/*' => function () use (&$list) {
+                return Http::response(['code' => 0, 'data' => ['list' => $list]]);
+            },
+            'business-api.tiktok.com/*' => Http::response(['code' => 0, 'data' => ['list' => []]]),
+        ]);
+        $fake = function (array $campaigns) use (&$list): void {
+            $list = $campaigns;
+        };
+
+        $fake([
+            ['campaign_id' => 'run', 'campaign_name' => 'Running', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_ENABLE'],
+            ['campaign_id' => 'off', 'campaign_name' => 'Off', 'operation_status' => 'DISABLE', 'secondary_status' => 'CAMPAIGN_STATUS_DISABLE'],
+            ['campaign_id' => 'odd', 'campaign_name' => 'Odd', 'operation_status' => 'FROZEN_NEW'],
+        ]);
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $unified = fn (string $id): UnifiedCampaign => UnifiedCampaign::withoutGlobalScopes()->findOrFail(
+            ExternalCampaign::withoutGlobalScopes()->where('external_id', $id)->value('unified_campaign_id'));
+        $this->assertSame('active', ExternalCampaign::withoutGlobalScopes()->where('external_id', 'run')->value('status'));
+        $this->assertSame('active', $unified('run')->status);
+        $this->assertSame('paused', $unified('off')->status);
+        $this->assertSame('unknown', $unified('odd')->status);
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $m, array $c = []) => str_contains($m, 'TikTok campaign status')
+            && ($c['unmapped'] ?? null) === ['operation_status' => 'FROZEN_NEW'] && ($c['campaign_id'] ?? null) === 'odd');
+
+        // Somebody authored a status on a campaign the sync did NOT adopt: the platform does not overwrite it.
+        $authored = $unified('off');
+        $authored->forceFill(['meta' => ['authored' => true], 'status' => 'completed'])->save();
+        // A campaign adopted while the mapping was broken is backfilled on the next sync.
+        $unified('run')->forceFill(['status' => 'unknown'])->save();
+
+        $fake([
+            ['campaign_id' => 'run', 'campaign_name' => 'Running', 'operation_status' => 'DISABLE', 'secondary_status' => 'CAMPAIGN_STATUS_DISABLE'],
+            ['campaign_id' => 'off', 'campaign_name' => 'Off', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_ENABLE'],
+            ['campaign_id' => 'odd', 'campaign_name' => 'Odd', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_BUDGET_EXCEED'],
+        ]);
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $this->assertSame('paused', $unified('run')->status, 'the adopted campaign follows the platform');
+        $this->assertSame('completed', $unified('off')->status, 'an authored status is not overwritten');
+        $this->assertSame('active', $unified('odd')->status, 'a daily budget spent is still a running campaign');
+        $this->assertSame('budget_exhausted', ExternalCampaign::withoutGlobalScopes()->where('external_id', 'odd')->value('raw')['delivery_signal'] ?? null);
+    }
+
+    /**
      * Google budgets a CAMPAIGN, never an ad group.
      *
      * Copying the campaign's budget down would show the same figure on every ad group beneath it, and
