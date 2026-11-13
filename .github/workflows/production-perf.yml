@@ -54,34 +54,21 @@ jobs:
             set +e
             cd /opt/campaignshub
             DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
-            echo "== FACTS-XLI $(date -u +%FT%TZ)"
+            echo "== FACTS-XLI2 $(date -u +%FT%TZ)"
             $DC exec -T backend sh -c 'git log -1 --format=%h 2>/dev/null; cat /var/www/html/REVISION 2>/dev/null; date; php -r "echo date_default_timezone_get(),PHP_EOL;"' || true
             $DC exec -T backend php artisan schedule:list 2>/dev/null | grep -E "integrations:sync|creative|covers" || true
             $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F " | "' <<'SQL'
             BEGIN READ ONLY;
-            \echo -- now (db)
-            select now();
-            \echo -- ad accounts x/linkedin: provider | n | active | last_synced | last_structure | next_sync
-            select provider, count(*), count(*) filter (where status='active'), max(last_synced_at), max(last_structure_synced_at), min(next_sync_at) from external_accounts where provider in ('x','linkedin') and account_type='ad_account' group by 1;
-            \echo -- active bindings: provider | project | accounts
-            select b.provider, b.project_id, count(*) from project_integration_bindings b where b.provider in ('x','linkedin') and b.is_active group by 1,2 order by 1,2;
-            \echo -- sync runs since 2026-11-13 00:00Z: provider | status | creative_status | runs | creative_rows | last_finished
-            select provider, status, coalesce(creative_status,'-'), count(*), coalesce(sum(creative_rows),0), max(finished_at) from metric_sync_runs where provider in ('x','linkedin') and created_at >= '2026-11-13 00:00:00+00' group by 1,2,3 order by 1,2,3;
-            \echo -- last 3 runs per provider: provider | started | status | creative_status | creative_rows | ids_received | ids_mapped | creative_error(120)
-            select provider, started_at, status, coalesce(creative_status,'-'), coalesce(creative_rows,0), meta->>'creative_ids_received', meta->>'creative_ids_mapped', left(coalesce(creative_error,''),120) from (select r.*, row_number() over (partition by provider order by created_at desc) rn from metric_sync_runs r where provider in ('x','linkedin')) t where rn<=3 order by 1,2 desc;
-            \echo -- creatives: provider | project | total | created_since_deploy | with_picture | cover_cached | text_card | missing_permission(post) | missing_permission(media) | no_face | last_active_set
-            select provider, project_id, count(*), count(*) filter (where created_at >= '2026-11-13 00:00:00+00'), count(*) filter (where coalesce(thumbnail_url, asset_url) is not null), count(*) filter (where cover_path is not null), count(*) filter (where format='text_card'), count(*) filter (where raw->>'media_reason'='linkedin_post_scope_missing'), count(*) filter (where raw->>'media_reason'='linkedin_media_scope_missing'), count(*) filter (where coalesce(thumbnail_url, asset_url) is null and coalesce(format,'')<>'text_card'), count(*) filter (where last_active_at is not null) from external_creatives where provider in ('x','linkedin') and coalesce(is_demo,false)=false group by 1,2 order by 1,2;
-            \echo -- creative stats rows: provider | project | rows | creatives | first_date | last_date | rows_written_since_deploy
-            select c.provider, c.project_id, count(*), count(distinct m.creative_id), min(m.metric_date), max(m.metric_date), count(*) filter (where m.created_at >= '2026-11-13 00:00:00+00') from creative_daily_metrics m join external_creatives c on c.id=m.creative_id where c.provider in ('x','linkedin') group by 1,2 order by 1,2;
-            \echo -- last 7 days per project: provider | project | campaigns_with_spend | ads_under_them | creatives_under_them | creatives_with_stats_7d
-            with sp as (select provider, project_id, external_campaign_id from daily_metrics where provider in ('x','linkedin') and metric_key='spend' and metric_date >= current_date - 7 and value > 0 group by 1,2,3)
-            select sp.provider, sp.project_id, count(distinct sp.external_campaign_id),
-              (select count(*) from external_ads a where a.external_campaign_id in (select external_campaign_id from sp s2 where s2.project_id=sp.project_id and s2.provider=sp.provider)),
-              (select count(*) from external_creatives c where c.external_campaign_id in (select external_campaign_id from sp s2 where s2.project_id=sp.project_id and s2.provider=sp.provider)),
-              (select count(distinct m.creative_id) from creative_daily_metrics m join external_creatives c on c.id=m.creative_id where c.project_id=sp.project_id and c.provider=sp.provider and m.metric_date >= current_date - 7)
-            from sp group by 1,2 order by 1,2;
-            \echo -- live links on those projects: project | active links
-            select r.project_id, count(*) from report_shares s join reports r on r.id=s.report_id where s.revoked_at is null and r.project_id in (select distinct project_id from project_integration_bindings where provider in ('x','linkedin') and is_active) group by 1;
+            \echo -- x creatives without a face: project | format | has_card_uri | media_type | has_body | raw_keys | source_updated | last_synced | n
+            select project_id, coalesce(format,'NULL'), (raw ? 'card_uri'), coalesce(raw->>'media_type','-'), (coalesce(body,'')<>''), coalesce((select string_agg(k, ',' order by k) from jsonb_object_keys(coalesce(raw,'{}'::jsonb)) k),'-'), max(source_updated_at)::date, max(last_synced_at)::date, count(*) from external_creatives where provider='x' and coalesce(is_demo,false)=false and coalesce(thumbnail_url, asset_url) is null and coalesce(format,'')<>'text_card' group by 1,2,3,4,5,6 order by 1;
+            \echo -- x creatives WITH a face, same projects: project | format | has_card_uri | media_type | n
+            select project_id, coalesce(format,'NULL'), (raw ? 'card_uri'), coalesce(raw->>'media_type','-'), count(*) from external_creatives where provider='x' and coalesce(is_demo,false)=false and (coalesce(thumbnail_url, asset_url) is not null or format='text_card') group by 1,2,3,4 order by 1;
+            \echo -- x accounts per project (bound): project | accounts | distinct connections
+            select b.project_id, count(*), count(distinct a.provider_connection_id) from project_integration_bindings b join external_accounts a on a.id=b.external_account_id where b.provider='x' and b.is_active group by 1;
+            \echo -- x ads of faceless creatives: project | promoted ads | ad status sample
+            select a.project_id, count(*), min(a.status) from external_ads a join external_creatives c on c.id=a.creative_id where c.provider='x' and coalesce(c.thumbnail_url, c.asset_url) is null and coalesce(c.format,'')<>'text_card' group by 1;
+            \echo -- x structure sync error lines (last 5 runs with errors): when | left(error,160)
+            select created_at, left(coalesce(error,''),160) from metric_sync_runs where provider='x' and error is not null order by created_at desc limit 5;
             ROLLBACK;
             SQL
             echo "== END FACTS-XLI"
