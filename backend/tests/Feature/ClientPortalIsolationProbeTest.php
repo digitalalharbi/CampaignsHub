@@ -8,6 +8,7 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -49,7 +50,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
 
     /** @var list<string> every GET under /client the probe covers, written as the route is */
     private const COVERED = [
-        'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
+        'api/v1/client/approvals', 'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
         'api/v1/client/invoices', 'api/v1/client/invoices/{invoice}', 'api/v1/client/invoices/{invoice}/pdf',
         'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview',
         'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/requests',
@@ -105,7 +106,10 @@ final class ClientPortalIsolationProbeTest extends TestCase
             'objective' => $label.' objective', 'journey_stage' => 'in_progress', 'submitted_at' => now(),
         ]);
 
-        return ['invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference];
+        // CLIENT-CONTENT-APPROVAL-001 — an open content approval, titled with the label so a leak names itself.
+        $approval = ContentApproval::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $w->id, 'project_id' => $project->id, 'title' => $label.' content', 'status' => 'pending']);
+
+        return ['invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference, 'approval' => (string) $approval->id];
     }
 
     private function signInAsAlpha(): void
@@ -122,7 +126,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
     {
         $this->signInAsAlpha();
 
-        foreach (['campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session', 'team'] as $path) {
+        foreach (['approvals', 'campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session', 'team'] as $path) {
             $res = $this->getJson("/api/v1/client/{$path}", $this->spa);
 
             $this->assertContains($res->status(), [200, 403, 404], "/client/{$path} answered {$res->status()}");
@@ -133,6 +137,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
         // The control: the probe can see Alpha's own records, so an empty answer is not a false pass.
         $this->assertStringContainsString('Alpha campaign', $this->getJson('/api/v1/client/campaigns', $this->spa)->getContent());
         $this->assertStringContainsString('Alpha-INV-1', $this->getJson('/api/v1/client/invoices', $this->spa)->getContent());
+        $this->assertStringContainsString('Alpha content', $this->getJson('/api/v1/client/approvals', $this->spa)->getContent());
     }
 
     public function test_every_endpoint_that_takes_an_id_refuses_the_other_clients_id(): void

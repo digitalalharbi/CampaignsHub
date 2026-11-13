@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace App\Domains\Requests\Services;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
-use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -33,7 +34,7 @@ final class ClientRequestManagerNotifier
 {
     public const TYPE = 'request.client_submitted';
 
-    public function __construct(private readonly NotificationDispatcher $dispatcher, private readonly ClientAccess $access) {}
+    public function __construct(private readonly NotificationDispatcher $dispatcher, private readonly ClientScopeResolver $scopes) {}
 
     /** @return list<int> the user ids notified (for the caller's tests and logs) */
     public function notify(ExternalRequest $request): array
@@ -92,14 +93,12 @@ final class ClientRequestManagerNotifier
             ->pluck('user_id')->map(fn ($id): int => (int) $id)->unique()->sort()->values()->all();
 
         // A manager whose reach to THIS client was taken away is not told about it, though their name is still on
-        // the project (the same `ClientAccess` question every client page asks).
+        // the project. Asked with the MANAGER's own membership — the request is the client's, so the bound context
+        // is not theirs — and in `ClientAccess`'s order: a membership that names clients is the whole answer, then
+        // `clients.view_all`, then ownership or the client's team roster.
         if ($active !== [] && $request->client_id !== null) {
             $client = ClientWorkspace::withoutGlobalScopes()->where('tenant_id', $tenantId)->find($request->client_id);
-            $active = $client === null ? [] : array_values(array_filter($active, function (int $id) use ($client): bool {
-                $user = User::query()->find($id);
-
-                return $user !== null && $this->access->canAccessClient($user, $client);
-            }));
+            $active = $client === null ? [] : array_values(array_filter($active, fn (int $id): bool => $this->reaches($id, $client, $tenantId)));
         }
 
         if ($active !== []) {
@@ -109,6 +108,27 @@ final class ClientRequestManagerNotifier
         $owner = $this->activeAgencyMembers($tenantId)->where('role', 'owner')->orderBy('created_at')->value('user_id');
 
         return $owner === null ? [] : [(int) $owner];
+    }
+
+    private function reaches(int $userId, ClientWorkspace $client, string $tenantId): bool
+    {
+        $user = User::query()->find($userId);
+        /** @var Membership|null $membership */
+        $membership = $this->activeAgencyMembers($tenantId)->where('user_id', $userId)->with('scopes')->first();
+        if ($user === null || $membership === null) {
+            return false;
+        }
+
+        $reach = $this->scopes->reachableClientIds($user, $membership);
+        if ($reach === null) {
+            return true;
+        }
+        if ($reach !== []) {
+            return in_array((string) $client->getKey(), $reach, true);
+        }
+
+        return ($client->owner_id !== null && (int) $client->owner_id === $userId)
+            || DB::table('client_workspace_user')->where('client_workspace_id', $client->getKey())->where('user_id', $userId)->exists();
     }
 
     /** @return Builder<Membership> */
