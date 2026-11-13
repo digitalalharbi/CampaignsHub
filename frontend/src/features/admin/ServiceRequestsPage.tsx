@@ -8,6 +8,7 @@ import {
 } from './api'
 import { Button } from '@/components/ui/Button'
 import { Pager } from '@/features/integrations/PageSizer'
+import { PlatformAlertsPanel } from './PlatformAlertsPanel'
 import { Num } from '@/components/ui/Num'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
@@ -85,6 +86,9 @@ export function ServiceRequestsPage() {
         <h1 className="font-heading text-3xl font-extrabold tracking-tight text-text-primary">{t.title}</h1>
         <p className="mt-1 max-w-2xl text-sm text-text-secondary">{t.subtitle}</p>
       </header>
+
+      {/* PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, above the service requests. */}
+      <PlatformAlertsPanel />
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Counter id="open" icon={Inbox} label={t.open} value={list.data?.counts.open} active={filter === 'open'} onClick={() => setFilter('open')} />
