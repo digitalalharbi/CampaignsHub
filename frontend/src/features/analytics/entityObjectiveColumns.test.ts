@@ -150,3 +150,15 @@ describe('the metric columns follow the rows’ objective', () => {
     }
   })
 })
+
+describe('OBJECTIVE-FILTERS-INCLUSIVE-001 — a chosen objective picks the columns and never the rows', () => {
+  it('leads a mixed table with the chosen objective\'s own KPIs and does not call it mixed', () => {
+    const rows = [{ objective: 'sales' }, { objective: 'awareness' }]
+
+    expect(entityColumnPlan(rows).mixed).toBe(true)
+    const sales = entityColumnPlan(rows, 'sales')
+    expect(sales.mixed).toBe(false)
+    expect(sales.keys[0]).toBe('spend')
+    expect(sales.keys).toContain('roas')
+  })
+})

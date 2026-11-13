@@ -3393,7 +3393,14 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
    * a figure under the wrong heading the first time a family changed the count — a worse defect than
    * the generic column set this replaces.
    */
-  const fullPlan = entityColumnPlan(allRows)
+  // OBJECTIVE-FILTERS-INCLUSIVE-001 — one objective chosen picks the columns; the rows stay every campaign's.
+  // The control sends the canonical bucket as its raw objectives; read the bucket back to choose its layout.
+  const chosenObjective = (() => {
+    const raw = [...(filters?.objective ?? [])].sort().join(',')
+    if (raw === '') return 'all'
+    return CANONICAL_OBJECTIVE_KEYS.find((key) => [...rawObjectivesFor(key)].sort().join(',') === raw) ?? 'all'
+  })()
+  const fullPlan = entityColumnPlan(allRows, chosenObjective)
   const plan = { ...fullPlan, keys: fullPlan.keys.filter((key) => !(workspace?.hidden ?? []).includes(key)) }
   const manage = workspace?.onManage
 

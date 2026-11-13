@@ -13,7 +13,7 @@ import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
  * fall back to the mixed set — the generic columns this row exists to replace.
  *
  * So this reads the rendered table on real seeded data, through the real endpoint, with the real
- * objective filter.
+ * objective control — which, since OBJECTIVE-FILTERS-INCLUSIVE-001, chooses the KPIs and never narrows the rows.
  *
  * ## The seed had to be able to produce a mixture
  *
@@ -123,16 +123,26 @@ for (const rung of RUNGS) for (const locale of ['ar', 'en'] as const) {
       await expect(table).toContainText(t.spend)
     })
 
-    test('gives a sales-only table its own return, with no excuse attached', async ({ page, request }) => {
+    /*
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — choosing «sales» picks the sales KPIs and removes nothing.
+     *
+     * It used to narrow the rows to the sales family and then lead with its return. Now the objective is a KPI choice: the sales
+     * columns lead (the return among them, with no «mixed objectives» excuse), and every row the unfiltered table held is still
+     * there — the awareness ads included — so no campaign and no riyal drops out of the table.
+     */
+    test('gives the sales choice its own return, and keeps every row', async ({ page, request }) => {
       await selectProject(page, await seededProject(request, PROJECT))
       const table = await openRung(page, locale, rung)
       await expect(table).toBeVisible({ timeout: 30000 })
+      const rowsBefore = await table.locator('tbody tr').count()
+      expect(rowsBefore, 'the seeded table has rows to keep').toBeGreaterThan(0)
 
       await narrowObjective(page, 'sales')
 
       await expect(table.locator('thead')).toContainText(t.roas)
       await expect(page.getByTestId(`entity-mixed-objectives-${rung.level}`)).toHaveCount(0)
       await expect(table).toContainText(t.spend)
+      await expect(table.locator('tbody tr'), 'choosing an objective removed a row').toHaveCount(rowsBefore)
     })
 
     test('gives an awareness-only table reach, and no cost per order', async ({ page, request }) => {
