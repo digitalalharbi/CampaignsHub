@@ -52,6 +52,12 @@ describe('audience blocks', () => {
     expect(screen.queryByText(/Spend/)).toBeNull()
   })
 
+  it('flags a breakdown that covers fewer ad sets than delivered', () => {
+    const g = { ...meta, coverage: { ...meta.coverage, ad_sets_with_rows: 1, ad_sets_delivering: 3 } }
+    renderWithProviders(<AudienceReportBlocks payload={{ audience_regions: { groups: [g] } }} locale="en" />)
+    expect(screen.getByTestId('audience-partial-coverage')).toHaveTextContent('Partial coverage: 1/3')
+  })
+
   it('states a row without a share as not available, and draws nothing for no parts', () => {
     const g = group('meta', [{ value: 'Unknown', impressions: null, share: null, clicks: null, reach: null }])
     const { container, rerender } = renderWithProviders(<AudienceReportBlocks payload={{ audience_regions: { groups: [g] } }} locale="en" />)

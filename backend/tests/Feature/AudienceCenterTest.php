@@ -324,6 +324,68 @@ final class AudienceCenterTest extends TestCase
         $this->assertEquals(900.0, collect($cut['audience_regions']['groups'][0]['rows'])->firstWhere('value', 'Najran Province')['impressions'], 'counts stay');
     }
 
+    public function test_reach_is_never_added_across_ad_sets_and_unknown_targeting_keys_never_leave(): void
+    {
+        $second = $this->adSet($this->meta, $this->project, 'meta', 'ext-set-2', 'SET_TWO', ['cities' => ['Najran'], 'custom_audiences' => ['VIP_LIST_NAME']]);
+        $this->row($this->meta, $this->project, $second, 'region', 'Najran Province', '2026-11-12', 50, 40, 1, 5.0, 'SAR');
+        $r = app(AudienceCenter::class)->build((string) $this->tenant->id, (string) $this->project->id, Carbon::parse('2026-11-12'), Carbon::parse('2026-11-12'));
+        $meta = collect($r['paid_delivery']['groups'])->firstWhere('provider', 'meta');
+
+        $this->assertNull(collect($meta['rows'])->firstWhere('value', 'Najran Province')['reach'], 'two ad sets overlap: no unique count is added');
+        $this->assertEquals(90.0, collect($meta['rows'])->firstWhere('value', 'Makkah Province')['reach'], 'one ad set: its own unique count');
+        $this->assertSame('reach_not_additive_across_ad_sets', $meta['reach_note']);
+        $this->assertStringNotContainsString('VIP_LIST_NAME', (string) json_encode($r), 'only whitelisted targeting keys leave the server');
+    }
+
+    public function test_a_link_narrowed_by_objective_gets_no_audience_and_a_campaign_link_is_pinned_to_its_campaign(): void
+    {
+        $this->choose(array_fill_keys(AudienceReportSections::KEYS, true));
+        $objective = $this->read($this->link([], ['objectives' => ['sales']]));
+        foreach (AudienceReportSections::KEYS as $key) {
+            $this->assertNull($objective[$key] ?? null, "$key reached a link narrowed by objective");
+        }
+
+        $unified = (string) Str::uuid();
+        DB::table('unified_campaigns')->insert(['id' => $unified, 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'client_workspace_id' => $this->project->client_workspace_id, 'name' => 'U', 'objective' => 'sales', 'objective_source' => 'declared', 'status' => 'active', 'platforms' => json_encode(['snapchat']), 'created_at' => now(), 'updated_at' => now()]);
+        $snapSet = (string) DB::table('external_ad_sets')->where('external_id', 'snap-set-1')->value('id');
+        DB::table('external_campaigns')->where('id', $this->campaignOf($snapSet))->update(['unified_campaign_id' => $unified]);
+
+        $pinned = $this->read($this->link([], ['campaign_ids' => [$unified], 'dynamic_campaigns' => false]));
+        $this->assertSame(['snapchat'], array_column($pinned['audience_regions']['groups'], 'provider'), 'only the named campaign’s rows');
+        $this->assertStringNotContainsString('Makkah Province', (string) json_encode($pinned, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function test_a_rebound_account_never_rewrites_another_projects_rows(): void
+    {
+        $connector = new class implements ReportsAudienceBreakdowns
+        {
+            public function audienceDimensions(): array
+            {
+                return ['region'];
+            }
+
+            public function audienceSourceField(string $dimension): string
+            {
+                return 'test:'.$dimension;
+            }
+
+            public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to): SyncResult
+            {
+                return SyncResult::of([['entity_id' => 'sib-set', 'date' => '2026-11-12', 'value' => 'Najran Province', 'impressions' => 7.0]]);
+            }
+        };
+        // The same account, now filed under the sibling project too.
+        $this->adSet($this->meta, $this->sibling, 'meta', 'sib-set', 'S', null);
+        ProjectIntegrationBinding::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->sibling->client_workspace_id, 'project_id' => $this->sibling->id, 'external_account_id' => $this->meta->id, 'provider' => 'meta', 'purpose' => 'advertising', 'is_active' => true]);
+        $run = MetricSyncRun::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'project_id' => $this->sibling->id, 'external_account_id' => $this->meta->id, 'provider' => 'meta', 'status' => 'running', 'window_start' => '2026-11-12', 'window_end' => '2026-11-12']);
+        $before = DB::table('audience_breakdown_rows')->where('project_id', $this->project->id)->count();
+
+        app(AudienceBreakdownSync::class)->sync($connector, $this->meta, $run, Carbon::parse('2026-11-12'), Carbon::parse('2026-11-12'));
+
+        $this->assertSame($before, DB::table('audience_breakdown_rows')->where('project_id', $this->project->id)->count());
+        $this->assertSame(1, DB::table('audience_breakdown_rows')->where('project_id', $this->sibling->id)->count());
+    }
+
     // ------------------------------------------------------------------ API
 
     public function test_the_api_answers_a_member_strips_money_without_money_view_and_refuses_another_tenant(): void

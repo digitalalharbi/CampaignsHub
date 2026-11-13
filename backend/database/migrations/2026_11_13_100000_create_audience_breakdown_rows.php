@@ -47,7 +47,7 @@ return new class extends Migration
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete();
             $table->foreign('project_id')->references('id')->on('projects')->cascadeOnDelete();
-            $table->unique(['external_account_id', 'dimension', 'external_entity_id', 'metric_date', 'value'], 'audience_rows_unique');
+            $table->unique(['project_id', 'external_account_id', 'dimension', 'external_entity_id', 'metric_date', 'value'], 'audience_rows_unique');
             $table->index(['tenant_id', 'project_id', 'dimension', 'metric_date'], 'audience_rows_read');
         });
     }

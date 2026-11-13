@@ -83,7 +83,10 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
       <p className="mt-2 break-words text-xs leading-5 text-text-secondary">
         {t(locale, 'المقياس: مرات الظهور · المصدر: ', 'Metric: impressions · Source: ')}<span dir="ltr">{group.source_field}</span>
         {' · '}{t(locale, 'التغطية', 'Coverage')}: <Num>{group.coverage.days_with_rows}</Num>/<Num>{group.coverage.days_in_period}</Num> {t(locale, 'يوم', 'days')}
-        {group.reach_note && <> · {t(locale, 'الوصول الفريد لا يُجمع عبر الأيام', 'Unique reach is not added across days')}</>}
+        {group.coverage.ad_sets_delivering > group.coverage.ad_sets_with_rows && (
+          <> · <span data-testid="audience-partial-coverage" className="font-semibold text-warning-700 dark:text-warning-300">{t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad sets')}</span></>
+        )}
+        {group.reach_note && <> · {t(locale, 'الوصول الفريد لا يُجمع', 'Unique reach is never added')}</>}
       </p>
     </section>
   )

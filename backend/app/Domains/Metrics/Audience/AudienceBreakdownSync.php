@@ -37,7 +37,7 @@ final class AudienceBreakdownSync
     public function sync(ReportsAudienceBreakdowns $connector, ExternalAccount $account, MetricSyncRun $run, Carbon $from, Carbon $to): array
     {
         $projectId = (string) $run->project_id;
-        $last = DB::table('audience_breakdown_rows')->where('external_account_id', $account->getKey())->max('synced_at');
+        $last = DB::table('audience_breakdown_rows')->where('external_account_id', $account->getKey())->where('project_id', $projectId)->max('synced_at');
         if ($last !== null && Carbon::parse((string) $last)->gt(now()->subMinutes(self::MIN_INTERVAL_MINUTES))) {
             return ['state' => 'throttled', 'last_synced_at' => Carbon::parse((string) $last)->toIso8601String()];
         }
@@ -82,7 +82,6 @@ final class AudienceBreakdownSync
                     $hasSpend = array_key_exists('spend', $row);
                     $values = [
                         'tenant_id' => (string) $account->tenant_id,
-                        'project_id' => (string) $run->project_id,
                         'provider' => (string) $account->provider,
                         'source_field' => $connector->audienceSourceField($dimension),
                         'external_campaign_id' => (string) $set->external_campaign_id,
@@ -99,16 +98,19 @@ final class AudienceBreakdownSync
                         'updated_at' => $now,
                     ];
                     $key = [
+                        'project_id' => (string) $run->project_id,
                         'external_account_id' => (string) $account->getKey(),
                         'dimension' => $dimension,
                         'external_entity_id' => (string) $row['entity_id'],
                         'metric_date' => (string) $row['date'],
                         'value' => Str::limit((string) $row['value'], 250, ''),
                     ];
-                    $exists = DB::table('audience_breakdown_rows')->where($key)->exists();
-                    $exists
-                        ? DB::table('audience_breakdown_rows')->where($key)->update($values)
-                        : DB::table('audience_breakdown_rows')->insert($key + $values + ['id' => (string) Str::uuid(), 'created_at' => $now]);
+                    // One statement, safe under a concurrent run: a re-bound account never rewrites another project's history.
+                    DB::table('audience_breakdown_rows')->upsert(
+                        [$key + $values + ['id' => (string) Str::uuid(), 'created_at' => $now]],
+                        array_keys($key),
+                        array_keys($values),
+                    );
                     $written++;
                 }
             });

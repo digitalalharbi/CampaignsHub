@@ -34,14 +34,25 @@ final class AudienceCenter
     /** @var list<string>|null the account ceiling of the build in progress */
     private ?array $accounts = null;
 
+    /** @var list<string>|null the unified-campaign ceiling of the build in progress */
+    private ?array $campaigns = null;
+
+    private string $project = '';
+
+    /** Only these keys of a stored targeting summary ever leave the server (an audience name or id list never does). */
+    private const TARGETING_KEYS = ['countries', 'cities', 'locations', 'age_min', 'age_max', 'age_groups', 'genders', 'gender', 'languages', 'platforms', 'placements', 'product_type'];
+
     /**
      * @param  list<string>|null  $providers  a narrower link's platforms, or null for all
      * @param  list<string>|null  $accountIds  the ad accounts (our ids) a link names, or null for all bound accounts
+     * @param  list<string>|null  $campaignIds  the UNIFIED campaigns a link or report is bounded to, or null for all
      * @return array<string, mixed>
      */
-    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, bool $clientFacing = false, bool $hideMoney = false, ?array $providers = null, ?array $accountIds = null): array
+    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, bool $clientFacing = false, bool $hideMoney = false, ?array $providers = null, ?array $accountIds = null, ?array $campaignIds = null): array
     {
         $this->accounts = $accountIds;
+        $this->campaigns = $campaignIds;
+        $this->project = $projectId;
         $period = ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => (int) $from->diffInDays($to) + 1];
         /** @var list<array{provider: string, account: string}> $bindings */
         $bindings = ReportReadMemo::remember('audience-bindings|'.$tenantId.'|'.$projectId, static fn (): array => DB::table('project_integration_bindings')
@@ -81,6 +92,7 @@ final class AudienceCenter
             ->where('s.is_demo', false)->where('s.status', 'active')
             ->whereIn('s.provider', $providers)
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('c.external_account_id', $this->accounts))
+            ->when($this->campaigns !== null, fn ($q) => $q->whereIn('c.unified_campaign_id', $this->campaigns))
             ->orderBy('s.provider')->orderBy('s.name')->limit(200)
             ->get(['s.id', 's.provider', 's.name', 's.targeting', 's.last_synced_at', 'c.name as campaign_name', 'c.external_account_id']);
 
@@ -93,7 +105,7 @@ final class AudienceCenter
                 'provider' => (string) $r->provider,
                 'level' => 'ad_set',
                 'ad_set_id' => (string) $r->id,
-                'settings' => is_array($settings) ? $settings : null,
+                'settings' => is_array($settings) ? (array_intersect_key($settings, array_flip(self::TARGETING_KEYS)) ?: null) : null,
                 'not_stored' => $cap['targeting_lost'] ?? [],
                 'synced_at' => $r->last_synced_at === null ? null : Carbon::parse((string) $r->last_synced_at)->toIso8601String(),
             ];
@@ -117,6 +129,7 @@ final class AudienceCenter
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)
             ->whereIn('provider', $providers)
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('external_account_id', $this->accounts))
+            ->when($this->campaigns !== null, fn ($q) => $q->whereIn('external_campaign_id', $this->campaignSubquery()))
             ->whereBetween('metric_date', [$period['from'], $period['to']])
             ->get(['provider', 'dimension', 'value', 'source_field', 'external_ad_set_id', 'metric_date', 'impressions', 'reach', 'clicks', 'spend_original', 'original_currency', 'currency_source', 'synced_at']);
 
@@ -137,8 +150,9 @@ final class AudienceCenter
                     'impressions' => $n,
                     'share' => $n === null || $denominator <= 0 ? null : ['numerator' => $n, 'denominator' => $denominator, 'ratio' => round($n / $denominator, 6)],
                     'clicks' => $clicks->isEmpty() ? null : (float) $clicks->sum(static fn ($r): float => (float) $r->clicks),
-                    // A daily unique count: one day only, never added across days.
-                    'reach' => $oneDay && $vs->contains(static fn ($r): bool => $r->reach !== null) ? (float) $vs->sum(static fn ($r): float => (float) $r->reach) : null,
+                    // A unique count: one day AND one ad set only — never added across days or across ad sets (people overlap).
+                    'reach' => $oneDay && $vs->pluck('external_ad_set_id')->unique()->count() === 1 && $vs->contains(static fn ($r): bool => $r->reach !== null)
+                        ? (float) $vs->sum(static fn ($r): float => (float) $r->reach) : null,
                 ];
                 if (! $noMoney) {
                     $row['spend'] = $vs->filter(static fn ($r): bool => $r->spend_original !== null && $r->original_currency !== null)
@@ -157,7 +171,7 @@ final class AudienceCenter
                 'metric' => 'impressions',
                 'source_field' => (string) $set->first()->source_field,
                 'denominator' => $denominator,
-                'reach_note' => $oneDay ? null : 'reach_not_additive_across_days',
+                'reach_note' => ! $oneDay ? 'reach_not_additive_across_days' : ($set->pluck('external_ad_set_id')->unique()->count() > 1 ? 'reach_not_additive_across_ad_sets' : null),
                 'coverage' => [
                     'days_with_rows' => $set->pluck('metric_date')->unique()->count(),
                     'days_in_period' => $period['days'],
@@ -181,12 +195,22 @@ final class AudienceCenter
         return ['state' => $groups === [] ? 'unavailable' : 'ready', 'groups' => $groups, 'unavailable' => $missing];
     }
 
+    /** The external campaigns behind the unified-campaign ceiling — a subquery, so no extra statement. */
+    private function campaignSubquery(): \Closure
+    {
+        $campaigns = $this->campaigns ?? [];
+        $project = $this->project;
+
+        return static fn ($q) => $q->select('id')->from('external_campaigns')->where('project_id', $project)->whereIn('unified_campaign_id', $campaigns);
+    }
+
     /** @param array{from: string, to: string, days: int} $period */
     private function deliveringAdSets(string $tenantId, string $projectId, string $provider, array $period): int
     {
         return (int) DB::table('entity_daily_metrics')
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('provider', $provider)
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('external_account_id', $this->accounts))
+            ->when($this->campaigns !== null, fn ($q) => $q->whereIn('external_campaign_id', $this->campaignSubquery()))
             ->where('entity_type', 'ad_set')->where('impressions', '>', 0)
             ->whereBetween('metric_date', [$period['from'], $period['to']])
             ->distinct()->count('entity_id');

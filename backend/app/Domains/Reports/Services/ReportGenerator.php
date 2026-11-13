@@ -1263,8 +1263,11 @@ final class ReportGenerator
             $audience !== 'internal',
             static fn (string $key): bool => $settings->enabled($registry->get($key), $audience),
             $scope->providers === [] ? null : array_values($scope->providers),
-            $scope->campaignIds !== [] || $scope->adSetIds !== [] || $scope->adIds !== [],
+            // Axes the audience rows cannot follow: withheld, never widened.
+            ($scope->objectiveFilter && $scope->objectives !== []) || $scope->paths !== [] || $scope->destinations !== []
+                || $scope->creativeIds !== [] || $scope->adSetIds !== [] || $scope->adIds !== [],
             $scope->accountIds === [] ? null : array_values($scope->accountIds),
+            campaignIds: ($c = $scope->resolvedCampaignIds()) === null ? null : array_values($c),
         );
     }
 

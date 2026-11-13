@@ -24,9 +24,9 @@ use Illuminate\Support\Carbon;
  *
  * Decided here, on the server, before anything is serialised: a hidden part is null (and the section
  * system removes its key), a client-facing report carries no money and no campaign / ad-set names, and
- * the link's account ceiling bounds every part, and a link that names specific campaigns, ad sets or ads
- * carries no audience part (narrowing the breakdowns by campaign is not built, so they are withheld rather
- * than leaked).
+ * the link's account AND campaign ceilings bound every part, and a link or report narrowed by an axis the
+ * audience rows cannot follow (objective, path, destination, content, ad set, ad) carries no audience part —
+ * withheld rather than leaked. `$namesCampaigns` is that «cannot follow» flag.
  */
 final class AudienceReportSections
 {
@@ -55,7 +55,7 @@ final class AudienceReportSections
      * @param  list<string>|null  $accountIds  the link's account ceiling (our ids), or null for all
      * @return array<string, array<string, mixed>|null>
      */
-    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, bool $clientFacing, callable $allows, ?array $providers = null, bool $namesCampaigns = false, ?array $accountIds = null, bool $hideSpend = false): array
+    public function build(string $tenantId, string $projectId, Carbon $from, Carbon $to, bool $clientFacing, callable $allows, ?array $providers = null, bool $namesCampaigns = false, ?array $accountIds = null, bool $hideSpend = false, ?array $campaignIds = null): array
     {
         $out = array_fill_keys(self::KEYS, null);
         $wanted = array_values(array_filter(self::KEYS, $allows));
@@ -64,7 +64,7 @@ final class AudienceReportSections
         }
 
         $noMoney = $clientFacing || $hideSpend || ! $allows(self::SPEND);
-        $reading = $this->center->build($tenantId, $projectId, $from, $to, $clientFacing, $noMoney, $providers, $accountIds);
+        $reading = $this->center->build($tenantId, $projectId, $from, $to, $clientFacing, $noMoney, $providers, $accountIds, $campaignIds);
         $period = $reading['period'];
 
         if (in_array('audience_targeting', $wanted, true) && ($reading['targeting']['state'] ?? null) === 'ready') {
