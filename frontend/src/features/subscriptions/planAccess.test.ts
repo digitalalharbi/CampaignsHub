@@ -14,6 +14,9 @@ describe('thresholds', () => {
     expect(thresholdOf({ limit: 100, used: 100, remaining: 0 })).toBe('full')
     expect(thresholdOf({ limit: 100, used: 140, remaining: 0 })).toBe('full')
     expect(thresholdOf({ limit: null, used: 9000, remaining: null })).toBe('unlimited')
+    // A limit of 0 with nothing used is «not on this plan», not «you reached it».
+    expect(thresholdOf({ limit: 0, used: 0, remaining: 0 })).toBe('ok')
+    expect(thresholdOf({ limit: 0, used: 2, remaining: 0 })).toBe('full')
   })
 
   it('reports the worst one reached', () => {

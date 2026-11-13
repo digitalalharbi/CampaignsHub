@@ -72,6 +72,24 @@ describe('«كل العملاء»', () => {
     expect(useAgencyClient.getState().currentClientId).toBeNull()
   })
 
+  it('brings the stores into line with an address opened cold, so the figures are the named client’s', async () => {
+    useAgencyClient.getState().setCurrentClientId('someone-else')
+    useProject.getState().setCurrentProjectId('their-project')
+    renderWithProviders(<OverviewDashboard portal="agency" />, { route: '/agency/dashboard?client=c1' })
+
+    expect((await screen.findByTestId('single-client')).textContent).toBe('dashboard')
+    expect(useAgencyClient.getState().currentClientId).toBe('c1')
+    expect(useProject.getState().currentProjectId).toBe('p1')
+  })
+
+  it('drops an address naming a client the reader cannot reach, instead of showing another client’s numbers', async () => {
+    useAgencyClient.getState().setCurrentClientId('someone-else')
+    renderWithProviders(<OverviewDashboard portal="agency" />, { route: '/agency/dashboard?client=nobody' })
+
+    expect(await screen.findByTestId('overview-client-c1')).toBeTruthy()
+    expect(screen.queryByTestId('single-client')).toBeNull()
+  })
+
   it('leaves the project to the switcher when a client has several', async () => {
     renderWithProviders(<OverviewDashboard portal="agency" />, { route: '/agency/dashboard' })
 

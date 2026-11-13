@@ -1,7 +1,9 @@
 import { AddonsShop } from './AddonsShop'
 import { LimitRings } from './LimitRings'
-import { PlanCompare } from './PlanCompare'
-import { useSearchParams } from 'react-router-dom'
+import { LockedFeature, PlanCompare } from './PlanCompare'
+import { featureKeys, includes, planWith } from './planAccess'
+import { portalBaseOf } from '@/app/portalPath'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { fetchCurrentUser } from '@/features/auth/api'
 import { UsageCard } from './UsageCard'
 import { useEffect, useRef, useState } from 'react'
@@ -188,6 +190,7 @@ export function SubscriptionsPage() {
   const qc = useQueryClient()
   const setUser = useAuth((s) => s.setUser)
   const [params, setParams] = useSearchParams()
+  const { pathname } = useLocation()
   const compare = params.get('compare') === '1'
 
   const currentQ = useQuery({ queryKey: ['subscriptions', 'current'], queryFn: getCurrent, retry: false, enabled: canView })
@@ -293,6 +296,20 @@ export function SubscriptionsPage() {
       ) : (
         <>
           <CurrentPlanCard current={current} c={c} />
+
+          {/* Features the current plan does not include: a lock and the NAME of the plan that has it; pressing opens the comparison. */}
+          {(() => {
+            const mine = plans.find((p) => p.code === currentCode)
+            const locked = mine ? featureKeys(plans).filter((k) => !includes(mine, k) && planWith(plans, k) !== null) : []
+
+            return locked.length === 0 ? null : (
+              <div data-testid="locked-features" className="flex flex-wrap gap-1.5">
+                {locked.map((k) => (
+                  <LockedFeature key={k} feature={k} plans={plans} to={`${portalBaseOf(pathname)}/subscriptions`} label={featureLabel(k, c)} />
+                ))}
+              </div>
+            )
+          })()}
 
           {current.renewal && (
             <RenewalCard

@@ -129,7 +129,7 @@ export function ClientCards({ ar, onOpenClient }: { ar: boolean; onOpenClient: (
   )
 
   return (
-    <section data-testid="overview-all-clients" aria-label={t.title} className="grid gap-2">
+    <section data-testid="overview-all-clients" aria-label={t.title} className="grid min-w-0 grid-cols-1 gap-2">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <StatCard testid="overview-spend" label={t.spend} value={fig(totals.spent)} trailing={icon(CircleDollarSign)} />
         <StatCard testid="overview-remaining" label={t.left} value={fig(totals.remaining)} trailing={icon(Wallet)} />

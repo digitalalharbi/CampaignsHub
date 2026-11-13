@@ -13,7 +13,8 @@ export type Threshold = 'unlimited' | 'ok' | 'near' | 'high' | 'full'
 /** The Owner's three alert points: 75%, 90% and 100%. At 100% only NEW things are refused — nothing running stops. */
 export function thresholdOf(metric: UsageMetric): Threshold {
   if (metric.limit === null) return 'unlimited'
-  if (metric.limit <= 0) return 'full'
+  // A limit of 0 with nothing used is «not on this plan», not «you reached it».
+  if (metric.limit <= 0) return metric.used > 0 ? 'full' : 'ok'
 
   const ratio = metric.used / metric.limit
   if (ratio >= 1) return 'full'

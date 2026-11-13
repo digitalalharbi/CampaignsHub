@@ -63,6 +63,19 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByText('Scale')).toBeInTheDocument()
   })
 
+  /** NAV-HOME-PLANS-001 — a feature the current plan lacks shows a lock with the plan that has it, and opens the comparison. */
+  it('locks what the current plan does not include and names the plan that has it', async () => {
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en', route: '/app/subscriptions' })
+
+    const lock = await screen.findByTestId('locked-white_label')
+    expect(lock).toHaveTextContent('Scale')
+    expect(lock.getAttribute('href')).toBe('/app/subscriptions?compare=1#plans')
+    // The plan already has ai_assist, so it is not locked.
+    expect(screen.queryByTestId('locked-ai_assist')).toBeNull()
+    expect(await screen.findByTestId('limit-rings')).toBeInTheDocument()
+  })
+
   /** PRICING-VAT-001/002 — the card states what THIS subscriber pays per renewal, with its VAT, not the catalogue price. */
   it('shows the subscriber’s own price and term with the VAT each renewal carries', async () => {
     vi.mocked(getCurrent).mockResolvedValue({ ...current, subscription: { ...current.subscription!, unit_amount: '6990.00', currency: 'SAR', billing_interval: 'annual',
