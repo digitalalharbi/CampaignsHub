@@ -109,7 +109,7 @@ final class ObjectivePathsTest extends TestCase
 
         $this->assertEqualsWithDelta(1819.7, $block['total_spend'], 0.001);
         $this->assertEqualsWithDelta($block['total_spend'], $sum, 0.001, 'the paths must add up to the one total');
-        $this->assertEqualsWithDelta(1.0, array_sum(array_column($block['paths'], 'share')), 0.001);
+        $this->assertEqualsWithDelta(1.0, array_sum(array_column($block['paths'], 'spend_share')), 0.001);
         // Stated once: no path carries a «total» of its own.
         foreach ($block['paths'] as $p) {
             $this->assertArrayNotHasKey('total_spend', $p);
@@ -117,6 +117,25 @@ final class ObjectivePathsTest extends TestCase
         $sales = $this->path($block, ObjectiveFamily::Sales);
         $this->assertEqualsWithDelta(813.4, $sales['spend'], 0.001);
         $this->assertEqualsWithDelta((3112 + 472) / 813.4, (float) $sales['roas'], 0.01);
+    }
+
+    /**
+     * Cents the ad sets do not account for go to the largest ad set, never to a path of their own:
+     * a sales campaign whose only squad buys visits has no «sales» card of 0.38.
+     */
+    public function test_a_rounding_residual_never_opens_a_path_of_its_own(): void
+    {
+        $this->campaign('Coffee — branches under a sales campaign', 'sales', [
+            ['goal' => 'landing_page_view', 'spend' => 999.62, 'clicks' => 8000, 'landing_page_views' => 2400],
+        ], campaignOverride: ['spend' => 1000.0]);
+
+        $block = $this->paths();
+
+        $this->assertFalse($block['mixed']);
+        $this->assertCount(1, $block['paths']);
+        $this->assertSame('traffic', $block['paths'][0]['family']);
+        $this->assertSame(1000.0, $block['paths'][0]['spend']);
+        $this->assertSame(1000.0, $block['total_spend']);
     }
 
     /** A campaign without ad-set figures goes whole to its own family, so nothing is dropped. */
@@ -183,8 +202,9 @@ final class ObjectivePathsTest extends TestCase
      *
      * @param  list<array<string, mixed>>  $squads
      * @param  array<string, float|int>  $campaignFigures  used when there are no squads
+     * @param  array<string, float|int>  $campaignOverride  campaign-grain figures that differ from the squads' sum
      */
-    private function campaign(string $name, string $objective, array $squads, array $campaignFigures = []): void
+    private function campaign(string $name, string $objective, array $squads, array $campaignFigures = [], array $campaignOverride = []): void
     {
         $this->holdingTenant((string) $this->tenant->id);
         $unified = UnifiedCampaign::create([
@@ -219,6 +239,7 @@ final class ObjectivePathsTest extends TestCase
             }
         }
 
+        $totals = $campaignOverride + $totals;
         $rows = [];
         foreach ($totals as $key => $value) {
             $rows[] = new NormalizedMetric(

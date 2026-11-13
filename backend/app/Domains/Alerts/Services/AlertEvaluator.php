@@ -177,6 +177,8 @@ final class AlertEvaluator
     public function evaluateAll(?Carbon $now = null): int
     {
         $now ??= Carbon::now();
+        // Read afresh every sweep: the ad sets a campaign carries change between sweeps.
+        $this->multiGoal = [];
         $raised = 0;
 
         // Rules are tenant-scoped models; iterate tenant-by-tenant so every scoped query (metrics, connections,
@@ -1058,6 +1060,10 @@ final class AlertEvaluator
         $previous = $this->withSalesPath($metrics->figuresByCampaign($prevFrom, $prevTo), $campaigns, $prevFrom, $prevTo);
 
         $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, &$out) {
+            // OBJECTIVE-PATHS-001 — a sales-path ROAS is never compared with a whole-campaign one.
+            if (($current[(string) $c->getKey()]['sales_path'] ?? false) !== ($previous[(string) $c->getKey()]['sales_path'] ?? false)) {
+                return;
+            }
             $cur = $current[(string) $c->getKey()]['roas'];
             $prev = $previous[(string) $c->getKey()]['roas'];
             if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
@@ -1197,13 +1203,19 @@ final class AlertEvaluator
      */
     private function withSalesPath(array $figures, Collection $campaigns, Carbon $from, Carbon $to): array
     {
-        if ($campaigns->isEmpty()) {
+        /*
+         * Only a campaign whose ad sets carry more than one optimisation goal can have more than one
+         * path, so only those go through the path read — one cheap statement per sweep instead of the
+         * path read on every rule and window (AlertSweepBatchedReadsTest holds the sweep's statements).
+         */
+        $candidates = $campaigns->filter(fn (UnifiedCampaign $c): bool => isset($this->multiGoalCampaigns()[(string) $c->id]));
+        if ($candidates->isEmpty()) {
             return $figures;
         }
 
         $paths = (new ObjectivePerformance(
-            projectIds: $campaigns->pluck('project_id')->map(static fn ($p): string => (string) $p)->unique()->values()->all(),
-            campaignIds: $campaigns->map(static fn (UnifiedCampaign $c): string => (string) $c->id)->all(),
+            projectIds: $candidates->pluck('project_id')->map(static fn ($p): string => (string) $p)->unique()->values()->all(),
+            campaignIds: $candidates->map(static fn (UnifiedCampaign $c): string => (string) $c->id)->values()->all(),
         ))->salesPathByCampaign($from, $to);
 
         foreach ($paths as $id => $path) {
@@ -1217,6 +1229,32 @@ final class AlertEvaluator
         }
 
         return $figures;
+    }
+
+    /** @var array<string, array<string, true>> tenant => campaign ids whose ad sets carry more than one goal */
+    private array $multiGoal = [];
+
+    /**
+     * OBJECTIVE-PATHS-001 — the current tenant's campaigns whose ad sets carry more than one goal, read once.
+     *
+     * @return array<string, true>
+     */
+    private function multiGoalCampaigns(): array
+    {
+        $tenant = (string) app(TenantContext::class)->tenantId();
+
+        return $this->multiGoal[$tenant] ??= array_fill_keys(
+            DB::table('external_ad_sets')
+                ->where('tenant_id', $tenant)
+                ->whereNotNull('unified_campaign_id')
+                ->whereNotNull('optimization_goal')
+                ->groupBy('unified_campaign_id')
+                ->havingRaw('COUNT(DISTINCT LOWER(optimization_goal)) > 1')
+                ->pluck('unified_campaign_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all(),
+            true,
+        );
     }
 
     /**
@@ -1605,6 +1643,10 @@ final class AlertEvaluator
              * beside other paths is judged on that path alone (see withSalesPath()).
              */
             if ($key === 'cpa' && ($cur['result_family'] ?? null) !== ObjectiveFamily::Sales->value && ! ($cur['sales_path'] ?? false)) {
+                return;
+            }
+            // A sales-path CPA is never compared with a whole-campaign one (ad-set rows can lag a window).
+            if ($key === 'cpa' && ($cur['sales_path'] ?? false) !== ($prev['sales_path'] ?? false)) {
                 return;
             }
 

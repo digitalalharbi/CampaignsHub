@@ -621,17 +621,26 @@ export function PrintDocument({
           */}
           {pathBlock?.mixed && (
             <>
-              <h3>Spend by objective — total {money(Number(pathBlock.total_spend), currency)}</h3>
+              {/* A link that hides spend arrives with the money redacted (null): the results stay, no money is printed. */}
+              <h3>{typeof pathBlock.total_spend === 'number' ? `Spend by objective — total ${money(pathBlock.total_spend, currency)}` : 'Results by objective'}</h3>
               <Table
-                head={['Objective', 'Spend', 'Share', 'Result', 'Cost per result', 'ROAS']}
-                rows={pathBlock.paths.map((p) => [
-                  p.label.en,
-                  money(Number(p.spend), currency),
-                  p.share === null ? '—' : `${nfmt(p.share * 100, { maximumFractionDigits: 0 })}%`,
-                  p.result === null ? '—' : `${p.result_label?.en ?? ''} ${nfmt(p.result)}`,
-                  p.cost_per_result === null ? '—' : money(p.cost_per_result, currency),
-                  p.family === 'sales' && p.roas !== null ? `${nfmt(p.roas, { maximumFractionDigits: 2 })}×` : '—',
-                ])}
+                head={typeof pathBlock.total_spend === 'number'
+                  ? ['Objective', 'Spend', 'Share', 'Result', 'Cost per result', 'ROAS']
+                  : ['Objective', 'Result']}
+                rows={pathBlock.paths.map((p) => {
+                  const result = p.result === null || p.result === undefined ? '—' : `${p.result_label?.en ?? ''} ${nfmt(p.result)}`
+
+                  return typeof pathBlock.total_spend === 'number'
+                    ? [
+                        p.label.en,
+                        p.spend === null ? '—' : money(p.spend, currency),
+                        p.spend_share === null ? '—' : `${nfmt(p.spend_share * 100, { maximumFractionDigits: 0 })}%`,
+                        result,
+                        p.cost_per_result === null ? '—' : money(p.cost_per_result, currency),
+                        p.family === 'sales' && p.roas !== null ? `${nfmt(p.roas, { maximumFractionDigits: 2 })}×` : '—',
+                      ]
+                    : [p.label.en, result]
+                })}
               />
             </>
           )}

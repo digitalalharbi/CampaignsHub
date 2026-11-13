@@ -580,14 +580,6 @@ final class OperationalDigestModel
     }
 
     /**
-     * The best (or weakest) platform of the month on the OBJECTIVE's own headline figure — a cost falls to be better, a return rises.
-     *
-     * Null with fewer than two platforms that carry the figure: a ranking of one is not a ranking.
-     *
-     * @param  list<array<string,mixed>>  $rows
-     * @return array<string,string>|null
-     */
-    /**
      * OBJECTIVE-PATHS-001 — the one total, and each objective's share of it with its own result.
      *
      * Only where ad sets bought more than one thing; a single objective is already the tile row.
@@ -606,7 +598,7 @@ final class OperationalDigestModel
             'paths' => array_values(array_map(static fn (array $path): array => [
                 'family' => (string) $path['family'],
                 'label' => (string) ($path['label'][$ar ? 'ar' : 'en'] ?? $path['family']),
-                'share' => (int) round(((float) ($path['share'] ?? 0)) * 100),
+                'share' => (int) round(((float) ($path['spend_share'] ?? 0)) * 100),
                 'spend' => $p->money((float) $path['spend']),
                 'result' => $path['result'] === null
                     ? '—'
@@ -616,6 +608,14 @@ final class OperationalDigestModel
         ];
     }
 
+    /**
+     * The best (or weakest) platform of the month on the OBJECTIVE's own headline figure — a cost falls to be better, a return rises.
+     *
+     * Null with fewer than two platforms that carry the figure: a ranking of one is not a ranking.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return array<string,string>|null
+     */
     private static function extreme(array $rows, string $objective, DigestPresenter $p, bool $ar, bool $best): ?array
     {
         $key = self::HEADLINE[$objective] ?? null;

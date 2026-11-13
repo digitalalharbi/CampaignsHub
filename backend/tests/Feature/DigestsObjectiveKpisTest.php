@@ -80,9 +80,9 @@ final class DigestsObjectiveKpisTest extends TestCase
         $block['objective_paths'] = [
             'total_spend' => 1000.0, 'spend_withheld_rows' => 0, 'mixed' => true, 'mixed_campaigns' => 1,
             'paths' => [
-                ['family' => 'sales', 'label' => ['ar' => 'المبيعات', 'en' => 'Sales'], 'spend' => 600.0, 'share' => 0.6, 'roas' => 5.0,
+                ['family' => 'sales', 'label' => ['ar' => 'المبيعات', 'en' => 'Sales'], 'spend' => 600.0, 'spend_share' => 0.6, 'roas' => 5.0,
                     'result' => 30.0, 'result_label' => ['ar' => 'الطلبات', 'en' => 'Orders']],
-                ['family' => 'traffic', 'label' => ['ar' => 'الزيارات', 'en' => 'Traffic'], 'spend' => 400.0, 'share' => 0.4, 'roas' => null,
+                ['family' => 'traffic', 'label' => ['ar' => 'الزيارات', 'en' => 'Traffic'], 'spend' => 400.0, 'spend_share' => 0.4, 'roas' => null,
                     'result' => 2400.0, 'result_label' => ['ar' => 'زيارات الصفحة', 'en' => 'Landing page views']],
             ],
         ];

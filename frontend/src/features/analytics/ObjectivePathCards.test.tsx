@@ -16,12 +16,12 @@ const block: ObjectivePathsBlock = {
   mixed_campaigns: 1,
   paths: [
     {
-      family: 'sales', label: { ar: 'المبيعات', en: 'Sales' }, spend: 600, share: 0.6, revenue: 3000, roas: 5,
+      family: 'sales', label: { ar: 'المبيعات', en: 'Sales' }, spend: 600, spend_share: 0.6, revenue: 3000, roas: 5,
       campaigns: 1, ad_sets: 1, result_key: 'conversions', result: 30, result_label: { ar: 'الطلبات', en: 'Orders' },
       cost_per_result: 20, cost_per_result_label: { ar: 'تكلفة الطلب (CPA)', en: 'Cost per order (CPA)' }, result_missing_label: null,
     },
     {
-      family: 'traffic', label: { ar: 'الزيارات', en: 'Traffic' }, spend: 400, share: 0.4, revenue: null, roas: null,
+      family: 'traffic', label: { ar: 'الزيارات', en: 'Traffic' }, spend: 400, spend_share: 0.4, revenue: null, roas: null,
       campaigns: 1, ad_sets: 1, result_key: 'landing_page_views', result: 2400, result_label: { ar: 'زيارات الصفحة', en: 'Landing page views' },
       cost_per_result: 0.17, cost_per_result_label: { ar: 'تكلفة الزيارة', en: 'Cost per visit' }, result_missing_label: null,
     },
@@ -55,6 +55,14 @@ describe('ObjectivePathCards', () => {
     expect(screen.queryByTestId('objective-paths-split')).toBeNull()
     expect(screen.queryByTestId('objective-path-roas')).toBeNull()
     expect(within(screen.getByTestId('objective-path-traffic')).getByText('زيارات الصفحة')).toBeInTheDocument()
+  })
+
+  it('treats a redacted total as a link that hides spend', () => {
+    renderWithProviders(<ObjectivePathCards block={{ ...block, total_spend: null, paths: block.paths.map((p) => ({ ...p, spend: null, spend_share: null, roas: null, revenue: null, cost_per_result: null })) }} locale="en" currency="SAR" />)
+
+    expect(screen.queryByTestId('objective-paths-total')).toBeNull()
+    expect(screen.queryByTestId('objective-path-roas')).toBeNull()
+    expect(within(screen.getByTestId('objective-path-sales')).getByText('Orders')).toBeInTheDocument()
   })
 
   it('draws nothing without paths', () => {

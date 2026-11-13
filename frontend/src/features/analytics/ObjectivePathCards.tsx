@@ -21,8 +21,8 @@ import type { Locale } from '@/stores/ui'
 export interface ObjectivePath {
   family: string
   label: { ar: string; en: string }
-  spend: number
-  share: number | null
+  spend: number | null
+  spend_share: number | null
   revenue: number | null
   roas: number | null
   campaigns: number
@@ -36,7 +36,8 @@ export interface ObjectivePath {
 }
 
 export interface ObjectivePathsBlock {
-  total_spend: number
+  /** Null on a link whose settings hide spend — the server redacts it. */
+  total_spend: number | null
   spend_withheld_rows: number
   mixed: boolean
   mixed_campaigns: number
@@ -70,9 +71,11 @@ const T = {
  */
 export function ObjectivePathCards({ block, locale, currency, showMoney = true }: { block: ObjectivePathsBlock | null | undefined; locale: Locale; currency: string | null; showMoney?: boolean }) {
   // A payload of another shape (an older saved report, a stubbed endpoint) draws nothing rather than crashing the page.
-  if (!block || !Array.isArray(block.paths) || block.paths.length === 0 || typeof block.total_spend !== 'number') return null
+  if (!block || !Array.isArray(block.paths) || block.paths.length === 0) return null
   if (!block.paths.every((p) => p && typeof p.family === 'string' && p.label && typeof p.label === 'object')) return null
   const l = locale === 'ar' ? 'ar' : 'en'
+  // A redacted payload (no total) is a link that hides spend, whatever the caller asked for.
+  const money_ = showMoney && typeof block.total_spend === 'number'
 
   return (
     <section data-testid="objective-path-cards" className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)]">
@@ -85,7 +88,7 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
         )}
       </div>
 
-      {showMoney && (<>
+      {money_ && (<>
       <div className="mt-3">
         <div className="text-xs text-text-secondary">{T.total[l]}</div>
         <div className="text-2xl font-bold text-text-primary" data-testid="objective-paths-total">
@@ -96,7 +99,7 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
       {/* One bar, one total: each objective's share of it. */}
       <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-border/40" role="img" aria-label={T.title[l]} data-testid="objective-paths-split">
         {block.paths.map((p) => (
-          <span key={p.family} className={`block h-full ${TONE[p.family] ?? 'bg-border'}`} style={{ width: `${Math.max(0, (p.share ?? 0) * 100)}%` }} title={`${p.label[l]} ${percent(p.share, 0)}`} />
+          <span key={p.family} className={`block h-full ${TONE[p.family] ?? 'bg-border'}`} style={{ width: `${Math.max(0, (p.spend_share ?? 0) * 100)}%` }} title={`${p.label[l]} ${percent(p.spend_share, 0)}`} />
         ))}
       </div>
       </>)}
@@ -107,10 +110,10 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE[p.family] ?? 'bg-border'}`} />
               <span className="truncate text-sm font-semibold text-text-primary">{p.label[l]}</span>
-              {showMoney && <span className="ms-auto text-xs text-text-secondary"><Num>{percent(p.share, 0)}</Num></span>}
+              {money_ && <span className="ms-auto text-xs text-text-secondary"><Num>{percent(p.spend_share, 0)}</Num></span>}
             </div>
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-              {showMoney && (
+              {money_ && (
                 <>
                   <dt className="text-text-secondary">{T.spend[l]}</dt>
                   <dd className="text-end font-medium"><Num>{money(p.spend, currency)}</Num></dd>
@@ -120,13 +123,13 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
               <dd className="text-end font-medium" title={p.result_missing_label?.[l]}>
                 <Num>{p.result === null ? '—' : compact(p.result)}</Num>
               </dd>
-              {showMoney && p.cost_per_result_label && (
+              {money_ && p.cost_per_result_label && (
                 <>
                   <dt className="text-text-secondary">{p.cost_per_result_label[l]}</dt>
                   <dd className="text-end font-medium"><Num>{money(p.cost_per_result, currency)}</Num></dd>
                 </>
               )}
-              {showMoney && p.family === 'sales' && (
+              {money_ && p.family === 'sales' && (
                 <>
                   <dt className="text-text-secondary">{T.revenue[l]}</dt>
                   <dd className="text-end font-medium"><Num>{money(p.revenue, currency)}</Num></dd>
@@ -139,7 +142,7 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
         ))}
       </div>
 
-      {showMoney && block.spend_withheld_rows > 0 && <p className="mt-3 text-xs text-text-secondary">{T.withheld[l]}</p>}
+      {money_ && block.spend_withheld_rows > 0 && <p className="mt-3 text-xs text-text-secondary">{T.withheld[l]}</p>}
     </section>
   )
 }

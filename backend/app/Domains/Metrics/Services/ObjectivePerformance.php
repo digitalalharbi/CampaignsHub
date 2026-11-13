@@ -287,16 +287,18 @@ final class ObjectivePerformance
             $paths[$family]['ad_sets'] += $piece['ad_sets'];
         }
 
+        // The total IS the sum of the paths as printed: each path rounded once, then added.
         $total = 0.0;
         foreach ($paths as $p) {
-            $total += array_sum(array_map(static fn (array $row): float => (float) ($row['spend'] ?? 0), $p['rows']));
+            $total += round(array_sum(array_map(static fn (array $row): float => (float) ($row['spend'] ?? 0), $p['rows'])), 2);
         }
 
         $out = [];
         foreach ($paths as $familyValue => $p) {
             $family = ObjectiveFamily::from($familyValue);
-            $spend = array_sum(array_map(static fn (array $row): float => (float) ($row['spend'] ?? 0), $p['rows']));
+            $spend = round(array_sum(array_map(static fn (array $row): float => (float) ($row['spend'] ?? 0), $p['rows'])), 2);
             $pathWithheld = (int) array_sum(array_map(static fn (array $row): int => (int) ($row['spend_withheld_rows'] ?? 0), $p['rows']));
+            $revenueWithheld = (int) array_sum(array_map(static fn (array $row): int => (int) ($row['revenue_withheld_rows'] ?? 0), $p['rows']));
             // A residual row carries money and no figures; it must not turn a measured result into «no data».
             $measured = array_keys(array_filter($p['reported'], static fn (array $rep): bool => $rep !== []));
             $result = ObjectiveResult::combine(
@@ -315,10 +317,10 @@ final class ObjectivePerformance
                 'family' => $family->value,
                 'label' => $family->label(),
                 'spend' => round($spend, 2),
-                'share' => $total > 0 ? round($spend / $total, 4) : null,
+                'spend_share' => $total > 0 ? round($spend / $total, 4) : null,
                 // Revenue and ROAS belong to the sales path only; elsewhere they are absent, not zero.
                 'revenue' => $isSales ? round($revenue, 2) : null,
-                'roas' => $isSales && $pathWithheld === 0 ? $this->ratio($revenue, $spend) : null,
+                'roas' => $isSales && $pathWithheld === 0 && $revenueWithheld === 0 ? $this->ratio($revenue, $spend) : null,
                 'campaigns' => count($p['campaigns']),
                 'ad_sets' => $p['ad_sets'],
                 'spend_withheld_rows' => $pathWithheld,
@@ -361,15 +363,18 @@ final class ObjectivePerformance
             if (! isset($mixed[$campaign]) || ! in_array(ObjectiveFamily::Sales->value, $mixed[$campaign], true) || $piece['family'] !== ObjectiveFamily::Sales->value) {
                 continue;
             }
-            $out[$campaign] ??= ['spend' => 0.0, 'revenue' => 0.0, 'conversions' => 0.0];
+            $out[$campaign] ??= ['spend' => 0.0, 'revenue' => 0.0, 'conversions' => 0.0, 'withheld' => 0];
             foreach (['spend', 'revenue', 'conversions'] as $k) {
                 $out[$campaign][$k] += (float) ($piece['row'][$k] ?? 0);
             }
+            $out[$campaign]['withheld'] += (int) ($piece['row']['spend_withheld_rows'] ?? 0) + (int) ($piece['row']['revenue_withheld_rows'] ?? 0);
         }
 
         foreach ($out as $campaign => $sums) {
-            $out[$campaign]['roas'] = $this->ratio($sums['revenue'], $sums['spend']);
-            $out[$campaign]['cpa'] = $this->ratio($sums['spend'], $sums['conversions']);
+            $held = $sums['withheld'] > 0;
+            $out[$campaign]['roas'] = $held ? null : $this->ratio($sums['revenue'], $sums['spend']);
+            $out[$campaign]['cpa'] = $held ? null : $this->ratio($sums['spend'], $sums['conversions']);
+            unset($out[$campaign]['withheld']);
         }
 
         return $out;
@@ -383,10 +388,11 @@ final class ObjectivePerformance
     private function pathPieces(Carbon $from, Carbon $to): array
     {
         $campaignRows = $this->rows($from, $to);
-        $adSets = $this->adSetRows($from, $to, $campaignRows->pluck('unified_campaign_id')->filter()->unique()->values()->all());
+        $adSets = $this->adSetRows($from, $to, $campaignRows->pluck('unified_campaign_id')->filter()->unique()->values()->all(), $campaignRows->pluck('project_id')->filter()->unique()->values()->all());
 
         $pieces = [];
         $mixed = [];
+        $familiesOf = [];
         $withheld = 0;
         $put = static function (string $family, array $row, array $reported, string $campaign, int $sets) use (&$pieces): void {
             $pieces[] = ['family' => $family, 'row' => $row, 'reported' => $reported, 'campaign' => $campaign, 'ad_sets' => $sets];
@@ -408,22 +414,39 @@ final class ObjectivePerformance
                 && abs($setSpend - $spend) <= max(0.01, 0.005 * $spend);
 
             if (! $covered) {
+                $familiesOf[$campaign][$campaignFamily->value] = true;
                 $put($campaignFamily->value, $row, self::rowReported($row), $campaign, 0);
 
                 continue;
             }
 
-            $families = [];
-            foreach ($sets as $set) {
-                $family = PathObjective::familyOf($provider, $set['optimization_goal'], $campaignFamily)->value;
-                $families[$family] = true;
-                $put($family, ['provider' => $provider, 'spend' => (float) $set['spend'], 'spend_withheld_rows' => 0] + $set['figures'], $set['reported'], $campaign, 1);
-            }
-            // What the ad sets do not account for (rounding, at most half a percent) stays with the campaign's own family.
+            /*
+             * What the ad sets do not account for (cents of rounding, at most half a percent) is booked
+             * to the LARGEST ad set, never to a family of its own: a sales campaign whose squads all buy
+             * visits must not grow a «sales» path of 0.38 with no result, and a negative leftover must
+             * never become a path with negative spend.
+             */
             $residual = round($spend - $setSpend, 6);
-            if ($residual !== 0.0) {
-                $put($campaignFamily->value, ['provider' => $provider, 'spend' => $residual, 'spend_withheld_rows' => 0], [], $campaign, 0);
+            $largest = 0;
+            foreach ($sets as $i => $set) {
+                if ((float) $set['spend'] > (float) $sets[$largest]['spend']) {
+                    $largest = $i;
+                }
             }
+            foreach ($sets as $i => $set) {
+                $family = PathObjective::familyOf($provider, $set['optimization_goal'], $campaignFamily)->value;
+                $familiesOf[$campaign][$family] = true;
+                $put($family, [
+                    'provider' => $provider,
+                    'spend' => (float) $set['spend'] + ($i === $largest ? $residual : 0.0),
+                    'spend_withheld_rows' => 0,
+                    'revenue_withheld_rows' => (int) $set['revenue_withheld'],
+                ] + $set['figures'], $set['reported'], $campaign, 1);
+            }
+        }
+
+        // A campaign is mixed when its paths, across every platform it runs on, buy more than one thing.
+        foreach ($familiesOf as $campaign => $families) {
             if (count($families) > 1) {
                 $mixed[$campaign] = array_keys($families);
             }
@@ -435,10 +458,15 @@ final class ObjectivePerformance
     /**
      * OBJECTIVE-PATHS-001 — each bounded campaign's ad sets in the window, with their goal and figures.
      *
+     * Held to the same bounds as {@see bounded()}: the tenant (model scope), the campaigns and PROJECTS the
+     * campaign rows came from, the platform and account axes, and the active-binding visibility rule — so a
+     * deselected account's or another project's ad-set rows can never reach a path.
+     *
      * @param  list<string>  $campaignIds
-     * @return array<string, list<array{spend: float, spend_withheld: int, optimization_goal: string|null, figures: array<string, float>, reported: array<string, bool>}>> keyed «campaign|provider»
+     * @param  list<string>  $projectIds
+     * @return array<string, list<array{spend: float, spend_withheld: int, revenue_withheld: int, optimization_goal: string|null, figures: array<string, float>, reported: array<string, bool>}>> keyed «campaign|provider»
      */
-    private function adSetRows(Carbon $from, Carbon $to, array $campaignIds): array
+    private function adSetRows(Carbon $from, Carbon $to, array $campaignIds, array $projectIds): array
     {
         if ($campaignIds === []) {
             return [];
@@ -449,6 +477,8 @@ final class ObjectivePerformance
             ->join('external_ad_sets', 'external_ad_sets.id', '=', 'entity_daily_metrics.entity_id')
             ->where('entity_daily_metrics.entity_type', EntityDailyMetric::AD_SET)
             ->whereIn('external_ad_sets.unified_campaign_id', $campaignIds)
+            ->whereIn('entity_daily_metrics.project_id', $projectIds ?: ['00000000-0000-0000-0000-000000000000'])
+            ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
             ->whereBetween('entity_daily_metrics.metric_date', [$from->toDateString(), $to->toDateString()])
             ->when($this->providers !== null, fn ($q) => $q->whereIn('entity_daily_metrics.provider', $this->providers ?: ['__none__']))
             ->when($this->accountIds !== null, fn ($q) => $q->whereIn('entity_daily_metrics.external_account_id', $this->accountIds ?: ['00000000-0000-0000-0000-000000000000']))
@@ -456,7 +486,8 @@ final class ObjectivePerformance
             ->groupBy('external_ad_sets.id', 'external_ad_sets.unified_campaign_id', 'entity_daily_metrics.provider', 'external_ad_sets.optimization_goal')
             ->select('external_ad_sets.unified_campaign_id', 'entity_daily_metrics.provider', 'external_ad_sets.optimization_goal')
             ->selectRaw('COALESCE(SUM(entity_daily_metrics.spend), 0) AS spend')
-            ->selectRaw('COUNT(*) FILTER (WHERE entity_daily_metrics.spend IS NULL AND entity_daily_metrics.spend_original IS NOT NULL) AS spend_withheld');
+            ->selectRaw('COUNT(*) FILTER (WHERE entity_daily_metrics.spend IS NULL AND entity_daily_metrics.spend_original IS NOT NULL) AS spend_withheld')
+            ->selectRaw('COUNT(*) FILTER (WHERE entity_daily_metrics.revenue IS NULL AND entity_daily_metrics.revenue_original IS NOT NULL) AS revenue_withheld');
         foreach ($keys as $k) {
             $query->selectRaw("SUM(entity_daily_metrics.{$k}) AS {$k}");
         }
@@ -478,6 +509,7 @@ final class ObjectivePerformance
             $out[(string) $r->unified_campaign_id.'|'.(string) $r->provider][] = [
                 'spend' => (float) $r->spend,
                 'spend_withheld' => (int) $r->spend_withheld,
+                'revenue_withheld' => (int) $r->revenue_withheld,
                 'optimization_goal' => $r->optimization_goal === null ? null : (string) $r->optimization_goal,
                 'figures' => $figures,
                 'reported' => $reported,
@@ -1115,8 +1147,9 @@ final class ObjectivePerformance
             ->join('unified_campaigns', 'unified_campaigns.id', '=', 'daily_metrics.unified_campaign_id')
             // `provider` joins the key so one row per (campaign, platform) exists — the grain
             // `byPlatform()` reads. The path totals above sum these rows and are unchanged by it.
-            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
-            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'daily_metrics.project_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
+            // OBJECTIVE-PATHS-001 — the project, so the ad-set read beside it is held to the same projects.
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider', 'daily_metrics.project_id', 'unified_campaigns.name', 'unified_campaigns.objective', 'unified_campaigns.objective_source')
             ->selectRaw($this->sum('spend'))
             ->selectRaw($this->heldMoney('spend'))
             ->selectRaw($this->sum('impressions'))
