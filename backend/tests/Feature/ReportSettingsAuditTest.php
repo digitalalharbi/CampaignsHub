@@ -95,7 +95,7 @@ final class ReportSettingsAuditTest extends TestCase
                 'ga4_overview' => [
                     'currency' => 'SAR', 'previous_period' => ['from' => '2026-01-01', 'to' => '2026-01-30'], 'revenue_hidden' => false,
                     'kpis' => [
-                        ['key' => 'sessions', 'kind' => 'count', 'current' => 4321, 'previous' => 8181, 'change' => -3860, 'change_pct' => -0.4718, 'currency' => null],
+                        ['key' => 'sessions', 'kind' => 'count', 'current' => 4321.5, 'previous' => 8181.5, 'change' => -3860, 'change_pct' => -0.4718, 'currency' => null],
                         ['key' => 'revenue', 'kind' => 'money', 'current' => 7777.77, 'previous' => 5555.55, 'change' => 2222.22, 'change_pct' => 0.4, 'currency' => 'SAR'],
                     ],
                     'series' => [['date' => now()->subDays(2)->toDateString(), 'sessions' => 4300, 'revenue' => 4444.44]],
@@ -149,7 +149,7 @@ final class ReportSettingsAuditTest extends TestCase
         $response = $this->getJson("/api/v1/reports/shared/{$token}");
         $response->assertOk();
 
-        return str_replace('\\/', '/', (string) $response->getContent());
+        return self::withoutEnvelope((string) $response->getContent());
     }
 
     private function printed(ReportShare $share, string $layout = 'document'): string
@@ -160,7 +160,19 @@ final class ReportSettingsAuditTest extends TestCase
             'type' => $layout, 'theme' => 'light', 'audience' => 'client', 'watermark' => false,
         ], 300);
 
-        return str_replace('\\/', '/', (string) $this->getJson("/api/v1/reports/print/{$token}")->assertOk()->getContent());
+        return self::withoutEnvelope((string) $this->getJson("/api/v1/reports/print/{$token}")->assertOk()->getContent());
+    }
+
+    /**
+     * The served body without its envelope's per-request `meta` (a random `request_id` such as `req_351d3350f6b8181f`), so a
+     * figure searched for as a substring can never be found inside a random id — the body is everything the reader is served.
+     */
+    private static function withoutEnvelope(string $raw): string
+    {
+        $body = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+        unset($body['meta']);
+
+        return str_replace('\\/', '/', (string) json_encode($body, JSON_UNESCAPED_UNICODE));
     }
 
     private function file(string $token, string $format): string
@@ -277,7 +289,7 @@ final class ReportSettingsAuditTest extends TestCase
             foreach ($money as $figure) {
                 $this->assertStringNotContainsString($figure, $raw, "{$surface}: revenue hidden, {$figure} is still published");
             }
-            $this->assertStringContainsString('4321', $raw, "{$surface}: hiding revenue took the visits with it");
+            $this->assertStringContainsString('4321.5', $raw, "{$surface}: hiding revenue took the visits with it");
         }
     }
 
@@ -286,21 +298,21 @@ final class ReportSettingsAuditTest extends TestCase
         [, $token] = $this->link(['ga4_hidden' => ['tile.sessions']]);
         $body = $this->shared($token);
 
-        $this->assertStringNotContainsString('4321', $body, 'the link hides the sessions tile and still publishes it');
+        $this->assertStringNotContainsString('4321.5', $body, 'the link hides the sessions tile and still publishes it');
         $this->assertStringContainsString('7777.77', $body, 'the link hid only the sessions tile');
     }
 
     public function test_previous_period_off_takes_the_website_and_store_comparison_with_it(): void
     {
         [, $shown] = $this->link([]);
-        $this->assertStringContainsString('8181', $this->shared($shown), 'the previous figure never reached the link — nothing is proved');
+        $this->assertStringContainsString('8181.5', $this->shared($shown), 'the previous figure never reached the link — nothing is proved');
 
         [$share, $token] = $this->link(['sections' => ['previous_comparison' => false]]);
         foreach (['page' => $this->shared($token), 'pdf' => $this->printed($share)] as $surface => $raw) {
-            foreach (['8181', '5555.55', '3333.33', '-0.4718'] as $figure) {
+            foreach (['8181.5', '5555.55', '3333.33', '-0.4718'] as $figure) {
                 $this->assertStringNotContainsString($figure, $raw, "{$surface}: the comparison is off, {$figure} (the previous window) is still published");
             }
-            $this->assertStringContainsString('4321', $raw, "{$surface}: this period's figure must stay");
+            $this->assertStringContainsString('4321.5', $raw, "{$surface}: this period's figure must stay");
         }
     }
 
