@@ -1,5 +1,7 @@
 # مراجعة القائمة الجانبية — 2026-11-13 (المهمة 12، الخطوة الأولى)
 
+> **حالة التنفيذ (2026-11-13):** نُفِّذت الدفعات A وB وC وD في نفس الفرع `fix/nav-home-plans` (NAV-HOME-PLANS-001، IMPLEMENTED_NOT_VERIFIED). ما لم يُنفَّذ وسببه في الصف الأخير من المصفوفة.
+
 مراجعة فقط. مبنية على `origin/main` عند `071cca0c0`، قبل دمج #1022 (الذي أزال «المشاريع» من قائمة الوكالة وغيّر صياغات). ما بعد الدمج يُعاد التحقق منه في أول دفعة تنفيذ.
 المصادر: `frontend/src/layouts/{agencyNav,appNav,AdminShell,SidebarNav,mobileTabs}.ts(x)`، `features/requests/portal/portalNav.tsx`، `app/router.tsx`، `docs/NAVIGATION_MATRIX.md`.
 
