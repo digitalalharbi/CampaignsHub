@@ -38,6 +38,40 @@
       ],
       "cwd": "frontend",
       "port": 4173
+    },
+    {
+      "name": "objpaths-api",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DB_DATABASE=mediabuying_objpaths",
+        "APP_ENV=local",
+        "APP_URL=http://127.0.0.1:8197",
+        "FRONTEND_URL=http://localhost:5297",
+        "SANCTUM_STATEFUL_DOMAINS=localhost:5297,127.0.0.1:5297",
+        "php",
+        "artisan",
+        "serve",
+        "--host=127.0.0.1",
+        "--port=8197"
+      ],
+      "cwd": "backend",
+      "port": 8197,
+      "autoPort": false
+    },
+    {
+      "name": "objpaths-web",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_API_TARGET=http://127.0.0.1:8197",
+        "npx",
+        "vite",
+        "--port",
+        "5297",
+        "--strictPort"
+      ],
+      "cwd": "frontend",
+      "port": 5297,
+      "autoPort": false
     }
   ]
 }
