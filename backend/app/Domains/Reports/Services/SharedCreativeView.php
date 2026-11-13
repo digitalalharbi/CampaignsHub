@@ -855,6 +855,8 @@ final class SharedCreativeView
             $row['preview']['can_download'] = $visibility->download;
 
             $row['preview'] = $this->redactCards($row['preview'], $visibility);
+            // SHARE-COPY-LEAK-001 — the envelope's own words (`text`) and every card's copy, through the one rule.
+            $row['preview'] = ContentCopy::preview($row['preview'], $visibility);
         }
 
         return $row;
@@ -882,8 +884,6 @@ final class SharedCreativeView
         }
 
         $preview['cards'] = array_map(static function (array $card) use ($visibility): array {
-            $card = ContentCopy::card($card, $visibility);
-
             if (! $visibility->video) {
                 $card['video_url'] = null;
             }
