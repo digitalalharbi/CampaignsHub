@@ -239,4 +239,38 @@ final class WorkspaceRolePresetsTest extends TestCase
         $this->postJson('/api/v1/settings/roles/viewer/reset')->assertForbidden();
         $this->assertSame(0, DB::table('roles')->where('slug', 'viewer')->count());
     }
+
+    /** Review finding 1: an invited project manager whose clients are not chosen yet reaches NO project. */
+    public function test_a_project_manager_with_no_client_yet_reaches_no_project(): void
+    {
+        $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'Ettifaq', 'slug' => 'ettifaq-p', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
+        $project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $client->id, 'name' => 'Ettifaq', 'status' => 'active']);
+        $pm = $this->member('fresh-pm@a.test', WorkspaceRolePresets::ensure((string) $this->tenant->id, WorkspaceRolePresets::PROJECT_MANAGER));
+
+        Sanctum::actingAs($pm);
+        $this->assertContains($this->getJson("/api/v1/projects/{$project->id}/campaigns")->status(), [403, 404]);
+        $listed = collect($this->getJson('/api/v1/projects')->json('data') ?? [])->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $this->assertNotContains((string) $project->id, $listed);
+
+        // Once the client is chosen, the project opens.
+        $scoped = $this->member('scoped-pm@a.test', WorkspaceRolePresets::ensure((string) $this->tenant->id, WorkspaceRolePresets::PROJECT_MANAGER), clientIds: [(string) $client->id]);
+        Sanctum::actingAs($scoped);
+        $this->getJson("/api/v1/projects/{$project->id}/campaigns")->assertOk();
+    }
+
+    /** Review finding 2: a manager confined to one client does not «hold» كل العملاء, whatever their role says. */
+    public function test_a_client_confined_manager_cannot_hand_out_every_client(): void
+    {
+        $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'Only', 'slug' => 'only', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
+        $ownerRole = Role::where('tenant_id', $this->tenant->id)->where('slug', 'tenant-owner')->firstOrFail();
+        $confined = $this->member('confined@a.test', $ownerRole, clientIds: [(string) $client->id]);
+        Sanctum::actingAs($confined);
+
+        $this->assertNotContains('clients.view_all', $this->getJson('/api/v1/settings/roles')->assertOk()->json('data.grantable'));
+        $this->putJson('/api/v1/settings/roles/viewer', ['permissions' => ['clients.view', 'clients.view_all']])->assertForbidden();
+        $this->postJson('/api/v1/settings/team', ['email' => 'second-me@a.test', 'role' => 'tenant-owner'])->assertForbidden();
+        $this->postJson('/api/v1/settings/team', ['email' => 'second-me@a.test', 'role' => 'finance'])->assertForbidden();
+        // A role inside their reach is still theirs to hand out.
+        $this->postJson('/api/v1/settings/team', ['email' => 'viewer@a.test', 'role' => 'viewer'])->assertStatus(201);
+    }
 }

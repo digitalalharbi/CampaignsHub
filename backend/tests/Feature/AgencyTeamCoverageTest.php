@@ -86,4 +86,16 @@ final class AgencyTeamCoverageTest extends TestCase
         $this->assertSame(['Mine'], $names);
         $this->assertNotContains((string) $hidden->name, $names);
     }
+
+    /** Review finding 3: a confined reader whose role carries clients.view_all still sees only their clients. */
+    public function test_a_named_client_list_outranks_the_all_clients_key(): void
+    {
+        $mine = $this->client('Mine');
+        $this->client('Hidden');
+        $lead = $this->person('Lead', ['users.view', 'clients.view', ClientScopeResolver::ALL_CLIENTS], [(string) $mine->id]);
+
+        $names = collect($this->actingAs($lead, 'sanctum')->getJson('/api/v1/agency/team')->assertOk()->json('data.coverage'))->pluck('name')->all();
+
+        $this->assertSame(['Mine'], $names);
+    }
 }

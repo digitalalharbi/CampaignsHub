@@ -6,6 +6,8 @@ namespace App\Domains\Access\Support;
 
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
+use App\Models\User;
 
 /**
  * TEAM-ROLE-PRESETS-001 — the ready-made workspace roles, and the checkboxes that edit them
@@ -222,6 +224,28 @@ final class WorkspaceRolePresets
         return $preset['permissions'] === null
             ? $catalogue
             : array_values(array_intersect($preset['permissions'], $catalogue));
+    }
+
+    /**
+     * The keys an actor may hand out: their own, as their ceiling actually backs them.
+     *
+     * `clients.view_all` counts only for somebody who really reaches every client. A membership that
+     * NAMES clients outranks the permission (`ClientScopeResolver::reachableClientIds`), so a manager
+     * confined to client A whose role happens to carry the key does not «hold» it — otherwise they
+     * could tick «كل العملاء» on a shared role, or invite a second account of their own as the
+     * workspace manager, and walk out of their own ceiling.
+     *
+     * @return list<string>
+     */
+    public static function heldBy(User $actor): array
+    {
+        $keys = $actor->permissionKeys()->map(fn ($k) => (string) $k)->all();
+
+        if (! $actor->is_platform_admin && app(ClientScopeResolver::class)->reachableClientIds($actor) !== null) {
+            $keys = array_diff($keys, [ClientScopeResolver::ALL_CLIENTS]);
+        }
+
+        return array_values($keys);
     }
 
     /**

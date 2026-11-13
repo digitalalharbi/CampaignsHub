@@ -172,7 +172,8 @@ final class ProjectAbilities
      */
     private function fromTenant(User $user, string $projectId): array
     {
-        if (! $user->hasPermission('projects.view.all')) {
+        // TEAM-ROLE-PRESETS-001 — no named client and no `clients.view_all`: no tenant-wide reach (ProjectReach).
+        if (! $user->hasPermission('projects.view.all') || $this->reach->agencyMemberWithoutClients()) {
             return [];
         }
 
