@@ -51,37 +51,60 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            q() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | "' 2>&1 <<EOF
+            BEGIN READ ONLY;
+            $1
+            ROLLBACK;
+            EOF
+            }
+            CTE=$(cat <<'SQL'
+            with fam(objective,family) as (values ('awareness','awareness'),('reach','awareness'),('traffic','traffic'),('landing_page_views','traffic'),('engagement','engagement'),('video_views','video'),('leads','leads'),('sales','sales'),('conversions','sales'),('purchases','sales'),('add_to_cart','sales'),('app_installs','app')),
+            m as (select dm.unified_campaign_id id, dm.tenant_id, string_agg(distinct dm.provider, ',') prov, array_agg(distinct dm.metric_key) keys,
+              coalesce(sum(dm.value) filter (where metric_key='spend'),0) spend, coalesce(sum(dm.value) filter (where metric_key='impressions'),0) imp,
+              coalesce(sum(dm.value) filter (where metric_key='clicks'),0) clk, coalesce(sum(dm.value) filter (where metric_key='conversions'),0) conv,
+              coalesce(sum(dm.value) filter (where metric_key='revenue'),0) rev, coalesce(sum(dm.value) filter (where metric_key='landing_page_views'),0) lpv,
+              coalesce(sum(dm.value) filter (where metric_key='engagements'),0) eng, coalesce(sum(dm.value) filter (where metric_key='video_views'),0) vv,
+              coalesce(sum(dm.value) filter (where metric_key='leads'),0) lds, coalesce(sum(dm.value) filter (where metric_key='form_leads'),0) flds,
+              coalesce(sum(dm.value) filter (where metric_key='purchases'),0) pur, coalesce(sum(dm.value) filter (where metric_key='installs'),0) ins
+              from daily_metrics dm where dm.metric_date>=current_date-7 and dm.unified_campaign_id is not null and coalesce(dm.is_demo,false)=false group by 1,2),
+            ps as (select tenant_id, provider, array_agg(distinct metric_key) keys from daily_metrics where metric_date>=current_date-90 and coalesce(is_demo,false)=false group by 1,2),
+            c as (select m.*, uc.project_id, coalesce(uc.objective,'') obj, uc.objective_source osrc, coalesce(uc.objective_platform_value,'') pov, coalesce(f.family,'unknown') family
+              from m join unified_campaigns uc on uc.id=m.id left join fam f on f.objective=uc.objective where uc.deleted_at is null and (m.spend>0 or m.imp>0)),
+            r as (select c.*, (select array_agg(distinct k) from (select unnest(c.keys) k union select unnest(ps.keys) from ps where ps.tenant_id=c.tenant_id and ps.provider=any(string_to_array(c.prov,','))) z) rep from c),
+            k as (select r.*, case family when 'awareness' then 'impressions'
+                when 'traffic' then case when lpv>0 or ('landing_page_views'=any(rep) and prov not like '%snapchat%') then 'landing_page_views' else 'clicks' end
+                when 'engagement' then 'engagements' when 'video' then 'video_views' when 'sales' then 'conversions' when 'app' then 'installs'
+                when 'leads' then case when lds>0 then 'leads' when flds>0 then 'form_leads' when conv>0 then 'conversions' else 'leads' end end rkey from r),
+            x as (select k.*, case rkey when 'impressions' then imp when 'landing_page_views' then lpv when 'clicks' then clk when 'engagements' then eng when 'video_views' then vv
+                when 'conversions' then conv when 'installs' then ins when 'leads' then lds when 'form_leads' then flds end rval from k),
+            y as (select x.*, case when rkey is null then 'objective_unknown' when rval>0 then 'has_value' when rkey=any(rep) then 'reported_zero' else 'not_reported' end rstate from x)
             SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            )
+            echo "== FACTS-OBJECTIVE $(date -u +%FT%TZ)"
+            echo "## Q1. active campaigns (spend or impressions, last 7d) by provider | family : n | objective empty | source unset | has_value | reported_zero | not_reported | objective_unknown"
+            q "$CTE select prov,family,count(*),count(*) filter (where obj=''),count(*) filter (where osrc='unset'),count(*) filter (where rstate='has_value'),count(*) filter (where rstate='reported_zero'),count(*) filter (where rstate='not_reported'),count(*) filter (where rstate='objective_unknown') from y group by 1,2 order by 1,3 desc;"
+            echo "## Q1b. active campaigns per provider in the unknown family: provider | stored objective | source | count"
+            q "$CTE select prov,coalesce(nullif(obj,''),'(empty)'),osrc,count(*) from y where family='unknown' group by 1,2,3 order by 1,4 desc;"
+            echo "## Q1c. objective_source among active: provider | source | count"
+            q "$CTE select prov,osrc,count(*) from y group by 1,2 order by 1,3 desc;"
+            echo "## Q2. sample projects"
+            q "select left(p.id::text,8),p.name from projects p where p.deleted_at is null and (p.name ilike '%1k%coffee%' or p.name ilike '%1kcoffee%' or p.name ilike '%karam%' or p.name ilike '%كرم%' or p.name ilike '%برديسي%' or p.name ilike '%bardisi%') order by 2;"
+            echo "## Q2a. sample projects: project | provider | family | result key | n | has_value | reported_zero | not_reported | sum(result)"
+            q "$CTE select left(y.project_id::text,8),prov,family,coalesce(rkey,'-'),count(*),count(*) filter (where rstate='has_value'),count(*) filter (where rstate='reported_zero'),count(*) filter (where rstate='not_reported'),round(sum(coalesce(rval,0))::numeric,0) from y join projects p on p.id=y.project_id where (p.name ilike '%1k%coffee%' or p.name ilike '%1kcoffee%' or p.name ilike '%karam%' or p.name ilike '%كرم%' or p.name ilike '%برديسي%' or p.name ilike '%bardisi%') group by 1,2,3,4 order by 1,2,3;"
+            echo "## Q2b. sample projects: project | provider | metric keys written last 7d"
+            q "select left(dm.project_id::text,8),dm.provider,string_agg(distinct dm.metric_key,',' order by dm.metric_key) from daily_metrics dm join projects p on p.id=dm.project_id where dm.metric_date>=current_date-7 and (p.name ilike '%1k%coffee%' or p.name ilike '%1kcoffee%' or p.name ilike '%karam%' or p.name ilike '%كرم%' or p.name ilike '%برديسي%' or p.name ilike '%bardisi%') group by 1,2 order by 1,2;"
+            echo "## Q2c. all active, traffic family: provider | result key | n | has_value | reported_zero | not_reported"
+            q "$CTE select prov,rkey,count(*),count(*) filter (where rstate='has_value'),count(*) filter (where rstate='reported_zero'),count(*) filter (where rstate='not_reported') from y where family='traffic' group by 1,2 order by 1,3 desc;"
+            echo "## Q3. non-sales families carrying revenue or purchases last 7d (would have a per-row roas in byCampaign): provider | family | n | rev>0 | purchases>0 | conv>0 | spend>3000 and conv<2"
+            q "$CTE select prov,family,count(*),count(*) filter (where rev>0),count(*) filter (where pur>0),count(*) filter (where conv>0),count(*) filter (where spend>3000 and conv<2) from y where family not in ('sales') group by 1,2 order by 1,2;"
+            echo "## Q4. unmapped, active last 7d: provider | external objective | platform value kept | google bidding | stored objective | count"
+            q "$CTE select ec.provider,coalesce(nullif(ec.objective,''),'(empty)'),coalesce(nullif(y.pov,''),'(empty)'),coalesce(ec.raw->'raw'->'campaign'->>'biddingStrategyType',ec.raw->'campaign'->>'biddingStrategyType',ec.raw->>'bidding_strategy_type','-'),coalesce(nullif(y.obj,''),'(empty)'),count(distinct y.id) from y join external_campaigns ec on ec.unified_campaign_id=y.id where y.family='unknown' group by 1,2,3,4,5 order by 1,6 desc;"
+            echo "## Q4b. unmapped, all non-deleted campaigns (any time): provider | external objective | platform value | google bidding | stored objective | count"
+            q "with fam(objective) as (values ('awareness'),('reach'),('traffic'),('landing_page_views'),('engagement'),('video_views'),('leads'),('sales'),('conversions'),('purchases'),('add_to_cart'),('app_installs')) select ec.provider,coalesce(nullif(ec.objective,''),'(empty)'),coalesce(nullif(uc.objective_platform_value,''),'(empty)'),coalesce(ec.raw->'raw'->'campaign'->>'biddingStrategyType',ec.raw->'campaign'->>'biddingStrategyType',ec.raw->>'bidding_strategy_type','-'),coalesce(nullif(uc.objective,''),'(empty)'),count(distinct uc.id) from unified_campaigns uc join external_campaigns ec on ec.unified_campaign_id=uc.id where uc.deleted_at is null and (uc.objective is null or uc.objective not in (select objective from fam)) group by 1,2,3,4,5 order by 1,6 desc limit 80;"
+            echo "## Q4c. mapped campaigns whose stored objective disagrees with nothing (sanity): provider | external objective | stored objective | count (top 60, active 7d)"
+            q "$CTE select ec.provider,coalesce(nullif(ec.objective,''),'(empty)'),coalesce(nullif(y.obj,''),'(empty)'),y.osrc,count(distinct y.id) from y join external_campaigns ec on ec.unified_campaign_id=y.id group by 1,2,3,4 order by 1,5 desc limit 60;"
+            echo "== END FACTS-OBJECTIVE"
+            exit 0
