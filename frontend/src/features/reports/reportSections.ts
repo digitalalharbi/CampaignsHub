@@ -1,3 +1,6 @@
+import type { FormatComparisonPayload } from '@/features/content/api'
+import { stripHasFigures } from './formatStrip'
+import { isClientAudience } from './reportAudience'
 /**
  * REPORT-SECTION-SURFACES-001 — the page draws the sections the server resolved, and nothing else.
  *
@@ -269,34 +272,24 @@ export function withEvidenceSlides<S extends { id: string; type: string; order: 
 }
 
 
-/** CONTENT-FORMAT-COMPARISON-001 — format rows on one printed table page; a longer table is split, never shrunk. */
-export const FORMAT_ROWS_PER_PAGE = 6
-
 /**
- * CONTENT-FORMAT-COMPARISON-001 — the deck's «مقارنة أنواع المحتوى» pages, only where the server named the part and
- * sent it (a snapshot from before the part existed gains nothing).
- *
- * On screen: one page per objective, with its switches and its drill. On paper (`paged`): per objective a charts page
- * (share, comparison, ranking) and the table split into pages of `FORMAT_ROWS_PER_PAGE` rows.
+ * CONTENT-FORMAT-COMPARISON-001 / REPORT-FORMAT-COMPARE-COMPACT-001 — the deck's «مقارنة أنواع المحتوى»: ONE page per report, on
+ * screen and on paper, only where the server named the part and sent it (a snapshot from before the part existed gains nothing).
+ * It was a page per objective and, on paper, a charts page plus table pages per objective — the Owner's «كبيرة جدًا ومكررة».
  */
 export function withFormatComparisonSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
   slides: S[],
-  data: WithReportSections & { content_format_comparison?: { objectives?: Array<{ family: string; formats?: unknown[] }> } | null },
-  paged = false,
+  data: WithReportSections & { audience?: string | null; content_format_comparison?: { objectives?: Array<{ family: string; formats?: unknown[] }>; spend_hidden?: boolean } | null },
+  // Kept for the callers' signature; paper and screen draw the same single page now.
+  _paged = false,
 ): S[] {
   const list = data.report_sections
   const block = data.content_format_comparison
   if (!Array.isArray(list) || !(list as string[]).includes('content_format_comparison') || block == null) return slides
-  for (const objective of block.objectives ?? []) {
-    if (!paged) {
-      slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
-      continue
-    }
-    slides.push({ id: `__formats:${objective.family}`, type: '__formats', order: 9989, visible: true } as S)
-    const rows = objective.formats?.length ?? 0
-    for (let i = 0; i < rows; i += FORMAT_ROWS_PER_PAGE) {
-      slides.push({ id: `__formats_table:${objective.family}:${i}`, type: '__formats_table', order: 9989, visible: true, range: [i, Math.min(i + FORMAT_ROWS_PER_PAGE, rows)] } as S)
-    }
+  // A page only when the strip would draw a figure for THIS reader (a client's copy has no cost to show) — never a title alone.
+  const hidesMoney = isClientAudience(data.audience ?? undefined) || block.spend_hidden === true
+  if (stripHasFigures(block as FormatComparisonPayload, hidesMoney)) {
+    slides.push({ id: '__formats', type: '__formats', order: 9989, visible: true } as S)
   }
 
   return slides

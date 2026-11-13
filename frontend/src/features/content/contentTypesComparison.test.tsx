@@ -3,7 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { barMetrics, ContentTypesComparison, rankedFormats } from './ContentTypesComparison'
 import type { FormatComparisonObjective, FormatComparisonPayload, FormatComparisonRow } from './api'
-import { FORMAT_ROWS_PER_PAGE, withFormatComparisonSlides } from '@/features/reports/reportSections'
+import { withFormatComparisonSlides } from '@/features/reports/reportSections'
 import { FormatComparisonReportBlock, FormatComparisonSlide } from '@/features/reports/FormatComparisonBlocks'
 
 /**
@@ -147,34 +147,64 @@ describe('the content type comparison', () => {
   })
 })
 
-describe('the report part', () => {
+describe('the report part (REPORT-FORMAT-COMPARE-COMPACT-001)', () => {
   interface Page { id: string; type: string; order: number; visible: boolean; range?: [number, number] }
   const many = Array.from({ length: 8 }, (_, i) => row(['image', 'video', 'carousel', 'collection', 'catalog', 'unclassified', 'image', 'video'][i]))
+  const traffic = (formats: FormatComparisonRow[]) => sales(formats, { family: 'traffic', label: { ar: 'الزيارات', en: 'Traffic' }, result_metric: 'clicks', cost_metric: 'cpc', winner: null, winner_refusal: 'fewer_than_two_comparable_formats' })
 
-  it('adds pages only where the server named the part, and splits the printed table into fixed pages', () => {
-    const data = { report_sections: ['kpis', 'content_format_comparison'], content_format_comparison: payload([sales(many)]) }
+  it('adds ONE page per report — on screen and on paper, whatever the objectives and rows — only where the server named the part', () => {
+    const data = { report_sections: ['kpis', 'content_format_comparison'], content_format_comparison: payload([sales(many), traffic(many)]) }
 
     expect(withFormatComparisonSlides<Page>([], { ...data, report_sections: ['kpis'] })).toEqual([])
     expect(withFormatComparisonSlides<Page>([], { ...data, report_sections: undefined })).toEqual([])
     expect(withFormatComparisonSlides<Page>([], data).map((s) => s.type)).toEqual(['__formats'])
-    const printed = withFormatComparisonSlides<Page>([], data, true)
-    expect(printed.map((s) => s.type)).toEqual(['__formats', '__formats_table', '__formats_table'])
-    expect(printed[1].range).toEqual([0, FORMAT_ROWS_PER_PAGE])
-    expect(printed[2].range).toEqual([FORMAT_ROWS_PER_PAGE, 8])
+    expect(withFormatComparisonSlides<Page>([], data, true).map((s) => s.type)).toEqual(['__formats'])
+    expect(withFormatComparisonSlides<Page>([], { ...data, content_format_comparison: payload([sales([])]) })).toEqual([])
   })
 
-  it('draws a client’s printed page and live block without a money column', () => {
-    const data = { audience: 'client', report_sections: ['content_format_comparison'], content_format_comparison: payload([sales(formats)], { spend_hidden: true }) }
-    const page = renderWithProviders(<FormatComparisonSlide slide={{ id: '__formats_table:sales:0', type: '__formats_table', range: [0, 6] }} data={data} paged />, { locale: 'ar' })
-    expect(screen.getByTestId('slide-format-table')).toBeInTheDocument()
-    expect(within(screen.getByTestId('format-table')).queryByText('الإنفاق')).toBeNull()
-    expect(within(screen.getByTestId('format-table')).queryByText('التكلفة')).toBeNull()
-    page.unmount()
+  it('draws small parallel cards with only the figures that exist: no zero, no «—», no money for a client', () => {
+    const zeroCarousel = row('carousel', { results: 0, conversion_rate: 0, share_of_results: 0, ctr: 0.01, roas: null })
+    const empty = row('collection', { results: null, cost_per_result: null, ctr: null, conversion_rate: null, roas: null })
+    const data = { audience: 'client', report_sections: ['content_format_comparison'], content_format_comparison: payload([sales([row('video'), row('image'), zeroCarousel, empty])], { spend_hidden: true }) }
+    renderWithProviders(<FormatComparisonSlide data={data} />, { locale: 'ar' })
 
-    const hidden = renderWithProviders(<FormatComparisonReportBlock payload={{ ...data, report_sections: ['kpis'] }} ar />, { locale: 'ar' })
-    expect(screen.queryByTestId('report-format-comparison')).toBeNull()
-    hidden.unmount()
+    const strip = screen.getByTestId('report-format-strip')
+    expect(within(strip).getByTestId('format-strip-card-video')).toBeInTheDocument()
+    expect(within(strip).queryByTestId('format-strip-card-collection')).toBeNull()
+    const carousel = within(strip).getByTestId('format-strip-card-carousel')
+    expect(within(carousel).queryByTestId('format-strip-cell-results')).toBeNull()
+    expect(within(carousel).queryByTestId('format-strip-cell-conversion_rate')).toBeNull()
+    expect(within(carousel).getByTestId('format-strip-cell-ctr')).toBeInTheDocument()
+    expect(strip.textContent).not.toMatch(/—|تكلفة النتيجة|الإنفاق|العائد/)
+    expect(within(strip).getByTestId('format-strip-winner')).toHaveTextContent('الأنسب للهدف')
+    // ROAS was answered by no format: no line for it on any card.
+    expect(within(strip).queryAllByTestId('format-strip-cell-roas')).toHaveLength(0)
+  })
+
+  it('an internal reader sees the cost of a result; several objectives share ONE block, a labelled row each', () => {
+    const data = { audience: 'internal', report_sections: ['content_format_comparison'], content_format_comparison: payload([sales(formats), traffic(formats)]) }
+    renderWithProviders(<FormatComparisonReportBlock payload={data} ar={false} />, { locale: 'en' })
+
+    expect(screen.getAllByTestId('report-format-strip')).toHaveLength(1)
+    expect(screen.getByTestId('format-strip-objective-sales')).toHaveTextContent('Sales')
+    expect(screen.getByTestId('format-strip-objective-traffic')).toHaveTextContent('Traffic')
+    expect(within(screen.getByTestId('format-strip-objective-sales')).getAllByTestId('format-strip-cell-cost_per_result').length).toBeGreaterThan(0)
+  })
+
+  it('adds no page — not even a title — when the reader has no figure to read (a client copy answered only in cost)', () => {
+    const onlyCost = sales([row('video', { results: null, ctr: null, conversion_rate: null, roas: null }), row('image', { results: 0, ctr: 0, conversion_rate: 0, roas: null })])
+    const client = { audience: 'client', report_sections: ['content_format_comparison'], content_format_comparison: payload([onlyCost], { spend_hidden: true }) }
+    expect(withFormatComparisonSlides<Page>([], client)).toEqual([])
+    const page = renderWithProviders(<FormatComparisonSlide data={client} />, { locale: 'ar' })
+    expect(screen.queryByTestId('slide-format-comparison')).toBeNull()
+    page.unmount()
+    // The same copy for an internal reader has the cost to show: one page.
+    expect(withFormatComparisonSlides<Page>([], { ...client, audience: 'internal', content_format_comparison: payload([onlyCost]) })).toHaveLength(1)
+  })
+
+  it('draws nothing where the server did not name the part', () => {
+    const data = { audience: 'client', report_sections: ['kpis'], content_format_comparison: payload([sales(formats)]) }
     renderWithProviders(<FormatComparisonReportBlock payload={data} ar />, { locale: 'ar' })
-    expect(screen.getByTestId('report-format-comparison')).toBeInTheDocument()
+    expect(screen.queryByTestId('report-format-comparison')).toBeNull()
   })
 })

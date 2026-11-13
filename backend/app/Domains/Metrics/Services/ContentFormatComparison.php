@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Support\CreativeKind;
 use App\Domains\Reports\Services\CreativeRankingService;
 use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\ReportObjectives;
 use Illuminate\Support\Carbon;
 
 /**
@@ -144,6 +145,53 @@ final class ContentFormatComparison
         }
 
         return HiddenMoney::redact($block, $hideSpend, $hideRevenue);
+    }
+
+    /** REPORT-FORMAT-COMPARE-COMPACT-001 — a report objective (template) → the objective family its results are counted in. */
+    public const TEMPLATE_FAMILY = [
+        'sales' => 'sales',
+        'awareness' => 'awareness',
+        'traffic' => 'traffic',
+        'engagement' => 'engagement',
+        'video' => 'video',
+        'leads' => 'leads',
+        'app_installs' => 'app',
+    ];
+
+    /**
+     * REPORT-FORMAT-COMPARE-COMPACT-001 (Owner 2026-11-13: «المقارنة بين أنواع المحتوى كبيرة جدًا ومكررة حسب كل هدف، وتظهر هوامش
+     * وأصفار لأن هدف العميل مثلًا مبيعات») — a REPORT's comparison speaks of the report's own objective(s) only.
+     *
+     * A report measured against sales does not compare formats on awareness or traffic results: those families' cells are the
+     * figures of an objective nobody asked this report about (empty, or a zero), and each one was a page of its own. The report's
+     * objectives choose which families stay; a report with no objective keeps every family. Nothing about the creatives is hidden
+     * by this — the content section lists them all — it only decides which results a format is compared on. A family with no
+     * format is dropped; where no family matches the report's objective every family with formats stays; a comparison with no
+     * family at all is null: no data, no section.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $templates  {@see ReportObjectives::of()}
+     * @return array<string, mixed>|null
+     */
+    public static function forReportObjectives(array $block, array $templates): ?array
+    {
+        $families = array_values(array_unique(array_filter(array_map(static fn (string $t): ?string => self::TEMPLATE_FAMILY[$t] ?? null, $templates))));
+        $withFormats = array_values(array_filter((array) ($block['objectives'] ?? []), static fn ($o): bool => is_array($o) && (array) ($o['formats'] ?? []) !== []));
+        $objectives = array_values(array_filter($withFormats, static fn (array $o): bool => $families === [] || in_array($o['family'] ?? null, $families, true)));
+        /*
+         * No family of the report's objective in scope: the comparison keeps what the content WAS bought for rather than vanish.
+         * A saved report carries its inferred lens in the same column as a chosen one, and an inferred lens that names no family
+         * of the creatives in scope must not take a true comparison away (objectives choose KPIs, they never hide content).
+         */
+        if ($objectives === []) {
+            $objectives = $withFormats;
+        }
+        if ($objectives === []) {
+            return null;
+        }
+        $block['objectives'] = $objectives;
+
+        return $block;
     }
 
     /**

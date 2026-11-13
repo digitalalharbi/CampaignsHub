@@ -5,7 +5,7 @@ import { API_HEADERS, AUTH, csrfHeaders, seededProject, selectProject } from './
  * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» on the three surfaces that draw it, against the DEMO creatives
  * (`DemoCreativesSeeder`, `DemoCreativeAnalysisSeeder` — labelled demo). No live provider is involved.
  *
- * What only a browser can say: the big format cards, the switches and the drill reach the rendered page; the client's
+ * What only a browser can say: the Analytics tab's big format cards, the switches and the drill reach the rendered page; the client's
  * live link draws the part in its «المحتوى» tab without a spend figure; and a regenerated saved report carries it.
  */
 const STORE_PROJECT = 'متجر تجريبي — Demo'
@@ -48,9 +48,11 @@ test.describe('content format comparison', () => {
 
     const block = page.getByTestId('report-format-comparison')
     await expect(block).toBeVisible({ timeout: 30000 })
-    await expect(block.getByTestId('format-cards')).toBeVisible()
-    await expect(block).not.toContainText(/الإنفاق|Spend|تكلفة النتيجة|Cost\/result/)
-    await expect(block.getByTestId('format-share')).toHaveCount(0)
+    // REPORT-FORMAT-COMPARE-COMPACT-001 — one compact strip of small parallel cards, no charts or tables, no «—» filler.
+    await expect(block.getByTestId('report-format-strip')).toHaveCount(1)
+    expect(await block.locator('[data-testid^="format-strip-card-"]').count()).toBeGreaterThan(1)
+    await expect(block).not.toContainText(/الإنفاق|Spend|تكلفة النتيجة|Cost\/result|—/)
+    await expect(block.getByTestId('format-cards')).toHaveCount(0)
   })
 
   test('a regenerated saved report carries the comparison page', async ({ page, request }) => {
@@ -90,8 +92,10 @@ test.describe('content format comparison', () => {
     await page.goto(`/r/${raw}`)
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
     await page.getByRole('button', { name: 'صفحة', exact: true }).click()
-    const slide = page.getByTestId('slide-format-comparison').first()
-    await expect(slide).toBeVisible({ timeout: 30000 })
-    await expect(slide.getByTestId('format-cards')).toBeVisible()
+    const slide = page.getByTestId('slide-format-comparison')
+    await expect(slide.first()).toBeVisible({ timeout: 30000 })
+    // ONE page per report, whatever the objectives (REPORT-FORMAT-COMPARE-COMPACT-001).
+    await expect(slide).toHaveCount(1)
+    await expect(slide.getByTestId('report-format-strip')).toBeVisible()
   })
 })
