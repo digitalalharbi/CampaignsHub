@@ -522,6 +522,8 @@ final class ProviderCatalogue
             capabilities: new ProviderCapabilities(
                 resourceType: ResourceType::AdAccount,
                 accountType: 'ad_account',
+                // X-LINKEDIN-CONTENT-001 — stats per promoted tweet, summed per tweet (the creative).
+                creativeInsights: true,
             ),
         );
     }
@@ -571,6 +573,8 @@ final class ProviderCatalogue
                 resourceType: ResourceType::AdAccount,
                 accountType: 'ad_account',
                 tokenExpiry: true,
+                // X-LINKEDIN-CONTENT-001 — adAnalytics `pivot=CREATIVE`, same r_ads_reporting grant.
+                creativeInsights: true,
                 periodReach: true,
             ),
         );

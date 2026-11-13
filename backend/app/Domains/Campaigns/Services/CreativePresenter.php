@@ -625,6 +625,10 @@ final class CreativePresenter
      */
     private function storedReasonNote(ExternalCreative $creative): ?array
     {
+        if (strtolower((string) $creative->provider) === 'linkedin') {
+            return $this->linkedinReasonNote((string) (((array) ($creative->raw ?? []))['media_reason'] ?? ''));
+        }
+
         if (strtolower((string) $creative->provider) !== 'tiktok') {
             return null;
         }
@@ -645,6 +649,35 @@ final class CreativePresenter
             'spark_identity_unknown' => [
                 'note_ar' => 'إعلان Spark: لم ترسل TikTok هوية الحساب الناشر للمنشور، فلا يمكن طلب غلافه.',
                 'note_en' => 'A Spark ad: TikTok did not name the identity that owns the post, so its cover cannot be requested.',
+            ],
+            default => null,
+        };
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — why a LinkedIn sponsored post draws nothing, in the connector's stored word. The two
+     * permissions are named exactly, because granting them is the Owner's step on the LinkedIn developer app.
+     *
+     * @return array{note_ar: string, note_en: string}|null
+     */
+    private function linkedinReasonNote(string $reason): ?array
+    {
+        return match ($reason) {
+            'linkedin_post_scope_missing' => [
+                'note_ar' => 'منشور ممول في لينكدإن: قراءة نصه وصورته تحتاج صلاحية r_organization_social على تطبيق لينكدإن.',
+                'note_en' => 'A LinkedIn sponsored post: reading its text and picture needs the r_organization_social permission on the LinkedIn app.',
+            ],
+            'linkedin_media_scope_missing' => [
+                'note_ar' => 'منشور ممول في لينكدإن: قراءة ملف الصورة أو الفيديو تحتاج صلاحية rw_ads على تطبيق لينكدإن.',
+                'note_en' => 'A LinkedIn sponsored post: reading its image or video file needs the rw_ads permission on the LinkedIn app.',
+            ],
+            'linkedin_post_unreadable', 'linkedin_media_unreadable' => [
+                'note_ar' => 'منشور ممول في لينكدإن: لم ترجع لينكدإن المنشور أو ملفه في آخر تحديث.',
+                'note_en' => 'A LinkedIn sponsored post: LinkedIn did not return the post or its file on the last refresh.',
+            ],
+            'linkedin_no_post_reference' => [
+                'note_ar' => 'إعلان لينكدإن لا يشير إلى منشور، فلا صورة له.',
+                'note_en' => 'This LinkedIn ad names no post, so it has no picture.',
             ],
             default => null,
         };
