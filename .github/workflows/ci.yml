@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # `labeled`: the Lander adds `full-gate` to the PR it is about to land, which starts the full three-browser run.
+    types: [opened, synchronize, reopened, labeled]
   # GitHub's own merge queue (a repository-ruleset option) builds each queued PR on this event, with no
   # token of ours involved. Inert until the ruleset enables it; see docs/MERGE_QUEUE.md.
   merge_group:
@@ -24,6 +26,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # CI-TIER-001 — the cheap run for every PR, the full three-browser gate for the PR that is about to land.
+  #
+  # Every open PR used to start all 24 jobs; GitHub's free plan runs 20 at once, so a run sat queued 35-45 minutes
+  # behind other PRs' runs (measured 2026-11-13: shards started +35..+45 min after the run did, then ran 16 minutes).
+  # A PR now runs backend + frontend + image + chromium (11 jobs, under the cap). `full` is true for a dispatch, a
+  # merge_group, or a PR labelled `full-gate` — which the Lander does to the one PR it is landing, so the run it waits
+  # on is the whole gate. Firefox and WebKit are SKIPPED otherwise, never green, so nothing is landed on a gate that
+  # did not run: `waitpr.sh` requires `gate (firefox)` and `gate (webkit)` to be SUCCESS, and a skipped one is not.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      full: ${{ steps.p.outputs.full }}
+    steps:
+      - id: p
+        env:
+          EVENT: ${{ github.event_name }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'full-gate') }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ "$LABELLED" = true ]; then echo full=true >> "$GITHUB_OUTPUT"; else echo full=false >> "$GITHUB_OUTPUT"; fi
+
   # CI-SPEED-001 — the backend check, as three kinds of job behind ONE name.
   #
   # `backend` used to be one job: autopilot + pint + larastan, then `php artisan test` over ~8,000 tests in one process
@@ -278,6 +301,8 @@ jobs:
       weights: '262:347:281:226'
   gate-firefox-shards:
     name: gate shards (firefox)
+    needs: plan
+    if: ${{ needs.plan.outputs.full == 'true' }}
     uses: ./.github/workflows/gate-shards.yml
     with:
       browser: firefox
@@ -286,6 +311,8 @@ jobs:
       weights: '259:370:256:223'
   gate-webkit-shards:
     name: gate shards (webkit)
+    needs: plan
+    if: ${{ needs.plan.outputs.full == 'true' }}
     uses: ./.github/workflows/gate-shards.yml
     with:
       browser: webkit
@@ -327,8 +354,8 @@ jobs:
 
   gate-firefox:
     name: gate (firefox)
-    if: ${{ always() }}
-    needs: gate-firefox-shards
+    if: ${{ always() && needs.plan.outputs.full == 'true' }}
+    needs: [plan, gate-firefox-shards]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -359,8 +386,8 @@ jobs:
 
   gate-webkit:
     name: gate (webkit)
-    if: ${{ always() }}
-    needs: gate-webkit-shards
+    if: ${{ always() && needs.plan.outputs.full == 'true' }}
+    needs: [plan, gate-webkit-shards]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
