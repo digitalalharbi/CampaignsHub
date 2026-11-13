@@ -85,11 +85,20 @@ describe('alert rules — edit, pause, remove, recipients', () => {
     fireEvent.click(within(form).getByTestId('alert-rule-rcpt-manager'))
     fireEvent.click(screen.getByTestId('alert-rule-save'))
 
-    await waitFor(() => expect(updateAlertRule).toHaveBeenCalledWith('r1', expect.objectContaining({
-      name: 'تكلفة الطلب', threshold: { pct: 35 }, project_id: 'p1', recipients: { project_manager: true, user_ids: [] },
-    })))
-    expect(vi.mocked(updateAlertRule).mock.calls[0][1]).not.toHaveProperty('type')
+    // Only what changed is sent — the untouched project, channels and severity are not re-sent.
+    await waitFor(() => expect(updateAlertRule).toHaveBeenCalledWith('r1', {
+      name: 'تكلفة الطلب', threshold: { pct: 35 }, recipients: { project_manager: true, user_ids: [] },
+    }))
     await waitFor(() => expect(screen.getByTestId('alert-rule-form')).toHaveTextContent('قاعدة جديدة'))
+  })
+
+  it('keeps the default channels when editing a rule stored without any', async () => {
+    vi.mocked(listAlertRules).mockResolvedValue({ rules: [{ ...RULE, channels: null }], total: 1 })
+    render()
+    fireEvent.click(await screen.findByTestId('alert-rule-edit-r1'))
+    fireEvent.change(within(screen.getByTestId('alert-rule-form')).getByLabelText('اسم القاعدة'), { target: { value: 'اسم جديد' } })
+    fireEvent.click(screen.getByTestId('alert-rule-save'))
+    await waitFor(() => expect(updateAlertRule).toHaveBeenCalledWith('r1', { name: 'اسم جديد' }))
   })
 
   it('pauses from the row switch', async () => {

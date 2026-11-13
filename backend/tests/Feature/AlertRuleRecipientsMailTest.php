@@ -115,6 +115,14 @@ final class AlertRuleRecipientsMailTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_a_rule_for_the_manager_on_a_project_with_none_is_counted_not_silently_dropped(): void
+    {
+        $counts = $this->sweep([$this->item($this->rule(['recipients' => ['project_manager' => true, 'user_ids' => []]]))]);
+
+        Mail::assertNothingSent();
+        $this->assertSame(1, $counts['no_named_recipient']);
+    }
+
     public function test_one_person_gets_one_bundle_for_default_and_named_alerts_in_the_same_sweep(): void
     {
         $named = $this->rule(['recipients' => ['project_manager' => false, 'user_ids' => [(int) $this->defaultReader->id]]]);

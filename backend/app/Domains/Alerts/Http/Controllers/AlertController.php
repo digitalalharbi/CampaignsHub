@@ -245,6 +245,12 @@ final class AlertController extends Controller
             $rules['type'] = ['prohibited'];
             $rules['name'] = ['sometimes', 'string', 'min:2', 'max:120'];
             $rules['project_id'] = ['sometimes', ...$rules['project_id']];
+            // Columns that are NOT NULL: on edit they are optional, never null (create fills them with defaults).
+            foreach (['cooldown_minutes', 'create_task', 'severity', 'active'] as $key) {
+                $rules[$key] = ['sometimes', ...array_values(array_filter($rules[$key], static fn ($r): bool => $r !== 'nullable'))];
+            }
+            // An edit that sends channels sends at least one; an empty list would silence the rule.
+            $rules['channels'] = ['sometimes', 'array', 'min:1'];
         }
 
         return $rules;

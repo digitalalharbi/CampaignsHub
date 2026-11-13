@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -83,11 +84,13 @@ final class DigestScope
      */
     public function ceilingIdsFor(User $user, string $tenantId): array
     {
+        // The internal membership: a person who also holds a client-portal login is judged by their staff reach.
         $membership = Membership::query()
             ->with('scopes')
             ->where('tenant_id', $tenantId)
             ->where('user_id', $user->getKey())
             ->where('status', 'active')
+            ->whereIn('portal', [Portal::App->value, Portal::Agency->value])
             ->first();
 
         return $membership === null ? [] : $this->ceilingFor($user, $membership, $tenantId);

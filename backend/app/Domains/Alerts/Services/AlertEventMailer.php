@@ -83,6 +83,7 @@ final class AlertEventMailer
         $namedItems = []; // userId => list of items
         $namedUsers = [];
         $rules = [];
+        $resolved = []; // one membership check per (rule, project) per sweep, not per item
         foreach ($items as $item) {
             $ruleId = (string) ($item['rule_id'] ?? '');
             $rule = $ruleId === '' ? null : ($rules[$ruleId] ??= AlertRule::query()->withoutGlobalScopes()->where('tenant_id', $tenantId)->find($ruleId));
@@ -91,9 +92,16 @@ final class AlertEventMailer
 
                 continue;
             }
-            $named = $rule === null ? null : $this->recipients->resolve($rule, isset($item['project_id']) ? (string) $item['project_id'] : null);
+            $projectId = isset($item['project_id']) ? (string) $item['project_id'] : null;
+            $named = $rule === null ? null : ($resolved[$ruleId.'|'.$projectId] ??= [$this->recipients->resolve($rule, $projectId)])[0];
             if ($named === null) {
                 $defaultItems[] = $item;
+
+                continue;
+            }
+            if ($named === []) {
+                // The rule names only the project's manager and there is none, or everybody named lost access: said, not dropped.
+                $counts['no_named_recipient'] = ($counts['no_named_recipient'] ?? 0) + 1;
 
                 continue;
             }
