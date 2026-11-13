@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -141,8 +142,43 @@ final class AlertVisual
         return array_merge($item, [
             'chip' => self::chip($severity, $ar),
             'viz' => $viz,
+            // ALERT-VISUAL-EVERY-CARD-001 — the ring's timeline when the card has no figure to draw: opened → now / resolved.
+            'timeline' => self::timeline($item, $ctx, $ar),
             'line' => self::line((string) ($item['detail'] ?? '')),
             'steps' => self::steps((string) ($item['action'] ?? '')),
         ]);
+    }
+
+    /**
+     * ALERT-VISUAL-EVERY-CARD-001 — the two ends of a card's timeline, dated: when it opened (the alert's window, or its first
+     * trigger) and when it ended (resolved) or «today». Null when the card carries no date at all.
+     *
+     * @param  array<string,mixed>  $item
+     * @param  array<string,mixed>  $ctx
+     * @return array{from: string, to: string}|null
+     */
+    public static function timeline(array $item, array $ctx, bool $ar): ?array
+    {
+        $date = static function (mixed $v): ?string {
+            if (! is_string($v) || $v === '') {
+                return null;
+            }
+            try {
+                return Carbon::parse(str_replace('recovered:', '', $v))->setTimezone('Asia/Riyadh')->toDateString();
+            } catch (\Throwable) {
+                return null;
+            }
+        };
+        $opened = $date($ctx['opened_at'] ?? null) ?? $date($ctx['window_from'] ?? null) ?? $date($ctx['last_day'] ?? null);
+        $resolved = $date($ctx['recovered_at'] ?? null);
+        $now = $date((string) ($item['triggered_at'] ?? '')) ?? Carbon::now('Asia/Riyadh')->toDateString();
+        if ($opened === null && $resolved === null) {
+            return null;
+        }
+
+        return [
+            'from' => ($ar ? 'بدأ ' : 'Opened ').AlertEventText::ltr($opened ?? $now),
+            'to' => $resolved !== null ? ($ar ? 'انحلّ ' : 'Resolved ').AlertEventText::ltr($resolved) : ($ar ? 'اليوم ' : 'Today ').AlertEventText::ltr($now),
+        ];
     }
 }
