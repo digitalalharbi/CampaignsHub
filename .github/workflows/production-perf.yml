@@ -51,37 +51,33 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            q() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | "' 2>&1 <<EOF
+            BEGIN READ ONLY;
+            $1
+            ROLLBACK;
+            EOF
+            }
+            # OBJECTIVE-RECLASSIFY-RUN-001 (Owner-approved 2026-11-13). Counts only, no names.
+            # hours=apply-reclassify runs the real reclassification after the dry run; anything else is dry run + recount only.
+            echo "== RECLASSIFY $(date -u +%FT%TZ) mode=${HOURS}"
+            echo "## A. BEFORE: active campaigns (spend or impressions, 7d) with objective other: platform | n"
+            q "select coalesce(m.prov,'(none)'), count(*) from (select dm.unified_campaign_id id, string_agg(distinct dm.provider, '+') prov from daily_metrics dm where dm.metric_date>=current_date-7 and dm.unified_campaign_id is not null and coalesce(dm.is_demo,false)=false group by 1 having coalesce(sum(dm.value) filter (where dm.metric_key in ('spend','impressions')),0)>0) m join unified_campaigns uc on uc.id=m.id where uc.deleted_at is null and uc.objective='other' group by 1 order by 1;"
+            echo "## A2. manual objectives: count | fingerprint"
+            q "select count(*), md5(coalesce(string_agg(id::text||':'||objective, ',' order by id),'')) from unified_campaigns where objective_source='manual';"
+            echo "## B. DRY RUN"
+            $DC exec -T backend php artisan objectives:reclassify --dry-run 2>&1
+            if [ "${HOURS}" = "apply-reclassify" ]; then
+              echo "## C. RUN"
+              $DC exec -T backend php artisan objectives:reclassify 2>&1
+            else
+              echo "## C. RUN skipped (dry run only)"
             fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            echo "## D. AFTER: active campaigns with objective other: platform | n"
+            q "select coalesce(m.prov,'(none)'), count(*) from (select dm.unified_campaign_id id, string_agg(distinct dm.provider, '+') prov from daily_metrics dm where dm.metric_date>=current_date-7 and dm.unified_campaign_id is not null and coalesce(dm.is_demo,false)=false group by 1 having coalesce(sum(dm.value) filter (where dm.metric_key in ('spend','impressions')),0)>0) m join unified_campaigns uc on uc.id=m.id where uc.deleted_at is null and uc.objective='other' group by 1 order by 1;"
+            echo "## D2. manual objectives after: count | fingerprint (must equal A2)"
+            q "select count(*), md5(coalesce(string_agg(id::text||':'||objective, ',' order by id),'')) from unified_campaigns where objective_source='manual';"
+            echo "== END RECLASSIFY"
+            exit 0
