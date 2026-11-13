@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\TikTokCampaignStatus;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -374,10 +375,30 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 continue;
             }
 
+            // TIKTOK-CAMPAIGN-STATUS-001 — TikTok's own values, mapped; one it has not documented is logged by name, never guessed.
+            $state = TikTokCampaignStatus::resolve(
+                isset($c['operation_status']) ? (string) $c['operation_status'] : null,
+                isset($c['secondary_status']) ? (string) $c['secondary_status'] : null,
+            );
+            if ($state['unmapped'] !== null) {
+                Log::warning('TikTok campaign status not documented; kept as unknown where nothing else decides it', [
+                    'advertiser_id' => $adAccountId, 'campaign_id' => (string) $c['campaign_id'], 'unmapped' => $state['unmapped'], 'status' => $state['status'],
+                ]);
+            }
+
+            if ($state['signal'] === 'account_suspended') {
+                // Not a pause somebody chose: TikTok suspended the advertiser account. Named, so it is never read as a quiet «paused».
+                Log::warning('TikTok advertiser account suspended (ADVERTISER_ACCOUNT_PUNISH); its campaigns are not delivering', [
+                    'advertiser_id' => $adAccountId, 'campaign_id' => (string) $c['campaign_id'],
+                ]);
+            }
+
             $campaigns[] = [
                 'external_id' => (string) $c['campaign_id'],
                 'name' => (string) ($c['campaign_name'] ?? $c['campaign_id']),
-                'status' => strtolower((string) ($c['operation_status'] ?? 'unknown')),
+                'status' => $state['status'],
+                // Kept with the row (it lands in `external_campaigns.raw`): budget_exhausted / account_suspended, else null.
+                'delivery_signal' => $state['signal'],
                 'objective' => isset($c['objective_type']) ? (string) $c['objective_type'] : null,
                 'daily_budget' => ($c['budget_mode'] ?? null) === 'BUDGET_MODE_DAY' && isset($c['budget'])
                     ? (float) $c['budget']
