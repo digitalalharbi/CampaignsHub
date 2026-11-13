@@ -49,6 +49,12 @@ final class CampaignStatusFollowsPlatformTest extends TestCase
         $this->project = Project::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $workspace->id, 'name' => 'P', 'status' => 'active']);
     }
 
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
     private function account(string $provider): ExternalAccount
     {
         $credential = new IntegrationCredential(['tenant_id' => $this->tenant->id, 'provider' => $provider, 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
@@ -156,6 +162,14 @@ final class CampaignStatusFollowsPlatformTest extends TestCase
         $this->assertSame('active', TikTokCampaignStatus::resolve('ENABLE', 'CAMPAIGN_STATUS_BUDGET_EXCEED')['status']);
         $this->assertSame('budget_exhausted', TikTokCampaignStatus::resolve('ENABLE', 'CAMPAIGN_STATUS_BUDGET_EXCEED')['signal']);
 
+        /*
+         * ALERT-DELIVERING-YESTERDAY-001 judges «yesterday» on the client's clock (Asia/Riyadh). The spend was written on the
+         * SERVER's yesterday, which from 21:00 UTC is the client's day before yesterday — so after 21:00 UTC the campaign had
+         * not delivered «yesterday» and no alert was raised (main went red at 21:18 UTC). The clock is pinned inside that
+         * window, and the spend is written on the client's yesterday.
+         */
+        Carbon::setTestNow(Carbon::parse('2026-11-13 21:30:00', 'UTC'));
+
         $tiktok = $this->account('tiktok');
         $this->import($tiktok, [['id' => 't1', 'name' => 'TT', 'status' => TikTokCampaignStatus::resolve('ENABLE', 'CAMPAIGN_STATUS_ENABLE')['status'], 'objective' => 'WEB_CONVERSIONS']]);
         $campaign = $this->unifiedOf('t1');
@@ -165,7 +179,7 @@ final class CampaignStatusFollowsPlatformTest extends TestCase
                 'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
                 'external_account_id' => $tiktok->id, 'external_campaign_id' => ExternalCampaign::withoutGlobalScopes()->where('external_id', 't1')->value('id'),
                 'unified_campaign_id' => $campaign->id, 'provider' => 'tiktok', 'metric_key' => $key,
-                'metric_date' => Carbon::now()->subDay()->toDateString(), 'value' => $value, 'project_currency' => 'SAR',
+                'metric_date' => Carbon::now('Asia/Riyadh')->subDay()->toDateString(), 'value' => $value, 'project_currency' => 'SAR',
                 'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
             ]);
         }

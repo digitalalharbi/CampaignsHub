@@ -35,7 +35,7 @@ jobs:
       browser: webkit
       shards: '[1,2,3,4,5]'
       total: 5
-      weights: '207:257:249:213:182'
+      weights: '215:224:278:206:195'
 
   gate-firefox-shards:
     name: gate shards (firefox)
@@ -45,7 +45,7 @@ jobs:
       browser: firefox
       shards: '[1,2,3,4,5]'
       total: 5
-      weights: '207:274:250:198:179'
+      weights: '236:257:285:166:189'
   # CI-TIER-001 — the cheap run for every PR, the full three-browser gate for the PR that is about to land.
   #
   # Every open PR used to start all 24 jobs; GitHub's free plan runs 20 at once, so a run sat queued 35-45 minutes
@@ -57,7 +57,8 @@ jobs:
   #
   # CI-TIER-002 — shard counts: backend 5, firefox 5, webkit 5 (was 4 each), so the slowest shard (webkit 19.4 min
   # measured on #1054) drops to about 15; firefox and webkit weights are the measured 4-way weights re-cut at equal
-  # time. The long jobs are defined first and carry no `needs`, so the runner queue starts them at t=0.
+  # time. CI-TIER-003: re-cut once more from the measured shard times of #1055 (webkit 15.5/20.9/13.8/17.5/14.8, firefox
+  # 10.6/14.6/10.6/17.9/12.0 minutes), damped by 0.6 for the fixed per-shard setup. The long jobs are defined first and carry no `needs`, so the runner queue starts them at t=0.
   # CI-SPEED-001 — the backend check, as three kinds of job behind ONE name.
   #
   # `backend` used to be one job: autopilot + pint + larastan, then `php artisan test` over ~8,000 tests in one process
