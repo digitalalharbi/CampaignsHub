@@ -50,10 +50,10 @@ jobs:
             SQL
             echo "== MOYASAR-SETTLEMENTS-PROBE (GET only)"
             $DC exec -T backend php -r '
-            $k = getenv("MOYASAR_SECRET_KEY");
-            if (!$k) { $c = @include "/var/www/html/bootstrap/cache/config.php"; $k = $c["services"]["moyasar"]["secret_key"] ?? null; }
+            $k = getenv("MOYASAR_SECRET_KEY"); $src = $k ? "container_env" : "none";
+            if (!$k) { $src = "cached_config"; $c = @include "/var/www/html/bootstrap/cache/config.php"; $k = $c["services"]["moyasar"]["secret_key"] ?? null; }
             if (!$k) { echo "no_secret_key_configured\n"; exit(0); }
-            echo "key_mode=", (strpos($k,"sk_live_")===0?"live":(strpos($k,"sk_test_")===0?"test":"unknown")), "\n";
+            echo "key_source=$src key_len=", strlen($k), " "; echo "key_mode=", (strpos($k,"sk_live_")===0?"live":(strpos($k,"sk_test_")===0?"test":"unknown")), "\n";
             $ch = curl_init("https://api.moyasar.com/v1/settlements?page=1");
             curl_setopt_array($ch, [CURLOPT_USERPWD => $k.":", CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPGET => true]);
             $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch);
@@ -64,6 +64,8 @@ jobs:
               if (isset($j["settlements"]) && is_array($j["settlements"])) { echo "settlements_on_page=", count($j["settlements"]), "\n"; if ($j["settlements"]) echo "settlement_fields=", implode(",", array_keys($j["settlements"][0])), "\n"; }
               if (isset($j["meta"])) echo "meta=", json_encode($j["meta"]), "\n";
               if (isset($j["type"])) echo "error_type=", $j["type"], "\n";
+              if (isset($j["message"])) echo "error_message=", substr((string)$j["message"],0,200), "\n";
+              if (isset($j["errors"])) echo "errors=", substr(json_encode($j["errors"]),0,200), "\n";
             } else { echo "non_json_body_len=", strlen((string)$body), "\n"; }
             ' 2>&1
             echo "== END FACTS-STOPPED"
