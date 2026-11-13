@@ -59,11 +59,11 @@ final class AlertCostPerIncreaseTest extends TestCase
         parent::tearDown();
     }
 
-    private function campaign(): UnifiedCampaign
+    private function campaign(string $objective = 'conversions'): UnifiedCampaign
     {
         return UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'name' => 'Camp '.uniqid(), 'objective' => 'conversions', 'status' => 'active',
+            'name' => 'Camp '.uniqid(), 'objective' => $objective, 'status' => 'active',
             'total_budget' => 0, 'budget_currency' => 'SAR',
         ]);
     }
@@ -187,7 +187,8 @@ final class AlertCostPerIncreaseTest extends TestCase
 
     public function test_cpl_increase_is_evaluated_on_leads_not_conversions(): void
     {
-        $c = $this->campaign();
+        // ALERT-CRITERIA-001 — cost per lead is judged on a leads campaign.
+        $c = $this->campaign('leads');
         $this->converted($c, 'spend', 100, 10);
         $this->converted($c, 'leads', 20, 10);         // CPL 5
         $this->converted($c, 'spend', 200, 1);

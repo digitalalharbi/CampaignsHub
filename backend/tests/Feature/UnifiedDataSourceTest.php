@@ -413,7 +413,8 @@ final class UnifiedDataSourceTest extends TestCase
         app(UpsertDailyMetrics::class)->handle([
             $this->metric($date, 'spend', $spend),
             $this->metric($date, 'revenue', $revenue),
-            $this->metric($date, 'conversions', 0),
+            // ALERT-CRITERIA-001 — a ROAS comparison needs a previous window with enough orders to compare against.
+            $this->metric($date, 'conversions', 10),
         ]);
 
         app(TenantContext::class)->forget();
