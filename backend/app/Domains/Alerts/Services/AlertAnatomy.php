@@ -41,7 +41,7 @@ final class AlertAnatomy
         $priority = self::priority($evidence, $severity);
 
         $say = ['ar' => AlertEventText::plain($type, $context, true), 'en' => AlertEventText::plain($type, $context, false)];
-        $known = isset(self::COMPARED[$type]) || in_array($type, [...self::CONNECTION, 'no_results', 'metric_anomaly', 'budget_risk'], true);
+        $known = isset(self::COMPARED[$type]) || in_array($type, [...self::CONNECTION, 'no_results', 'metric_anomaly', 'budget_risk', 'campaign_stopped', 'not_spending'], true);
         $sufficient = $evidence['sufficient'] === true && $known;
 
         $note = ['ar' => 'بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.', 'en' => 'Insufficient data — no action is recommended until the evidence is complete.'];
@@ -130,6 +130,8 @@ final class AlertAnatomy
             isset(self::COMPARED[$type]) => $e['before'] !== null && $e['now'] !== null && $e['before'] > 0 && ($e['window_days'] ?? 0) > 0 && $e['threshold'] !== null,
             $type === 'no_results' => ($e['spend'] ?? 0) > 0 && ($e['window_days'] ?? 0) > 0 && $e['now'] !== null,
             $type === 'metric_anomaly' => $e['metric'] !== null && $e['before'] !== null && $e['now'] !== null,
+            // ALERT-CRITERIA-001 — a notice rests on the platform's status and the stored figures' last delivered day.
+            in_array($type, ['campaign_stopped', 'not_spending'], true) => isset($c['to']) && (($c['last_delivered'] ?? null) !== null || ($c['checks']['setup']['ads'] ?? null) !== null),
             $type === 'budget_risk' => $e['now'] !== null && ($e['limit'] ?? null) !== null && $e['limit'] > 0,
             in_array($type, self::CONNECTION, true) => ($c['provider'] ?? '') !== '' || ($c['last_sync_at'] ?? null) !== null || ($c['expires_at'] ?? null) !== null || ($c['error'] ?? null) !== null,
             default => false,

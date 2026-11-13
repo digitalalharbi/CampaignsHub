@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
 use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
@@ -111,6 +112,12 @@ final class AlertEvaluator
     public const EVENT_DRIVEN = ['report_failed'];
 
     /**
+     * ALERT-CRITERIA-001 — event types that are not rule types: notices the «صرف بدون نتائج» sweep raises about the campaigns it
+     * reads («توقفت أمس», «ما تصرف»). Nobody creates a rule of these types; they live and close under the no_results rule.
+     */
+    public const NOTICES = ['campaign_stopped', 'not_spending'];
+
+    /**
      * Creatable, and raised by nothing at all — ALERT-SLA-UNRAISED-001.
      *
      * `sla_warning` is offered by the picker and accepted by the controller, and no code anywhere
@@ -129,6 +136,9 @@ final class AlertEvaluator
         'cpl_increase' => 'budget_risk',
         'roas_drop' => 'budget_risk',
         'no_results' => 'budget_risk',
+        // ALERT-CRITERIA-001 — the campaign notices raised by the «صرف بدون نتائج» sweep.
+        'campaign_stopped' => 'performance',
+        'not_spending' => 'budget_risk',
         'sync_failure' => 'sync_failed',
         'sync_outage' => 'sync_failed',
         'measurement_outage' => 'sync_failed',
@@ -320,6 +330,12 @@ final class AlertEvaluator
                     || (($this->noResultsState[(string) $rule->id][(string) $event->entity_id]['reason'] ?? null) === CampaignDelivery::DATA_PENDING)) {
                     return;
                 }
+                // ALERT-CRITERIA-001 — a notice («توقفت أمس», «ما تصرف») whose day has passed did not «recover»: it closes silently.
+                if ((string) $event->type !== (string) $rule->type) {
+                    $this->closeQuietly($event, 'notice_over', $now);
+
+                    return;
+                }
                 $quiet = $this->notApplicable($rule, $event);
                 if ($quiet !== null) {
                     $this->closeQuietly($event, $quiet, $now);
@@ -441,7 +457,7 @@ final class AlertEvaluator
         $this->notifications->dispatch([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
-            'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'type' => self::NOTIFICATION_TYPE[(string) $event->type] ?? self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
             'severity' => 'info',
             'title' => 'Recovered: '.$title,
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
@@ -468,7 +484,11 @@ final class AlertEvaluator
 
     private function dedupKey(AlertRule $rule, array $b): string
     {
-        return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '']));
+        // A notice raised under a rule of another type (ALERT-CRITERIA-001: «توقفت أمس», «ما تصرف» under «صرف بدون نتائج») is its own
+        // finding about the same campaign, so it carries its type in the key; the rule's own type keeps the key it always had.
+        $kind = isset($b['type']) && $b['type'] !== $rule->type ? [(string) $b['type']] : [];
+
+        return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '', ...$kind]));
     }
 
     /**
@@ -489,6 +509,10 @@ final class AlertEvaluator
             ->latest('last_triggered_at')->first();
 
         if ($active !== null) {
+            // ALERT-CRITERIA-001 — a notice is said once per episode: while it is open it is neither refreshed nor sent again.
+            if (($b['once'] ?? false) === true) {
+                return false;
+            }
             // Snoozed into the future, or still inside the cooldown window → suppress (no storm).
             if ($active->status === 'snoozed' && $active->snoozed_until !== null && $active->snoozed_until->isFuture()) {
                 return false;
@@ -510,19 +534,26 @@ final class AlertEvaluator
 
         // No active event. If the most recent (possibly resolved) event is still inside cooldown, suppress.
         $recent = AlertEvent::query()->where('dedup_key', $dedupKey)->latest('last_triggered_at')->first();
+        // A notice is said once per EPISODE, even after a quiet close: the episode is the campaign's last delivered day, which does
+        // not move while it stays stopped or keeps spending nothing. It moves only when the campaign delivered again.
+        if (($b['once'] ?? false) === true && $recent !== null
+            && ($recent->context['last_delivered'] ?? '') === ($b['context']['last_delivered'] ?? '')) {
+            return false;
+        }
         if ($recent !== null && $cooldownUntil($recent)->isFuture()) {
             return false;
         }
 
         // Fresh alert.
         $notification = $this->notify($rule, $b);
-        $taskId = $rule->create_task ? $this->openTask($rule, $b) : null;
+        // A notice is information about a campaign, not work: it opens no task even when the rule's own breaches do.
+        $taskId = $rule->create_task && ($b['once'] ?? false) !== true ? $this->openTask($rule, $b) : null;
 
         $event = AlertEvent::create([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'rule_id' => $rule->id,
-            'type' => $rule->type,
+            'type' => ($b['type'] ?? $rule->type),
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
             'dedup_key' => $dedupKey,
@@ -547,7 +578,7 @@ final class AlertEvaluator
      */
     private function anatomy(AlertRule $rule, array $b): array
     {
-        return AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), (string) ($b['severity'] ?? $rule->severity));
+        return AlertAnatomy::build((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []), (string) ($b['severity'] ?? $rule->severity));
     }
 
     /** Raise the notification through the shared dispatcher; returns the notification id (or null if deduped). */
@@ -556,9 +587,9 @@ final class AlertEvaluator
     {
         $this->outbox[] = [
             'event_id' => (string) $event->id,
-            'notification_type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'notification_type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
             // EMAIL-DIGESTS-OPERATIONAL-001 — what the finding is ABOUT, so the mail can say it plainly and link to the exact page.
-            'rule_type' => (string) $rule->type,
+            'rule_type' => (string) ($b['type'] ?? $rule->type),
             'entity_type' => (string) ($b['entity_type'] ?? $event->entity_type ?? ''),
             'entity_id' => (string) ($b['entity_id'] ?? $event->entity_id ?? ''),
             'severity' => $severity,
@@ -572,8 +603,8 @@ final class AlertEvaluator
             // EMAIL-PERF-DASHBOARDS-001 — the rule's own figures travel with the finding, so the email can lead with the number.
             'context' => (array) ($b['context'] ?? []),
             // OPERATIONAL-INTELLIGENCE-P1-001 — priority and whether the evidence is thin, so the mail can say both in one line.
-            'priority' => $event->priority ?? AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), $severity)['priority'],
-            'insufficient' => ($event->evidence['sufficient'] ?? AlertAnatomy::evidence((string) $rule->type, (array) ($b['context'] ?? []))['sufficient']) !== true,
+            'priority' => $event->priority ?? AlertAnatomy::build((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []), $severity)['priority'],
+            'insufficient' => ($event->evidence['sufficient'] ?? AlertAnatomy::evidence((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []))['sufficient']) !== true,
         ];
     }
 
@@ -582,8 +613,9 @@ final class AlertEvaluator
         $n = $this->notifications->dispatch([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
-            'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
-            'severity' => $rule->severity === 'critical' ? 'error' : ($rule->severity === 'info' ? 'info' : 'warning'),
+            'type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
+            // A notice carries its own severity («توقفت أمس» is info); a rule's breach keeps the rule's.
+            'severity' => ($sev = (string) ($b['severity'] ?? $rule->severity)) === 'critical' ? 'error' : ($sev === 'info' ? 'info' : 'warning'),
             'title' => $b['title'],
             'message' => $b['message'],
             // DIGESTS-VISUAL-V2-001 — the bell's Arabic: the rule's own when it wrote one, else the mail's wording of the same finding.
@@ -611,7 +643,7 @@ final class AlertEvaluator
     private function bellArabic(AlertRule $rule, array $b): array
     {
         $c = AlertEventText::compose([
-            'rule_type' => (string) $rule->type, 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
+            'rule_type' => (string) ($b['type'] ?? $rule->type), 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
             'project_id' => $b['project_id'] ?? $rule->project_id, 'project_name' => '', 'entity_type' => '', 'entity_id' => '', 'event_id' => '', 'triggered_at' => '',
         ], true);
 
@@ -628,7 +660,7 @@ final class AlertEvaluator
             'description' => $b['message'],
             'status' => 'todo',
             'priority' => $rule->severity === 'critical' ? 'urgent' : 'high',
-            'meta' => ['source' => 'alert', 'alert_type' => $rule->type],
+            'meta' => ['source' => 'alert', 'alert_type' => ($b['type'] ?? $rule->type)],
         ]);
 
         return (string) $task->id;
@@ -1064,7 +1096,12 @@ final class AlertEvaluator
          * at most `days` windows, never one per campaign.
          */
         $windows = [];
+        $byId = $campaigns->keyBy(static fn (UnifiedCampaign $c): string => (string) $c->getKey());
         foreach ($verdicts as $id => $v) {
+            $notice = $this->notice($byId[$id], $v, $now);
+            if ($notice !== null) {
+                $out[] = $notice;
+            }
             if ($v['reason'] !== null) {
                 // OBJECTIVE-RESULT-001 + ALERT-DELIVERING-YESTERDAY-001 — ended, stopped, or not running yesterday: not a performance problem.
                 $state[$id] = ['reason' => $v['reason'], 'result_key' => null];
@@ -1073,13 +1110,20 @@ final class AlertEvaluator
             }
             $windows[$v['from'].'|'.$v['to']][] = $id;
         }
+        // One currency read for the campaigns judged: when their spend agrees on one currency, every card states it.
+        $judgedIds = array_merge([], ...array_values($windows));
+        $currency = null;
+        if ($judgedIds !== []) {
+            $basis = $this->metrics->acrossProjects()->forCampaigns($judgedIds)->currencyBasis($now->copy()->subDays($days + 1), $now);
+            $currency = $basis['bases'] === 1 ? (string) $basis['currency'] : null;
+        }
         $figures = [];
         foreach ($windows as $key => $ids) {
             [$from, $to] = explode('|', $key);
             $figures += $this->metrics->acrossProjects()->forCampaigns($ids)->figuresByCampaign(Carbon::parse($from), Carbon::parse($to));
         }
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $verdicts, &$out, &$state) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $verdicts, $currency, &$out, &$state) {
             $id = (string) $c->getKey();
             if (! isset($figures[$id])) {
                 return;
@@ -1118,6 +1162,7 @@ final class AlertEvaluator
                     // `days` is the days JUDGED (since it last started delivering), not the rule's ceiling.
                     'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $v['days'], 'from' => $v['from'], 'to' => $v['to'],
                         'active_since' => $v['active_since'], 'campaign_status' => $v['status'], 'checks' => $v['checks'],
+                        'card' => $this->card($c, $v, ['spend' => $spend, 'result' => (float) $result, 'result_key' => (string) $totals['result_key'], 'from' => $v['from'], 'to' => $v['to']], $currency),
                         'result_key' => $totals['result_key'], 'result_family' => $totals['result_family'] ?? null, 'result_label' => $totals['result_label'] ?? null],
                 ];
             }
@@ -1127,20 +1172,140 @@ final class AlertEvaluator
         return $out;
     }
 
+    /** A campaign that delivered within this many days and now spends nothing is «ما تصرف»; an older silence is not news. */
+    private const NOT_SPENDING_RECENT_DAYS = 7;
+
+    /**
+     * ALERT-CRITERIA-001 — the two campaign notices the Owner's rules allow beside the performance verdicts, raised by the
+     * «صرف بدون نتائج» sweep that already holds the proof (OWNER_NOTIFICATIONS_RULES §6, §7أ case 2–3, §10أ check 4):
+     *
+     * - `campaign_stopped` «توقفت أمس» — its platform says it is not running and it last delivered the day before yesterday. Once:
+     *   the next day the condition no longer holds and the notice closes silently.
+     * - `not_spending` «ما تصرف» — running per its platform, yesterday's figures arrived (a successful sync covered the day), it
+     *   spent nothing, and it either delivered in the last {@see NOT_SPENDING_RECENT_DAYS} days or its ads are all rejected / in
+     *   review. The stored setup facts travel with it; what we do not fetch says «غير متاح».
+     *
+     * Both are said once per episode (`once`: an open notice is never refreshed or re-sent) and close silently, never «تعافى».
+     *
+     * @param  array<string, mixed>  $v  the campaign's {@see CampaignDelivery} verdict
+     * @return array<string, mixed>|null
+     */
+    private function notice(UnifiedCampaign $c, array $v, Carbon $now): ?array
+    {
+        $checks = (array) $v['checks'];
+        $last = $checks['last_delivered'] ?? null;
+        $type = null;
+        if ($v['reason'] === CampaignDelivery::INACTIVE && ($checks['stopped_yesterday'] ?? false) === true) {
+            $type = 'campaign_stopped';
+        } elseif ($v['reason'] === CampaignDelivery::NOT_DELIVERING && ($checks['running']['platform'] ?? []) !== []) {
+            // «الربط سليم» needs a linked platform whose sync covered yesterday (CampaignDelivery already withheld it otherwise).
+            $ads = $checks['setup']['ads'] ?? null;
+            $recent = is_string($last) && $last >= Carbon::parse($v['to'])->subDays(self::NOT_SPENDING_RECENT_DAYS)->toDateString();
+            if ($recent || in_array($ads, ['rejected', 'in_review'], true)) {
+                $type = 'not_spending';
+            }
+        }
+        if ($type === null) {
+            return null;
+        }
+        $card = $this->card($c, $v, null);
+
+        return [
+            'type' => $type,
+            'once' => true,
+            'severity' => $type === 'campaign_stopped' ? 'info' : 'warning',
+            'entity_type' => UnifiedCampaign::class,
+            'entity_id' => (string) $c->id,
+            'project_id' => (string) $c->project_id,
+            'title' => $type === 'campaign_stopped' ? 'Stopped yesterday' : 'Not spending',
+            'message' => $c->name.($type === 'campaign_stopped'
+                ? ' stopped: its platform says '.$v['status'].' and it last delivered on '.$last.'.'
+                : ' is running on its platform and spent nothing on '.$v['to'].'.'),
+            'context' => ['last_delivered' => $last, 'to' => $v['to'], 'campaign_status' => $v['status'], 'checks' => $checks, 'card' => $card],
+        ];
+    }
+
+    /**
+     * ALERT-CRITERIA-001 — what every campaign alert states (§10أ): platform, ad account, campaign (and its ad set when it has
+     * one), objective, the result's unit, spend with its currency, the period's dates, and the status with since when.
+     *
+     * @param  array<string, mixed>  $v  the {@see CampaignDelivery} verdict
+     * @param  array{spend?: float, result?: ?float, result_key?: ?string, from?: string, to?: string}|null  $judged
+     * @return array<string, mixed>
+     */
+    private function card(UnifiedCampaign $c, array $v, ?array $judged, ?string $currency = null): array
+    {
+        $facts = $this->delivery()->cardFacts((string) $c->id);
+        $from = $judged['from'] ?? $v['from'] ?? $v['to'];
+        $to = $judged['to'] ?? $v['to'];
+        // The sweep's shared currency when its campaigns agree; otherwise this campaign's own (one read, only for a raised alert).
+        if ($currency === null && isset($judged['spend'])) {
+            $basis = $this->metrics->acrossProjects()->forCampaigns([(string) $c->id])->currencyBasis(Carbon::parse((string) $from), Carbon::parse((string) $to));
+            $currency = $basis['bases'] === 1 ? (string) $basis['currency'] : null;
+        }
+
+        return [
+            'providers' => $facts['providers'],
+            'accounts' => $facts['accounts'],
+            'campaign' => (string) $c->name,
+            'ad_set' => $facts['ad_set'],
+            'objective' => (string) $c->objective,
+            'result_key' => $judged['result_key'] ?? null,
+            'result' => $judged['result'] ?? null,
+            'spend' => $judged['spend'] ?? null,
+            'currency' => isset($judged['spend']) ? $currency : null,
+            'from' => $from,
+            'to' => $to,
+            'status' => (string) $v['status'],
+            'active_since' => $v['active_since'] ?? null,
+            'last_delivered' => $v['checks']['last_delivered'] ?? null,
+        ];
+    }
+
+    /**
+     * ALERT-CRITERIA-001 (§10أ check 6) — which objective family each comparison rule may judge, its default threshold for that
+     * family (a rule's own `threshold.pct` wins), and the smallest previous window a comparison may rest on: a «rise» measured
+     * against three orders is noise. ROAS and cost per order are sales figures; cost per lead is a leads figure. A traffic or
+     * awareness campaign is never told its ROAS fell.
+     *
+     * @var array<string, array{families: list<string>, pct: float, min_previous_results: int, result: string}>
+     */
+    public const COMPARISON_RULES = [
+        'roas_drop' => ['families' => ['sales'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'conversions'],
+        'cpa_increase' => ['families' => ['sales'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'conversions'],
+        'cpl_increase' => ['families' => ['leads'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'leads'],
+    ];
+
+    /** @param  Collection<int, UnifiedCampaign>  $campaigns  @return Collection<int, UnifiedCampaign> */
+    private static function ofFamilies(string $type, Collection $campaigns): Collection
+    {
+        $families = self::COMPARISON_RULES[$type]['families'] ?? null;
+
+        return $families === null ? $campaigns : $campaigns->filter(
+            static fn (UnifiedCampaign $c): bool => in_array(ObjectiveResult::familyOf($c->objective === null ? null : (string) $c->objective)->value, $families, true),
+        )->values();
+    }
+
+    /** The rule's own percentage, else the family default for its type. */
+    private static function pctFor(AlertRule $rule, float $fallback): float
+    {
+        return is_numeric($rule->threshold['pct'] ?? null) ? (float) $rule->threshold['pct'] : (float) (self::COMPARISON_RULES[$rule->type]['pct'] ?? $fallback);
+    }
+
     /** @return list<array<string,mixed>> */
     private function roasDrops(AlertRule $rule, Carbon $now): array
     {
-        $pct = (float) ($rule->threshold['pct'] ?? 25); // % drop vs previous window
+        $pct = self::pctFor($rule, 25); // % drop vs previous window
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
         $curFrom = $now->copy()->subDays($days);
         $prevFrom = $now->copy()->subDays($days * 2);
         $prevTo = $now->copy()->subDays($days + 1);
 
-        // ALERT-DELIVERING-YESTERDAY-001 — a stopped campaign's ROAS is not a decision to make.
-        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
+        // ALERT-DELIVERING-YESTERDAY-001 — a stopped campaign's ROAS is not a decision to make; ALERT-CRITERIA-001 — nor is a non-sales one's.
+        $campaigns = $this->eligibleOnly($rule, self::ofFamilies('roas_drop', UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get(), $now, $days);
+            ->get()), $now, $days);
         if ($campaigns->isEmpty()) {
             return [];
         }
@@ -1151,7 +1316,9 @@ final class AlertEvaluator
         $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, &$out) {
             $cur = $current[(string) $c->getKey()]['roas'];
             $prev = $previous[(string) $c->getKey()]['roas'];
-            if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
+            // ALERT-CRITERIA-001 — a comparable previous window: enough orders to compare against.
+            $enough = (float) ($previous[(string) $c->getKey()]['conversions'] ?? 0) >= self::COMPARISON_RULES['roas_drop']['min_previous_results'];
+            if ($enough && $cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
                 $out[] = [
                     'entity_type' => UnifiedCampaign::class,
                     'entity_id' => (string) $c->id,
@@ -1612,7 +1779,7 @@ final class AlertEvaluator
      */
     private function costPerIncreases(AlertRule $rule, Carbon $now, string $key, string $resultKey): array
     {
-        $pct = (float) ($rule->threshold['pct'] ?? 25);
+        $pct = self::pctFor($rule, 25);
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
         $curFrom = $now->copy()->subDays($days);
@@ -1621,9 +1788,9 @@ final class AlertEvaluator
         $label = strtoupper($key);
 
         // ALERT-DELIVERING-YESTERDAY-001 — only a campaign running and delivering yesterday has a cost worth a decision.
-        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
+        $campaigns = $this->eligibleOnly($rule, self::ofFamilies((string) $rule->type, UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get(), $now, $days);
+            ->get()), $now, $days);
         if ($campaigns->isEmpty()) {
             return [];
         }
@@ -1670,6 +1837,10 @@ final class AlertEvaluator
             $was = $prev[$key] ?? null;
 
             if ($now_ === null || $was === null || $was <= 0) {
+                return;
+            }
+            // ALERT-CRITERIA-001 — a cost compared against too few results in the previous window is noise, not a rise.
+            if ((float) ($prev[$resultKey] ?? 0) < (self::COMPARISON_RULES[$key === 'cpl' ? 'cpl_increase' : 'cpa_increase']['min_previous_results'])) {
                 return;
             }
 
