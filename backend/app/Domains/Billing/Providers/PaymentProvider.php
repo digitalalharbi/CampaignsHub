@@ -61,8 +61,8 @@ interface PaymentProvider
      * credentials, no endpoint, or the request failed. **Null is not «it is fine»** — a caller that
      * needs this answer must refuse to settle without it.
      *
-     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null
-     *                                                                                            status ∈ paid|failed|refunded|pending|processing
+     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string, provider_status?: ?string}|null
+     *                                                                                                                       status ∈ paid|failed|refunded|pending|processing
      */
     public function fetchPayment(string $providerPaymentId): ?array;
 

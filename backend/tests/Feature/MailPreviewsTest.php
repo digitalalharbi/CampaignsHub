@@ -177,9 +177,9 @@ final class MailPreviewsTest extends TestCase
         $this->assertStringNotContainsString('ملخص أمس', $files['digest-weekly.ar.html']);
         $this->assertStringContainsString('The week across your projects', $files['digest-weekly.en.html']);
 
-        // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so its snippet says so and never «أمس».
-        $this->assertStringContainsString('آخر 7 أيام عبر مشاريعك', $files['digest-daily.ar.html']);
-        $this->assertStringNotContainsString('ملخص أمس', $files['digest-daily.ar.html']);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 (Owner, 2026-11-12) — the daily is yesterday, so its snippet says so and never «7 أيام».
+        $this->assertStringContainsString('ملخص أمس عبر مشاريعك', $files['digest-daily.ar.html']);
+        $this->assertStringNotContainsString('آخر 7 أيام عبر مشاريعك', $files['digest-daily.ar.html']);
     }
 
     /** A preview that rendered a blank shell would pass every other assertion here. */

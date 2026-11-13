@@ -36,6 +36,20 @@ const shown = (page: Page, name: string) => page.getByText(name).locator('visibl
 
 const memberships = async (page: Page) => (await api<Memberships>(page, '/auth/memberships')).data
 
+/**
+ * FLAKE-NAV-ABORT-002 — leave a landing page only once it has finished loading.
+ *
+ * Every step here lands on a portal's front door (`/app` redirects to the dashboard, `/agency` likewise) and
+ * then `goto`s the page under test straight away. `toHaveURL` is satisfied the moment the address matches, which
+ * is while the dashboard's lazy chunks are still downloading, and WebKit aborts those requests when the next
+ * navigation starts. NAV-ABORT-001 (#1041) found that mechanism in `first-viewport-detail` and the page under
+ * test never rendered (the projects list here: «Two Portals Brand Project» not found for 20 s on webkit, #1045).
+ * Waiting for the network to go quiet costs nothing on a page that has settled and removes the abort.
+ */
+async function settleBeforeNavigating(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle')
+}
+
 /** Signed in and chosen the advertiser: tab A, on its projects page. */
 async function tabInBrand(context: BrowserContext): Promise<Page> {
   const page = await context.newPage()
@@ -43,6 +57,7 @@ async function tabInBrand(context: BrowserContext): Promise<Page> {
   await signIn(page, EMAIL)
   await page.getByTestId('switch-to-app').first().click({ timeout: 30_000 })
   await expect(page).toHaveURL(/\/app(\/|$)/)
+  await settleBeforeNavigating(page)
   await page.goto('/app/projects')
   await expect(shown(page, BRAND_PROJECT)).toBeVisible({ timeout: 20_000 })
 
@@ -97,6 +112,7 @@ test.describe('one session, two portals', () => {
 
     // Propagation: the tab left behind is moved, on a full load, to the portal's front door.
     await expect(tabA).toHaveURL(/\/agency(\/|$)/, { timeout: 20_000 })
+    await settleBeforeNavigating(tabA)
     await tabA.goto('/agency/projects')
     await expect(shown(tabA, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabA.getByText(BRAND_PROJECT)).toHaveCount(0)
@@ -119,6 +135,7 @@ test.describe('one session, two portals', () => {
     // Not `waitForURL`: the sign-in redirect replaces its own navigation, and WebKit rejects the wait with
     // «Navigation canceled by policy check» while the page lands exactly where it should. The URL is the claim.
     await expect(tabA).toHaveURL(/\/app(\/|$)/, { timeout: 30_000 })
+    await settleBeforeNavigating(tabA)
 
     const claims: (string | undefined)[] = []
     tabA.on('request', (r) => { if (new URL(r.url()).pathname === '/api/v1/projects') claims.push(r.headers()['x-workspace-membership']) })
