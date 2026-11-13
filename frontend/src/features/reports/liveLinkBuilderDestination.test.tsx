@@ -94,4 +94,30 @@ describe('the Link Report builder objective and destination filters', () => {
     expect(body.kpi_labels).toEqual({ native_leads: 'العملاء المحتملون' })
     expect(body.hide_spend).toBe(false)
   })
+
+  // REPORT-MULTI-OBJECTIVE-001 (master task 10) — the objective reaches the server, and «زيارات + مبيعات» is two objectives, not the first.
+  it('sends one objective, or several with the KPIs left to the server union', async () => {
+    await open()
+
+    fireEvent.change(screen.getByTestId('live-builder-campaign-objective'), { target: { value: 'traffic' } })
+    fireEvent.click(screen.getByTestId('live-builder-objective-sales'))
+    fireEvent.click(within(screen.getByTestId('live-builder-campaigns')).getAllByRole('checkbox')[0])
+    fireEvent.change(screen.getByTestId('live-link-name'), { target: { value: 'Visits and sales' } })
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await vi.waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    const body = vi.mocked(createLiveLink).mock.calls[0][1] as Record<string, unknown>
+    expect(body.objectives).toEqual(['traffic', 'sales'])
+    expect(body.metrics).toEqual([])
+  })
+
+  it('sends no objective when none was chosen, as before', async () => {
+    await open()
+    fireEvent.click(within(screen.getByTestId('live-builder-campaigns')).getAllByRole('checkbox')[0])
+    fireEvent.change(screen.getByTestId('live-link-name'), { target: { value: 'Plain' } })
+    fireEvent.click(screen.getByTestId('live-link-create'))
+
+    await vi.waitFor(() => expect(createLiveLink).toHaveBeenCalled())
+    expect((vi.mocked(createLiveLink).mock.calls[0][1] as Record<string, unknown>).objectives).toBeUndefined()
+  })
 })
