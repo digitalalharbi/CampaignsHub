@@ -301,3 +301,35 @@ export function withFormatComparisonSlides<S extends { id: string; type: string;
 
   return slides
 }
+
+/** AUDIENCE-001 — delivery cards per printed page (one row of three), targeting entries per page. */
+export const AUDIENCE_GROUPS_PER_PAGE = 3
+export const AUDIENCE_TARGETING_PER_PAGE = 4
+const AUDIENCE_DELIVERY_KEYS = ['audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional'] as const
+
+/**
+ * AUDIENCE-001 — the audience pages of the deck and the PDF: only the parts the server resolved (a hidden part is absent
+ * from the payload and is not named in `report_sections`), delivery cards three to a page, targeting four to a page, the
+ * site's visitors on a page of their own. A part is SPLIT across pages, never shrunk.
+ */
+export function withAudienceSlides<S extends { id: string; type: string; order: number; visible: boolean; range?: [number, number] }>(
+  slides: S[],
+  data: WithReportSections & Record<string, unknown>,
+): S[] {
+  const list = data.report_sections
+  if (!Array.isArray(list)) return slides
+  const named = (key: string) => (list as string[]).includes(key) && data[key] != null
+  const groups = AUDIENCE_DELIVERY_KEYS.filter(named).reduce((n, k) => n + (((data[k] as { groups?: unknown[] }).groups ?? []).length), 0)
+  for (let i = 0; i < groups; i += AUDIENCE_GROUPS_PER_PAGE) {
+    slides.push({ id: `__audience_delivery:${i}`, type: '__audience_delivery', order: 9988, visible: true, range: [i, Math.min(i + AUDIENCE_GROUPS_PER_PAGE, groups)] } as S)
+  }
+  if (named('audience_targeting')) {
+    const n = ((data.audience_targeting as { items?: unknown[] }).items ?? []).length
+    for (let i = 0; i < n; i += AUDIENCE_TARGETING_PER_PAGE) {
+      slides.push({ id: `__audience_targeting:${i}`, type: '__audience_targeting', order: 9988, visible: true, range: [i, Math.min(i + AUDIENCE_TARGETING_PER_PAGE, n)] } as S)
+    }
+  }
+  if (named('audience_site')) slides.push({ id: '__audience_site', type: '__audience_site', order: 9988, visible: true } as S)
+
+  return slides
+}

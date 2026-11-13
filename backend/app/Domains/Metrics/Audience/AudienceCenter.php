@@ -40,7 +40,7 @@ final class AudienceCenter
     private string $project = '';
 
     /** Only these keys of a stored targeting summary ever leave the server (an audience name or id list never does). */
-    private const TARGETING_KEYS = ['countries', 'cities', 'locations', 'age_min', 'age_max', 'age_groups', 'genders', 'gender', 'languages', 'platforms', 'placements', 'product_type'];
+    private const TARGETING_KEYS = ['countries', 'regions', 'postal_codes', 'radius_m', 'excluded_countries', 'excluded_regions', 'cities', 'locations', 'age_min', 'age_max', 'age_groups', 'genders', 'gender', 'languages', 'platforms', 'placements', 'product_type'];
 
     /**
      * @param  list<string>|null  $providers  a narrower link's platforms, or null for all

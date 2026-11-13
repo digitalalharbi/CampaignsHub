@@ -23,5 +23,10 @@ interface ReportsAudienceBreakdowns
     /** The provider field each dimension is read from, for provenance (e.g. `meta:insights.breakdowns=region`). */
     public function audienceSourceField(string $dimension): string;
 
-    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to): SyncResult;
+    /**
+     * @param  array<string, list<string>>  $delivering  the provider's ad-set ids that DELIVERED in the window → their days
+     *                                                   (impressions > 0). A provider that must ask per ad set and day
+     *                                                   (Snapchat) asks only these; one that answers per account ignores it.
+     */
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult;
 }

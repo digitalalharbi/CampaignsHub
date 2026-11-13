@@ -50,10 +50,24 @@ final class AudienceBreakdownSync
             ->get(['id', 'external_id', 'external_campaign_id', 'tenant_id'])
             ->keyBy(static fn (ExternalAdSet $s): string => (string) $s->external_id);
 
+        // The ad sets that DELIVERED in the window, and on which days — what a per-ad-set provider asks about, and nothing else.
+        $delivering = [];
+        $byId = $sets->mapWithKeys(static fn (ExternalAdSet $s): array => [(string) $s->getKey() => (string) $s->external_id]);
+        foreach (DB::table('entity_daily_metrics')
+            ->where('tenant_id', (string) $account->tenant_id)->where('project_id', $projectId)
+            ->where('external_account_id', (string) $account->getKey())->where('entity_type', 'ad_set')
+            ->where('impressions', '>', 0)->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
+            ->get(['entity_id', 'metric_date']) as $d) {
+            $ext = $byId[(string) $d->entity_id] ?? null;
+            if ($ext !== null) {
+                $delivering[$ext][] = substr((string) $d->metric_date, 0, 10);
+            }
+        }
+
         $out = [];
         foreach ($connector->audienceDimensions() as $dimension) {
             try {
-                $result = $connector->audienceBreakdown((string) $account->external_id, $dimension, $from->toDateString(), $to->toDateString());
+                $result = $connector->audienceBreakdown((string) $account->external_id, $dimension, $from->toDateString(), $to->toDateString(), $delivering);
             } catch (Throwable $e) {
                 $out[$dimension] = ['state' => 'failed', 'reason' => Str::limit((string) ProviderErrorText::forStorage($e->getMessage()), 300)];
 

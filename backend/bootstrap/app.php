@@ -48,6 +48,7 @@ use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
 use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
+use App\Domains\Metrics\Console\AudienceBreakdownProbeCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
@@ -214,6 +215,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
         // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
         MoneyCurrencyAuditCommand::class,
+        AudienceBreakdownProbeCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
         // PROD-PROVISION-001 — the reference data a production install cannot work without, and

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen } from '@testing-library/react'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
-import { AudienceReportBlocks } from './AudienceBlocks'
+import { AudienceReportBlocks, AudienceSlideBody } from './AudienceBlocks'
+import { withAudienceSlides } from '@/features/reports/reportSections'
 import { AudiencePanel } from './AudiencePanel'
 import type { AudienceReading, DeliveryGroup } from './types'
 import { useUi } from '@/stores/ui'
@@ -85,3 +86,25 @@ describe('audience blocks', () => {
     expect(screen.getByTestId('audience-availability')).toHaveTextContent('Not offered by platform')
   })
 })
+
+describe('audience pages of the deck and the PDF', () => {
+  type S = { id: string; type: string; order: number; visible: boolean; range?: [number, number] }
+  const four = [meta, snap, group('tiktok', [], 'age'), group('tiktok', [], 'gender')]
+
+  it('splits delivery cards three to a page and prints only the parts the server named', () => {
+    const slides = withAudienceSlides<S>([], { report_sections: ['audience_regions', 'audience_age'], audience_regions: { groups: [meta, snap] }, audience_age: { groups: four.slice(2) }, audience_targeting: { items: reading().targeting.items } })
+    expect(slides.map((s) => [s.type, s.range])).toEqual([['__audience_delivery', [0, 3]], ['__audience_delivery', [3, 4]]])
+  })
+
+  it('prints nothing for a payload without the section list or with every part hidden', () => {
+    expect(withAudienceSlides<S>([], { audience_regions: { groups: [meta] } })).toEqual([])
+    expect(withAudienceSlides<S>([], { report_sections: ['kpis'] })).toEqual([])
+  })
+
+  it('a delivery page draws its own slice of cards', () => {
+    renderWithProviders(<AudienceSlideBody type="__audience_delivery" range={[1, 2]} payload={{ audience_regions: { groups: [meta, snap] } }} />)
+    expect(screen.queryByTestId('audience-delivery-meta-region')).toBeNull()
+    expect(screen.getByTestId('audience-delivery-snapchat-region')).toBeInTheDocument()
+  })
+})
+

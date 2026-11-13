@@ -49,7 +49,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
 
     /** @var list<string> every GET under /client the probe covers, written as the route is */
     private const COVERED = [
-        'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
+        'api/v1/client/audience', 'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
         'api/v1/client/invoices', 'api/v1/client/invoices/{invoice}', 'api/v1/client/invoices/{invoice}/pdf',
         'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview',
         'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/requests',
@@ -122,7 +122,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
     {
         $this->signInAsAlpha();
 
-        foreach (['campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session', 'team'] as $path) {
+        foreach (['audience', 'campaigns', 'files', 'invoices', 'messages', 'overview', 'quotes', 'reports', 'requests', 'spaces', 'visibility', 'branding', 'session', 'team'] as $path) {
             $res = $this->getJson("/api/v1/client/{$path}", $this->spa);
 
             $this->assertContains($res->status(), [200, 403, 404], "/client/{$path} answered {$res->status()}");

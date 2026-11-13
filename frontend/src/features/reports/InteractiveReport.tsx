@@ -1,9 +1,11 @@
 import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { frozenBeforeWebsiteTab, sectionShown, withDailyRecordsSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
+import { frozenBeforeWebsiteTab, sectionShown, withDailyRecordsSlides, withAudienceSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { Ga4Slide, type WithGa4Sections } from './Ga4ReportBlocks'
 import { FormatComparisonSlide } from './FormatComparisonBlocks'
+import { AudienceSlideBody } from '@/features/audience/AudienceBlocks'
+import type { AudienceParts } from '@/features/audience/types'
 import { StoreAnalyticsBlock, type StoreAnalyticsPayload } from './StoreAnalyticsBlock'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
@@ -409,6 +411,8 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case '__ga4_pulse': case '__ga4_attribution': case '__ga4_reasons': case '__ga4_classification': case '__ga4_products':
       return <Ga4Slide slide={slide} data={data} paged={paged} />
     // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
+    case '__audience_delivery': case '__audience_targeting': case '__audience_site':
+      return <AudienceSlideBody type={slide.type} range={slide.range} payload={data as unknown as AudienceParts} />
     case '__formats': case '__formats_table':
       return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
@@ -492,6 +496,8 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       withFormatComparisonSlides(visible, data)
       withDailyRecordsSlides(visible, data)
     }
+    // AUDIENCE-001 — the audience pages the server left in, after the report proper.
+    withAudienceSlides(visible, data as never)
     return visible
   }, [data])
   const cur = slides[i]

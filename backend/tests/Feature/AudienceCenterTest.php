@@ -131,7 +131,7 @@ final class AudienceCenterTest extends TestCase
                 return 'test:'.$dimension;
             }
 
-            public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to): SyncResult
+            public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
             {
                 $this->calls++;
 
@@ -230,7 +230,7 @@ final class AudienceCenterTest extends TestCase
             $this->assertSame(AudienceCapabilities::DIMENSIONS, array_keys($cap['dimensions']), $provider);
         }
         $stored = collect($all)->flatMap(static fn (array $c, string $p): array => array_map(static fn (string $d): string => "$p.$d", array_keys(array_filter($c['dimensions'], static fn (array $f): bool => $f['delivery'] === 'stored'))))->values()->all();
-        $this->assertSame(['meta.region'], $stored, 'only what is actually fetched claims «stored»');
+        $this->assertSame(['meta.region', 'snapchat.region', 'tiktok.region', 'tiktok.gender', 'tiktok.age'], $stored, 'only what is actually fetched claims «stored»');
     }
 
     // ------------------------------------------------------------------ report surfaces
@@ -369,7 +369,7 @@ final class AudienceCenterTest extends TestCase
                 return 'test:'.$dimension;
             }
 
-            public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to): SyncResult
+            public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
             {
                 return SyncResult::of([['entity_id' => 'sib-set', 'date' => '2026-11-12', 'value' => 'Najran Province', 'impressions' => 7.0]]);
             }

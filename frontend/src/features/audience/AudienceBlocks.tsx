@@ -119,7 +119,7 @@ function settingChips(s: Record<string, unknown> | null, locale: L): string[] {
   for (const [k, v] of Object.entries(s)) {
     const value = Array.isArray(v) ? v.join('، ') : String(v)
     const label: Record<string, [string, string]> = {
-      countries: ['الدول', 'Countries'], cities: ['المدن', 'Cities'], locations: ['المواقع', 'Locations'], age_min: ['العمر من', 'Age from'], age_max: ['العمر إلى', 'Age to'],
+      countries: ['الدول', 'Countries'], regions: ['المناطق', 'Regions'], postal_codes: ['رموز بريدية (عدد)', 'Postal codes (count)'], radius_m: ['نصف القطر (م)', 'Radius (m)'], excluded_countries: ['دول مستبعدة', 'Excluded countries'], excluded_regions: ['مناطق مستبعدة', 'Excluded regions'], cities: ['المدن', 'Cities'], locations: ['المواقع', 'Locations'], age_min: ['العمر من', 'Age from'], age_max: ['العمر إلى', 'Age to'],
       age_groups: ['فئات العمر', 'Age groups'], genders: ['الجنس', 'Gender'], gender: ['الجنس', 'Gender'], languages: ['اللغات', 'Languages'], platforms: ['المنصات', 'Platforms'], placements: ['المواضع', 'Placements'], product_type: ['النوع', 'Type'],
     }
     const [ar, en] = label[k] ?? [k, k]
@@ -187,4 +187,37 @@ export function AudienceReportBlocks({ payload, locale }: { payload: AudiencePar
       </div>
     </div>
   )
+}
+
+/** AUDIENCE-001 — one printed page of the audience: a slice of the delivery cards, of the targeting, or the site. */
+export function AudienceSlideBody({ type, range, payload }: { type: string; range?: [number, number]; payload: AudienceParts }) {
+  const [from, to] = range ?? [0, Number.MAX_SAFE_INTEGER]
+  if (type === '__audience_delivery') {
+    const groups = AUDIENCE_DELIVERY_PARTS.flatMap((k) => payload[k]?.groups ?? []).slice(from, to)
+    return (
+      <div data-testid="audience-slide-delivery">
+        <h2 className="mb-1 text-2xl font-extrabold tracking-tight text-text-primary">الجمهور: التسليم المدفوع</h2>
+        <p className="mb-3 text-sm text-text-secondary">كل منصة بمقامها — لا تُجمع المنصات ولا الوصول الفريد. «المنطقة» عند المنصة ليست موقع الاستهداف.</p>
+        <div className="grid grid-cols-3 gap-3">{groups.map((g) => <DeliveryGroupCard key={`${g.provider}-${g.dimension}`} group={g} locale="ar" />)}</div>
+      </div>
+    )
+  }
+  if (type === '__audience_targeting') {
+    return (
+      <div data-testid="audience-slide-targeting">
+        <h2 className="mb-3 text-2xl font-extrabold tracking-tight text-text-primary">الجمهور المستهدف</h2>
+        <TargetingList items={(payload.audience_targeting?.items ?? []).slice(from, to)} locale="ar" />
+      </div>
+    )
+  }
+  if (type === '__audience_site') {
+    return (
+      <div data-testid="audience-slide-site">
+        <h2 className="mb-3 text-2xl font-extrabold tracking-tight text-text-primary">زوار الموقع حسب الدولة والجهاز</h2>
+        <div className="grid grid-cols-2 gap-3">{(payload.audience_site?.groups ?? []).map((g) => <SiteGroupCard key={g.dimension} group={g} locale="ar" />)}</div>
+      </div>
+    )
+  }
+
+  return null
 }

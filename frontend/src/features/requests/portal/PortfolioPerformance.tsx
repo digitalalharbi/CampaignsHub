@@ -15,6 +15,7 @@ import { useUi } from '@/stores/ui'
 import { fetchPortalOverview, type PortalOverview } from './portalOverviewApi'
 import { useClientSpacePath } from './clientSpace'
 import { usePortalGuard } from './usePortalGuard'
+import { PortalAudience } from './PortalAudience'
 
 /**
  * CP-DASH-001 — the client's portfolio: a few figures that matter, then compact summaries.
@@ -83,7 +84,13 @@ export function PortfolioPerformance() {
     return overview.isPending ? <div data-testid="portfolio-loading" className="mb-6 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
   }
 
-  return <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
+  return (
+    <>
+      <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
+      {/* AUDIENCE-001 — under the performance dashboard, for the same period; absent unless the agency switched it on. */}
+      <PortalAudience {...(range === 30 ? {} : periodOf(range))} />
+    </>
+  )
 }
 
 /** The last N days ending today, as the endpoint reads them (local calendar dates). */

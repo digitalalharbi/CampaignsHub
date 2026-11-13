@@ -37,17 +37,17 @@ final class AudienceCapabilities
                 'docs' => 'https://developers.facebook.com/docs/marketing-api/insights/breakdowns',
             ],
             'snapchat' => [
-                'dimensions' => ['region' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'city' => ['targeting' => false, 'delivery' => 'unknown'], 'gender' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'age' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'device' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'placement' => ['targeting' => true, 'delivery' => 'unknown'], 'interests' => ['targeting' => false, 'delivery' => 'unknown'], 'professional' => ['targeting' => false, 'delivery' => 'unavailable_provider']],
-                'targeting_stored' => ['countries', 'age_min', 'age_max', 'gender', 'languages', 'placements'],
-                'targeting_lost' => ['regions', 'metros', 'postal_codes', 'radius', 'excluded_locations', 'interests'],
-                'source' => 'stats report_dimension (not requested)',
+                'dimensions' => ['region' => ['targeting' => true, 'delivery' => 'stored'], 'city' => ['targeting' => false, 'delivery' => 'unknown'], 'gender' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'age' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'device' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'placement' => ['targeting' => true, 'delivery' => 'unknown'], 'interests' => ['targeting' => false, 'delivery' => 'unknown'], 'professional' => ['targeting' => false, 'delivery' => 'unavailable_provider']],
+                'targeting_stored' => ['countries', 'regions', 'postal_codes (count)', 'radius_m', 'excluded_countries', 'excluded_regions', 'age_min', 'age_max', 'gender', 'languages', 'placements'],
+                'targeting_lost' => ['metros', 'circle centres', 'interests'],
+                'source' => 'GET /v1/adsquads/{id}/stats granularity=TOTAL report_dimension=region (estimated; days with at least 30 impressions)',
                 'docs' => 'https://developers.snap.com/api/marketing-api/Ads-API/measurement',
             ],
             'tiktok' => [
-                'dimensions' => ['region' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'city' => ['targeting' => false, 'delivery' => 'unknown'], 'gender' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'age' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'device' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'placement' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'interests' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'professional' => ['targeting' => false, 'delivery' => 'unavailable_provider']],
+                'dimensions' => ['region' => ['targeting' => true, 'delivery' => 'stored'], 'city' => ['targeting' => false, 'delivery' => 'unknown'], 'gender' => ['targeting' => true, 'delivery' => 'stored'], 'age' => ['targeting' => true, 'delivery' => 'stored'], 'device' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'placement' => ['targeting' => true, 'delivery' => 'api_not_fetched'], 'interests' => ['targeting' => false, 'delivery' => 'api_not_fetched'], 'professional' => ['targeting' => false, 'delivery' => 'unavailable_provider']],
                 'targeting_stored' => ['locations', 'age_groups', 'gender', 'languages', 'placements'],
                 'targeting_lost' => ['excluded_locations', 'location names (ids only)', 'interests'],
-                'source' => 'report/integrated/get report_type=AUDIENCE (not requested)',
+                'source' => 'report/integrated/get report_type=AUDIENCE data_level=AUCTION_ADGROUP (age, gender, province_id; province stored as its id)',
                 'docs' => 'https://business-api.tiktok.com/portal/docs',
             ],
             'google' => [
