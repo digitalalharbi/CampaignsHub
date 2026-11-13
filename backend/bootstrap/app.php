@@ -63,6 +63,7 @@ use App\Domains\Ops\Console\PerfSnapshotCommand;
 use App\Domains\Ops\Console\ProfileLiveReportCommand;
 use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
+use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
@@ -226,6 +227,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
+        // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
+        SweepPlatformPaymentAlerts::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

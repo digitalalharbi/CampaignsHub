@@ -94,6 +94,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'subscriptions:lifecycle',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',
+        // PLATFORM-PAYMENT-ALERTS-001 — every fifteen minutes, offset from the reconcile sweep; reads only, files owner alerts.
+        'platform:payment-alerts',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */
@@ -177,6 +179,7 @@ final class ScheduledWorkInventoryTest extends TestCase
             'fx:rates',
             'subscriptions:lifecycle',
             'subscriptions:reconcile-payments',
+            'platform:payment-alerts',
         ];
 
         foreach (app(Schedule::class)->events() as $event) {
