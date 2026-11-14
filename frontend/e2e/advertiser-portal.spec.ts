@@ -57,7 +57,8 @@ async function openSection(page: import('@playwright/test').Page, href: string) 
 test.describe('the advertiser portal', () => {
   test.use({ storageState: AUTH.advertiser })
 
-  const arabicWords = (text: string) => (text.match(/[؀-ۿ]+/g) ?? []).length
+  // The SAR currency mark «ر.س» is the same in both languages by the Owner's money rule (MONEY-MARKS-001); it is not untranslated copy.
+  const arabicWords = (text: string) => (text.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g) ?? []).length
 
   async function toggleLanguage(page: Page) {
     await page.getByRole('button', { name: 'Toggle language' }).first().click()

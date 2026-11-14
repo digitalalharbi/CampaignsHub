@@ -20,9 +20,9 @@ import { campaignPage } from '@/test/campaignPage'
 /**
  * CAMP-MONEY-001 — the Campaigns summary row read the aggregator's zero, in an assumed currency.
  *
- * Production's shape: Snapchat reported 4,128.93 USD and no USD→SAR rate exists, so FX-001 withheld
+ * Production's shape: Snapchat reported 4,128.93 $ and no USD→SAR rate exists, so FX-001 withheld
  * the conversion and the aggregator coalesced the sum to 0. `money(k?.cpa)` formatted that 0 with
- * the helper's SAR default and the card read «0 SAR» — beside a dashboard, on the same data, reading
+ * the helper's SAR default and the card read «0 ر.س» — beside a dashboard, on the same data, reading
  * the truth.
  */
 const WITHHELD = {
@@ -82,8 +82,8 @@ describe('the Campaigns summary row', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
     // 4,128.93 / 102 = 40.48, and it is USD — not the SAR the formatter used to assume.
-    expect(await screen.findByText('40.48 USD')).toBeInTheDocument()
-    expect(screen.queryByText('0 SAR')).not.toBeInTheDocument()
+    expect(await screen.findByText('40.48 $')).toBeInTheDocument()
+    expect(screen.queryByText('0 ر.س')).not.toBeInTheDocument()
 
     // 12,969.03 / 4,128.93 ≈ 3.14. The aggregator's own roas was 0.
     expect(screen.getByText(/3\.1/)).toBeInTheDocument()
@@ -100,7 +100,7 @@ describe('the Campaigns summary row', () => {
     route(WITHHELD, false)
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    await screen.findByText('40.48 USD')
+    await screen.findByText('40.48 $')
 
     expect(screen.queryByLabelText(/Change/i)).not.toBeInTheDocument()
   })
@@ -116,7 +116,7 @@ describe('the Campaigns summary row', () => {
     route({ ...WITHHELD, coverage: truncated }, true, { ...WITHHELD, coverage: complete })
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    await screen.findByText('40.48 USD')
+    await screen.findByText('40.48 $')
 
     expect(screen.queryByLabelText(/Change/i)).not.toBeInTheDocument()
   })
@@ -126,7 +126,7 @@ describe('the Campaigns summary row', () => {
     route(WITHHELD, true)
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
 
-    await screen.findByText('40.48 USD')
+    await screen.findByText('40.48 $')
 
     /*
      * «Need a look» under a zero asserted both that nothing needed reviewing and that it did. The

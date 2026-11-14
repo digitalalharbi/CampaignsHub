@@ -4,9 +4,9 @@ import { readMetric } from './metricCatalog'
 /**
  * FX-WITHHELD-UI-001 — the reading that decides whether a real figure or a zero reaches the card.
  *
- * The live Snapchat account reported 3,465.33 USD. No USD→SAR rate exists, so FX-001 stored
+ * The live Snapchat account reported 3,465.33 $. No USD→SAR rate exists, so FX-001 stored
  * `value = null` deliberately and the aggregator coalesced it to 0 for arithmetic. Every screen then
- * printed «0 SAR» under a label saying the platform had not sent it — which the payload disproves.
+ * printed «0 ر.س» under a label saying the platform had not sent it — which the payload disproves.
  */
 const spendSpec = { format: (v: number) => `${v} SAR` } as never
 
@@ -19,7 +19,7 @@ describe('withheld money', () => {
       undefined,
     )
 
-    expect(reading).toEqual({ kind: 'withheld', original: '3,465.33 USD' })
+    expect(reading).toEqual({ kind: 'withheld', original: '3,465.33 $' })
   })
 
   it('does not claim a currency it cannot name', () => {

@@ -11,6 +11,7 @@ import { objectiveLabel } from '@/features/campaigns/labels'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { currencyMark } from '@/lib/money/mark'
 
 /**
  * NUMBER-PRESENTATION-001 §58 — this surface had its own formatter, and it followed neither rule.
@@ -105,7 +106,7 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
     )
   }
   const a = q.data!
-  const cur = a.currency ? ` ${a.currency}` : ''
+  const cur = a.currency ? ` ${currencyMark(a.currency)}` : ''
 
   return (
     <div className="grid gap-4">

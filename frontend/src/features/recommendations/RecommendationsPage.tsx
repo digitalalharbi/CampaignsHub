@@ -20,6 +20,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /**
  * RECOMMENDATIONS-001 — «ماذا نفعل الآن», on one screen.
@@ -208,6 +209,7 @@ export function RecommendationsPage() {
           )
           : undefined}
       />
+      <FinancialDisclaimer />
 
       {/* AGENTS-APPROVAL-GATEWAY-001 — the requests agents and colleagues have put forward, one press away. */}
       <p className="text-xs">

@@ -122,7 +122,7 @@ describe('the content summary holds its shape in every state', () => {
     })
     expect(screen.getByTestId('content-summary-count')).toHaveTextContent('127 creatives')
     const scope = screen.getByTestId('content-summary-mix-scope')
-    expect(scope).toHaveTextContent('Demo Store only — 60 creatives · 181,995 SAR')
+    expect(scope).toHaveTextContent('Demo Store only — 60 creatives · 181,995 ر.س')
     expect(scope).toHaveTextContent('span 127 creatives')
   })
 

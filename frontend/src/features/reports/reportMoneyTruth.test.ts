@@ -34,9 +34,9 @@ describe('a report over withheld money', () => {
     const reading = readMetric('spend', SPECS.spend, WITHHELD_KPIS as never, undefined)
 
     expect(reading.kind).toBe('withheld')
-    expect(readingText(reading)).toBe('4,128.93 USD')
+    expect(readingText(reading)).toBe('4,128.93 $')
     expect(readingText(reading)).not.toBe('لا توجد بيانات')
-    expect(readingText(reading)).not.toContain('0 SAR')
+    expect(readingText(reading)).not.toContain('0 ر.س')
   })
 
   it('still says «لا توجد بيانات» when there genuinely is none', () => {
@@ -49,6 +49,6 @@ describe('a report over withheld money', () => {
     const reading = readMetric('spend', SPECS.spend, { spend: 0, spend_withheld_rows: 0 } as never, undefined)
 
     expect(reading.kind).toBe('value')
-    expect(readingText(reading)).not.toContain('USD')
+    expect(readingText(reading)).not.toMatch(/USD|\$/)
   })
 })

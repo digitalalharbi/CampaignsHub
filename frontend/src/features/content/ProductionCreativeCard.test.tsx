@@ -21,7 +21,7 @@ import type { AuthUser } from '@/lib/api/types'
  * — not a plausible-looking fixture, the recorded numbers:
  *
  *     objective  : SALES   card shows: spend, impressions, clicks, ctr
- *     spend      : null   original 79.614004 USD  withheld_rows 11
+ *     spend      : null   original 79.614004 $  withheld_rows 11
  *     impressions: 33967   clicks 546   ctr 0.0161
  *     reach      : null   video_views 4409
  *     results    : conversions 0   revenue null   roas null
@@ -166,7 +166,7 @@ describe('the Content card, fed what production actually returns', () => {
    * Asserted as text a person would read, because «the key is present in the payload» is exactly
    * what was already true while the operator saw nothing.
    */
-  it('shows the withheld spend as a real amount in its own currency, never as 0 SAR', async () => {
+  it('shows the withheld spend as a real amount in its own currency, never as 0 ر.س', async () => {
     renderWithProviders(<CreativesPage />, { locale: 'ar' })
 
     await waitFor(() => expect(screen.getByText(/June 11, 2026/)).toBeInTheDocument())
@@ -174,8 +174,8 @@ describe('the Content card, fed what production actually returns', () => {
     const body = document.body.textContent ?? ''
 
     expect(body).toMatch(/79\.61/)
-    expect(body).toContain('USD')
-    expect(body).not.toMatch(/0[\s,.]*SAR/)
+    expect(body).toContain('$')
+    expect(body).not.toMatch(/0[\s,.]*(?:SAR|ر\.س)/)
   })
 
   it('shows impressions, clicks and CTR as figures', async () => {

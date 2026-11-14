@@ -23,13 +23,13 @@ describe('the GA4 store view', () => {
     expect(kpiText({ kind: 'rate', currency: null }, 0.3)).toBe('30.0%')
     expect(kpiText({ kind: 'seconds', currency: null }, 75)).toBe('1:15')
     expect(kpiText({ kind: 'count', currency: null }, 1234)).toBe('1,234')
-    expect(kpiText({ kind: 'money', currency: 'SAR' }, 2000, 500)).toBe('500 USD')
-    expect(kpiText({ kind: 'money', currency: 'SAR' }, 2000, null)).toBe('2K SAR')
+    expect(kpiText({ kind: 'money', currency: 'SAR' }, 2000, 500)).toBe('500 $')
+    expect(kpiText({ kind: 'money', currency: 'SAR' }, 2000, null)).toBe('2K ر.س')
     expect(kpiText({ kind: 'money', currency: 'SAR' }, null, null)).toBe('—')
 
-    expect(usdFirst(500, 2000, 'SAR')).toEqual({ text: '500 USD', original: '2K SAR' })
+    expect(usdFirst(500, 2000, 'SAR')).toEqual({ text: '500 $', original: '2K ر.س' })
     // No rate: the original stands alone, never a guessed conversion.
-    expect(usdFirst(null, 2000, 'SAR')).toEqual({ text: '2K SAR', original: null })
+    expect(usdFirst(null, 2000, 'SAR')).toEqual({ text: '2K ر.س', original: null })
     expect(usdFirst(null, null, 'SAR')).toEqual({ text: '—', original: null })
   })
 
@@ -48,8 +48,8 @@ describe('the GA4 store view', () => {
     // A bounce rate that doubled went UP and that is the bad direction.
     expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveAttribute('data-direction', 'up')
     expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveAttribute('data-good', 'no')
-    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('500 USD')
-    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('2K SAR')
+    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('500 $')
+    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('2K ر.س')
     expect(screen.getByTestId('ga4-tile-aov')).toHaveTextContent('—')
     expect(screen.queryByTestId('ga4-delta-aov')).toBeNull()
   })
@@ -126,7 +126,7 @@ describe('the GA4 store view', () => {
     const first = size()
     expect(first.rows).toBe(8)
     expect(within(box()).getByText('source-01')).toBeInTheDocument()
-    expect(within(box()).getAllByText('475 USD').length).toBeGreaterThan(0)
+    expect(within(box()).getAllByText('475 $').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByTestId('ga4-table-next'))
     fireEvent.click(screen.getByTestId('ga4-table-next'))
@@ -139,7 +139,7 @@ describe('the GA4 store view', () => {
 
     fireEvent.click(screen.getByTestId('ga4-table-tab-products'))
     expect(within(box()).getByText('عباية سوداء')).toBeInTheDocument()
-    expect(within(box()).getByText('700 USD')).toHaveAttribute('dir', 'ltr')
+    expect(within(box()).getByText('700 $')).toHaveAttribute('dir', 'ltr')
     expect(size()).toEqual(first)
   })
 

@@ -29,16 +29,16 @@ describe('the campaigns secondary strip', () => {
 
     const text = screen.getByTestId('campaigns-secondary-strip').textContent ?? ''
 
-    expect(text).toContain('5K SAR')
-    expect(text).toContain('4K SAR')
-    expect(text).toContain('1.2K SAR')
+    expect(text).toContain('5K ر.س')
+    expect(text).toContain('4K ر.س')
+    expect(text).toContain('1.2K ر.س')
   })
 
   /**
    * A spend in a currency nobody reports in keeps its own — never assumed into the project's.
    *
-   * This was the budget card's promise: the platform said 500 USD, and the figure a reader checks
-   * against the platform has to be 500 USD.
+   * This was the budget card's promise: the platform said 500 $, and the figure a reader checks
+   * against the platform has to be 500 $.
    */
   it('keeps the platform figure in the currency it was spent in', () => {
     render(
@@ -51,7 +51,7 @@ describe('the campaigns secondary strip', () => {
       />,
     )
 
-    expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('500 USD')
+    expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('500 $')
   })
 
   /** Budgets in two currencies do not add, and the strip says so rather than showing a total. */

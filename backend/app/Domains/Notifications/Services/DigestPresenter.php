@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Metrics\Services\ReportingCurrency;
 
 /**
@@ -101,7 +102,7 @@ final class DigestPresenter
             return $this->noData();
         }
 
-        return trim(number_format((float) $value, ((float) $value) === floor((float) $value) ? 0 : 2).' '.$this->currency);
+        return FundingMoney::withMark(number_format((float) $value, ((float) $value) === floor((float) $value) ? 0 : 2), $this->currency);
     }
 
     /**
@@ -121,7 +122,7 @@ final class DigestPresenter
             return $this->noData();
         }
 
-        return trim(number_format(round((float) $value), 0).' '.$this->currency);
+        return FundingMoney::withMark(number_format(round((float) $value), 0), $this->currency);
     }
 
     /** A count, or the honest reason there is not one. */

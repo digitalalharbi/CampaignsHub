@@ -38,7 +38,7 @@ describe('the approvals queue', () => {
 
     renderWithProviders(<ApprovalsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('Daily budget 110 USD')
+    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('Daily budget 110 $')
     expect(screen.getByTestId('proposal-p1')).toHaveTextContent('ROAS is twice the target')
     expect(screen.getByTestId('approvals-limits')).toHaveTextContent('capped at 20%')
     expect(screen.getByTestId('approvals-limits')).toHaveTextContent('never a delete')

@@ -51,7 +51,7 @@ const ad = (over: Partial<ReportAd> = {}): ReportAd => ({
  * CLIENT-REPORT-MONEY-REDACTION-001 — the four money states, on the ad card a client reads.
  *
  * `ReportAds` used to write `spend => metrics.spend ?? 0`, so an unconvertible amount arrived here as
- * a zero and this card printed «0 SAR» for an ad that had really spent 412.50 USD. The builder now
+ * a zero and this card printed «0 ر.س» for an ad that had really spent 412.50 $. The builder now
  * leaves `spend` null and carries the original beside it, and the card reads both through the one
  * money contract. These four cases are the states that contract distinguishes and `cash()` could not.
  */
@@ -70,20 +70,20 @@ describe('the ads section states money truthfully', () => {
     renderWithProviders(<ReportAdsSection ads={[withheldAd()]} locale="en" currency="SAR" />, { locale: 'en' })
 
     const figure = screen.getByText(/41[23]/)
-    expect(figure.textContent, 'the platform currency was not stated').toMatch(/USD/)
-    expect(figure.textContent, 'an unconvertible amount was labelled with the reporting currency').not.toMatch(/SAR/)
+    expect(figure.textContent, 'the platform currency was not stated').toMatch(/\$/)
+    expect(figure.textContent, 'an unconvertible amount was labelled with the reporting currency').not.toMatch(/(?:SAR|ر\.س)/)
   })
 
   it('never prints a withheld spend as zero', () => {
     renderWithProviders(<ReportAdsSection ads={[withheldAd()]} locale="en" currency="SAR" />, { locale: 'en' })
 
-    expect(screen.queryByText(/^0(\.0+)?\s*(SAR|USD)?$/), 'a withheld spend rendered as a zero').toBeNull()
+    expect(screen.queryByText(/^0(\.0+)?\s*(SAR|ر\.س|USD|\$)?$/), 'a withheld spend rendered as a zero').toBeNull()
   })
 
   it('prints a converted spend in the reporting currency', () => {
     renderWithProviders(<ReportAdsSection ads={[ad({ spend: 3000 })]} locale="en" currency="SAR" />, { locale: 'en' })
 
-    expect(screen.getByText(/3,000/).textContent).toMatch(/SAR/)
+    expect(screen.getByText(/3,000/).textContent).toMatch(/ر\.س/)
   })
 
   /**

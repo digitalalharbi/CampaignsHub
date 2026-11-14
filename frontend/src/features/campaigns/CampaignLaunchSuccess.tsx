@@ -8,6 +8,7 @@ import type { LaunchOutcome, LaunchPlatform } from './launch'
 import { fmtDateTime } from '@/lib/datetime'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * LAUNCH-SUCCESS-001 — the launch moment, wired to the launch that happened.
@@ -98,7 +99,7 @@ export function CampaignLaunchSuccess({ outcome, onDismiss }: {
   if (outcome.total_budget !== null) {
     facts.push({
       label: t('budget_label'),
-      value: `${outcome.total_budget.toLocaleString('en-US')} ${outcome.budget_currency}`,
+      value: withMark(outcome.total_budget.toLocaleString('en-US'), outcome.budget_currency),
       ltr: true,
     })
   }

@@ -35,6 +35,21 @@ final class FundingMoney
         return number_format((float) $amount, $decimals, '.', ',').' '.self::mark($currency);
     }
 
+    /**
+     * MONEY-MARKS-001 — an already-formatted figure with its mark after it; an unknown currency prints the figure bare, never a
+     * guessed one. For the places that build the number's text themselves (digests, alerts, notices).
+     */
+    public static function withMark(string $figure, ?string $currency): string
+    {
+        return $currency === null || trim($currency) === '' ? $figure : $figure.' '.self::mark($currency);
+    }
+
+    /** Whether a line of text carries a money figure (a number then a currency mark or ISO code): decides where the disclaimer rides. */
+    public static function textHasMoney(string $text): bool
+    {
+        return (bool) preg_match('/\d\s?(?:ر\.س|\$|€|[A-Z]{3})(?![A-Za-z])/u', $text);
+    }
+
     /** The number alone, for a cell whose mark is drawn beside it. */
     public static function number(float|int|null $amount, int $decimals = 2): string
     {

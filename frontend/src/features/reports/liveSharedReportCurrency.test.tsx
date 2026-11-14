@@ -13,8 +13,8 @@ import { fetchLiveShared } from './api'
  * REPORT-CURRENCY-TRUTH-001 — the live page formats money in the unit the PAYLOAD states.
  *
  * The `currency` prop is the report row's stamp, written by the controllers as the reporting
- * default. On the owner's live link the KPI read «45.9K USD» while the budget block beneath it,
- * reading the rows, said 45.9K SAR — one page, one figure, two units.
+ * default. On the owner's live link the KPI read «45.9K $» while the budget block beneath it,
+ * reading the rows, said 45.9K ر.س — one page, one figure, two units.
  */
 const clean = {
   spend_original: 0, spend_withheld_rows: 0, revenue_original: 0, revenue_withheld_rows: 0,
@@ -47,8 +47,8 @@ describe('the unit a live shared report prints its money in', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
     const kpis = within(screen.getByTestId('live-kpis'))
-    expect(kpis.getByText(/45\.9K SAR/)).toBeInTheDocument()
-    expect(kpis.queryByText(/USD/)).not.toBeInTheDocument()
+    expect(kpis.getByText(/45\.9K ر.س/)).toBeInTheDocument()
+    expect(kpis.queryByText(/(?:USD|\$)/)).not.toBeInTheDocument()
   })
 
   it('prints the figure bare when the scope holds two units and the payload states none', async () => {
@@ -56,7 +56,7 @@ describe('the unit a live shared report prints its money in', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="USD" />, { route: '/r/tok?view=dashboard', locale: 'en' })
     await screen.findByTestId('live-report')
     const kpis = within(screen.getByTestId('live-kpis'))
-    expect(kpis.queryByText(/USD|SAR/)).not.toBeInTheDocument()
+    expect(kpis.queryByText(/USD|\$|SAR|ر\.س/)).not.toBeInTheDocument()
     expect(kpis.getByText(/45\.9K/)).toBeInTheDocument()
   })
 })
