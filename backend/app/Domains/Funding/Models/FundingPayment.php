@@ -13,7 +13,10 @@ use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
- * FIN-LOOP-001 — one amount finance approved for a project. Append-only.
+ * FIN-LOOP-001 — one entry in a project's budget ledger. Append-only.
+ *
+ * kind: initial | top_up (money in) · adjustment (a signed correction of the amount, and maybe the period) ·
+ * void (the budget deleted: the net amount taken out) · reversal (an undo: names the entry it cancels).
  *
  * A renewal is a NEW row; nothing here is ever edited or deleted, so the spend counted before a renewal
  * is untouched by it and the record of who added what, when, and against which reference survives.
@@ -25,6 +28,9 @@ use LogicException;
  * @property string $currency
  * @property string $amount_sar
  * @property Carbon $paid_on
+ * @property string|null $reverses_id
+ * @property string|null $reason
+ * @property array<string, mixed>|null $meta
  * @property string|null $reference
  * @property string|null $note
  * @property string|null $remaining_before
@@ -41,12 +47,12 @@ final class FundingPayment extends Model
 
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'project_id', 'kind', 'amount', 'currency', 'amount_sar', 'rate', 'rate_date',
-        'rate_source', 'paid_on', 'reference', 'note', 'remaining_before', 'remaining_after', 'idempotency_key', 'created_by',
+        'rate_source', 'paid_on', 'reference', 'note', 'remaining_before', 'remaining_after', 'idempotency_key', 'created_by', 'reverses_id', 'reason', 'meta',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2', 'amount_sar' => 'decimal:2', 'rate' => 'decimal:12', 'rate_date' => 'date',
-        'paid_on' => 'date', 'remaining_before' => 'decimal:2', 'remaining_after' => 'decimal:2', 'created_at' => 'datetime',
+        'paid_on' => 'date', 'remaining_before' => 'decimal:2', 'remaining_after' => 'decimal:2', 'created_at' => 'datetime', 'meta' => 'array',
     ];
 
     protected static function booted(): void

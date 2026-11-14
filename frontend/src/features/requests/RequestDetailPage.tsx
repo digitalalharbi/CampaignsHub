@@ -79,19 +79,19 @@ export function RequestDetailPage() {
 
         {/* Actions */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
+          <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" disabled={changeStatus.isPending} onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
             <option value="">{t('change_status')}</option>
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusLabel(s, lang)}</option>)}
           </select>
-          <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} onChange={(e) => changePriority.mutate(e.target.value)}>
+          <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} disabled={changePriority.isPending} onChange={(e) => changePriority.mutate(e.target.value)}>
             {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{priorityLabel(p, lang)}</option>)}
           </select>
           {user?.id && (d.assigned_to ? (
-            <Button variant="secondary" size="sm" onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
+            <Button variant="secondary" size="sm" disabled={assign.isPending} onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
           ) : (
-            <Button variant="secondary" size="sm" onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
+            <Button variant="secondary" size="sm" disabled={assign.isPending} onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
           ))}
-          {!d.archived_at && <Button variant="ghost" size="sm" onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
+          {!d.archived_at && <Button variant="ghost" size="sm" disabled={archiveMut.isPending} onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
           {!d.conversion && !d.archived_at && (
             <Button size="sm" onClick={() => convertMut.mutate()} loading={convertMut.isPending}>{t('convert')}</Button>
           )}

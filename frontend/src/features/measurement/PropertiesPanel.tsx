@@ -86,7 +86,7 @@ export function PropertiesPanel({ projectId }: { projectId: string }) {
 
   const query = useQuery({ queryKey: ['measurement-properties', projectId], queryFn: () => listMeasurementProviders(projectId) })
 
-  const sync = useMutation({
+  const sync = useMutation({ meta: { feedback: 'none' },
     mutationFn: (accountId: string) => syncMeasurementProperty(accountId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['measurement-properties'] }),
   })

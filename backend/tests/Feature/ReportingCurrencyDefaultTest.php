@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -23,6 +24,10 @@ use Tests\TestCase;
  */
 final class ReportingCurrencyDefaultTest extends TestCase
 {
+    // Reads tables (platform settings, provider configurations, currency rates): it must migrate its own database rather
+    // than rely on an earlier class having done so — under ParaTest each worker starts on an empty one.
+    use RefreshDatabase;
+
     public function test_the_reporting_default_is_usd(): void
     {
         $this->assertSame('USD', ReportingCurrency::DEFAULT);

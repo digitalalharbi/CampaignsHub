@@ -42,8 +42,8 @@ export function CampaignViewsBar({ current, days, onApply, ar, module = CAMPAIGN
       {(views.data ?? []).map((v) => (
         <span key={v.id} className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs">
           <button type="button" onClick={() => onApply(v)} className="font-semibold text-text-primary hover:text-brand-600" data-testid={`${testPrefix}-view-${v.id}`}>{v.name}</button>
-          <button type="button" onClick={() => setDefault.mutate(v.id)} aria-label={ar ? 'اجعله الافتراضي' : 'Make default'} aria-pressed={v.is_default} className={v.is_default ? 'text-warning' : 'text-text-muted hover:text-warning'}><Star size={12} aria-hidden /></button>
-          <button type="button" onClick={() => remove.mutate(v.id)} aria-label={ar ? 'حذف العرض' : 'Delete view'} className="text-text-muted hover:text-danger"><Trash2 size={12} aria-hidden /></button>
+          <button type="button" disabled={setDefault.isPending} onClick={() => setDefault.mutate(v.id)} aria-label={ar ? 'اجعله الافتراضي' : 'Make default'} aria-pressed={v.is_default} className={v.is_default ? 'text-warning' : 'text-text-muted hover:text-warning'}><Star size={12} aria-hidden /></button>
+          <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(v.id)} aria-label={ar ? 'حذف العرض' : 'Delete view'} className="text-text-muted hover:text-danger"><Trash2 size={12} aria-hidden /></button>
         </span>
       ))}
       {naming ? (

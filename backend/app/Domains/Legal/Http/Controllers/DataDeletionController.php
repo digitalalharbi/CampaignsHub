@@ -11,6 +11,7 @@ use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Services\DeletionBlockers;
 use App\Domains\Legal\Services\DeletionVerification;
+use App\Domains\Legal\Services\PlatformInboxNotifier;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Http\Controllers\Controller;
@@ -51,6 +52,7 @@ final class DataDeletionController extends Controller
         private readonly DeletionVerification $verification,
         private readonly DeletionBlockers $blockers,
         private readonly TransactionalMailer $mailer,
+        private readonly PlatformInboxNotifier $notifier,
     ) {}
 
     /**
@@ -124,6 +126,9 @@ final class DataDeletionController extends Controller
             'blockers' => array_column($blockers, 'code'),
             'delivery' => $delivery,
         ]);
+
+        // PLATFORM-INBOX-ATTENTION-001 — a data request has a statutory clock from the moment it arrives.
+        $this->notifier->received($record);
 
         return ApiResponse::success([
             'reference' => $record->reference,
@@ -279,6 +284,8 @@ final class DataDeletionController extends Controller
                 'provider' => $provider,
                 'external_user_id' => $externalId,
             ]);
+
+            $this->notifier->received($record);
         }
 
         return response()->json([

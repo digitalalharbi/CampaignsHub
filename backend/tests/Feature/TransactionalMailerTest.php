@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Notifications\Mail\CredentialMail;
-use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
+use Tests\Support\ConfiguredTestEmailProvider;
 use Tests\TestCase;
 
 /**
@@ -147,25 +147,5 @@ final class TransactionalMailerTest extends TestCase
 
         $this->assertSame(2, DB::table('mail_deliveries')->count());
         Mail::assertSentCount(2);
-    }
-}
-
-/** A stand-in for a channel that has credentials. The transport itself is faked separately. */
-final class ConfiguredTestEmailProvider implements MessageProvider
-{
-    public function channel(): string
-    {
-        return 'email';
-    }
-
-    public function isConfigured(): bool
-    {
-        return true;
-    }
-
-    /** @param  array<string,mixed>  $payload */
-    public function send(string $destination, array $payload): array
-    {
-        return ['status' => 'sent', 'provider_message_id' => 'test', 'error' => null];
     }
 }
