@@ -78,6 +78,7 @@ const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage')
 const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
 const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
 const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
+const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
 const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
 const DevStatusPage = lazyPage(() => import('@/features/dev/DevStatusPage'), 'DevStatusPage')
 const IntegrationsPage = lazyPage(() => import('@/features/integrations/IntegrationsPage'), 'IntegrationsPage')
@@ -405,6 +406,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
+          { path: 'budgets', element: <BudgetsPage /> },
           /*
            * BUDGET-GOVERNANCE-001 — the workspace's own limits, which are not the platforms'.
            *
@@ -659,6 +662,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'automation', element: <AutomationPage /> },
             { path: 'agents', element: <AgentCenterPage /> },
             { path: 'agents/approvals', element: <ApprovalsPage /> },
+            { path: 'budgets', element: <BudgetsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },

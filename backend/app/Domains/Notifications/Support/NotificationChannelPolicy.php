@@ -69,6 +69,7 @@ final class NotificationChannelPolicy
         'Domains/Alerts/Services/AlertEvaluator.php',
         'Domains/Automation/Services/RuleEvaluator.php',
         'Domains/ClientWorkspaces/Services/ClientManagementService.php',
+        'Domains/Funding/Services/FundingNotifier.php',
         'Domains/Messaging/Services/MessagingService.php',
         'Domains/Reports/Jobs/GenerateReportJob.php',
         'Domains/Requests/Services/RequestJourneyService.php',
@@ -132,6 +133,8 @@ final class NotificationChannelPolicy
         'role_changed' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'planned', 'severity' => 'warning'],
         'member_welcome' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'automation_rule' => ['in_app' => true, 'via' => 'dispatcher', 'whatsapp' => 'planned', 'severity' => 'warning', 'spend' => true],
+        // FIN-LOOP-001 — a project's approved budget: added, running low, over. Recipients are chosen by FundingNotifier.
+        'project_budget' => ['in_app' => true, 'via' => 'dispatcher', 'whatsapp' => 'planned', 'severity' => 'warning', 'spend' => true],
     ];
 
     /**
