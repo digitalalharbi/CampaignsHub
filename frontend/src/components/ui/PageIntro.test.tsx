@@ -14,9 +14,9 @@ import { PageIntro } from './PageIntro'
  */
 describe('the page hero', () => {
   it('says which scope the page is showing, above the title', () => {
-    render(<PageIntro title="التقارير" eyebrow="محفظة العميل" testid="h" />)
+    render(<PageIntro title="التقارير" eyebrow="ملخص العميل" testid="h" />)
 
-    expect(screen.getByTestId('h-eyebrow').textContent).toBe('محفظة العميل')
+    expect(screen.getByTestId('h-eyebrow').textContent).toBe('ملخص العميل')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('التقارير')
   })
 

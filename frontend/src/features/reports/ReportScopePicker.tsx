@@ -547,7 +547,7 @@ export function ReportScopePicker({
                 {tpl.name}
               </button>
               {tpl.shared && <span className="text-text-muted">· {t.shared}</span>}
-              <button type="button" aria-label={t.remove} className="text-text-muted hover:text-danger" onClick={() => remove.mutate(tpl.id)}>
+              <button type="button" aria-label={t.remove} className="text-text-muted hover:text-danger" disabled={remove.isPending} onClick={() => remove.mutate(tpl.id)}>
                 <Trash2 size={11} />
               </button>
             </span>

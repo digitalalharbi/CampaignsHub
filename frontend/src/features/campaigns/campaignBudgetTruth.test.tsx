@@ -98,7 +98,7 @@ describe('a budget comparison nobody can make', () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />, { locale: 'ar' })
     const card = (await screen.findByText('المتبقي')).closest('div.rounded-2xl') as HTMLElement
     expect(card).toHaveTextContent('—')
-    expect(card).toHaveTextContent('بلا رقم مصروف يُقارن بالميزانية')
+    expect(card).toHaveTextContent('بلا رقم إنفاق يُقارن بالميزانية')
 
     renderWithProviders(<CampaignExecutiveSummary campaign={campaign} projectId="p1" range={range} locale="ar" />, { locale: 'ar' })
     expect(await screen.findByText(/غير متاح/)).toBeInTheDocument()

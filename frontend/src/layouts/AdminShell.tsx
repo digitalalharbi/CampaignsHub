@@ -8,6 +8,7 @@ import {
   Receipt,
   ShieldAlert,
   Inbox,
+  MessagesSquare,
   ScrollText,
   Settings,
   Building2,
@@ -64,13 +65,15 @@ const adminNav = [
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site, owned by the platform.
   { to: '/admin/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
+  // PLATFORM-INBOX-ATTENTION-001 — contact messages, support tickets and data requests addressed to the platform.
+  { to: '/admin/inbox', ar: 'الوارد', en: 'Inbox', icon: MessagesSquare },
   { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
   { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
   { to: '/admin/addons', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
   // PRICING-MIGRATION-001 — launch-plan subscribers onto the current catalogue: previewed, typed, at period end.
   { to: '/admin/plan-migration', ar: 'الانتقال للباقات الجديدة', en: 'Plan migration', icon: ArrowRightLeft },
-  { to: '/admin/usage', ar: 'الاستهلاك والرصيد', en: 'Usage and credits', icon: Gauge },
+  { to: '/admin/usage', ar: 'الاستخدام والرصيد', en: 'Usage and credits', icon: Gauge },
   { to: '/admin/tax', ar: 'ضريبة القيمة المضافة', en: 'VAT', icon: Receipt },
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
@@ -114,8 +117,8 @@ const adminAdvancedNav = [
 const ADMIN_TABS: MobileTab[] = [
   { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: adminNav[0].icon, end: true },
   { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: adminNav[1].icon },
-  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: adminNav[3].icon },
-  { to: '/admin/billing', ar: 'الاشتراكات', en: 'Billing', icon: adminNav[4].icon },
+  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: adminNav[4].icon },
+  { to: '/admin/billing', ar: 'الاشتراكات', en: 'Billing', icon: adminNav[5].icon },
 ]
 
 /**

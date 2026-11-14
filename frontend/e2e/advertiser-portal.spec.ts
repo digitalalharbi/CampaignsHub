@@ -41,7 +41,7 @@ async function openSection(page: import('@playwright/test').Page, href: string) 
    */
   await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(/|\\?|$)`))
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» is the campaigns page with its builder OPEN (`?launch=1`). That is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» is the campaigns page with its builder OPEN (`?launch=1`). That is the
    * section arriving, not a stray overlay: the dialog must be the builder, and a person closes it before
    * reaching for the rail again — exactly what the walk now does. Any other link that leaves a dialog
    * open still fails here, on the link that opened it.
