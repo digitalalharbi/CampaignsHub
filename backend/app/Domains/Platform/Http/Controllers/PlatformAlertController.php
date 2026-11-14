@@ -8,7 +8,6 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Platform\Alerts\PlatformAlertPresenter;
 use App\Domains\Platform\Alerts\SettlementSource;
-use App\Domains\Platform\Alerts\UnavailableSettlementSource;
 use App\Domains\Platform\Models\PlatformAlert;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -56,8 +55,8 @@ final class PlatformAlertController extends Controller
                 'critical' => (clone $open)->where('severity', 'critical')->count(),
                 'by_kind' => (clone $open)->selectRaw('kind, count(*) as n')->groupBy('kind')->pluck('n', 'kind')->map(fn ($n): int => (int) $n)->all(),
             ],
-            // Honest about the one check that cannot run: no settlement data exists here yet.
-            'settlement_check' => $this->settlements->isAvailable() ? 'available' : UnavailableSettlementSource::STATE,
+            // Honest about the settlement check: available, blocked (no key) or refused by Moyasar.
+            'settlement_check' => $this->settlements->state(),
         ], 'Platform alerts.');
     }
 
