@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -77,6 +77,7 @@ const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage')
 const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
 const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
 const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
+const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
 const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
 const DevStatusPage = lazyPage(() => import('@/features/dev/DevStatusPage'), 'DevStatusPage')
 const IntegrationsPage = lazyPage(() => import('@/features/integrations/IntegrationsPage'), 'IntegrationsPage')
@@ -401,6 +402,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
+          { path: 'budgets', element: <BudgetsPage /> },
           /*
            * BUDGET-GOVERNANCE-001 — the workspace's own limits, which are not the platforms'.
            *
@@ -603,7 +606,9 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'requests', element: <RequestsDashboardPage /> },
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
             { path: 'portfolio', element: <PortfolioPage /> },
-            { path: 'projects', element: <ProjectsPage /> },
+            // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
+            { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
+            { path: 'projects/:projectId', element: <AgencyProjectToClientRedirect /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*
@@ -655,6 +660,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'automation', element: <AutomationPage /> },
             { path: 'agents', element: <AgentCenterPage /> },
             { path: 'agents/approvals', element: <ApprovalsPage /> },
+            { path: 'budgets', element: <BudgetsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },

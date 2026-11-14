@@ -72,7 +72,7 @@ final class MailPreviewsTest extends TestCase
 
         // 22 messages (the owner invitation joined in EMAIL-RTL-001) × 2 languages (digest-single-project, digest-client-weekly and digest-restricted-daily joined the gallery, then the welcome and the role-change notice).
         // DIGESTS-CADENCE-BUDGETS-001 added the project monthly, «ملخص المشاريع» daily/weekly/monthly and ten alert families: 14 × 2.
-        $this->assertCount(96, $files); // EMAIL-DIGESTS-OPERATIONAL-001 added digest-project, digest-project-leads and digest-portfolio in both languages; // LOGIN-004 added the Google link message in both languages; EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
+        $this->assertCount(100, $files); // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 added spend-summary-weekly and spend-summary-external in both languages; // EMAIL-DIGESTS-OPERATIONAL-001 added digest-project, digest-project-leads and digest-portfolio in both languages; // LOGIN-004 added the Google link message in both languages; EMAIL-SYSTEM-P0 added monthly, agency-branded, password-changed and delivery-reminder; EMAIL-GAPS added two scheduled-report and two client-request messages.
     }
 
     /**
@@ -244,6 +244,14 @@ final class MailPreviewsTest extends TestCase
     public function test_only_subscribed_messages_offer_the_way_out(): void
     {
         foreach ($this->render() as $name => $html) {
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the mail to a recipient OUTSIDE the platform is self-contained: no link into the
+            // product at all (no settings, no policies page, no login); its one way out is the signed unsubscribe link.
+            if (str_starts_with($name, 'spend-summary-external')) {
+                $this->assertStringNotContainsString('/app/', $html, "{$name} links into the platform");
+                $this->assertStringNotContainsString('/privacy', $html, "{$name} links into the platform");
+
+                continue;
+            }
             $this->assertStringContainsString('/privacy', $html, "{$name} has no privacy link");
             // EMAIL-FOOTER-001 (Owner, 2026-11-06) supersedes MAIL-009 for this one part: every message,
             // an account message included, links to the settings page, so a reader manages mail there

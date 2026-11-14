@@ -11,9 +11,11 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Services\CreativeMetrics;
 use App\Domains\Campaigns\Services\CreativeResultAttribution;
 use App\Domains\Campaigns\Support\CreativeKind;
+use App\Domains\Reports\Analytics\ObjectiveMetricFamilies;
 use App\Domains\Reports\Services\CreativeRankingService;
 use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\HiddenMoney;
+use App\Domains\Reports\Support\ReportObjectives;
 use Illuminate\Support\Carbon;
 
 /**
@@ -147,6 +149,271 @@ final class ContentFormatComparison
     }
 
     /**
+     * REPORT-FORMAT-COMPARE-TABLE-001 — the figures a report's comparison table can show, by the names the report's KPI presets use
+     * (`ReportTemplateEngine::METRIC_SETS`). Volume and delivery figures read every creative of the format; a RESULT and everything
+     * built on it (orders, revenue, ROAS, cost per order …) reads only the creatives whose results reached creative grain, exactly as
+     * `results` does above. A withheld amount makes every figure built from it null (FX-001).
+     */
+    public const TABLE_KEYS = [
+        'spend', 'impressions', 'reach', 'frequency', 'clicks', 'ctr', 'cpc', 'cpm', 'landing_page_views', 'cost_per_lpv',
+        'add_to_cart', 'purchases', 'conversions', 'revenue', 'roas', 'cpa', 'conversion_rate',
+        'leads', 'cpl', 'installs', 'cpi', 'engagements', 'engagement_rate', 'cpe', 'video_views', 'cost_per_view', 'completion_rate',
+    ];
+
+    /** The figures that are a result, or built on one — read from the attributable creatives only. */
+    private const RESULT_KEYS = ['add_to_cart', 'purchases', 'conversions', 'revenue', 'roas', 'cpa', 'conversion_rate', 'leads', 'cpl', 'installs', 'cpi'];
+
+    /** Figures built on spend (null when any of it is withheld). */
+    private const SPEND_BUILT = ['spend', 'cpc', 'cpm', 'cost_per_lpv', 'roas', 'cpa', 'cpl', 'cpi', 'cpe', 'cost_per_view'];
+
+    /** A report preset's name for a figure → the name this table carries it under. */
+    public const TABLE_ALIASES = ['video_completion_rate' => 'completion_rate', 'orders' => 'purchases'];
+
+    /** Which way is better, for the per-row winner. Spend and frequency name no winner: more of either is not better or worse. */
+    public const TABLE_BETTER = [
+        'impressions' => 'higher', 'reach' => 'higher', 'clicks' => 'higher', 'ctr' => 'higher', 'landing_page_views' => 'higher',
+        'add_to_cart' => 'higher', 'purchases' => 'higher', 'conversions' => 'higher', 'revenue' => 'higher', 'roas' => 'higher',
+        'conversion_rate' => 'higher', 'leads' => 'higher', 'installs' => 'higher', 'engagements' => 'higher', 'engagement_rate' => 'higher',
+        'video_views' => 'higher', 'completion_rate' => 'higher',
+        'cpc' => 'lower', 'cpm' => 'lower', 'cost_per_lpv' => 'lower', 'cpa' => 'lower', 'cpl' => 'lower', 'cpi' => 'lower', 'cpe' => 'lower', 'cost_per_view' => 'lower',
+    ];
+
+    /** The figure a one-line verdict is stated on, per family, tried in order (the first the data answers wins). */
+    public const VERDICT_ORDER = [
+        'sales' => ['roas', 'purchases', 'conversions', 'revenue', 'cpa'],
+        'traffic' => ['ctr', 'cpc', 'clicks'],
+        'awareness' => ['cpm', 'reach', 'impressions'],
+        'engagement' => ['engagement_rate', 'cpe', 'engagements'],
+        'video' => ['completion_rate', 'cost_per_view', 'video_views'],
+        'leads' => ['cpl', 'leads'],
+        'app' => ['cpi', 'installs'],
+    ];
+
+    /**
+     * @param  array<string, mixed>  $all
+     * @param  array<string, mixed>  $attr
+     * @return array<string, float|null>
+     */
+    private function tableMetrics(array $all, array $attr, bool $withheld, bool $attrWithheld, bool $revenueWithheld): array
+    {
+        $out = [];
+        foreach (self::TABLE_KEYS as $key) {
+            $result = in_array($key, self::RESULT_KEYS, true);
+            $source = $result ? $attr : $all;
+            $value = $this->number($source[$key] ?? null);
+            if (in_array($key, self::SPEND_BUILT, true) && ($result ? $attrWithheld : $withheld)) {
+                $value = null;
+            }
+            if (in_array($key, ['revenue', 'roas'], true) && $revenueWithheld) {
+                $value = null;
+            }
+            $out[$key] = $value;
+        }
+
+        return $out;
+    }
+
+    /**
+     * REPORT-FORMAT-COMPARE-TABLE-001 (Owner 2026-11-13: «جدول مقارنة احترافي: كل نوع محتوى عمود، وكل صف مؤشر من مؤشرات هدف التقرير»)
+     * — the report's ONE comparison table: a column per content type, a row per KPI of the report.
+     *
+     * Rows are the report's own KPI list (its cards' list — the objective's preset or the operator's choice), in that order; a row
+     * every type left empty (no figure, or zero everywhere) is not a row, and a type with no figure in any row is not a column. Built
+     * from each family's per-format `metrics` — already cut for this reader (client, hidden spend or revenue) — and, when the report
+     * keeps several families, merged by format: counts and money are summed and every ratio is rebuilt from those sums, never averaged;
+     * reach and frequency and a completion rate cannot be added across families and are dropped then.
+     *
+     * Cells are keyed by KPI so that every later redaction pass (`HiddenMoney`, `forAudience`, `withoutMetrics`) that removes a money
+     * key by name removes its whole row with it. The verdict is drawn by the renderer from the cells that survived — never written here,
+     * where a sentence could outlive the figure it quotes.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $kpis
+     * @return array<string, mixed>|null
+     */
+    public static function table(array $block, array $kpis): ?array
+    {
+        $objectives = array_values(array_filter((array) ($block['objectives'] ?? []), 'is_array'));
+        $rows = [];
+        foreach ($kpis as $kpi) {
+            $key = self::TABLE_ALIASES[$kpi] ?? $kpi;
+            if (in_array($key, self::TABLE_KEYS, true) && ! in_array($key, $rows, true)) {
+                $rows[] = $key;
+            }
+        }
+        if ($objectives === [] || $rows === []) {
+            return null;
+        }
+
+        /*
+         * Orders are the provider's PURCHASES; where no type in scope reports a purchase but conversions are reported, the row is
+         * CONVERSIONS — named as conversions, never printed under the word purchase. The rule `ObjectiveMetricFamilies::salesKeys()`
+         * states for the objective blocks, applied here rather than restated.
+         */
+        $reported = static function (string $key) use ($objectives): bool {
+            foreach ($objectives as $objective) {
+                foreach ((array) ($objective['formats'] ?? []) as $f) {
+                    if (is_numeric($f['metrics'][$key] ?? null) && (float) $f['metrics'][$key] > 0.0) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        };
+        $purchases = ObjectiveMetricFamilies::salesKeys($reported('purchases'))['volume'];
+        $rows = array_values(array_unique(array_map(static fn (string $r): string => $r === 'purchases' ? $purchases : $r, $rows)));
+
+        $merged = [];
+        $meta = [];
+        foreach ($objectives as $objective) {
+            foreach ((array) ($objective['formats'] ?? []) as $f) {
+                if (! is_array($f) || ! is_string($f['format'] ?? null)) {
+                    continue;
+                }
+                $kind = $f['format'];
+                $merged[$kind][] = (array) ($f['metrics'] ?? []);
+                $meta[$kind] = [
+                    'format' => $kind,
+                    'creatives' => ($meta[$kind]['creatives'] ?? 0) + (int) ($f['creatives'] ?? 0),
+                    'spend' => ($meta[$kind]['spend'] ?? 0.0) + (float) ($f['spend'] ?? 0.0),
+                    'small_sample' => ($meta[$kind]['small_sample'] ?? true) && (bool) ($f['small_sample'] ?? false),
+                ];
+            }
+        }
+
+        $cells = [];
+        foreach ($rows as $row) {
+            foreach ($merged as $kind => $sets) {
+                $cells[$row][$kind] = self::mergedFigure($row, $sets);
+            }
+        }
+
+        $present = static fn ($v): bool => is_numeric($v) && (float) $v != 0.0;
+        $cells = array_filter($cells, static fn (array $byFormat): bool => array_filter($byFormat, $present) !== []);
+        $formats = array_values(array_filter($meta, static function (array $m) use ($cells, $present): bool {
+            foreach ($cells as $byFormat) {
+                if ($present($byFormat[$m['format']] ?? null)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
+        if ($cells === [] || $formats === []) {
+            return null;
+        }
+        usort($formats, static fn (array $a, array $b): int => [$a['format'] === CreativeKind::UNCLASSIFIED, -$a['spend'], -$a['creatives'], $a['format']]
+            <=> [$b['format'] === CreativeKind::UNCLASSIFIED, -$b['spend'], -$b['creatives'], $b['format']]);
+        $formats = array_map(static fn (array $m): array => ['format' => $m['format'], 'creatives' => $m['creatives'], 'small_sample' => $m['small_sample']], $formats);
+
+        $first = (string) ($objectives[0]['family'] ?? '');
+
+        return [
+            'rows' => array_keys($cells),
+            'formats' => $formats,
+            'cells' => $cells,
+            'better' => array_intersect_key(self::TABLE_BETTER, $cells),
+            'labels' => array_map(static fn (string $k): array => ObjectiveMetricFamilies::label($k), array_combine(array_keys($cells), array_keys($cells))),
+            'kinds' => array_map(static fn (string $k): string => ObjectiveMetricFamilies::kind($k), array_combine(array_keys($cells), array_keys($cells))),
+            'verdict_order' => self::VERDICT_ORDER[$first] ?? [],
+        ];
+    }
+
+    /**
+     * One figure of one format across the families kept: a family's own figure when only one has the format, else rebuilt.
+     *
+     * @param  list<array<string, mixed>>  $sets
+     */
+    private static function mergedFigure(string $key, array $sets): ?float
+    {
+        if (count($sets) === 1) {
+            return is_numeric($sets[0][$key] ?? null) ? (float) $sets[0][$key] : null;
+        }
+        $sum = static function (string $k) use ($sets): ?float {
+            $total = null;
+            foreach ($sets as $set) {
+                if (! array_key_exists($k, $set)) {
+                    continue;
+                }
+                if (! is_numeric($set[$k])) {
+                    return null;
+                }
+                $total = ($total ?? 0.0) + (float) $set[$k];
+            }
+
+            return $total;
+        };
+        $ratio = static function (?float $num, ?float $den, float $scale = 1.0): ?float {
+            return $num === null || $den === null || $den <= 0.0 ? null : $num / $den * $scale;
+        };
+
+        return match ($key) {
+            'reach', 'frequency', 'completion_rate' => null,
+            'ctr' => $ratio($sum('clicks'), $sum('impressions')),
+            'cpc' => $ratio($sum('spend'), $sum('clicks')),
+            'cpm' => $ratio($sum('spend'), $sum('impressions'), 1000.0),
+            'cost_per_lpv' => $ratio($sum('spend'), $sum('landing_page_views')),
+            'roas' => $ratio($sum('revenue'), $sum('spend')),
+            'cpa' => $ratio($sum('spend'), $sum('purchases')),
+            'conversion_rate' => $ratio($sum('conversions'), $sum('clicks')),
+            'cpl' => $ratio($sum('spend'), $sum('leads')),
+            'cpi' => $ratio($sum('spend'), $sum('installs')),
+            'engagement_rate' => $ratio($sum('engagements'), $sum('impressions')),
+            'cpe' => $ratio($sum('spend'), $sum('engagements')),
+            'cost_per_view' => $ratio($sum('spend'), $sum('video_views')),
+            default => $sum($key),
+        };
+    }
+
+    /** REPORT-FORMAT-COMPARE-COMPACT-001 — a report objective (template) → the objective family its results are counted in. */
+    public const TEMPLATE_FAMILY = [
+        'sales' => 'sales',
+        'awareness' => 'awareness',
+        'traffic' => 'traffic',
+        'engagement' => 'engagement',
+        'video' => 'video',
+        'leads' => 'leads',
+        'app_installs' => 'app',
+    ];
+
+    /**
+     * REPORT-FORMAT-COMPARE-COMPACT-001 (Owner 2026-11-13: «المقارنة بين أنواع المحتوى كبيرة جدًا ومكررة حسب كل هدف، وتظهر هوامش
+     * وأصفار لأن هدف العميل مثلًا مبيعات») — a REPORT's comparison speaks of the report's own objective(s) only.
+     *
+     * A report measured against sales does not compare formats on awareness or traffic results: those families' cells are the
+     * figures of an objective nobody asked this report about (empty, or a zero), and each one was a page of its own. The report's
+     * objectives choose which families stay; a report with no objective keeps every family. Nothing about the creatives is hidden
+     * by this — the content section lists them all — it only decides which results a format is compared on. A family with no
+     * format is dropped; where no family matches the report's objective every family with formats stays; a comparison with no
+     * family at all is null: no data, no section.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $templates  {@see ReportObjectives::of()}
+     * @return array<string, mixed>|null
+     */
+    public static function forReportObjectives(array $block, array $templates): ?array
+    {
+        $families = array_values(array_unique(array_filter(array_map(static fn (string $t): ?string => self::TEMPLATE_FAMILY[$t] ?? null, $templates))));
+        $withFormats = array_values(array_filter((array) ($block['objectives'] ?? []), static fn ($o): bool => is_array($o) && (array) ($o['formats'] ?? []) !== []));
+        $objectives = array_values(array_filter($withFormats, static fn (array $o): bool => $families === [] || in_array($o['family'] ?? null, $families, true)));
+        /*
+         * No family of the report's objective in scope: the comparison keeps what the content WAS bought for rather than vanish.
+         * A saved report carries its inferred lens in the same column as a chosen one, and an inferred lens that names no family
+         * of the creatives in scope must not take a true comparison away (objectives choose KPIs, they never hide content).
+         */
+        if ($objectives === []) {
+            $objectives = $withFormats;
+        }
+        if ($objectives === []) {
+            return null;
+        }
+        $block['objectives'] = $objectives;
+
+        return $block;
+    }
+
+    /**
      * REPORT-KPI-CONTRACT-001 — a report or link that chose its KPIs carries no figure it did not choose, here too.
      *
      * `$cut` is the list of KPI keys left out. Each objective names its own result and cost metric, so «conversions not
@@ -174,9 +441,30 @@ final class ContentFormatComparison
             }
         }
 
-        $block['objectives'] = array_map(static function ($objective) use ($off, $direct) {
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the table and each type's figures carry no KPI the report left out either. Orders that
+        // fell back to conversions (`table()`) stand for the chosen purchases and stay while purchases are chosen.
+        $gone = static fn (string $k): bool => isset($off[$k]) && ! ($k === 'conversions' && ! isset($off['purchases']));
+        if (is_array($block['table'] ?? null)) {
+            $t = $block['table'];
+            $t['rows'] = array_values(array_filter((array) ($t['rows'] ?? []), static fn ($r): bool => is_string($r) && ! $gone($r)));
+            foreach (['cells', 'better', 'labels', 'kinds'] as $part) {
+                $t[$part] = array_filter((array) ($t[$part] ?? []), static fn ($k): bool => ! $gone((string) $k), ARRAY_FILTER_USE_KEY);
+            }
+            $block['table'] = $t['rows'] === [] ? null : $t;
+        }
+
+        $block['objectives'] = array_map(static function ($objective) use ($off, $direct, $gone) {
             if (! is_array($objective)) {
                 return $objective;
+            }
+            foreach ((array) ($objective['formats'] ?? []) as $i => $format) {
+                if (is_array($format['metrics'] ?? null)) {
+                    foreach (array_keys($format['metrics']) as $k) {
+                        if ($gone((string) $k)) {
+                            $objective['formats'][$i]['metrics'][$k] = null;
+                        }
+                    }
+                }
             }
             $keys = array_values(array_filter($direct, static fn (string $k): bool => isset($off[$k])));
             if (isset($off['spend'])) {
@@ -473,6 +761,8 @@ final class ContentFormatComparison
             'small_sample_reason' => $smallReason,
             'creative_list' => array_slice($drill, 0, max(0, $drillRows)),
             'creative_list_total' => count($drill),
+            // REPORT-FORMAT-COMPARE-TABLE-001 — every figure a report KPI can name, for the report's comparison table (see table()).
+            'metrics' => $this->tableMetrics($all, $attr, $withheld, $attrWithheld, $revenueWithheld),
         ];
     }
 

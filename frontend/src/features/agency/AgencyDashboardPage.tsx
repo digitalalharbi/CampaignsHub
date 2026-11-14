@@ -317,7 +317,7 @@ export function AgencyDashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
-            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
+            {ar ? 'تنبيهات' : 'Needs your attention'}
           </h2>
           <ul className="mt-4 space-y-2.5 text-sm">
             {/*
@@ -365,7 +365,7 @@ export function AgencyDashboardPage() {
           tone="brand"
         />
         <Metric
-          to="/agency/projects"
+          to="/agency/clients"
           label={ar ? 'المشاريع' : 'Projects'}
           value={d.projects.total}
           hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}
@@ -592,7 +592,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
       </h2>
       <MetricTable
         head={ar
-          ? ['العميل', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+          ? ['العميل', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
           : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
         rows={rows.map((r) => [
           <div key="c" className="flex flex-col">
@@ -651,7 +651,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
           </h3>
           <MetricTable
             head={ar
-              ? ['المشروع', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+              ? ['المشروع', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
               : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
             rows={(open.projects_breakdown ?? []).map((p) => [
               <div key="n" className="flex flex-col">
