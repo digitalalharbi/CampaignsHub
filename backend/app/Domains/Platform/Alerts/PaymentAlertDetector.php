@@ -68,9 +68,9 @@ final class PaymentAlertDetector
         ];
     }
 
-    public function settlementCheckAvailable(): bool
+    public function settlementCheckState(): string
     {
-        return $this->settlements->isAvailable();
+        return $this->settlements->state();
     }
 
     /**
@@ -331,7 +331,7 @@ final class PaymentAlertDetector
             return [];
         }
 
-        $days = max(1, (int) config('platform_alerts.settlement_after_days', 4));
+        $days = max(1, (int) config('platform_alerts.settlement_after_days', 7));
         $out = [];
 
         $byProvider = SubscriptionPayment::query()
@@ -344,18 +344,31 @@ final class PaymentAlertDetector
 
         foreach ($byProvider as $provider => $payments) {
             $ids = $payments->pluck('provider_payment_id')->map(fn ($id): string => (string) $id)->values()->all();
-            $settled = $this->settlements->settled((string) $provider, $ids);
+            // Settlements created on or after the earliest of these payments (a day of margin for time zones).
+            $since = Carbon::parse((string) $payments->min('paid_at'))->subDay();
+            $settled = $this->settlements->settled((string) $provider, $ids, $since);
             if ($settled === null) {
                 // Could not read the source this time: that says nothing about the money.
                 continue;
             }
+            $coverage = $this->settlements->coverage();
+            $latest = ($coverage['latest_at'] ?? null) === null ? null : Carbon::parse((string) $coverage['latest_at']);
             foreach ($payments as $payment) {
                 if (in_array((string) $payment->provider_payment_id, $settled, true)) {
                     continue;
                 }
+                /*
+                 * Only a payment the settlement history already covers: Moyasar must have settled at least once AFTER this
+                 * payment's expected period. Otherwise «not in a settlement yet» is the cycle, not a missing transfer.
+                 */
+                if ($latest === null || $payment->paid_at === null || $latest->lessThan($payment->paid_at->copy()->addDays($days))) {
+                    continue;
+                }
                 $out[] = $this->candidate(PlatformAlert::UNSETTLED, 'critical', 'unsettled:'.$payment->getKey(), $payment, $this->paymentFacts($payment) + [
                     'expected_days' => $days,
-                    'paid_at' => $payment->paid_at?->toIso8601String(),
+                    'paid_at' => $payment->paid_at->toIso8601String(),
+                    // What was read: how many of Moyasar's settlements, from when, and the newest one.
+                    'settlement_coverage' => $this->settlements->coverage(),
                 ]);
             }
         }

@@ -133,6 +133,15 @@ final class PlatformObjectiveMap
             'CATALOG_SALES' => CampaignObjective::Sales,
             // OBJECTIVE-RESULT-001 — Snapchat's current objective for an app buy; it fell through to nothing.
             'APP_PROMOTION' => CampaignObjective::AppInstalls,
+            /*
+             * OBJECTIVE-GAPS-001 — Snap's Campaign Objective V2 (developers.snap.com/api/marketing-api/
+             * Ads-API/campaigns, «Campaign Objective V2»): `objective_v2_type` is one of
+             * AWARENESS_AND_ENGAGEMENT, SALES, TRAFFIC, APP_PROMOTION, LEADS, and the page's business-logic
+             * table files the legacy BRAND_AWARENESS, VIDEO_VIEW and ENGAGEMENT objectives under the first
+             * (goals IMPRESSIONS, SWIPES, STORY_OPENS, USES, VIDEO_VIEWS, VIDEO_VIEWS_15_SEC). Awareness:
+             * its result is reach, else impressions. 32 Production campaigns carried it, all unclassified.
+             */
+            'AWARENESS_AND_ENGAGEMENT' => CampaignObjective::Awareness,
         ],
 
         'x' => [
@@ -157,6 +166,14 @@ final class PlatformObjectiveMap
          */
         'openai_ads' => [
             'CONVERSIONS' => CampaignObjective::Conversions,
+            /*
+             * OBJECTIVE-GAPS-001 — developers.openai.com/ads/bidding-and-budgets, «Campaign Objectives &
+             * Billing»: the campaign objective (`bidding_type`) is `impressions`, `clicks` or
+             * `conversions`, and a `clicks` campaign's optimisation outcome is «Clicks» (strategy
+             * `maximize_clicks`, billed per click) — a traffic buy. `impressions` is left out on purpose:
+             * not asked for in this batch, so it stays unclassified until it is.
+             */
+            'CLICKS' => CampaignObjective::Traffic,
         ],
 
         'linkedin' => [

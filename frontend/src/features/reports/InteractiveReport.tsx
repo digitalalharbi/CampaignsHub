@@ -1,3 +1,4 @@
+import { ObjectivePathCards, type ObjectivePathsBlock } from '@/features/analytics/ObjectivePathCards'
 import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
@@ -324,6 +325,8 @@ export interface ObjectivePath {
 }
 export interface ObjectivePerformance {
   paths: ObjectivePath[]
+  /** OBJECTIVE-PATHS-001 — one total spend split by ad-set objective path; absent on reports saved before it. */
+  objective_paths?: ObjectivePathsBlock
   direct: {
     label_ar: string; label_en: string
     spend: number; orders: number; revenue: number
@@ -1542,6 +1545,13 @@ function GeneralPerformanceSlide({ data }: { data: ReportData }) {
           الحملات في هذا التقرير لها أهداف مختلفة، لذلك تُعرض نتيجة كل هدف داخل قسمه بدل جمعها في رقم واحد.
         </p>
       </div>
+
+      {/* OBJECTIVE-PATHS-001 — where ad sets bought different things: the one total split by objective. */}
+      {op.objective_paths?.mixed && (
+        <div className="mt-4">
+          <ObjectivePathCards block={op.objective_paths} locale={ar ? 'ar' : 'en'} currency={c ?? null} />
+        </div>
+      )}
 
       {/* Each family, judged by its own metric — where a cost per order does not apply, it is absent. */}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">

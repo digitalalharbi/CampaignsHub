@@ -107,7 +107,8 @@ final class LiveReportQueryBudgetTest extends TestCase
         $this->assertLessThanOrEqual(1, $ceiling, "the account ceiling resolved its campaign list {$ceiling} times");
         // AUDIENCE-001 — three constant reads (the bound ad accounts, the ad sets' targeting, the paid-delivery rows), never per campaign.
         $this->assertLessThanOrEqual(1, self::matching($run, 'from "audience_breakdown_rows"'), 'the audience delivery rows are read once per build');
-        $this->assertLessThanOrEqual(128, count($run), 'a build over 36 campaigns asked '.count($run).' questions (128 allowed: 125 + AUDIENCE-001\'s three constant reads; the build before this work asked 338)');
+        // 129: 126 (main, incl. OBJECTIVE-PATHS-001 adds ONE statement per build (the ad-set read behind the objective split)) + AUDIENCE-001's three constant reads (bound accounts, targeting, delivery rows); none is per campaign.
+        $this->assertLessThanOrEqual(129, count($run), 'a build over 36 campaigns asked '.count($run).' questions (129 allowed; the build before this work asked 338)');
     }
 
     public function test_no_statement_runs_twice_with_the_same_bindings_inside_one_build(): void

@@ -286,12 +286,12 @@ final class FundingLedgerActionsTest extends TestCase
 
         $csv = (string) $this->actingAs($this->finance, 'sanctum')->get('/api/v1/funding/export?format=csv&sheet=summary')->assertOk()->getContent();
         $this->assertStringContainsString('12000', $csv);
-        $this->assertStringContainsString('snapchat:1000.00; meta:375.00', $csv, 'the per-platform split is in the sheet too');
+        $this->assertStringContainsString('snapchat:266.67; meta:100.00', $csv, 'the per-platform split is in the sheet too, in USD');
 
         $figures = $this->actingAs($this->finance, 'sanctum')->getJson('/api/v1/funding/projects/'.$p->id)->assertOk()->json('data');
         $row = ['client' => 'عميل', 'project' => $p->name] + $figures;
         $html = app(FundingPdf::class)->html([$row], [(string) $p->id => FundingPayment::query()->where('project_id', $p->id)->orderBy('seq')->get()->all()], '2026-11-13');
-        $this->assertStringContainsString('ملخص الميزانيات', $html);
+        $this->assertStringContainsString('البيان المالي', $html);
         $this->assertStringContainsString('12,000', $html);
         $this->assertStringContainsString('10,625', $html, 'remaining = 12,000 - 1,375');
         $this->assertStringContainsString('سناب شات', $html);

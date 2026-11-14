@@ -772,13 +772,14 @@ final class MetricsAggregator
             }
             // Reach is null on this read (see above), so it is never the figure a result is judged on here.
             $reported['reach'] = false;
-            $out[$id] = $figures + ObjectiveResult::resolve(
-                ObjectiveResult::familyOf($objective === null ? null : (string) $objective),
+            $family = ObjectiveResult::familyOf($objective === null ? null : (string) $objective);
+            $out[$id] = self::roasForSalesOnly($figures + ObjectiveResult::resolve(
+                $family,
                 $figures,
                 // Every family is judged on what was SENT; landing page views only where they were measured.
                 self::resultReported($reported, $state),
                 ($state['partial'] ?? false) === true,
-            );
+            ), $family->value);
         }
 
         return $out;
@@ -795,6 +796,27 @@ final class MetricsAggregator
     {
         self::$sweep = $token;
         self::$sendsMemo = [];
+    }
+
+    /**
+     * OBJECTIVE-GAPS-001 — a campaign's return on spend exists for the SALES family only.
+     *
+     * `withDerived()` computes ROAS for any row with revenue, so a traffic campaign that caught a few
+     * sales — four Snapchat traffic campaigns on Production in one week — printed a ROAS in the campaign
+     * table, the saved report and the ROAS-drop alert. ROAS belongs to the sales family only
+     * ({@see ObjectiveResult}); every other family gets null, never 0 («does not apply» is not
+     * «returned nothing»). Revenue stays: it is the platform's figure, only the ratio is withheld.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function roasForSalesOnly(array $row, string $family): array
+    {
+        if ($family !== ObjectiveFamily::Sales->value && array_key_exists('roas', $row)) {
+            $row['roas'] = null;
+        }
+
+        return $row;
     }
 
     /**
@@ -2195,7 +2217,7 @@ final class MetricsAggregator
         $rows = array_map(static function (array $row): array {
             unset($row['_lpv_state']);
 
-            return $row;
+            return self::roasForSalesOnly($row, (string) $row['result_family']);
         }, $rows);
 
         return self::orderCampaignRows($rows);

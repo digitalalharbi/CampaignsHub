@@ -342,8 +342,7 @@ describe('AlertsPage — the queue says whose alert each row is, and can be narr
     renderWithProviders(<AlertsPage />, { locale: 'en' })
     await openRulesTab()
 
-    const row = await screen.findByText('Unusual day')
-    const card = row.closest('div')?.parentElement as HTMLElement
+    const card = await screen.findByTestId('alert-rule-r1')
     expect(card).toHaveTextContent('In-app')
     expect(card).toHaveTextContent('Email')
     expect(card).not.toHaveTextContent('in_app')

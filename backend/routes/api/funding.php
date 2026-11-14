@@ -14,12 +14,14 @@ use Illuminate\Support\Facades\Route;
  * — the same rule, applied completely. FundingLedgerTest asserts it.
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('funding')->name('funding.')->group(function (): void {
+    Route::get('disclaimer', [FundingController::class, 'disclaimer'])->name('disclaimer');
     Route::get('/', [FundingController::class, 'index'])->name('index');
     Route::post('payments', [FundingController::class, 'store'])->middleware('throttle:30,1')->name('payments.store');
     Route::get('projects/{funded}', [FundingController::class, 'show'])->whereUuid('funded')->name('projects.show');
     Route::get('projects/{funded}/months/{month}', [FundingController::class, 'month'])->whereUuid('funded')->name('projects.month');
     Route::get('export', [FundingController::class, 'export'])->middleware('throttle:20,1')->name('export');
     Route::post('projects/{funded}/adjust', [FundingController::class, 'adjust'])->whereUuid('funded')->middleware('throttle:30,1')->name('projects.adjust');
+    Route::post('projects/{funded}/reallocate', [FundingController::class, 'reallocate'])->whereUuid('funded')->middleware('throttle:30,1')->name('projects.reallocate');
     Route::post('projects/{funded}/void', [FundingController::class, 'void'])->whereUuid('funded')->middleware('throttle:30,1')->name('projects.void');
     Route::post('projects/{funded}/undo', [FundingController::class, 'undo'])->whereUuid('funded')->middleware('throttle:30,1')->name('projects.undo');
     Route::patch('projects/{funded}', [FundingController::class, 'update'])->whereUuid('funded')->name('projects.update');

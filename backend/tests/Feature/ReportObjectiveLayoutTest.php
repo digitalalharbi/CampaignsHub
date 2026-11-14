@@ -317,7 +317,9 @@ final class ReportObjectiveLayoutTest extends TestCase
      */
     public function test_the_findings_survive_without_the_names(): void
     {
-        $this->seedCampaign('Zephyr Prospecting — burner', CampaignObjective::Sales, $this->meta, spend: 9_000, impressions: 400_000, clicks: 900, orders: 0);
+        // The platform REPORTED zero orders: «spend without results» reads each campaign's own result,
+        // and a result nobody sent is not a zero (OBJECTIVE-GAPS-001, the rules of #1017).
+        $this->seedCampaign('Zephyr Prospecting — burner', CampaignObjective::Sales, $this->meta, spend: 9_000, impressions: 400_000, clicks: 900, orders: 0, ordersReported: true);
         $this->seedCampaign('Zephyr Retargeting — winner', CampaignObjective::Sales, $this->meta, spend: 4_000, impressions: 200_000, clicks: 800, orders: 60, revenue: 90_000);
 
         $data = $this->generate();
@@ -411,6 +413,7 @@ final class ReportObjectiveLayoutTest extends TestCase
         float $orders = 0,
         float $revenue = 0,
         bool $declared = true,
+        bool $ordersReported = false,
     ): void {
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -442,7 +445,8 @@ final class ReportObjectiveLayoutTest extends TestCase
             'spend' => $spend, 'impressions' => $impressions, 'reach' => $reach,
             'clicks' => $clicks, 'conversions' => $orders, 'revenue' => $revenue,
         ] as $key => $value) {
-            if ($value === 0.0) {
+            // A reported zero is a measurement; an absent key is «not reported» (OBJECTIVE-GAPS-001).
+            if ($value === 0.0 && ! ($key === 'conversions' && $ordersReported)) {
                 continue;
             }
 

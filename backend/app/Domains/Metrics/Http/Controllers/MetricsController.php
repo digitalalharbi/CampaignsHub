@@ -727,6 +727,26 @@ final class MetricsController extends Controller
     }
 
     /**
+     * OBJECTIVE-PATHS-001 — one total spend, its split by objective path, one card per objective.
+     *
+     * Paths are ad sets classified by their own optimisation goal ({@see ObjectivePerformance::objectivePaths()}),
+     * so a campaign buying store purchases and branch visits shows both, each with its own result.
+     */
+    public function objectivePathCards(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->objectivePaths($request)->objectivePaths($from, $to),
+            'Spend and results by objective path.',
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
+        );
+    }
+
+    /**
      * OBJECTIVE-ANALYTICS-DEPTH-001 — each path's own trend, in the metric it was buying.
      *
      * Separate from `metrics/timeseries`, which is one line over a mixed programme: awareness rising

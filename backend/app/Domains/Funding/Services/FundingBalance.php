@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Metrics\Services\CurrencyConverter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +22,12 @@ use Illuminate\Support\Facades\DB;
  */
 final class FundingBalance
 {
-    public function __construct(private readonly FundingSpendRefresher $refresher) {}
+    public function __construct(
+        private readonly FundingSpendRefresher $refresher,
+        private readonly FundingPlan $plans,
+        private readonly FundingMonth $months,
+        private readonly CurrencyConverter $fx,
+    ) {}
 
     /**
      * The remaining day by day, for the chart: renewals show as steps up, spend as the slope down.
@@ -48,7 +54,7 @@ final class FundingBalance
         $start = $from->copy()->max($today->copy()->subDays(179));
         $approved = array_sum(array_filter($added, static fn ($v, $d): bool => $d < $start->toDateString(), ARRAY_FILTER_USE_BOTH));
         $spentCum = array_sum(array_filter($spent, static fn ($v, $d): bool => $d < $start->toDateString(), ARRAY_FILTER_USE_BOTH));
-        $prepaid = $funding->payment_method === 'prepaid';
+        $prepaid = $funding->payment_method === 'prepaid' && $funding->payment_mode !== 'credit';
 
         $points = [];
         for ($d = $start->copy(); $d->lte($today); $d->addDay()) {
@@ -86,14 +92,42 @@ final class FundingBalance
             ->groupBy('provider')->orderByDesc('spent')->get()
             ->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2), 'unconverted_days' => (int) $r->unconverted])->all();
 
+        // BUDGET-CURRENCY-001 — a platform's own spend is shown in USD (one unit for platforms), totals stay in SAR. The unit is the SAR
+        // figure over the latest USD→SAR rate; with no rate there is no USD figure, never a guessed one. Days with no dated rate keep
+        // their OWN currency and amount, so the page can say «بدون سعر صرف» next to them.
+        $usdRate = $this->fx->resolve('USD', 'SAR', $today)['rate'] ?? null;
+        $toUsd = static fn (?float $sar): ?float => ($sar === null || $usdRate === null || $usdRate <= 0) ? null : round($sar / $usdRate, 2);
+        $unconverted = $spendQuery()->whereNull('amount_sar')->where('original_amount', '>', 0)
+            ->selectRaw('provider, original_currency AS currency, SUM(original_amount) AS amount')->groupBy('provider', 'original_currency')->get()
+            ->groupBy('provider')->map(static fn ($g): array => $g->map(static fn ($r): array => ['currency' => (string) ($r->currency ?? ''), 'amount' => round((float) $r->amount, 2)])->values()->all())->all();
+        $byPlatform = array_map(static fn (array $p): array => $p + ['spent_usd' => $toUsd($p['spent']), 'unconverted' => $unconverted[$p['provider']] ?? []], $byPlatform);
+
         $weekStart = $today->copy()->subDays(7)->toDateString();
         $weekEnd = $today->copy()->subDay()->toDateString();
         $week = $spendQuery()->whereBetween('spend_date', [$weekStart, $weekEnd]);
         $weekDays = (int) (clone $week)->count();
         $pace = $weekDays > 0 ? round((float) (clone $week)->sum('amount_sar') / 7, 2) : null;
 
-        $prepaid = $funding->payment_method === 'prepaid';
+        $tracked = $funding->payment_method === 'prepaid';
+        // BUDGET-MODES-001 — a credit budget is NOT a prepaid balance: nothing «remains», the amount (if any) is a ceiling.
+        $credit = $tracked && $funding->payment_mode === 'credit';
+        $prepaid = $tracked && ! $credit;
         $remaining = $prepaid ? round($approved - $spent, 2) : null;
+        $ceiling = ($credit && $approved > 0) ? round($approved, 2) : null;
+        $ceilingRatio = $ceiling !== null ? round($spent / $ceiling, 4) : null;
+
+        $planRows = is_array($funding->platform_plan) && $funding->platform_plan !== []
+            ? $this->plans->withAmounts($funding->platform_plan, $approved) : null;
+        $comparison = null;
+        if ($planRows !== null) {
+            $weekBy = $spendQuery()->whereBetween('spend_date', [$weekStart, $weekEnd])->whereNotNull('amount_sar')
+                ->selectRaw('provider, SUM(amount_sar) AS s')->groupBy('provider')->pluck('s', 'provider')
+                ->map(static fn ($v): float => (float) $v)->all();
+            $comparison = array_map(static fn (array $r): array => $r + ['planned_usd' => $toUsd($r['planned']), 'spent_usd' => $toUsd($r['spent'])],
+                $this->plans->compare($planRows, $byPlatform, $weekBy, $from, $to, $today));
+        }
+        $invoiceMonths = $credit ? $this->months->invoiceMonths($funding, $today) : null;
+        $thisMonth = $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['month'] === $today->format('Y-m') ? $m['spent'] : 0.0, $invoiceMonths)), 2);
 
         $daysLeft = ($remaining !== null && $pace !== null && $pace > 0 && $remaining > 0)
             ? (int) floor($remaining / $pace) : null;
@@ -102,6 +136,10 @@ final class FundingBalance
             $funding->payment_method === 'unset' => 'unset',
             $funding->voided_at !== null => 'void',
             $funding->payment_method === 'direct' => 'direct',
+            $credit && $withoutRate > 0 => 'incomplete',
+            $credit && $ceiling !== null && $spent > $ceiling => 'credit_over',
+            $credit && $ceilingRatio !== null && $ceilingRatio >= FundingPlan::NEAR => 'credit_near',
+            $credit => 'credit',
             $approved <= 0 => 'no_budget',
             $remaining < 0 => 'over',
             // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
@@ -114,6 +152,7 @@ final class FundingBalance
             'project_id' => $funding->project_id,
             'client_workspace_id' => $funding->client_workspace_id,
             'payment_method' => $funding->payment_method,
+            'payment_mode' => $funding->payment_mode,
             'counts_from' => $from?->toDateString(),
             'period_start' => $from?->toDateString(),
             'period_end' => $to?->toDateString(),
@@ -126,7 +165,18 @@ final class FundingBalance
             'payments' => $payments,
             'spent' => round($spent, 2),
             'remaining' => $remaining,
-            'used_ratio' => ($prepaid && $approved > 0) ? round($spent / $approved, 4) : null,
+            'used_ratio' => (($prepaid || $credit) && $approved > 0) ? round($spent / $approved, 4) : null,
+            // credit: spend so far, the optional ceiling with its own ratio, and what is ready to invoice (closed months).
+            'to_date' => $credit ? round($spent, 2) : null,
+            'this_month' => $thisMonth,
+            'usd_rate' => $usdRate,
+            'ceiling' => $ceiling,
+            'ceiling_ratio' => $ceilingRatio,
+            'to_invoice' => $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['closed'] ? $m['spent'] : 0.0, $invoiceMonths)), 2),
+            'planned' => $planRows !== null,
+            'platform_plan' => $planRows,
+            'plan' => $comparison,
+            'plan_alerts' => $comparison === null ? 0 : count($this->plans->alerts($comparison)),
             'pace_per_day' => $pace,
             'days_left' => $daysLeft,
             'spend_without_rate' => $withoutRate,

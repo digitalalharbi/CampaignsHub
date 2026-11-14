@@ -1,4 +1,4 @@
-import { api, getData, getEnvelope, postData } from '@/lib/api/client'
+import { api, deleteData, getData, getEnvelope, patchData, postData } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
 /** An alert rule (config). Mirrors backend AlertRule. */
@@ -13,8 +13,18 @@ export interface AlertRule {
   create_task: boolean
   severity: 'info' | 'warning' | 'critical'
   active: boolean
+  /** ALERT-RULES-MANAGE-001 — null = everyone in scope who chose alert email. */
+  recipients?: AlertRuleRecipients | null
   created_at: string | null
 }
+
+/** Who a rule emails: the project's manager and/or named members of this workspace. */
+export interface AlertRuleRecipients {
+  project_manager: boolean
+  user_ids: number[]
+}
+
+export interface RecipientOption { id: number; name: string; email: string }
 
 /** A firing-ledger entry. Mirrors backend AlertEvent. */
 export interface AlertEvent {
@@ -103,9 +113,24 @@ export interface NewAlertRule {
   create_task?: boolean
   severity?: 'info' | 'warning' | 'critical'
   active?: boolean
+  project_id?: string | null
+  recipients?: AlertRuleRecipients | null
 }
 
 export const createAlertRule = (body: NewAlertRule) => postData<AlertRule>('/alerts/rules', body)
+
+/**
+ * ALERT-RULES-MANAGE-001 — edit, pause and remove.
+ *
+ * The type is not editable (the server refuses it): it decides what the threshold means, so another type is a new
+ * rule. Pausing is `{ active: false }` on the same endpoint. Removing keeps the alerts the rule already raised.
+ */
+export type AlertRulePatch = Partial<Omit<NewAlertRule, 'type' | 'threshold'>> & { threshold?: Record<string, number> | null }
+export const updateAlertRule = (id: string, patch: AlertRulePatch) => patchData<AlertRule>(`/alerts/rules/${id}`, patch)
+export const deleteAlertRule = (id: string) => deleteData<null>(`/alerts/rules/${id}`)
+/** The members a rule on this project (or workspace-wide) may name. */
+export const listRuleRecipients = (projectId?: string | null) =>
+  getData<RecipientOption[]>(projectId ? `/alerts/rules/recipients?project=${encodeURIComponent(projectId)}` : '/alerts/rules/recipients')
 
 /** Counts over the WHOLE ledger, which is not the same set as the page. */
 export interface AlertEventCounts {

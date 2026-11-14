@@ -1,4 +1,5 @@
-import type { BudgetStatus } from './fundingApi'
+import type { BudgetStatus, PaymentMode } from './fundingApi'
+import { moneyNumber } from './money'
 
 /**
  * FIN-LOOP-001 — every word on the budgets surfaces, from the style guide (Owner 2026-11-13):
@@ -57,17 +58,43 @@ export const L = {
   delDone: { ar: 'حُذفت الميزانية', en: 'Budget deleted' },
   editDone: { ar: 'تم التعديل', en: 'Budget edited' },
   addDone: { ar: 'أُضيفت الميزانية', en: 'Budget added' },
-  noRate: { ar: 'ناقص سعر صرف', en: 'No FX rate' },
+  noRate: { ar: 'بدون سعر صرف', en: 'No FX rate' },
   pdfOff: { ar: 'PDF غير مفعّل', en: 'PDF is off' },
   withHistory: { ar: 'مع السجل', en: 'With history' },
+  spentToDate: { ar: 'الإنفاق حتى الآن', en: 'Spent so far' },
+  thisMonth: { ar: 'هذا الشهر (للفوترة)', en: 'This month (to invoice)' },
+  periodChip: { ar: 'الفترة', en: 'Period' },
+  plusCeiling: { ar: '+ سقف', en: '+ Ceiling' },
+  ceiling: { ar: 'سقف', en: 'Ceiling' },
+  ceilingOptional: { ar: 'سقف (اختياري)', en: 'Ceiling (optional)' },
+  noCeiling: { ar: 'بلا سقف', en: 'No ceiling' },
+  invoiceMonths: { ar: 'المستحق بالشهر', en: 'To invoice by month' },
+  monthClosed: { ar: 'مكتمل', en: 'Closed' },
+  monthRunning: { ar: 'جارٍ', en: 'Running' },
+  plan: { ar: 'الخطة', en: 'Plan' },
+  planVsActual: { ar: 'الخطة والفعلي', en: 'Plan vs actual' },
+  planDiff: { ar: 'فرق عن الخطة', en: 'Off plan' },
+  planned: { ar: 'المخطط', en: 'Planned' },
+  projected: { ar: 'المتوقع', en: 'Projected' },
+  realloc: { ar: 'أعد التوزيع', en: 'Reallocate' },
+  reallocAuto: { ar: 'إعادة توزيع حسب الصرف', en: 'Rebalanced by spend' },
+  reallocDone: { ar: 'تمت إعادة التوزيع', en: 'Reallocated' },
+  payMode: { ar: 'الطريقة', en: 'Mode' },
+  addPlatform: { ar: 'أضف منصة', en: 'Add platform' },
+  platform: { ar: 'المنصة', en: 'Platform' },
+  planSum: { ar: 'المجموع', en: 'Sum' },
+  byPercent: { ar: 'نسبة', en: '%' },
+  byAmount: { ar: 'مبلغ', en: 'Amount' },
+  periodFirstSpend: { ar: 'من أول إنفاق', en: 'From first spend' },
 } as const
 
-export const KIND: Record<'initial' | 'top_up' | 'adjustment' | 'void' | 'reversal', { ar: string; en: string }> = {
+export const KIND: Record<'initial' | 'top_up' | 'adjustment' | 'void' | 'reversal' | 'reallocation', { ar: string; en: string }> = {
   initial: { ar: 'ميزانية', en: 'Budget' },
   top_up: { ar: 'تجديد', en: 'Renewal' },
   adjustment: { ar: 'تعديل', en: 'Edit' },
   void: { ar: 'حذف', en: 'Delete' },
   reversal: { ar: 'تراجع', en: 'Undo' },
+  reallocation: { ar: 'إعادة توزيع', en: 'Reallocation' },
 }
 
 export const STATUS: Record<BudgetStatus, { ar: string; en: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -79,7 +106,20 @@ export const STATUS: Record<BudgetStatus, { ar: string; en: string; tone: 'succe
   direct: { ar: 'دفع مباشر', en: 'Direct pay', tone: 'neutral' },
   unset: { ar: 'لم يُحدد', en: 'Not set', tone: 'neutral' },
   void: { ar: 'محذوفة', en: 'Deleted', tone: 'neutral' },
+  credit: { ar: 'بالأجل', en: 'On credit', tone: 'neutral' },
+  credit_near: { ar: 'قرّبت من السقف', en: 'Near ceiling', tone: 'warning' },
+  credit_over: { ar: 'تجاوزت السقف', en: 'Over ceiling', tone: 'danger' },
 }
+
+/** The mode chip on a row: مباشر / بالأجل, and مخطّطة when the budget has a plan per platform. */
+export const MODE: Record<PaymentMode | 'planned', { ar: string; en: string }> = {
+  direct: { ar: 'مباشر', en: 'Direct' },
+  credit: { ar: 'بالأجل', en: 'Credit' },
+  planned: { ar: 'مخطّطة', en: 'Planned' },
+}
+
+/** The ONE plan chip: «فرق عن الخطة». It states that a platform is off its share, never why; red only when it is over. */
+export const PLAN_DIFF: { ar: string; en: string } = { ar: 'فرق عن الخطة', en: 'Off plan' }
 
 export const TONE_BAR: Record<'success' | 'warning' | 'danger' | 'neutral', string> = {
   success: 'bg-success',
@@ -91,5 +131,5 @@ export const TONE_BAR: Record<'success' | 'warning' | 'danger' | 'neutral', stri
 /** Whole riyals with Latin digits, the product's numeral rule. */
 export function sar(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
-  return Math.round(Math.abs(n)).toLocaleString('en-US')
+  return moneyNumber(n)
 }
