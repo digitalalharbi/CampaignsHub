@@ -59,11 +59,24 @@ export interface AgencyTeamMember {
   is_self: boolean
 }
 
+export interface AgencyClientCoverage {
+  id: string
+  name: string
+  managers: string[]
+  followers: string[]
+  has_manager: boolean
+}
+
 export interface AgencyTeam {
   members: AgencyTeamMember[]
   can_manage: boolean
   /** Only the clients the SIGNED-IN operator may hand out. */
   assignable_clients: { id: string; name: string }[]
+  /**
+   * TEAM-CLIENT-COVERAGE-001 — who follows each client the reader reaches; `has_manager` false is the
+   * client none of whose projects names a project manager. Absent from an older backend.
+   */
+  coverage?: AgencyClientCoverage[]
 }
 
 export function fetchAgencyTeam(): Promise<AgencyTeam> {
@@ -121,6 +134,11 @@ export interface ClientBudgetRow {
    * project holding no campaigns is absent rather than listed empty.
    */
   projects_breakdown: ProjectBudgetRow[]
+  /**
+   * NAV-HOME-PLANS-001 — the client's spend for the last seven days, today last; null when there is nothing to read or
+   * the roll-up mixes currencies (a sum across two units is not a trend).
+   */
+  daily_spend_7d?: number[] | null
 }
 
 export interface ProjectBudgetRow {

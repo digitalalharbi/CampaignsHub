@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, switchToEnglish, selectProject } from './helpers'
+import { AUTH, openCampaignBuilder, seededProject, switchToEnglish, selectProject } from './helpers'
 
 /**
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
@@ -108,8 +108,7 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
   // A demo project is auto-selected by the switcher. The page opens on the overview, which renders four
   // charts — wait for the view switcher to be interactive before clicking anything, otherwise a slow
   // parallel run can time out on a button that is still behind chart layout work.
-  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
+  await openCampaignBuilder(page)
 
   const name = `E2E Campaign ${Date.now()}`
   await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)

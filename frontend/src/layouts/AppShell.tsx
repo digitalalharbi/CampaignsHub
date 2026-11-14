@@ -14,11 +14,12 @@ import {
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/ProjectSwitcher'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { UsageMeterChip } from '@/features/subscriptions/UsageMeterChip'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { SidebarNav } from './SidebarNav'
-import { appNavGroups } from './appNav'
+import { appAllGroups, appNavGroups, appSettingsGroup } from './appNav'
 import { PortalFrame } from './PortalFrame'
 import { OpsPanel } from './OpsPanel'
 import { useSectionTitle } from './sectionTitle'
@@ -123,10 +124,12 @@ export function AppShell() {
   const nav = useAuth((s) => s.user?.account?.nav)
 
   /* The tab says which screen it holds — it carried the marketing line on every one of them. */
-  useSectionTitle(appNavGroups)
+  useSectionTitle(appAllGroups)
 
   // The same entitlement filter the rail applies, so the phone offers the same set — never more.
-  const moreGroups = moreGroupsFrom(appNavGroups, APP_TABS, (leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent))
+  const allowed = (leaf: { ent?: string }) => !nav || leaf.ent === undefined || nav.includes(leaf.ent)
+  const workspace = { group: appSettingsGroup, allow: allowed }
+  const moreGroups = moreGroupsFrom([...appNavGroups, appSettingsGroup], APP_TABS, (leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent))
 
   return (
     <PortalFrame
@@ -159,7 +162,7 @@ export function AppShell() {
         * door at all on a real phone, which is a feature removed to make navigation fit. It is the
         * first thing in the sheet because choosing the project comes before choosing the section.
         */
-      moreHeader={<div className="grid gap-3"><ProjectSwitcher /><AccountMenu variant="sidebar" /></div>}
+      moreHeader={<div className="grid gap-3"><ProjectSwitcher /><AccountMenu variant="sidebar" workspace={workspace} /></div>}
       drawerOpen={sidebarOpen}
       onDrawerClose={() => setSidebarOpen(false)}
       rail={
@@ -188,7 +191,7 @@ export function AppShell() {
             <ProjectSwitcher />
           )}
           <NavItems collapsed={sidebarCollapsed} />
-          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} workspace={workspace} />
         </>
       }
       drawer={
@@ -205,7 +208,7 @@ export function AppShell() {
           </div>
           <ProjectSwitcher />
           <NavItems onNavigate={() => setSidebarOpen(false)} />
-          <AccountMenu variant="sidebar" />
+          <AccountMenu variant="sidebar" workspace={workspace} />
         </>
       }
       header={
@@ -247,7 +250,8 @@ export function AppShell() {
             <kbd className="tnum rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs text-text-muted">⌘K</kbd>
           </button>
 
-          <div className="ms-auto flex items-center gap-1.5">
+          <div className="ms-auto flex min-w-0 items-center gap-1.5">
+            <UsageMeterChip />
             <NotificationCenter />
             {/* OPS-PANEL-001 — desktop only; on a phone the panel does not exist. */}
             <button
@@ -273,7 +277,7 @@ export function AppShell() {
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <div className="ms-1"><AccountMenu variant="topbar" /></div>
+            <div className="ms-1"><AccountMenu variant="topbar" workspace={workspace} /></div>
           </div>
         </header>
       }

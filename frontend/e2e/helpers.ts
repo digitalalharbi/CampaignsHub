@@ -236,10 +236,24 @@ export async function seedExternals(request: APIRequestContext, projectId: strin
   await request.post(`/api/v1/projects/${projectId}/integrations/bindings/${bindingId}/sync`, { headers })
 }
 
-export async function createCampaign(page: Page, name: string) {
+/**
+ * Open the campaign DRAFT builder (the modal) the way the product reaches it now.
+ *
+ * NAV-HOME-PLANS-001 — «حملة جديدة» on the campaigns page opens the launch page (`/launch`), which publishes on the
+ * platforms' APIs and is therefore not something a spec can drive. The internal draft builder these specs create
+ * campaigns through is still there, opened by the campaigns page's own address (`?launch=1`), so that is the path
+ * walked here: same page, same modal, same permission check. `launch.spec.ts` covers the button's own destination.
+ */
+export async function openCampaignBuilder(page: Page) {
   // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
   await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
+  const here = new URL(page.url())
+  await page.goto(`${here.pathname}?launch=1`)
+  await expect(page.getByLabel(/Campaign name|اسم الحملة/), 'the draft builder did not open').toBeVisible({ timeout: 20000 })
+}
+
+export async function createCampaign(page: Page, name: string) {
+  await openCampaignBuilder(page)
 
   /*
    * Assert the field actually HOLDS the name before saving.

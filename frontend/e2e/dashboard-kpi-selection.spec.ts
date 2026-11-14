@@ -132,7 +132,15 @@ test.describe('the dashboard KPI cards', () => {
 
     await openDashboard(page, request)
 
+    /*
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 — an objective no longer empties a scope: it picks the KPIs and keeps every campaign, so the
+     * cards stay. A scope that really holds nothing comes from a PLATFORM the seed never ran on.
+     */
     await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+    await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toHaveCount(0)
+
+    await page.getByTestId('dashboard-platform-linkedin').click()
 
     await expect(page.getByTestId('dashboard-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('kpi-picker-0')).toHaveCount(0)

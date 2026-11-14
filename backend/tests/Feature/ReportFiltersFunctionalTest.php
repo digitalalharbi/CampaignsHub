@@ -594,7 +594,7 @@ final class ReportFiltersFunctionalTest extends TestCase
 
     // ---------------------------------------------------------------- objective and currency
 
-    public function test_the_objective_is_a_template_unless_asked_to_filter_and_the_currency_is_the_rows_own(): void
+    public function test_the_objective_is_always_a_template_and_the_currency_is_the_rows_own(): void
     {
         // The objective chooses the KPI template; it does not remove a campaign from the totals.
         $sales = $this->report(['campaign_objective' => 'sales']);
@@ -605,10 +605,11 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertEqualsWithDelta(4767.67, (float) $sales->data['kpis']['spend'], 0.001);
         $this->assertEqualsWithDelta(4767.67, (float) $leads->data['kpis']['spend'], 0.001);
 
-        // Asked to filter by objective, it does: only the sales campaign's rows remain, in the totals and in the content.
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the old «filter by objective» switch no longer removes a riyal: a stored
+        // `objective_filter: true` is read as the KPI template, and every in-scope campaign stays in the totals.
         $filtered = $this->report(['scope' => ['account_ids' => [$this->snap, $this->meta], 'objectives' => ['sales'], 'objective_filter' => true]]);
-        $this->assertEqualsWithDelta(1333.33, (float) $filtered->data['kpis']['spend'], 0.001);
-        $this->assertSame(['snapchat'], array_column($filtered->data['platforms'], 'provider'));
+        $this->assertEqualsWithDelta(4767.67, (float) $filtered->data['kpis']['spend'], 0.001);
+        $this->assertSame('sales', $filtered->data['objective']);
 
         // The currency printed is the one the rows are held in, on the stored copy, the live payload and the files.
         DB::table('daily_metrics')->where('project_id', $this->project->getKey())->update(['project_currency' => 'USD', 'original_currency' => 'USD']);
@@ -618,7 +619,10 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertSame('USD', $this->live($raw)['currency']);
         $files = $this->surfaces($usd, $share, $raw);
         $this->assertStringContainsString('USD', $files['csv']);
-        $this->assertStringNotContainsString('SAR', $files['csv'], 'the file states a currency its rows are not held in');
+        // The «Reference» row is a random code (UC3CH-XXXXX) that can spell «SAR» by chance; it states no currency.
+        $withoutReference = preg_replace('/^"Reference \/ [^\n]*\n/mu', '', $files['csv']);
+        $this->assertStringNotContainsString('Reference /', $withoutReference, 'the reference row was not stripped');
+        $this->assertStringNotContainsString('SAR', $withoutReference, 'the file states a currency its rows are not held in');
 
         // Two currencies in one scope have no unit: none is stated, rather than one of them over the sum.
         DB::table('daily_metrics')->where('project_id', $this->project->getKey())->where('provider', 'meta')->update(['project_currency' => 'SAR']);
