@@ -52,7 +52,7 @@ final class ReportViews
         // `ga4_pulse` is the ONE small headline strip the summary carries; every other website component is the website view's alone.
         'summary' => ['kpis', 'trends', 'platform_comparison', 'objective_breakdown', 'content_performance', 'funnel', 'budget_pacing', 'ga4_pulse', 'recommendations'],
         'dashboard' => ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'recommendations', 'detailed_tables', 'objective_breakdown', 'advanced_segmentation'],
-        'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown'],
+        'platforms' => ['kpis', 'trends', 'platform_comparison', 'content_performance', 'account_breakdown', 'audience_targeting', 'audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional', 'audience_site', 'audience_spend'],
         'content' => ['kpis', 'content_performance', 'content_format_comparison'],
         'website' => ['kpis', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'site_measurement', 'store_analytics'],
         'tables' => ['kpis', 'platform_comparison', 'account_breakdown', 'daily_records', 'content_performance', 'detailed_tables'],

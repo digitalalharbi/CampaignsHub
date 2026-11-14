@@ -63,6 +63,19 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByText('Scale')).toBeInTheDocument()
   })
 
+  /** NAV-HOME-PLANS-001 — a feature the current plan lacks shows a lock with the plan that has it, and opens the comparison. */
+  it('locks what the current plan does not include and names the plan that has it', async () => {
+    signInWith(['subscriptions.view'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en', route: '/app/subscriptions' })
+
+    const lock = await screen.findByTestId('locked-white_label')
+    expect(lock).toHaveTextContent('Scale')
+    expect(lock.getAttribute('href')).toBe('/app/subscriptions?compare=1#plans')
+    // The plan already has ai_assist, so it is not locked.
+    expect(screen.queryByTestId('locked-ai_assist')).toBeNull()
+    expect(await screen.findByTestId('limit-rings')).toBeInTheDocument()
+  })
+
   /** PRICING-VAT-001/002 — the card states what THIS subscriber pays per renewal, with its VAT, not the catalogue price. */
   it('shows the subscriber’s own price and term with the VAT each renewal carries', async () => {
     vi.mocked(getCurrent).mockResolvedValue({ ...current, subscription: { ...current.subscription!, unit_amount: '6990.00', currency: 'SAR', billing_interval: 'annual',
@@ -165,6 +178,25 @@ describe('SubscriptionsPage — mid-term plan change', () => {
     expect(await screen.findByTestId('due-now')).toHaveTextContent('0.00 USD')
     expect(screen.getByTestId('proration-note')).toHaveTextContent(/Nothing is charged and nothing is refunded/i)
     expect(screen.getByTestId('confirm-plan-change')).toHaveTextContent(/at period end/i)
+  })
+
+  /** PLAN-LIMITS-METER-001 — a plan the current usage does not fit is never entered; the screen says exactly what is over. */
+  it('blocks a downgrade the usage does not fit and lists what is over, without offering to remove anything', async () => {
+    vi.mocked(quotePlanChange).mockResolvedValue({
+      ...upgradeQuote,
+      to: { plan: 'starter', plan_name: 'Starter', interval: 'monthly' },
+      quote: { ...upgradeQuote.quote, direction: 'downgrade' as const, due_now: '0.00', effective: 'period_end' as const, effective_at: '2026-08-01T00:00:00Z' },
+      fit: { fits: false, exceeds: [{ metric: 'projects', label: 'Projects', used: 8, limit: 3, over: 5 }] },
+    })
+    signInWith(['subscriptions.view', 'subscriptions.manage'])
+    renderWithProviders(<SubscriptionsPage />, { locale: 'en' })
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /Switch to this plan/i }))[0])
+
+    const blocked = await screen.findByTestId('fit-blocked')
+    expect(screen.getByTestId('fit-over-projects')).toHaveTextContent('Projects: 8 of 3 (5 over)')
+    expect(blocked).toHaveTextContent(/Nothing is deleted or stopped/i)
+    expect(screen.getByTestId('confirm-plan-change')).toBeDisabled()
   })
 
   /**

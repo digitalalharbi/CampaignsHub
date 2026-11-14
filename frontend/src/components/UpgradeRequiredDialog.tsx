@@ -33,7 +33,7 @@ const T = {
   entitlementTitle: { ar: 'هذه الخاصية ليست ضمن باقتك', en: 'This is not part of your plan' },
   usage: { ar: 'المستخدَم', en: 'In use' },
   plan: { ar: 'باقتك الحالية', en: 'Your current plan' },
-  upgrade: { ar: 'عرض الباقات', en: 'See the plans' },
+  upgrade: { ar: 'ترقية', en: 'Upgrade' },
   later: { ar: 'ليس الآن', en: 'Not now' },
   /*
    * Said explicitly, because it is the first thing anybody blocked mid-task fears.
@@ -53,6 +53,8 @@ const SUBJECTS: Record<string, { ar: string; en: string }> = {
   projects: { ar: 'المشاريع', en: 'Projects' },
   campaigns: { ar: 'الحملات', en: 'Campaigns' },
   team_members: { ar: 'أعضاء الفريق', en: 'Team members' },
+  clients: { ar: 'العملاء', en: 'Clients' },
+  ad_accounts: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
   connections: { ar: 'الاتصالات', en: 'Connections' },
   reports_per_month: { ar: 'التقارير هذا الشهر', en: 'Reports this month' },
 }
@@ -78,7 +80,8 @@ export function UpgradeRequiredDialog() {
         <>
           <Button variant="secondary" onClick={dismiss}>{t('later')}</Button>
           <a
-            href={refusal.upgradePath}
+            // The comparison opens on the subscription page, where the in-app checkout takes the payment (PLAN-LIMITS-METER-001).
+            href={`${refusal.upgradePath}?compare=1#plans`}
             onClick={dismiss}
             data-testid="upgrade-link"
             className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 text-sm font-semibold text-white hover:bg-brand-700"

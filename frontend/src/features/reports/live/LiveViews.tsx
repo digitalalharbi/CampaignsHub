@@ -40,6 +40,8 @@ import { FormatComparisonReportBlock } from '../FormatComparisonBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
+import { AudienceReportBlocks } from '@/features/audience/AudienceBlocks'
+import type { AudienceParts } from '@/features/audience/types'
 import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -526,6 +528,9 @@ export function PlatformsView({
           )
         })}
       </div>
+
+      {/* AUDIENCE-001 — the audience parts the server resolved for this link (absent = hidden or no data). */}
+      <AudienceReportBlocks payload={whole as unknown as AudienceParts} locale={ar ? 'ar' : 'en'} />
 
       {platform && (
         <LoadGate load={narrowed} ar={ar}>

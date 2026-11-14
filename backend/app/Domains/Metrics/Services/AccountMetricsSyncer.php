@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\ReportsAudienceBreakdowns;
 use App\Domains\Integrations\Providers\ReportsCreativeInsights;
 use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
@@ -25,6 +26,7 @@ use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
+use App\Domains\Metrics\Audience\AudienceBreakdownSync;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -403,6 +405,19 @@ final class AccountMetricsSyncer
         } elseif ($connector instanceof ReportsEntityGrains) {
             $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
             $unlabelled += (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0);
+        }
+
+        /*
+         * AUDIENCE-001 — paid delivery by audience dimension, for the providers that declare it.
+         * Enrichment: contained, throttled, recorded on the run, never turns the run red.
+         */
+        if (! $unlinkedMidRun && $connector instanceof ReportsAudienceBreakdowns) {
+            try {
+                $audience = app(AudienceBreakdownSync::class)->sync($connector, $account, $run, $from, $to);
+            } catch (Throwable $e) {
+                $audience = ['state' => 'failed', 'reason' => Str::limit((string) ProviderErrorText::forStorage($e->getMessage()), 300)];
+            }
+            $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'audience' => $audience]])->save();
         }
 
         /*

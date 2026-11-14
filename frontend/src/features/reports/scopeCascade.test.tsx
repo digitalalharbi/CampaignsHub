@@ -35,7 +35,7 @@ describe('the dependent report scope filters', () => {
     vi.mocked(explainScope).mockResolvedValue({ scope: {}, bound_axes: [], explain: [] } as never)
   })
 
-  it('sends the chosen provider, account, objective and destination with the options request', async () => {
+  it('sends the chosen provider, account and destination with the options request — never the objective (OBJECTIVE-FILTERS-INCLUSIVE-001)', async () => {
     renderWithProviders(
       <ReportScopePicker
         projectId="p1"
@@ -50,7 +50,7 @@ describe('the dependent report scope filters', () => {
       expect(scopeOptions).toHaveBeenCalledWith(
         'p1',
         expect.anything(),
-        { providers: ['meta'], account_ids: ['a1'], objectives: ['leads'], destinations: ['whatsapp'] },
+        { providers: ['meta'], account_ids: ['a1'], destinations: ['whatsapp'] },
       ),
     )
   })
@@ -111,16 +111,20 @@ describe('the dependent report scope filters', () => {
   })
 })
 
-describe('the report objective is a template, not a filter (REPORT-OBJECTIVE-TEMPLATE-001)', () => {
-  it('sends no objective to the campaign list until the operator turns the filter on, and the switch writes the flag', async () => {
+describe('the report objective chooses KPIs only (REPORT-OBJECTIVE-TEMPLATE-001, OBJECTIVE-FILTERS-INCLUSIVE-001)', () => {
+  it('never sends the objective to the campaign list and offers no switch that would filter campaigns by it', async () => {
     const onChange = vi.fn()
     renderWithProviders(<ReportScopePicker projectId="p1" value={{ objectives: ['sales', 'conversions', 'purchases', 'add_to_cart'] }} onChange={onChange} />, { locale: 'en' })
 
-    const sw = await screen.findByTestId('scope-objective-filter')
-    expect(sw).not.toBeChecked()
+    expect(await screen.findByTestId('scope-objective-kpis-note')).toHaveTextContent('KPIs only')
+    expect(screen.queryByTestId('scope-objective-filter')).toBeNull()
     expect(vi.mocked(scopeOptions).mock.calls.at(-1)![2]).toEqual(expect.not.objectContaining({ objectives: expect.anything() }))
+  })
 
-    fireEvent.click(sw)
-    expect(onChange.mock.calls.at(-1)![0]).toEqual({ objectives: ['sales', 'conversions', 'purchases', 'add_to_cart'], objective_filter: true })
+  it('a stored objective_filter: true no longer narrows the list either', async () => {
+    renderWithProviders(<ReportScopePicker projectId="p1" value={{ objectives: ['sales'], objective_filter: true }} onChange={vi.fn()} />, { locale: 'en' })
+
+    await screen.findByTestId('scope-objective-kpis-note')
+    expect(vi.mocked(scopeOptions).mock.calls.at(-1)![2]).toEqual(expect.not.objectContaining({ objectives: expect.anything() }))
   })
 })

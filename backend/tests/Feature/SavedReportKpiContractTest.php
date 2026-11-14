@@ -223,13 +223,15 @@ final class SavedReportKpiContractTest extends TestCase
         $this->assertSame('leads', $shown['objective']);
         $this->assertArrayNotHasKey('objectives', (array) $report->fresh()->scope);
 
-        // An EXPLICIT «filter campaigns by objective» is the only way the objective narrows the data.
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the old «filter campaigns by objective» flag, if still sent, is read as the KPI template:
+        // the objective moves to the report, nothing is stored as a data bound, and no platform is dropped.
         $this->actingAs($owner, 'sanctum')->putJson("/api/v1/projects/{$this->project->id}/reports/{$report->id}/scope", [
             'scope' => ['account_ids' => $accounts, 'objectives' => ['sales'], 'objective_filter' => true],
         ])->assertOk();
-        $this->assertSame(['sales'], $report->fresh()->scope['objectives']);
-        $this->assertTrue($report->fresh()->scope['objective_filter']);
-        $this->assertSame(['meta'], array_column($this->regenerate($report)['platforms'], 'provider'));
+        $this->assertArrayNotHasKey('objectives', (array) $report->fresh()->scope);
+        $this->assertArrayNotHasKey('objective_filter', (array) $report->fresh()->scope);
+        $this->assertSame('sales', $report->fresh()->campaign_objective);
+        $this->assertGreaterThan(1, count(array_column($this->regenerate($report)['platforms'], 'provider')), 'the objective dropped a platform');
     }
 
     public function test_s5_a_platform_that_sent_no_leads_or_purchases_is_not_reported_as_having_zero(): void

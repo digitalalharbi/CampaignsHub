@@ -119,6 +119,54 @@ export function useTeamActions() {
   }
 }
 
+// ---- Roles & permissions (TEAM-ROLE-PRESETS-001) -------------------------------------------------
+
+export interface RoleSection {
+  key: string
+  ar: string
+  en: string
+  /** The key that makes the page appear. */
+  page: string
+  actions: { key: string; ar: string; en: string }[]
+}
+
+export interface PresetRole {
+  slug: string
+  name_ar: string
+  name_en: string
+  /** The workspace manager: every key, never editable. */
+  locked: boolean
+  /** The ticked boxes — only keys that appear on the screen. */
+  permissions: string[]
+  members: number
+}
+
+export interface RolesData {
+  sections: RoleSection[]
+  roles: PresetRole[]
+  /** What the reader may switch ON — they cannot grant what they do not hold. */
+  grantable: string[]
+}
+
+/** What a save or a reset answers: the boxes now ticked, as committed. */
+export interface SavedRole { slug: string; permissions: string[] }
+
+export function useRoles() {
+  return useQuery({ queryKey: ['settings', 'roles'], queryFn: () => getData<RolesData>('/settings/roles') })
+}
+
+export function useRoleActions() {
+  const qc = useQueryClient()
+  const inv = () => {
+    void qc.invalidateQueries({ queryKey: ['settings', 'roles'] })
+    void qc.invalidateQueries({ queryKey: ['settings', 'team'] })
+  }
+  return {
+    save: useMutation({ mutationFn: (b: { slug: string; permissions: string[] }) => putData<SavedRole>(`/settings/roles/${b.slug}`, { permissions: b.permissions }), onSuccess: inv }),
+    reset: useMutation({ mutationFn: (slug: string) => postData<SavedRole>(`/settings/roles/${slug}/reset`), onSuccess: inv }),
+  }
+}
+
 // ---- Notification preferences --------------------------------------------------------------------
 
 export type Rhythm = 'immediate' | 'daily' | 'weekly' | 'monthly'

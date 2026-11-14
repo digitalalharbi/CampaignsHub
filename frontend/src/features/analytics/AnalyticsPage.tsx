@@ -151,6 +151,7 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { SiteAnalyticsTab } from './SiteAnalyticsTab'
+import { AudiencePanel } from '@/features/audience/AudiencePanel'
 import { AttributionPanel } from './AttributionPanel'
 import { WidgetSurface } from '@/features/widgets/WidgetSurface'
 import { useWidgetLayout } from '@/features/widgets/api'
@@ -197,6 +198,8 @@ const TAB_GROUPS = [
     ar: 'التفصيل', en: 'Breakdown',
     tabs: [
       { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
+      // AUDIENCE-001 — targeting, paid delivery, site visitors and unpaid, kept apart, per platform.
+      { id: 'audience', ar: 'الجمهور', en: 'Audience' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
       { id: 'ad_sets', ar: 'المجموعات الإعلانية', en: 'Ad sets' },
@@ -801,6 +804,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         )}
         {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
         {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'audience' && <AudiencePanel projectId={currentProjectId} range={range} />}
         {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
@@ -3397,7 +3401,14 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
    * a figure under the wrong heading the first time a family changed the count — a worse defect than
    * the generic column set this replaces.
    */
-  const fullPlan = entityColumnPlan(allRows)
+  // OBJECTIVE-FILTERS-INCLUSIVE-001 — one objective chosen picks the columns; the rows stay every campaign's.
+  // The control sends the canonical bucket as its raw objectives; read the bucket back to choose its layout.
+  const chosenObjective = (() => {
+    const raw = [...(filters?.objective ?? [])].sort().join(',')
+    if (raw === '') return 'all'
+    return CANONICAL_OBJECTIVE_KEYS.find((key) => [...rawObjectivesFor(key)].sort().join(',') === raw) ?? 'all'
+  })()
+  const fullPlan = entityColumnPlan(allRows, chosenObjective)
   const plan = { ...fullPlan, keys: fullPlan.keys.filter((key) => !(workspace?.hidden ?? []).includes(key)) }
   const manage = workspace?.onManage
 
