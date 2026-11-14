@@ -17,7 +17,9 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
+use App\Domains\ClientWorkspaces\Services\ContentApprovals;
 use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
@@ -43,6 +45,7 @@ use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Services\ClientPortalIdentity;
 use App\Domains\Requests\Services\ClientRequestCreator;
+use App\Domains\Requests\Services\ClientRequestManagerNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
@@ -452,6 +455,8 @@ final class ClientPortalController
 
         // EMAIL-GAPS — the team is told. Off by default, and it cannot change this answer.
         app(RequestMailer::class)->newRequestToTeam($created);
+        // CLIENT-REQUEST-PM-NOTICE-001 — and THIS client's project manager specifically (owner when none).
+        app(ClientRequestManagerNotifier::class)->notify($created);
 
         if (! empty($data['upload_token'])) {
             $this->uploads->attach($created, $data['upload_token']);
@@ -621,6 +626,97 @@ final class ClientPortalController
         $model->update(['status' => 'rejected']);
 
         return response()->json(['data' => ['quote' => $this->quoteShape($model->refresh())]]);
+    }
+
+    // ============================================================================================
+    // CLIENT-CONTENT-APPROVAL-001 — «بانتظار اعتمادك»: content the agency put before this client.
+    // Read with the `content` section on; answered by an approver/admin (never a viewer) where the agency
+    // granted `approve_content`. A project-confined user reads and answers only their projects' asks.
+    // ============================================================================================
+
+    /** GET /client/approvals — open asks first, then the latest answered ones. */
+    public function contentApprovals(Request $request, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(ContentApproval::query()->with('creative')
+                ->whereIn('client_workspace_id', $ids)
+                ->where('status', '!=', 'withdrawn')
+                ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+                ->orderByRaw("case when status = 'pending' then 0 else 1 end")
+                ->latest('created_at'));
+
+        $models = $this->ownedWorkspaceModels($token);
+        $canDecide = $this->identity->clientRole($request, $token) !== 'client_viewer';
+
+        return response()->json(['data' => [
+            'approvals' => $page['rows']->map(fn (ContentApproval $a) => $approvals->clientShape($a) + [
+                'can_decide' => $canDecide && $a->status === 'pending'
+                    && isset($models[(string) $a->client_workspace_id])
+                    && (PortalVisibility::capabilitiesFor($models[(string) $a->client_workspace_id])['approve_content'] ?? false) === true,
+            ])->values(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
+    }
+
+    /** POST /client/approvals/{approval}/approve */
+    public function approveContent(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'approved', $approvals);
+    }
+
+    /** POST /client/approvals/{approval}/request-changes — a note saying what should change is required. */
+    public function requestContentChanges(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'changes_requested', $approvals);
+    }
+
+    private function decideContent(Request $request, string $approval, string $decision, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->requireActor($token);
+        $this->bindTenant($token);
+        $model = $this->ownedContentApproval($token, $approval);
+
+        $workspace = $this->ownedWorkspaceModels($token)[(string) $model->client_workspace_id] ?? null;
+        abort_if($workspace === null, 404);
+        abort_unless((PortalVisibility::capabilitiesFor($workspace)['approve_content'] ?? false) === true, 403, 'Your agency has not enabled content approval here.');
+
+        $data = $request->validate([
+            'note' => [$decision === 'changes_requested' ? 'required' : 'nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            // The person is recorded only when the MEMBERSHIP engine opened this session — a staff account that happens
+            // to be signed in beside a contact's cookie is not the one answering.
+            $actor = $this->identity->reach($request, $token)['engine'] === 'membership' ? $request->user() : null;
+            $decided = $approvals->decide($model, $decision, $data['note'] ?? null, $actor, $token->contact_email, $request->ip(), $request->userAgent());
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['data' => ['error' => $e->getMessage()]], 422);
+        }
+
+        return response()->json(['data' => ['approval' => $approvals->clientShape($decided->load('creative'))]]);
+    }
+
+    private function ownedContentApproval(ClientPortalToken $token, string $id): ContentApproval
+    {
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+        /** @var ContentApproval|null $model */
+        $model = $ids === [] || ! PortalIdShape::uuid($id) ? null : ContentApproval::query()
+            ->whereIn('client_workspace_id', $ids)
+            ->where('status', '!=', 'withdrawn')
+            ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+            ->whereKey($id)->first();
+        abort_if($model === null, 404);
+
+        return $model;
     }
 
     /**
