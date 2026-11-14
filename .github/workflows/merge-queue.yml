@@ -15,8 +15,8 @@ name: Merge queue
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/15 * * * *'
+  # CI-TIER-001: no `schedule` — 96 idle runs a day took runner seats for nothing; a finished CI run is the only moment
+  # the head of the queue can become mergeable, and `workflow_run` below is that moment.
   # A finished CI run is the moment the head of the queue may have become mergeable.
   workflow_run:
     workflows: [CI]

@@ -8,6 +8,7 @@ use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Console\Command;
@@ -39,6 +40,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class SendDailyDigests extends Command
 {
+    /** The project status that is reported on daily: a project in setup, paused, completed, closed or archived is not running. */
+    private const ACTIVE_PROJECT = 'active';
+
     protected $signature = 'notifications:send-digests
         {--user= : Send for one user id only — for verifying a change without mailing an account}
         {--force : Ignore the recipient’s chosen hour and day; sent as an on-demand copy that never takes the period’s scheduled slot}
@@ -186,7 +190,12 @@ final class SendDailyDigests extends Command
         } finally {
             $tenants->forget();
         }
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — one mail per ACTIVE project: a paused, completed, closed or archived project is not reported on.
+        $active = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->where('status', self::ACTIVE_PROJECT)->pluck('id')->map(fn ($id): string => (string) $id)->all();
         foreach ($projectIds as $projectId) {
+            if (! in_array((string) $projectId, $active, true)) {
+                continue;
+            }
             $key = DigestDispatcher::projectKey((string) $projectId);
             $state = $this->dispatch($dispatcher, $kind, $user, $tenantId, $anchor, $locale, $audience, $key);
             $state === 'sent' ? $sent++ : $skipped++;
