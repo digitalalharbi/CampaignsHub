@@ -98,6 +98,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'subscriptions:reconcile-payments',
         // PLATFORM-PAYMENT-ALERTS-001 — every fifteen minutes, offset from the reconcile sweep; reads only, files owner alerts.
         'platform:payment-alerts',
+        // FIN-LOOP-001 — at :20 and :50, after each sync; copies spend into each project budget, one replaced row per account-day.
+        'funding:refresh',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */
@@ -183,6 +185,8 @@ final class ScheduledWorkInventoryTest extends TestCase
             'subscriptions:lifecycle',
             'subscriptions:reconcile-payments',
             'platform:payment-alerts',
+            // Two overlapping refreshes write the same keys: harmless (an upsert), but doubled work for nothing.
+            'funding:refresh',
         ];
 
         foreach (app(Schedule::class)->events() as $event) {
