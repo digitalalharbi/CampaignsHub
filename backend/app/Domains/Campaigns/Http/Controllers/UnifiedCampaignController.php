@@ -392,6 +392,9 @@ final class UnifiedCampaignController extends Controller
         $validated = $this->validatePayload($request, creating: false, ignoreId: (string) $model->id);
         $before = $model->only(['name', 'status', 'objective', 'total_budget', 'stage', 'performance_label', 'priority']);
         $model->update($validated);
+        if (array_key_exists('status', $validated) && $validated['status'] !== $before['status']) {
+            $this->markStatusManual($model, $request);
+        }
 
         /*
          * An objective change is recorded as a REVIEW, separately from the rest of the edit
@@ -431,14 +434,14 @@ final class UnifiedCampaignController extends Controller
     {
         abort_unless($request->user()->hasPermission('campaigns.pause'), 403);
 
-        return $this->transition($campaign, CampaignStatus::Paused, 'campaign.paused', $audit);
+        return $this->transition($campaign, CampaignStatus::Paused, 'campaign.paused', $audit, request: $request);
     }
 
     public function activate(Request $request, string $project, string $campaign, AuditLogger $audit, CampaignLaunchOutcome $outcome): JsonResponse
     {
         abort_unless($request->user()->hasPermission('campaigns.update'), 403);
 
-        return $this->transition($campaign, CampaignStatus::Active, 'campaign.activated', $audit, $outcome);
+        return $this->transition($campaign, CampaignStatus::Active, 'campaign.activated', $audit, $outcome, $request);
     }
 
     public function destroy(Request $request, string $project, string $campaign, AuditLogger $audit): JsonResponse
@@ -537,20 +540,39 @@ final class UnifiedCampaignController extends Controller
      * read but its own. `$outcome` is passed only by {@see self::activate()}, so a pause can never
      * return a launch payload for a UI to celebrate.
      */
-    private function transition(string $campaign, CampaignStatus $status, string $action, AuditLogger $audit, ?CampaignLaunchOutcome $outcome = null): JsonResponse
+    private function transition(string $campaign, CampaignStatus $status, string $action, AuditLogger $audit, ?CampaignLaunchOutcome $outcome = null, ?Request $request = null): JsonResponse
     {
         $model = $this->find($campaign);
         $model->update([
             'status' => $status->value,
             ...($status === CampaignStatus::Active ? ['activated_at' => now()] : []),
         ]);
-        $audit->log(action: $action, entityType: UnifiedCampaign::class, entityId: (string) $model->id, after: ['status' => $status->value]);
+        if ($request !== null) {
+            $this->markStatusManual($model, $request);
+        }
+        $audit->log(action: $action, entityType: UnifiedCampaign::class, entityId: (string) $model->id, after: ['status' => $status->value, 'status_source' => 'manual']);
 
         return ApiResponse::success(
             new UnifiedCampaignResource($model),
             'Campaign status updated.',
             meta: $outcome !== null ? ['launch' => $outcome->for($model)] : [],
         );
+    }
+
+    /**
+     * TIKTOK-CAMPAIGN-STATUS-001 review — a status a person set is recorded as theirs, with who and when.
+     *
+     * An adopted campaign follows its platform's status on every sync ({@see ImportExternalCampaigns}); without this a
+     * pause, an activation or a «completed» chosen here was reverted by the next sweep, silently. Set here on the server,
+     * never accepted from the request, exactly like `objective_source`.
+     */
+    private function markStatusManual(UnifiedCampaign $model, Request $request): void
+    {
+        $model->forceFill(['meta' => array_merge((array) $model->meta, [
+            'status_source' => 'manual',
+            'status_set_at' => now()->toIso8601String(),
+            'status_set_by' => $request->user()?->id,
+        ])])->save();
     }
 
     /** @return array<string, mixed> */

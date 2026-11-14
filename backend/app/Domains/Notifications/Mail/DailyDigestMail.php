@@ -185,7 +185,7 @@ final class DailyDigestMail extends Mailable
         $report = match ($this->kind) {
             'monthly' => $ar ? 'تقريرك الشهري' : 'Your monthly report',
             'weekly' => $ar ? 'تقريرك الأسبوعي' : 'Your weekly report',
-            default => $ar ? 'تقريرك اليومي (آخر 7 أيام)' : 'Your daily report (last 7 days)',
+            default => $ar ? 'تقريرك اليومي (أمس)' : 'Your daily report (yesterday)',
         };
         $agency = trim((string) ($this->senderName ?? ''));
         $lead = $agency !== '' && $agency !== (string) config('brand.name') ? "{$agency}: {$report}" : $report;
@@ -234,8 +234,8 @@ final class DailyDigestMail extends Mailable
                 'preheader' => match ($this->kind) {
                     'monthly' => $ar ? 'ملخص الشهر عبر مشاريعك ومنصاتك.' : 'The month across your projects and platforms.',
                     'weekly' => $ar ? 'ملخص الأسبوع عبر مشاريعك ومنصاتك.' : 'The week across your projects and platforms.',
-                    // EMAIL-DAILY-WINDOW-001 — the daily reports seven days, so «أمس» would name a span it does not cover.
-                    default => $ar ? 'آخر 7 أيام عبر مشاريعك ومنصاتك.' : 'The last 7 days across your projects and platforms.',
+                    // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the daily reports yesterday, compared with the day before.
+                    default => $ar ? 'أمس عبر مشاريعك ومنصاتك.' : 'Yesterday across your projects and platforms.',
                 },
                 'headerNote' => $this->headerNote($ar),
                 'footerNote' => MailDisclaimer::note($this->lang),
@@ -1123,7 +1123,7 @@ final class DailyDigestMail extends Mailable
             'intro' => match ($this->kind) {
                 'monthly' => 'ملخص هذا الشهر عبر مشاريعك، وما يحتاج قرارك.',
                 'weekly' => 'ملخص هذا الأسبوع عبر مشاريعك، وما يحتاج قرارك.',
-                default => 'ملخص آخر 7 أيام عبر مشاريعك، وما يحتاج قرارك اليوم.',
+                default => 'ملخص أمس عبر مشاريعك، وما يحتاج قرارك اليوم.',
             },
             'account_total' => 'إجمالي الحساب',
             'spend' => 'الإنفاق',
@@ -1175,7 +1175,7 @@ final class DailyDigestMail extends Mailable
             'intro' => match ($this->kind) {
                 'monthly' => 'Here is the month across your projects, and what needs your decision.',
                 'weekly' => 'Here is the week across your projects, and what needs your decision.',
-                default => 'Here are the last 7 days across your projects, and what needs your decision today.',
+                default => 'Here is yesterday across your projects, and what needs your decision today.',
             },
             'account_total' => 'Account total',
             'spend' => 'Spend',

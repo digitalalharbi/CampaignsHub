@@ -59,11 +59,11 @@ final class AlertCostPerIncreaseTest extends TestCase
         parent::tearDown();
     }
 
-    private function campaign(): UnifiedCampaign
+    private function campaign(string $objective = 'conversions'): UnifiedCampaign
     {
         return UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'name' => 'Camp '.uniqid(), 'objective' => 'conversions', 'status' => 'active',
+            'name' => 'Camp '.uniqid(), 'objective' => $objective, 'status' => 'active',
             'total_budget' => 0, 'budget_currency' => 'SAR',
         ]);
     }
@@ -107,15 +107,15 @@ final class AlertCostPerIncreaseTest extends TestCase
         // Previous window (8–14 days ago): 100 spend / 10 conversions = CPA 10.
         $this->converted($c, 'spend', 100, 10);
         $this->converted($c, 'conversions', 10, 10);
-        // Current window (0–7 days ago): 100 spend / 4 conversions = CPA 25 — a 150% rise.
-        $this->converted($c, 'spend', 100, 3);
-        $this->converted($c, 'conversions', 4, 3);
+        // Current window (0–7 days ago): 100 spend / 4 conversions = CPA 25 — a 150% rise. Delivered yesterday, so it is judged.
+        $this->converted($c, 'spend', 100, 1);
+        $this->converted($c, 'conversions', 4, 1);
 
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
 
         // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window are stated, not implied.
         $event = AlertEvent::query()->sole();
-        $this->assertStringContainsString('the last 7 days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
+        $this->assertStringContainsString('the last 7 complete days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
         $this->assertSame(7, $event->context['window_days']);
     }
 
@@ -187,11 +187,12 @@ final class AlertCostPerIncreaseTest extends TestCase
 
     public function test_cpl_increase_is_evaluated_on_leads_not_conversions(): void
     {
-        $c = $this->campaign();
+        // ALERT-CRITERIA-001 — cost per lead is judged on a leads campaign.
+        $c = $this->campaign('leads');
         $this->converted($c, 'spend', 100, 10);
         $this->converted($c, 'leads', 20, 10);         // CPL 5
-        $this->converted($c, 'spend', 200, 3);
-        $this->converted($c, 'leads', 10, 3);          // CPL 20 — a 300% rise
+        $this->converted($c, 'spend', 200, 1);
+        $this->converted($c, 'leads', 10, 1);          // CPL 20 — a 300% rise, delivered yesterday
 
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpl_increase')));
     }

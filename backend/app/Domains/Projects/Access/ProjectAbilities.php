@@ -66,6 +66,9 @@ final class ProjectAbilities
         'campaigns.budget.change' => [ProjectCapability::BUDGET_MANAGE],
         'budget.view' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         'budget.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::BUDGET_MANAGE, ProjectCapability::MONEY_VIEW],
+        // FIN-LOOP-001 — an approved project budget is money: its readers read money, and a membership's `denied` list still wins.
+        'funding.view' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
+        'funding.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         'leads.view' => [ProjectCapability::LEADS_VIEW],
         'leads.update' => [ProjectCapability::LEADS_UPDATE],
         /* Named separately at the tenant layer too — see the note in `PermissionSeeder`. */
