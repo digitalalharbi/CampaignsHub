@@ -79,6 +79,10 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         // stored copy states what ran when it was made, and an account deselected since must not empty a document already sent.
         'Domains/Reports/Services/ReportSourceContainment.php' => 'narrows a stored report to its own ad accounts; removes rows only, reads no figure',
         // SEC-CLUSTER-4 — proves a Drive attachment target is a creative of this tenant inside the caller's client ceiling; reads the creative's project id only.
+        // CLIENT-CONTENT-APPROVAL-001 — the model's relation, and the service that checks a creative an agency operator NAMED belongs to
+        // the approval's own project and tenant, then hands the client that creative's format and https still. Never a figure.
+        'Domains/ClientWorkspaces/Models/ContentApproval.php' => 'relation',
+        'Domains/ClientWorkspaces/Services/ContentApprovals.php' => 'checks a named creative is inside the approval\'s own project and reads its format and still; reads no figure',
         'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];
 
