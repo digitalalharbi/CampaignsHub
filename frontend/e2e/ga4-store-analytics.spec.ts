@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { API_HEADERS, AUTH, csrfHeaders, seededProject, selectProject } from './helpers'
 
 /**
@@ -18,6 +18,29 @@ const box = async (l: Locator) => {
   expect(b, 'the table box was not laid out').not.toBeNull()
 
   return { w: Math.round(b!.width), h: Math.round(b!.height) }
+}
+
+/**
+ * The page's height once every panel on the tab has finished loading — no request in flight, no
+ * skeleton or busy region left, and the height unchanged across consecutive reads. A baseline taken
+ * earlier measures a page that is still growing below the box under test, so a later comparison
+ * would blame the box for panels that merely finished loading.
+ */
+const settledHeight = async (page: Page) => {
+  await page.waitForLoadState('networkidle')
+  await expect(page.locator('[aria-busy="true"], [data-testid$="-skeleton"]')).toHaveCount(0, { timeout: 30000 })
+  const read = () => page.evaluate(() => document.documentElement.scrollHeight)
+  let last = -1
+  let stable = 0
+  await expect.poll(async () => {
+    const h = await read()
+    stable = h === last ? stable + 1 : 0
+    last = h
+
+    return stable
+  }, { message: 'the page height never settled', timeout: 15000, intervals: [250] }).toBeGreaterThanOrEqual(3)
+
+  return last
 }
 
 test.describe('GA4 store analytics', () => {
@@ -120,8 +143,10 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
     const table = page.getByTestId('match-table-box')
     await table.scrollIntoViewIfNeeded()
+    // Measure the page only once everything below the match has loaded, so the comparison after the
+    // drill speaks for the match box alone.
+    const pageHeight = await settledHeight(page)
     const level1 = await box(table)
-    const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight)
 
     // Platform -> campaigns.
     await page.locator('[data-testid^="match-drill-platform-"]').first().click()
