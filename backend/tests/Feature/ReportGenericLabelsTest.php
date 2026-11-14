@@ -21,6 +21,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\Concerns\BuildsLiveReportWorld;
@@ -29,13 +30,16 @@ use Tests\TestCase;
 /**
  * REPORT-GENERIC-LABELS-001 (Owner file 2026-11-03 §7.1) — a hidden name stays hidden everywhere, and the rows stay.
  *
- * Every name in the world is overwritten with a sentinel beginning «ZZ», so a leak is a substring of the raw bytes: the JSON a
+ * Every name in the world is overwritten with a sentinel beginning «ZZ~» (the tilde is outside every generated token's alphabet: trace marks, request ids, share and download references,
+ * file ids are base32/alphanumeric/hex, so no random token can ever hold it — run 43575449716 was a «ZZ» inside a random token), so a leak is a substring of the raw bytes: the JSON a
  * browser receives (a hidden key is still a leak), the CSV, the unzipped XLSX and the document headless Chromium prints.
  */
 final class ReportGenericLabelsTest extends TestCase
 {
     use BuildsLiveReportWorld;
     use RefreshDatabase;
+
+    private const SENTINEL = '/ZZ~[A-Z]+ ?[0-9a-f]*/';
 
     private const ALL = ['campaign', 'ad_set', 'account', 'content'];
 
@@ -45,12 +49,12 @@ final class ReportGenericLabelsTest extends TestCase
         config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         $this->freezeWorld();
         $this->buildWorld();
-        DB::table('unified_campaigns')->update(['name' => DB::raw("'ZZCAMP '||right(id::text,6)"), 'client_display_name' => null]);
-        DB::table('external_campaigns')->update(['name' => DB::raw("'ZZEXT '||right(id::text,6)")]);
-        DB::table('external_ad_sets')->update(['name' => DB::raw("'ZZSET '||right(id::text,6)")]);
-        DB::table('external_ads')->update(['name' => DB::raw("'ZZAD '||right(id::text,6)")]);
-        DB::table('external_creatives')->update(['name' => DB::raw("'ZZCONTENT '||right(id::text,6)")]);
-        DB::table('external_accounts')->update(['name' => DB::raw("'ZZACCT '||right(id::text,6)")]);
+        DB::table('unified_campaigns')->update(['name' => DB::raw("'ZZ~CAMP '||right(id::text,6)"), 'client_display_name' => null]);
+        DB::table('external_campaigns')->update(['name' => DB::raw("'ZZ~EXT '||right(id::text,6)")]);
+        DB::table('external_ad_sets')->update(['name' => DB::raw("'ZZ~SET '||right(id::text,6)")]);
+        DB::table('external_ads')->update(['name' => DB::raw("'ZZ~AD '||right(id::text,6)")]);
+        DB::table('external_creatives')->update(['name' => DB::raw("'ZZ~CONTENT '||right(id::text,6)")]);
+        DB::table('external_accounts')->update(['name' => DB::raw("'ZZ~ACCT '||right(id::text,6)")]);
     }
 
     protected function tearDown(): void
@@ -101,22 +105,29 @@ final class ReportGenericLabelsTest extends TestCase
     }
 
     /** @param  array<string, string>  $surfaces */
-    private function assertNoSentinel(array $surfaces, string $pattern = '/ZZ[A-Z]+ ?[0-9a-f]*/'): void
+    private function assertNoSentinel(array $surfaces, string $pattern = self::SENTINEL): void
     {
         foreach ($surfaces as $name => $bytes) {
-            // The share's random trace mark («WAKQN-ZZJF3») and the request id are generated, not data: a mark that happens to hold «ZZ»
-            // matched the sentinel (run 43482161475, 2026-11-13). Mask them; the sentinel is still searched in everything else.
-            $bytes = (string) preg_replace(['/"report_trace":"[^"]*"/', '/"request_id":"[^"]*"/'], ['"report_trace":"-"', '"request_id":"-"'], $bytes);
             preg_match($pattern, $bytes, $m);
             $this->assertSame([], $m, "«{$name}» still carries a hidden name: ".($m === [] ? '' : mb_substr($bytes, max(0, (int) strpos($bytes, $m[0]) - 80), 200)));
         }
+    }
+
+    public function test_the_sentinel_is_detected_when_present_and_cannot_come_from_a_random_token(): void
+    {
+        $this->assertSame(1, preg_match(self::SENTINEL, '{"name":"ZZ~CONTENT 0a1b2c"}'), 'the sweep would miss a planted name');
+        for ($i = 0; $i < 200; $i++) {
+            $token = strtoupper(Str::random(12)).'-'.Str::upper(Str::random(8)).'ZZ'.Str::uuid().bin2hex(random_bytes(8));
+            $this->assertSame(0, preg_match(self::SENTINEL, $token), 'a random token matched the sentinel');
+        }
+        $this->assertSame(0, preg_match(self::SENTINEL, '"report_trace":"WAKQN-ZZJF3","ZZZZZ-ZZZZZ"'));
     }
 
     public function test_the_same_link_without_the_switch_does_show_content_names_so_the_sweep_can_fail(): void
     {
         [, $raw] = $this->link();
 
-        $this->assertStringContainsString('ZZCONTENT', $this->publicSurfaces($raw)['live']);
+        $this->assertStringContainsString('ZZ~CONTENT', $this->publicSurfaces($raw)['live']);
     }
 
     public function test_every_public_payload_of_a_live_link_carries_no_hidden_name(): void
@@ -130,7 +141,7 @@ final class ReportGenericLabelsTest extends TestCase
     {
         $settings = ['creatives' => CreativeVisibility::fromArray(array_fill_keys(CreativeVisibility::FLAGS, true))->toArray()];
         [, $control] = $this->link(settings: $settings);
-        $this->assertStringContainsString('ZZCONTENT', (string) $this->getJson("/api/v1/reports/shared/{$control}/creatives")->assertOk()->getContent(), 'the library shows no names, so this proves nothing');
+        $this->assertStringContainsString('ZZ~CONTENT', (string) $this->getJson("/api/v1/reports/shared/{$control}/creatives")->assertOk()->getContent(), 'the library shows no names, so this proves nothing');
 
         [, $raw] = $this->link(self::ALL, settings: $settings);
         $library = $this->getJson("/api/v1/reports/shared/{$raw}/creatives")->assertOk();
@@ -230,13 +241,13 @@ final class ReportGenericLabelsTest extends TestCase
     {
         [, $raw] = $this->link(['content']);
         $live = (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent();
-        $this->assertStringNotContainsString('ZZCONTENT', $live);
-        $this->assertStringContainsString('ZZCAMP', $live, 'hiding content names took the campaign names with them');
+        $this->assertStringNotContainsString('ZZ~CONTENT', $live);
+        $this->assertStringContainsString('ZZ~CAMP', $live, 'hiding content names took the campaign names with them');
 
         [, $raw] = $this->link(['campaign']);
         $live = (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent();
-        $this->assertStringNotContainsString('ZZCAMP', $live);
-        $this->assertStringContainsString('ZZCONTENT', $live, 'hiding campaign names took the content names with them');
+        $this->assertStringNotContainsString('ZZ~CAMP', $live);
+        $this->assertStringContainsString('ZZ~CONTENT', $live, 'hiding campaign names took the content names with them');
     }
 
     /** A snapshot whose stored document quotes names under every key and in prose, on an internal report's link. */
@@ -256,17 +267,17 @@ final class ReportGenericLabelsTest extends TestCase
                 'platforms' => [['provider' => 'meta', 'spend' => 100.0, 'impressions' => 1000, 'clicks' => 10, 'conversions' => 2, 'revenue' => 50.0]],
                 'timeseries' => [['date' => '2026-10-01', 'impressions' => 1000, 'clicks' => 10, 'spend' => 100.0]],
                 'campaigns' => [
-                    ['campaign_id' => 'c1', 'campaign_name' => 'ZZSTORED One', 'provider' => 'meta', 'spend' => 60.0, 'conversions' => 1],
-                    ['campaign_id' => 'c2', 'campaign_name' => 'ZZSTORED Two', 'provider' => 'meta', 'spend' => 40.0, 'conversions' => 1],
+                    ['campaign_id' => 'c1', 'campaign_name' => 'ZZ~STORED One', 'provider' => 'meta', 'spend' => 60.0, 'conversions' => 1],
+                    ['campaign_id' => 'c2', 'campaign_name' => 'ZZ~STORED Two', 'provider' => 'meta', 'spend' => 40.0, 'conversions' => 1],
                 ],
-                'ad_sets' => [['ad_set_id' => 's1', 'ad_set_name' => 'ZZSTOREDSET', 'campaign_name' => 'ZZSTORED One', 'spend' => 60.0]],
-                'best' => ['campaign' => 'ZZSTORED One'],
-                'ads' => [['name' => 'ZZSTOREDAD', 'provider' => 'meta', 'campaign_name' => 'ZZSTORED One', 'metrics' => ['clicks' => 5]]],
-                'creatives' => [['name' => 'ZZSTOREDAD', 'provider' => 'meta', 'campaign_name' => 'ZZSTORED One', 'preview' => ['kind' => 'image', 'alt' => 'ZZSTOREDAD'], 'metrics' => ['clicks' => 5]]],
-                'accounts' => [['provider' => 'meta', 'account_name' => 'ZZSTOREDACCT', 'spend' => 100.0]],
-                'observations' => [['title' => 'A note', 'detail' => 'حملة «ZZSTORED One» تستهلك الميزانية', 'scope' => ['type' => 'campaign', 'name' => 'ZZSTORED One']]],
-                'summary' => ['Campaign "ZZSTORED Two" led the period'],
-                'next_steps' => [['action' => 'Scale ZZSTORED Two', 'reason' => 'It leads']],
+                'ad_sets' => [['ad_set_id' => 's1', 'ad_set_name' => 'ZZ~STOREDSET', 'campaign_name' => 'ZZ~STORED One', 'spend' => 60.0]],
+                'best' => ['campaign' => 'ZZ~STORED One'],
+                'ads' => [['name' => 'ZZ~STOREDAD', 'provider' => 'meta', 'campaign_name' => 'ZZ~STORED One', 'metrics' => ['clicks' => 5]]],
+                'creatives' => [['name' => 'ZZ~STOREDAD', 'provider' => 'meta', 'campaign_name' => 'ZZ~STORED One', 'preview' => ['kind' => 'image', 'alt' => 'ZZ~STOREDAD'], 'metrics' => ['clicks' => 5]]],
+                'accounts' => [['provider' => 'meta', 'account_name' => 'ZZ~STOREDACCT', 'spend' => 100.0]],
+                'observations' => [['title' => 'A note', 'detail' => 'حملة «ZZ~STORED One» تستهلك الميزانية', 'scope' => ['type' => 'campaign', 'name' => 'ZZ~STORED One']]],
+                'summary' => ['Campaign "ZZ~STORED Two" led the period'],
+                'next_steps' => [['action' => 'Scale ZZ~STORED Two', 'reason' => 'It leads']],
                 'slides' => [['id' => 'campaigns', 'type' => 'campaigns', 'order' => 1, 'visible' => true]],
             ],
         ]);
@@ -350,8 +361,8 @@ final class ReportGenericLabelsTest extends TestCase
         [$report, $share] = $this->snapshot([]);
 
         $files = $this->files($report, $share);
-        $this->assertStringContainsString('ZZSTORED', $files['csv']);
-        $this->assertStringContainsString('ZZSTORED', $files['xlsx']);
+        $this->assertStringContainsString('ZZ~STORED', $files['csv']);
+        $this->assertStringContainsString('ZZ~STORED', $files['xlsx']);
     }
 
     public function test_the_older_hide_campaign_names_switch_closes_its_snapshot_leaks_and_keeps_its_wording(): void
@@ -362,13 +373,13 @@ final class ReportGenericLabelsTest extends TestCase
         $surfaces += $this->files($report, $share);
 
         foreach ($surfaces as $name => $bytes) {
-            $this->assertStringNotContainsString('ZZSTORED One', $bytes, "«{$name}» still names a campaign under the older switch");
-            $this->assertStringNotContainsString('ZZSTORED Two', $bytes, "«{$name}» still names a campaign under the older switch");
+            $this->assertStringNotContainsString('ZZ~STORED One', $bytes, "«{$name}» still names a campaign under the older switch");
+            $this->assertStringNotContainsString('ZZ~STORED Two', $bytes, "«{$name}» still names a campaign under the older switch");
         }
         $file = json_decode($surfaces['export_data'], true);
         $this->assertSame(['حملة', 'حملة'], array_column($file['campaigns'], 'campaign_name'), 'an existing link keeps the words it showed');
-        $this->assertSame('ZZSTOREDSET', $file['ad_sets'][0]['ad_set_name'], 'the older switch is about campaigns only');
-        $this->assertSame('ZZSTOREDAD', $file['ads'][0]['name'], 'the older switch is about campaigns only');
+        $this->assertSame('ZZ~STOREDSET', $file['ad_sets'][0]['ad_set_name'], 'the older switch is about campaigns only');
+        $this->assertSame('ZZ~STOREDAD', $file['ads'][0]['name'], 'the older switch is about campaigns only');
     }
 
     public function test_a_real_name_shaped_like_a_stand_in_is_still_hidden(): void
@@ -478,7 +489,7 @@ final class ReportGenericLabelsTest extends TestCase
         $report = Report::query()->findOrFail($share->report_id);
         $report->forceFill(['config' => ['generic_names' => ['content']] + (array) $report->config])->save();
 
-        $this->assertStringNotContainsString('ZZCONTENT', (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent());
+        $this->assertStringNotContainsString('ZZ~CONTENT', (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent());
     }
 
     private function operator(): void
@@ -501,7 +512,7 @@ final class ReportGenericLabelsTest extends TestCase
 
         $this->putJson($url, ['generic_names' => ['content', 'nonsense']])->assertUnprocessable();
         $this->putJson($url, ['generic_names' => ['content']])->assertOk()->assertJsonPath('data.generic_names', ['content']);
-        $this->assertStringNotContainsString('ZZCONTENT', (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent());
+        $this->assertStringNotContainsString('ZZ~CONTENT', (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent());
 
         $this->context();
         $entry = AuditLog::query()->where('action', 'report.sections_updated')->where('entity_id', $share->report_id)->latest('created_at')->firstOrFail();
@@ -521,8 +532,8 @@ final class ReportGenericLabelsTest extends TestCase
 
         $this->putJson($url, ['generic_names' => ['campaign']])->assertOk()->assertJsonPath('data.generic_names', ['campaign'])->assertJsonPath('data.generic_names_of_report', []);
         $live = (string) $this->getJson("/api/v1/reports/shared/{$raw}/live")->getContent();
-        $this->assertStringNotContainsString('ZZCAMP', $live);
-        $this->assertStringContainsString('ZZCONTENT', $live);
+        $this->assertStringNotContainsString('ZZ~CAMP', $live);
+        $this->assertStringContainsString('ZZ~CONTENT', $live);
 
         // Saving something else leaves the switch alone.
         $this->putJson($url, ['sections' => ['trends' => false]])->assertOk()->assertJsonPath('data.generic_names', ['campaign']);
