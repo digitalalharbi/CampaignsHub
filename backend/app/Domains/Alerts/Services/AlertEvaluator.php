@@ -7,11 +7,13 @@ namespace App\Domains\Alerts\Services;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Support\CampaignDelivery;
+use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
 use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
@@ -20,13 +22,16 @@ use App\Domains\Forms\Services\TrackingHealth;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
@@ -85,6 +90,12 @@ final class AlertEvaluator
         'ga4_sales_drop', 'ga4_bounce_spike', 'ga4_cvr_drop', 'ga4_aov_shift', 'ga4_attribution_gap', 'ga4_tracking_loss', 'ga4_unmatched_spend',
     ];
 
+    /** The rule types that judge one campaign's performance — closed silently once that campaign stops running. */
+    public const CAMPAIGN_PERFORMANCE = ['roas_drop', 'cpa_increase', 'cpl_increase', 'no_results', 'budget_risk', 'metric_anomaly'];
+
+    /** The calendar a performance window is cut in — the Owner's (Asia/Riyadh); `metric_date` rows are calendar days. */
+    public const MEASURE_TIMEZONE = 'Asia/Riyadh';
+
     /** The default age, in hours, after which a measurement property with no successful sync is an outage. */
     private const MEASUREMENT_OUTAGE_HOURS = 12;
 
@@ -111,6 +122,12 @@ final class AlertEvaluator
     public const EVENT_DRIVEN = ['report_failed'];
 
     /**
+     * ALERT-CRITERIA-001 — event types that are not rule types: notices the «صرف بدون نتائج» sweep raises about the campaigns it
+     * reads («توقفت أمس», «ما تصرف»). Nobody creates a rule of these types; they live and close under the no_results rule.
+     */
+    public const NOTICES = ['campaign_stopped', 'not_spending'];
+
+    /**
      * Creatable, and raised by nothing at all — ALERT-SLA-UNRAISED-001.
      *
      * `sla_warning` is offered by the picker and accepted by the controller, and no code anywhere
@@ -129,6 +146,9 @@ final class AlertEvaluator
         'cpl_increase' => 'budget_risk',
         'roas_drop' => 'budget_risk',
         'no_results' => 'budget_risk',
+        // ALERT-CRITERIA-001 — the campaign notices raised by the «صرف بدون نتائج» sweep.
+        'campaign_stopped' => 'performance',
+        'not_spending' => 'budget_risk',
         'sync_failure' => 'sync_failed',
         'sync_outage' => 'sync_failed',
         'measurement_outage' => 'sync_failed',
@@ -160,6 +180,7 @@ final class AlertEvaluator
         private readonly SpendLimitGovernor $limits,
         private readonly DataFreshnessService $freshness,
         private readonly AlertEventMailer $mailer,
+        private readonly LinkHealth $linkHealth,
     ) {}
 
     /**
@@ -175,7 +196,19 @@ final class AlertEvaluator
     {
         $now ??= Carbon::now();
         $raised = 0;
+        MetricsAggregator::sweep('alerts:'.spl_object_id($this).':'.$now->format('U.u'));
 
+        try {
+            return $this->sweepAll($now, $raised);
+        } finally {
+            MetricsAggregator::sweep(null);
+            $this->delivered = [];
+            $this->deliveredSweep = null;
+        }
+    }
+
+    private function sweepAll(Carbon $now, int $raised): int
+    {
         // Rules are tenant-scoped models; iterate tenant-by-tenant so every scoped query (metrics, connections,
         // campaigns) resolves inside the correct tenant boundary.
         $tenantIds = DB::table('alert_rules')->where('active', true)->distinct()->pluck('tenant_id');
@@ -186,7 +219,10 @@ final class AlertEvaluator
             foreach ($tenantIds as $tenantId) {
                 $this->tenants->setTenantId((string) $tenantId);
                 $this->delivery()->forget();
-                AlertRule::query()->where('active', true)->get()
+                $rules = AlertRule::query()->where('active', true)->get();
+                // The tenant's switched-on types, from the read the sweep makes anyway (LINK-HEALTH-YESTERDAY-001 asks it per rule).
+                $this->activeRuleTypes[(string) $tenantId] = $rules->pluck('type')->map(static fn ($t): string => (string) $t)->unique()->values()->all();
+                $rules
                     ->each(function (AlertRule $rule) use ($now, &$raised) {
                         $raised += $this->evaluateRule($rule, $now);
                     });
@@ -225,7 +261,7 @@ final class AlertEvaluator
             $this->delivery()->forget();
         }
         $breaches = match ($rule->type) {
-            'sync_failure' => $this->syncFailures($rule),
+            'sync_failure' => $this->syncFailures($rule, $now),
             'sync_outage' => $this->syncOutages($rule, $now),
             'measurement_outage' => $this->measurementOutages($rule, $now),
             'tracking_health' => $this->trackingHealth($rule, $now),
@@ -272,6 +308,16 @@ final class AlertEvaluator
             default => $this->unevaluated($rule),
         };
 
+        // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
+        $openLinks = null;
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
+            $breaches = $this->onlyWhereYesterdayMissing($rule, $breaches, $now);
+            // One read of the tenant's open events of this type serves the adoption below and the recovery after the raises.
+            $openLinks = AlertEvent::query()->where('tenant_id', $rule->tenant_id)->where('type', $rule->type)
+                ->whereIn('status', ['open', 'snoozed'])->orderByDesc('last_triggered_at')->get();
+            $this->adoptLegacyLinkEvents($rule, $breaches, $openLinks);
+        }
+
         $raised = 0;
         foreach ($breaches as $b) {
             if ($this->raise($rule, $b, $now)) {
@@ -279,7 +325,7 @@ final class AlertEvaluator
             }
         }
 
-        $this->recoverCleared($rule, $breaches, $now);
+        $this->recoverCleared($rule, $breaches, $now, $openLinks);
 
         return $raised;
     }
@@ -296,7 +342,8 @@ final class AlertEvaluator
      *
      * @param  list<array<string,mixed>>  $breaches
      */
-    private function recoverCleared(AlertRule $rule, array $breaches, Carbon $now): void
+    /** @param  Collection<int, AlertEvent>|null  $openLinks  a link type's open events, read once by {@see evaluateRule()} */
+    private function recoverCleared(AlertRule $rule, array $breaches, Carbon $now, ?Collection $openLinks = null): void
     {
         if (! in_array($rule->type, self::PERIODIC, true)) {
             return;
@@ -307,27 +354,95 @@ final class AlertEvaluator
             $still[$this->dedupKey($rule, $b)] = true;
         }
 
-        AlertEvent::query()
-            ->where('rule_id', $rule->id)
+        // LINK-HEALTH-YESTERDAY-001 — a link event is the tenant's, whichever rule raised it (one per connection).
+        $events = $openLinks !== null ? $openLinks->filter(fn (AlertEvent $e): bool => in_array($e->status, ['open', 'snoozed'], true))->values() : AlertEvent::query()
+            ->when(in_array($rule->type, LinkHealth::TYPES, true),
+                fn ($q) => $q->where('tenant_id', $rule->tenant_id)->where('type', $rule->type),
+                fn ($q) => $q->where('rule_id', $rule->id))
             ->whereIn('status', ['open', 'snoozed'])
-            ->get()
-            ->each(function (AlertEvent $event) use ($still, $rule, $now): void {
-                if (isset($still[$event->dedup_key])) {
-                    return;
-                }
-                // ALERT-DELIVERING-YESTERDAY-001 — yesterday's figures not proven yet (a late or failed sync): no verdict either way.
-                if (($this->ineligible[(string) $rule->id][(string) $event->entity_id] ?? null) === CampaignDelivery::DATA_PENDING
-                    || (($this->noResultsState[(string) $rule->id][(string) $event->entity_id]['reason'] ?? null) === CampaignDelivery::DATA_PENDING)) {
-                    return;
-                }
-                $quiet = $this->notApplicable($rule, $event);
-                if ($quiet !== null) {
-                    $this->closeQuietly($event, $quiet, $now);
+            ->get();
+        /*
+         * «رجعت الأمور طبيعية» only about a campaign still running AND delivered yesterday. The performance rules that judge through
+         * {@see CampaignDelivery} close the others quietly via {@see notApplicable()}; `budget_risk` (which counts withheld spend
+         * as delivery) is judged here.
+         */
+        $live = [];
+        if ($rule->type === 'budget_risk') {
+            $ids = $events->filter(fn (AlertEvent $e): bool => $e->entity_type === UnifiedCampaign::class && ! isset($still[$e->dedup_key]))->pluck('entity_id')->unique()->values()->all();
+            $running = $ids === [] ? new Collection : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get()->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
+            $live = $this->delivering($running, $now)->map(fn (UnifiedCampaign $c): string => (string) $c->id)->all();
+        }
 
-                    return;
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
+            $closable = $events->filter(fn (AlertEvent $e): bool => ! isset($still[$e->dedup_key]));
+            $this->linkHealth->prime($closable->where('entity_type', ProviderConnection::class)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->values()->all(), $now);
+            $pairs = [];
+            foreach ($closable->where('entity_type', Project::class) as $e) {
+                foreach ((array) (((array) $e->context)['sources'] ?? []) as $source) {
+                    $pairs[] = [(string) $e->entity_id, (string) ($source['provider'] ?? '')];
                 }
-                $this->recover($rule, $event, $now);
-            });
+            }
+            $this->linkHealth->primeProjects($pairs, $now);
+        }
+
+        $events->each(function (AlertEvent $event) use ($still, $rule, $now, $live): void {
+            if (isset($still[$event->dedup_key])) {
+                return;
+            }
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a performance alert on a campaign that is no longer running (paused,
+             * completed, past its end date) is CLOSED without a word: «رجعت الأمور طبيعية» about an ended campaign is a
+             * notification about an ended campaign, which the Owner's rules forbid. The context records why.
+             */
+            // LINKING-ALERT-NO-FALSE-EXPIRY-001 — an «expiring» event on a connection that renews itself was never true: closed without a «recovered» notice.
+            if ($rule->type === 'token_expiry' && isset(((array) $event->context)['expires_at']) && ! isset(((array) $event->context)['error'])) {
+                $this->resolve($event, $now);
+                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'renews_itself', 'closed_at' => $now->toIso8601String()]])->save();
+
+                return;
+            }
+            /*
+             * LINK-HEALTH-YESTERDAY-001 — a link event whose connection delivered yesterday (or that was raised by the old
+             * rules on a «stale» window or a run a later run made good) is closed without a word: no «تعافى» notice, no mail.
+             */
+            if (in_array($rule->type, LinkHealth::TYPES, true)) {
+                // Closed only on proof: yesterday arrived, or the link itself is gone. Anything else stays open — a rule that merely
+                // stopped proposing it (another project's rule, a quiet fortnight) is never a reason to close a real outage.
+                $why = $this->linkCloseReason($event, $now);
+                if ($why !== null) {
+                    $this->resolve($event, $now);
+                    $event->forceFill(['context' => (array) $event->context + ['closed_reason' => $why, 'closed_at' => $now->toIso8601String()]])->save();
+                }
+
+                return;
+            }
+            // ALERT-DELIVERING-YESTERDAY-001 — yesterday's figures not proven yet (a late or failed sync): no verdict either way.
+            if (($this->ineligible[(string) $rule->id][(string) $event->entity_id] ?? null) === CampaignDelivery::DATA_PENDING
+                || (($this->noResultsState[(string) $rule->id][(string) $event->entity_id]['reason'] ?? null) === CampaignDelivery::DATA_PENDING)) {
+                return;
+            }
+            // ALERT-CRITERIA-001 — a notice («توقفت أمس», «ما تصرف») whose day has passed did not «recover»: it closes silently.
+            if ((string) $event->type !== (string) $rule->type) {
+                $this->closeQuietly($event, 'notice_over', $now);
+
+                return;
+            }
+            // ALERT-OBJECTIVE-RESULT-001 — a «صرف بدون نتائج» that no longer applies (inactive, objective unknown, result not
+            // reported or redefined) did not recover: closed with its reason, no notice.
+            $quiet = $this->notApplicable($rule, $event);
+            if ($quiet !== null) {
+                $this->closeQuietly($event, $quiet, $now);
+
+                return;
+            }
+            if ($rule->type === 'budget_risk' && $event->entity_type === UnifiedCampaign::class && ! in_array((string) $event->entity_id, $live, true)) {
+                $this->resolve($event, $now);
+                $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'campaign_not_running', 'closed_at' => $now->toIso8601String()]])->save();
+
+                return;
+            }
+            $this->recover($rule, $event, $now);
+        });
     }
 
     /**
@@ -434,6 +549,8 @@ final class AlertEvaluator
         $titleAr = (string) ($event->context['title_ar'] ?? $title);
         $context = (array) $event->context;
         $context['recovered_at'] = $now->toIso8601String();
+        // ALERT-VISUAL-EVERY-CARD-001 — when it opened, so the recovery card's timeline can be drawn.
+        $context['opened_at'] ??= ($event->created_at ?? $now)->toIso8601String();
 
         $this->resolve($event, $now);
         $event->forceFill(['context' => $context])->save();
@@ -441,7 +558,7 @@ final class AlertEvaluator
         $this->notifications->dispatch([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
-            'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'type' => self::NOTIFICATION_TYPE[(string) $event->type] ?? self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
             'severity' => 'info',
             'title' => 'Recovered: '.$title,
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
@@ -462,13 +579,27 @@ final class AlertEvaluator
             'message' => 'The condition behind «'.$title.'» was no longer present at '.$now->toDateTimeString().'. The alert is resolved.',
             'message_ar' => 'لم تعد حالة «'.$titleAr.'» قائمة عند '.$now->toDateTimeString().'. أُغلق التنبيه.',
             'project_id' => $event->project_id ? (string) $event->project_id : $rule->project_id,
-            'context' => [],
+            // ALERT-VISUAL-EVERY-CARD-001 — the figures and dates travel with the recovery, so its card draws them.
+            'context' => array_intersect_key($context, array_flip(['opened_at', 'recovered_at', 'window_from', 'window_to', 'provider',
+                'roas_current', 'roas_previous', 'cpa_current', 'cpa_previous', 'cpl_current', 'cpl_previous', 'ctr_current', 'ctr_previous', 'cpc_current', 'cpc_previous'])),
         ], 'info', $now, recovered: true);
     }
 
     private function dedupKey(AlertRule $rule, array $b): string
     {
-        return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '']));
+        /*
+         * LINKING-ALERT-NO-FALSE-EXPIRY-001 — a connection's health is ONE fact per tenant, whichever rule found it: three token rules
+         * (one per project) produced three identical cards. Every other type stays keyed by its rule.
+         */
+        if (in_array($rule->type, LinkHealth::TYPES, true)) {
+            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '']));
+        }
+
+        // A notice raised under a rule of another type (ALERT-CRITERIA-001: «توقفت أمس», «ما تصرف» under «صرف بدون نتائج») is its own
+        // finding about the same campaign, so it carries its type in the key; the rule's own type keeps the key it always had.
+        $kind = isset($b['type']) && $b['type'] !== $rule->type ? [(string) $b['type']] : [];
+
+        return hash('sha256', implode('|', [$rule->id, $b['entity_type'], $b['entity_id'] ?? '', ...$kind]));
     }
 
     /**
@@ -489,6 +620,10 @@ final class AlertEvaluator
             ->latest('last_triggered_at')->first();
 
         if ($active !== null) {
+            // ALERT-CRITERIA-001 — a notice is said once per episode: while it is open it is neither refreshed nor sent again.
+            if (($b['once'] ?? false) === true) {
+                return false;
+            }
             // Snoozed into the future, or still inside the cooldown window → suppress (no storm).
             if ($active->status === 'snoozed' && $active->snoozed_until !== null && $active->snoozed_until->isFuture()) {
                 return false;
@@ -501,28 +636,42 @@ final class AlertEvaluator
                 'last_triggered_at' => $now,
                 'context' => array_merge($b['context'], ['title' => $b['title'], 'message' => $b['message']]),
                 'status' => 'open',
+                // LINK-HEALTH-YESTERDAY-001 — an escalation reaches the stored event (bell, Recommendations), not only the mail.
+                'severity' => $b['severity'] ?? $active->severity,
             ] + $this->anatomy($rule, $b))->save();
-            $this->notify($rule, $b);
-            $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
+            if (($b['context']['digest_only'] ?? false) !== true) {
+                $this->notify($rule, $b);
+                $this->post($rule, $active, $b, $b['severity'] ?? $rule->severity, $now);
+            }
 
             return false;
         }
 
         // No active event. If the most recent (possibly resolved) event is still inside cooldown, suppress.
         $recent = AlertEvent::query()->where('dedup_key', $dedupKey)->latest('last_triggered_at')->first();
+        // A notice is said once per EPISODE, even after a quiet close: the episode is the campaign's last delivered day, which does
+        // not move while it stays stopped or keeps spending nothing. It moves only when the campaign delivered again.
+        if (($b['once'] ?? false) === true && $recent !== null
+            && ($recent->context['last_delivered'] ?? '') === ($b['context']['last_delivered'] ?? '')) {
+            return false;
+        }
         if ($recent !== null && $cooldownUntil($recent)->isFuture()) {
             return false;
         }
 
+        // LINKING-ALERT-NO-FALSE-EXPIRY-001 — a finding marked `digest_only` is recorded for the morning digest's «ملخص الربط», never sent instantly.
+        $digestOnly = ($b['context']['digest_only'] ?? false) === true;
+
         // Fresh alert.
-        $notification = $this->notify($rule, $b);
-        $taskId = $rule->create_task ? $this->openTask($rule, $b) : null;
+        $notification = $digestOnly ? null : $this->notify($rule, $b);
+        // A notice is information about a campaign, not work: it opens no task even when the rule's own breaches do.
+        $taskId = $rule->create_task && ($b['once'] ?? false) !== true ? $this->openTask($rule, $b) : null;
 
         $event = AlertEvent::create([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
             'rule_id' => $rule->id,
-            'type' => $rule->type,
+            'type' => ($b['type'] ?? $rule->type),
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
             'dedup_key' => $dedupKey,
@@ -534,7 +683,9 @@ final class AlertEvaluator
             'task_id' => $taskId,
             'last_triggered_at' => $now,
         ] + $this->anatomy($rule, $b));
-        $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
+        if (! $digestOnly) {
+            $this->post($rule, $event, $b, $b['severity'] ?? $rule->severity, $now);
+        }
 
         return true;
     }
@@ -547,7 +698,7 @@ final class AlertEvaluator
      */
     private function anatomy(AlertRule $rule, array $b): array
     {
-        return AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), (string) ($b['severity'] ?? $rule->severity));
+        return AlertAnatomy::build((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []), (string) ($b['severity'] ?? $rule->severity));
     }
 
     /** Raise the notification through the shared dispatcher; returns the notification id (or null if deduped). */
@@ -556,9 +707,9 @@ final class AlertEvaluator
     {
         $this->outbox[] = [
             'event_id' => (string) $event->id,
-            'notification_type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
+            'notification_type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
             // EMAIL-DIGESTS-OPERATIONAL-001 — what the finding is ABOUT, so the mail can say it plainly and link to the exact page.
-            'rule_type' => (string) $rule->type,
+            'rule_type' => (string) ($b['type'] ?? $rule->type),
             'entity_type' => (string) ($b['entity_type'] ?? $event->entity_type ?? ''),
             'entity_id' => (string) ($b['entity_id'] ?? $event->entity_id ?? ''),
             'severity' => $severity,
@@ -572,8 +723,8 @@ final class AlertEvaluator
             // EMAIL-PERF-DASHBOARDS-001 — the rule's own figures travel with the finding, so the email can lead with the number.
             'context' => (array) ($b['context'] ?? []),
             // OPERATIONAL-INTELLIGENCE-P1-001 — priority and whether the evidence is thin, so the mail can say both in one line.
-            'priority' => $event->priority ?? AlertAnatomy::build((string) $rule->type, (array) ($b['context'] ?? []), $severity)['priority'],
-            'insufficient' => ($event->evidence['sufficient'] ?? AlertAnatomy::evidence((string) $rule->type, (array) ($b['context'] ?? []))['sufficient']) !== true,
+            'priority' => $event->priority ?? AlertAnatomy::build((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []), $severity)['priority'],
+            'insufficient' => ($event->evidence['sufficient'] ?? AlertAnatomy::evidence((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? []))['sufficient']) !== true,
         ];
     }
 
@@ -582,8 +733,9 @@ final class AlertEvaluator
         $n = $this->notifications->dispatch([
             'tenant_id' => $rule->tenant_id,
             'project_id' => $b['project_id'] ?? $rule->project_id,
-            'type' => self::NOTIFICATION_TYPE[$rule->type] ?? 'performance',
-            'severity' => $rule->severity === 'critical' ? 'error' : ($rule->severity === 'info' ? 'info' : 'warning'),
+            'type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
+            // A notice carries its own severity («توقفت أمس» is info); a rule's breach keeps the rule's.
+            'severity' => ($sev = (string) ($b['severity'] ?? $rule->severity)) === 'critical' ? 'error' : ($sev === 'info' ? 'info' : 'warning'),
             'title' => $b['title'],
             'message' => $b['message'],
             // DIGESTS-VISUAL-V2-001 — the bell's Arabic: the rule's own when it wrote one, else the mail's wording of the same finding.
@@ -611,7 +763,7 @@ final class AlertEvaluator
     private function bellArabic(AlertRule $rule, array $b): array
     {
         $c = AlertEventText::compose([
-            'rule_type' => (string) $rule->type, 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
+            'rule_type' => (string) ($b['type'] ?? $rule->type), 'severity' => (string) ($b['severity'] ?? $rule->severity), 'context' => (array) ($b['context'] ?? []),
             'project_id' => $b['project_id'] ?? $rule->project_id, 'project_name' => '', 'entity_type' => '', 'entity_id' => '', 'event_id' => '', 'triggered_at' => '',
         ], true);
 
@@ -628,7 +780,7 @@ final class AlertEvaluator
             'description' => $b['message'],
             'status' => 'todo',
             'priority' => $rule->severity === 'critical' ? 'urgent' : 'high',
-            'meta' => ['source' => 'alert', 'alert_type' => $rule->type],
+            'meta' => ['source' => 'alert', 'alert_type' => ($b['type'] ?? $rule->type)],
         ]);
 
         return (string) $task->id;
@@ -656,28 +808,122 @@ final class AlertEvaluator
     /** EMAIL-ALERT-DETERIORATION-001 — the window and the threshold a deterioration was judged on, in one sentence. */
     private function deteriorationBasis(int $days, float $pct, string $direction): string
     {
-        return 'the last '.$days.' days against the '.$days.' before; this rule fires at a '.rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.').'% '.$direction.'.';
+        return 'the last '.$days.' complete days against the '.$days.' before; this rule fires at a '.rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.').'% '.$direction.'.';
     }
 
-    private function syncFailures(AlertRule $rule): array
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured window of a performance rule: `$days` COMPLETE days ending YESTERDAY
+     * (Riyadh calendar), against the same number of complete days before them. Today is still being written by the platforms,
+     * so a window that ends «now» compares a part-day with whole days and reads every sweep differently.
+     *
+     * @return array{0: Carbon, 1: Carbon, 2: Carbon, 3: Carbon} current from, current to, previous from, previous to
+     */
+    public static function completeDays(Carbon $now, int $days): array
     {
-        // Latest sync run per connection; a failed latest run is an active problem.
+        $days = max(1, $days);
+        $to = $now->copy()->setTimezone(self::MEASURE_TIMEZONE)->subDay()->endOfDay();
+        $from = $to->copy()->subDays($days - 1)->startOfDay();
+        $prevTo = $from->copy()->subSecond();
+        $prevFrom = $from->copy()->subDays($days)->startOfDay();
+
+        return [$from, $to, $prevFrom, $prevTo];
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — of these campaigns, the ones that DELIVERED yesterday (spend or impressions above
+     * zero). A running campaign with no movement has nothing to be alerted about: no spend, no budget at risk.
+     *
+     * @param  Collection<int, UnifiedCampaign>  $campaigns
+     * @return Collection<int, UnifiedCampaign>
+     */
+    private function delivering(Collection $campaigns, Carbon $now): Collection
+    {
+        if ($campaigns->isEmpty()) {
+            return $campaigns;
+        }
+        // One read of yesterday per campaign per sweep (one `$now`), however many rules ask: the answer cannot differ between them.
+        $sweep = $now->format('U.u');
+        if ($this->deliveredSweep !== $sweep) {
+            $this->delivered = [];
+            $this->deliveredSweep = $sweep;
+        }
+        $unknown = $campaigns->filter(fn (UnifiedCampaign $c): bool => ! array_key_exists((string) $c->getKey(), $this->delivered))->values();
+        if ($unknown->isNotEmpty()) {
+            [$from, $to] = self::completeDays($now, 1);
+            $figures = $this->campaignMetrics($unknown)->figuresByCampaign($from, $to);
+            foreach ($unknown as $c) {
+                $f = $figures[(string) $c->getKey()] ?? [];
+                // A spend the money contract withheld (no exchange rate) is still spend the platform reported: it delivered.
+                $this->delivered[(string) $c->getKey()] = (float) ($f['spend'] ?? 0) > 0 || (float) ($f['impressions'] ?? 0) > 0 || (int) ($f['spend_withheld_rows'] ?? 0) > 0;
+            }
+        }
+
+        return $campaigns->filter(fn (UnifiedCampaign $c): bool => $this->delivered[(string) $c->getKey()] ?? false)->values();
+    }
+
+    private ?ReportingTimezone $clock = null;
+
+    /** One reporting clock per evaluator: each project's timezone is read once, not once per campaign. */
+    private function clock(): ReportingTimezone
+    {
+        return $this->clock ??= app(ReportingTimezone::class);
+    }
+
+    /** @var array<string, bool> campaign id → delivered yesterday, for the sweep in {@see} */
+    private array $delivered = [];
+
+    private ?string $deliveredSweep = null;
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign is eligible for a PERFORMANCE alert only while it is running: status
+     * active and not past its end date. A paused, completed or ended campaign (its budget ran out, its dates passed) raises
+     * nothing about its cost or its return — that is history, not a decision (MASTER_FINAL §هـ).
+     */
+    public static function running(UnifiedCampaign $c, Carbon $now, ?ReportingTimezone $clock = null): bool
+    {
+        // «Past its end date» is the CLIENT's day (ALERT-OBJECTIVE-RESULT-001): the project's reporting timezone, Riyadh by default.
+        // A caller judging many campaigns passes ONE clock, which reads each project's timezone once.
+        $today = $now->copy()->setTimezone(($clock ?? app(ReportingTimezone::class))->forProject((string) $c->project_id))->toDateString();
+        $ended = $c->ends_on !== null && $c->ends_on->toDateString() < $today;
+
+        return $c->status === CampaignStatus::Active->value && ! $ended;
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last month is a CANDIDATE, one per connection; the
+     * one rule ({@see onlyWhereYesterdayMissing()}) keeps those whose yesterday did not arrive. A failed run that a later run
+     * made good is therefore nothing, and a connection that simply stopped syncing (no failed run at all) is
+     * still found. A connection the platform refused is the `token_expiry` card, never a second one here.
+     */
+    private function syncFailures(AlertRule $rule, ?Carbon $now = null): array
+    {
+        $now ??= Carbon::now();
+        // The latest run per connection, for THIS rule's project when it has one (filtered inside, so another project's newer
+        // run never hides this project's connection).
         $latest = MetricSyncRun::query()
-            ->whereIn('id', function ($q) {
+            ->whereIn('id', function ($q) use ($rule, $now) {
                 $q->selectRaw('DISTINCT ON (connection_id) id')
                     ->from('metric_sync_runs')
+                    ->whereNotNull('connection_id')
+                    ->where('created_at', '>=', $now->copy()->subDays(30))
+                    ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
                     ->orderByRaw('connection_id, started_at DESC NULLS LAST, created_at DESC');
             })
-            ->where('status', 'failed')
             ->get();
+        // A removed link says nothing; a refused one is the `token_expiry` card — when the tenant watches tokens at all.
+        $watchesTokens = in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true);
+        $skip = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
+            ->whereIn('status', $watchesTokens ? ['error', 'disconnected', 'disabled', 'revoked'] : ['disconnected', 'disabled', 'revoked'])
+            ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $skip, true))->values();
 
         return $latest->map(fn (MetricSyncRun $r) => [
             'entity_type' => ProviderConnection::class,
             'entity_id' => (string) $r->connection_id,
             'project_id' => $r->project_id ? (string) $r->project_id : null,
             'title' => 'Data sync failed',
-            'message' => 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.'),
-            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->error],
+            'message' => $r->status === 'failed' ? 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.') : 'Syncs for '.$r->provider.' have not delivered the day.',
+            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->status === 'failed' ? $r->error : null],
         ])->all();
     }
 
@@ -814,11 +1060,13 @@ final class AlertEvaluator
 
         /*
          * META-SESSION-190-001 — a connection whose token the provider already refused (`error`) needs the same act as one about to
-         * expire, sooner. It is named first and only once: an `error` row is not also reported as expiring.
+         * expire, sooner. It is named first and only once: an `error` row is not also reported as expiring. This is a PROVEN failure:
+         * `TokenVault::fresh()` marks a connection `error` when the platform refused the refresh, or the grant was revoked.
          */
-        $refused = ProviderConnection::query()
+        $refused = self::oneIdentityOnce(ProviderConnection::query()
             ->where('status', 'error')
-            ->get()
+            ->orderBy('id')
+            ->get())
             ->map(fn (ProviderConnection $c) => [
                 'entity_type' => ProviderConnection::class,
                 'entity_id' => (string) $c->id,
@@ -828,21 +1076,207 @@ final class AlertEvaluator
                 'context' => ['provider' => $c->provider, 'error' => $c->last_error],
             ]);
 
-        $expiring = ProviderConnection::query()
+        /*
+         * LINKING-ALERT-NO-FALSE-EXPIRY-001 — `token_expires_at` is the ACCESS token's expiry. Google's lasts an hour and is renewed
+         * from the refresh token on the next call, so «قارب ينتهي» on it was false on every working Google connection. Only a
+         * credential that does NOT renew itself (no refresh token stored) has a real expiry to warn about, and that warning is not
+         * instant: it waits for the morning digest's «ملخص الربط» (`digest_only`). A renewal that FAILS is the `error` row above.
+         */
+        $vault = app(TokenVault::class);
+        $expiring = self::oneIdentityOnce(ProviderConnection::query()
             ->whereNotNull('token_expires_at')
             ->where('token_expires_at', '<=', $cutoff)
             ->where('status', '!=', 'error')
-            ->get()
+            ->orderBy('id')
+            ->get())
+            ->filter(static function (ProviderConnection $c) use ($vault): bool {
+                try {
+                    return $vault->stored($c)->refreshToken === null;
+                } catch (\Throwable) {
+                    // No readable credential: nothing proves an expiry, and the sync failure (if any) is reported by its own rule.
+                    return false;
+                }
+            })
             ->map(fn (ProviderConnection $c) => [
                 'entity_type' => ProviderConnection::class,
                 'entity_id' => (string) $c->id,
                 'project_id' => null,
                 'title' => 'Connection token expiring',
-                'message' => 'The '.$c->provider.' connection token expires '.optional($c->token_expires_at)->toDateString().'. Reconnect to avoid a sync gap.',
-                'context' => ['provider' => $c->provider, 'expires_at' => optional($c->token_expires_at)->toIso8601String()],
+                'message' => 'The '.$c->provider.' connection token expires '.optional($c->token_expires_at)->toDateString().' and does not renew itself. Reconnect to avoid a sync gap.',
+                'context' => ['provider' => $c->provider, 'expires_at' => optional($c->token_expires_at)->toIso8601String(), 'digest_only' => true],
             ]);
 
         return $refused->concat($expiring)->values()->all();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — keeps a link breach only where the required day (yesterday, after 06:00 Riyadh) did not
+     * arrive, states it in the reader's words (state 1, «بيانات أمس ما وصلت»), and escalates it to critical once
+     * {@see LinkHealth::ESCALATE_AFTER_DAYS} days are missing. A project-level outage keeps only the platforms whose data
+     * is missing, and goes away when none is.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @return list<array<string,mixed>>
+     */
+    private function onlyWhereYesterdayMissing(AlertRule $rule, array $breaches, Carbon $now): array
+    {
+        $this->linkHealth->prime(array_values(array_map(static fn (array $b): string => (string) $b['entity_id'],
+            array_filter($breaches, static fn (array $b): bool => $b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null))), $now);
+        $pairs = [];
+        foreach ($breaches as $b) {
+            if ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
+                foreach ((array) ($b['context']['sources'] ?? []) as $source) {
+                    $pairs[] = [(string) $b['entity_id'], (string) ($source['provider'] ?? '')];
+                }
+            }
+        }
+        $this->linkHealth->primeProjects($pairs, $now);
+        $out = [];
+        foreach ($breaches as $b) {
+            $context = (array) ($b['context'] ?? []);
+            if ($b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null) {
+                $reading = $this->linkHealth->forConnection((string) $b['entity_id'], $now);
+                if ($reading['arrived']) {
+                    continue;
+                }
+            } elseif ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
+                $missing = [];
+                $reading = null;
+                foreach ((array) ($context['sources'] ?? []) as $source) {
+                    $r = $this->linkHealth->forProjectProvider((string) $b['entity_id'], (string) ($source['provider'] ?? ''), $now);
+                    if (! $r['arrived']) {
+                        $missing[] = $source;
+                        $reading ??= $r;
+                    }
+                }
+                if ($missing === [] || $reading === null) {
+                    continue;
+                }
+                $context['sources'] = $missing;
+            } else {
+                continue;
+            }
+
+            $day = (string) $reading['required_day'];
+            $context['link_state'] = 'not_synced';
+            $context['required_day'] = $day;
+            $context['last_day'] = $reading['last_day'];
+            $context['missing_days'] = $reading['missing_days'];
+            $context['title_ar'] = LinkHealth::text('not_synced', true);
+            $context['message_ar'] = 'ما وصلت بيانات يوم '.$day.($reading['last_day'] !== null ? '، آخر يوم وصل '.$reading['last_day'] : '').'.';
+            $b['title'] = LinkHealth::text('not_synced', false);
+            $b['message'] = 'No data arrived for '.$day.($reading['last_day'] !== null ? '; the last day that arrived is '.$reading['last_day'] : '').'.'
+                .(isset($b['message']) ? ' '.$b['message'] : '');
+            unset($context['digest_only']);
+            // One item per connection: where the tenant watches each connection (`sync_failure`), the project-level outage would
+            // restate those cards in the mail and the bell — it is kept for the digest's «ملخص الربط» only.
+            if ($rule->type === 'sync_outage' && $this->watchesConnections((string) $rule->tenant_id)) {
+                $context['digest_only'] = true;
+            }
+            if (($reading['missing_days'] ?? 0) >= LinkHealth::ESCALATE_AFTER_DAYS) { // escalation needs a MEASURED persistence; a link never read is not «days missing»
+                $b['severity'] = 'critical';
+            }
+            $b['context'] = $context;
+            $out[] = $b;
+        }
+
+        return $out;
+    }
+
+    private function watchesConnections(string $tenantId): bool
+    {
+        return in_array('sync_failure', $this->activeRuleTypes($tenantId), true);
+    }
+
+    /** @var array<string, list<string>> */
+    private array $activeRuleTypes = [];
+
+    /** @return list<string> the rule types a tenant has switched on — one read per tenant per evaluator */
+    private function activeRuleTypes(string $tenantId): array
+    {
+        return $this->activeRuleTypes[$tenantId] ??= AlertRule::query()->where('tenant_id', $tenantId)->where('active', true)
+            ->distinct()->pluck('type')->map(static fn ($t): string => (string) $t)->values()->all();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — open link events written under the old per-RULE dedup key (before this rule) are the same fact as
+     * the per-tenant key now: the newest is rekeyed and kept (no second notice on deploy), any further copy closed silently.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @param  Collection<int, AlertEvent>  $open
+     */
+    private function adoptLegacyLinkEvents(AlertRule $rule, array $breaches, Collection $open): void
+    {
+        if ($breaches === [] || $open->isEmpty()) {
+            return;
+        }
+        foreach ($breaches as $b) {
+            $key = $this->dedupKey($rule, $b);
+            $same = $open->filter(fn (AlertEvent $e): bool => $e->entity_type === $b['entity_type'] && (string) $e->entity_id === (string) ($b['entity_id'] ?? ''))->values();
+            if ($same->isEmpty() || $same->every(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
+                continue;
+            }
+            $keep = $same->first(fn (AlertEvent $e): bool => $e->dedup_key === $key) ?? $same->first();
+            if ($keep->dedup_key !== $key) {
+                $keep->forceFill(['dedup_key' => $key])->save();
+            }
+            $same->reject(fn (AlertEvent $e): bool => $e->is($keep))->each(fn (AlertEvent $e) => $this->closeAsDuplicate($e));
+        }
+    }
+
+    private function closeAsDuplicate(AlertEvent $event): void
+    {
+        $now = Carbon::now();
+        $this->resolve($event, $now);
+        $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'same_link', 'closed_at' => $now->toIso8601String()]])->save();
+    }
+
+    /**
+     * LINK-HEALTH-YESTERDAY-001 — why an open link event may close, on PROOF only: its yesterday arrived (`yesterday_arrived`), or
+     * the link is gone (`link_removed`). Null keeps it open.
+     */
+    private function linkCloseReason(AlertEvent $event, Carbon $now): ?string
+    {
+        $ctx = (array) $event->context;
+        if ($event->entity_type === ProviderConnection::class && $event->entity_id !== null) {
+            if ($this->linkHealth->forConnection((string) $event->entity_id, $now)['arrived']) {
+                return 'yesterday_arrived';
+            }
+            $connection = ProviderConnection::query()->withoutGlobalScopes()->whereKey($event->entity_id)->first(['id', 'status']);
+            if ($connection === null || in_array((string) $connection->status, ['disconnected', 'disabled', 'revoked'], true)) {
+                return 'link_removed';
+            }
+            // A refused grant closes when the connection was reconnected (no longer refused) — the proof of that failure's end.
+            if ($event->type === 'token_expiry' && ! isset($ctx['expires_at']) && (string) $connection->status !== 'error') {
+                return 'reconnected';
+            }
+
+            return null;
+        }
+        if ($event->entity_type === Project::class && $event->entity_id !== null) {
+            foreach ((array) ($ctx['sources'] ?? []) as $source) {
+                if (! $this->linkHealth->forProjectProvider((string) $event->entity_id, (string) ($source['provider'] ?? ''), $now)['arrived']) {
+                    return null;
+                }
+            }
+
+            return 'yesterday_arrived';
+        }
+
+        return 'yesterday_arrived';
+    }
+
+    /**
+     * LINKING-ALERT-NO-FALSE-EXPIRY-001 — one card per platform IDENTITY: a Google login linked to three projects is three
+     * `project_only` connections (Production, 2026-11-12) and was three identical cards. Grouped by provider and the platform's
+     * own owner id; a connection with no owner id stands alone.
+     *
+     * @param  Collection<int, ProviderConnection>  $connections  ordered by id, so the same connection speaks for the group each sweep
+     * @return Collection<int, ProviderConnection>
+     */
+    private static function oneIdentityOnce(Collection $connections): Collection
+    {
+        return $connections->unique(static fn (ProviderConnection $c): string => $c->provider.'|'.((string) ($c->external_owner_id ?? '') !== '' ? (string) $c->external_owner_id : 'id:'.$c->id))->values();
     }
 
     /** @return list<array<string,mixed>> */
@@ -854,7 +1288,10 @@ final class AlertEvaluator
 
         $campaigns = UnifiedCampaign::query()->where('total_budget', '>', 0)
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get();
+            ->get()
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a campaign whose budget already ran out, or that is paused or ended, is not «at risk».
+            ->filter(fn (UnifiedCampaign $c): bool => self::running($c, $now, $this->clock()))->values();
+        $campaigns = $this->delivering($campaigns, $now);
 
         /*
          * Falls THROUGH rather than returning: the workspace's own spend limits are merged in at the
@@ -1064,7 +1501,12 @@ final class AlertEvaluator
          * at most `days` windows, never one per campaign.
          */
         $windows = [];
+        $byId = $campaigns->keyBy(static fn (UnifiedCampaign $c): string => (string) $c->getKey());
         foreach ($verdicts as $id => $v) {
+            $notice = $this->notice($byId[$id], $v, $now);
+            if ($notice !== null) {
+                $out[] = $notice;
+            }
             if ($v['reason'] !== null) {
                 // OBJECTIVE-RESULT-001 + ALERT-DELIVERING-YESTERDAY-001 — ended, stopped, or not running yesterday: not a performance problem.
                 $state[$id] = ['reason' => $v['reason'], 'result_key' => null];
@@ -1073,13 +1515,20 @@ final class AlertEvaluator
             }
             $windows[$v['from'].'|'.$v['to']][] = $id;
         }
+        // One currency read for the campaigns judged: when their spend agrees on one currency, every card states it.
+        $judgedIds = array_merge([], ...array_values($windows));
+        $currency = null;
+        if ($judgedIds !== []) {
+            $basis = $this->metrics->acrossProjects()->forCampaigns($judgedIds)->currencyBasis($now->copy()->subDays($days + 1), $now);
+            $currency = $basis['bases'] === 1 ? (string) $basis['currency'] : null;
+        }
         $figures = [];
         foreach ($windows as $key => $ids) {
             [$from, $to] = explode('|', $key);
             $figures += $this->metrics->acrossProjects()->forCampaigns($ids)->figuresByCampaign(Carbon::parse($from), Carbon::parse($to));
         }
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $verdicts, &$out, &$state) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($figures, $verdicts, $currency, &$out, &$state) {
             $id = (string) $c->getKey();
             if (! isset($figures[$id])) {
                 return;
@@ -1118,7 +1567,9 @@ final class AlertEvaluator
                     // `days` is the days JUDGED (since it last started delivering), not the rule's ceiling.
                     'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $v['days'], 'from' => $v['from'], 'to' => $v['to'],
                         'active_since' => $v['active_since'], 'campaign_status' => $v['status'], 'checks' => $v['checks'],
-                        'result_key' => $totals['result_key'], 'result_family' => $totals['result_family'] ?? null, 'result_label' => $totals['result_label'] ?? null],
+                        'card' => $this->card($c, $v, ['spend' => $spend, 'result' => (float) $result, 'result_key' => (string) $totals['result_key'], 'from' => $v['from'], 'to' => $v['to']], $currency),
+                        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the dated card reads the judged window under the names every alert uses.
+                        'result_key' => $totals['result_key'], 'result_family' => $totals['result_family'] ?? null, 'result_label' => $totals['result_label'] ?? null] + ['window_from' => $v['from'], 'window_to' => $v['to']],
                 ];
             }
         });
@@ -1127,31 +1578,152 @@ final class AlertEvaluator
         return $out;
     }
 
+    /** A campaign that delivered within this many days and now spends nothing is «ما تصرف»; an older silence is not news. */
+    private const NOT_SPENDING_RECENT_DAYS = 7;
+
+    /**
+     * ALERT-CRITERIA-001 — the two campaign notices the Owner's rules allow beside the performance verdicts, raised by the
+     * «صرف بدون نتائج» sweep that already holds the proof (OWNER_NOTIFICATIONS_RULES §6, §7أ case 2–3, §10أ check 4):
+     *
+     * - `campaign_stopped` «توقفت أمس» — its platform says it is not running and it last delivered the day before yesterday. Once:
+     *   the next day the condition no longer holds and the notice closes silently.
+     * - `not_spending` «ما تصرف» — running per its platform, yesterday's figures arrived (a successful sync covered the day), it
+     *   spent nothing, and it either delivered in the last {@see NOT_SPENDING_RECENT_DAYS} days or its ads are all rejected / in
+     *   review. The stored setup facts travel with it; what we do not fetch says «غير متاح».
+     *
+     * Both are said once per episode (`once`: an open notice is never refreshed or re-sent) and close silently, never «تعافى».
+     *
+     * @param  array<string, mixed>  $v  the campaign's {@see CampaignDelivery} verdict
+     * @return array<string, mixed>|null
+     */
+    private function notice(UnifiedCampaign $c, array $v, Carbon $now): ?array
+    {
+        $checks = (array) $v['checks'];
+        $last = $checks['last_delivered'] ?? null;
+        $type = null;
+        if ($v['reason'] === CampaignDelivery::INACTIVE && ($checks['stopped_yesterday'] ?? false) === true) {
+            $type = 'campaign_stopped';
+        } elseif ($v['reason'] === CampaignDelivery::NOT_DELIVERING && ($checks['running']['platform'] ?? []) !== []) {
+            // «الربط سليم» needs a linked platform whose sync covered yesterday (CampaignDelivery already withheld it otherwise).
+            $ads = $checks['setup']['ads'] ?? null;
+            $recent = is_string($last) && $last >= Carbon::parse($v['to'])->subDays(self::NOT_SPENDING_RECENT_DAYS)->toDateString();
+            if ($recent || in_array($ads, ['rejected', 'in_review'], true)) {
+                $type = 'not_spending';
+            }
+        }
+        if ($type === null) {
+            return null;
+        }
+        $card = $this->card($c, $v, null);
+
+        return [
+            'type' => $type,
+            'once' => true,
+            'severity' => $type === 'campaign_stopped' ? 'info' : 'warning',
+            'entity_type' => UnifiedCampaign::class,
+            'entity_id' => (string) $c->id,
+            'project_id' => (string) $c->project_id,
+            'title' => $type === 'campaign_stopped' ? 'Stopped yesterday' : 'Not spending',
+            'message' => $c->name.($type === 'campaign_stopped'
+                ? ' stopped: its platform says '.$v['status'].' and it last delivered on '.$last.'.'
+                : ' is running on its platform and spent nothing on '.$v['to'].'.'),
+            'context' => ['last_delivered' => $last, 'to' => $v['to'], 'campaign_status' => $v['status'], 'checks' => $checks, 'card' => $card],
+        ];
+    }
+
+    /**
+     * ALERT-CRITERIA-001 — what every campaign alert states (§10أ): platform, ad account, campaign (and its ad set when it has
+     * one), objective, the result's unit, spend with its currency, the period's dates, and the status with since when.
+     *
+     * @param  array<string, mixed>  $v  the {@see CampaignDelivery} verdict
+     * @param  array{spend?: float, result?: ?float, result_key?: ?string, from?: string, to?: string}|null  $judged
+     * @return array<string, mixed>
+     */
+    private function card(UnifiedCampaign $c, array $v, ?array $judged, ?string $currency = null): array
+    {
+        $facts = $this->delivery()->cardFacts((string) $c->id);
+        $from = $judged['from'] ?? $v['from'] ?? $v['to'];
+        $to = $judged['to'] ?? $v['to'];
+        // The sweep's shared currency when its campaigns agree; otherwise this campaign's own (one read, only for a raised alert).
+        if ($currency === null && isset($judged['spend'])) {
+            $basis = $this->metrics->acrossProjects()->forCampaigns([(string) $c->id])->currencyBasis(Carbon::parse((string) $from), Carbon::parse((string) $to));
+            $currency = $basis['bases'] === 1 ? (string) $basis['currency'] : null;
+        }
+
+        return [
+            'providers' => $facts['providers'],
+            'accounts' => $facts['accounts'],
+            'campaign' => (string) $c->name,
+            'ad_set' => $facts['ad_set'],
+            'objective' => (string) $c->objective,
+            'result_key' => $judged['result_key'] ?? null,
+            'result' => $judged['result'] ?? null,
+            'spend' => $judged['spend'] ?? null,
+            'currency' => isset($judged['spend']) ? $currency : null,
+            'from' => $from,
+            'to' => $to,
+            'status' => (string) $v['status'],
+            'active_since' => $v['active_since'] ?? null,
+            'last_delivered' => $v['checks']['last_delivered'] ?? null,
+        ];
+    }
+
+    /**
+     * ALERT-CRITERIA-001 (§10أ check 6) — which objective family each comparison rule may judge, its default threshold for that
+     * family (a rule's own `threshold.pct` wins), and the smallest previous window a comparison may rest on: a «rise» measured
+     * against three orders is noise. ROAS and cost per order are sales figures; cost per lead is a leads figure. A traffic or
+     * awareness campaign is never told its ROAS fell.
+     *
+     * @var array<string, array{families: list<string>, pct: float, min_previous_results: int, result: string}>
+     */
+    public const COMPARISON_RULES = [
+        'roas_drop' => ['families' => ['sales'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'conversions'],
+        'cpa_increase' => ['families' => ['sales'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'conversions'],
+        'cpl_increase' => ['families' => ['leads'], 'pct' => 25.0, 'min_previous_results' => 5, 'result' => 'leads'],
+    ];
+
+    /** @param  Collection<int, UnifiedCampaign>  $campaigns  @return Collection<int, UnifiedCampaign> */
+    private static function ofFamilies(string $type, Collection $campaigns): Collection
+    {
+        $families = self::COMPARISON_RULES[$type]['families'] ?? null;
+
+        return $families === null ? $campaigns : $campaigns->filter(
+            static fn (UnifiedCampaign $c): bool => in_array(ObjectiveResult::familyOf($c->objective === null ? null : (string) $c->objective)->value, $families, true),
+        )->values();
+    }
+
+    /** The rule's own percentage, else the family default for its type. */
+    private static function pctFor(AlertRule $rule, float $fallback): float
+    {
+        return is_numeric($rule->threshold['pct'] ?? null) ? (float) $rule->threshold['pct'] : (float) (self::COMPARISON_RULES[$rule->type]['pct'] ?? $fallback);
+    }
+
     /** @return list<array<string,mixed>> */
     private function roasDrops(AlertRule $rule, Carbon $now): array
     {
-        $pct = (float) ($rule->threshold['pct'] ?? 25); // % drop vs previous window
+        $pct = self::pctFor($rule, 25); // % drop vs previous window
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
-        $curFrom = $now->copy()->subDays($days);
-        $prevFrom = $now->copy()->subDays($days * 2);
-        $prevTo = $now->copy()->subDays($days + 1);
+        [$curFrom, $curTo, $prevFrom, $prevTo] = self::completeDays($now, $days);
 
-        // ALERT-DELIVERING-YESTERDAY-001 — a stopped campaign's ROAS is not a decision to make.
-        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
+        // ALERT-DELIVERING-YESTERDAY-001 — a stopped campaign's ROAS is not a decision to make; ALERT-CRITERIA-001 — nor is a non-sales one's.
+        $campaigns = $this->eligibleOnly($rule, self::ofFamilies('roas_drop', UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get(), $now, $days);
+            ->get()), $now, $days);
         if ($campaigns->isEmpty()) {
             return [];
         }
         $metrics = $this->campaignMetrics($campaigns);
-        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $current = $metrics->figuresByCampaign($curFrom, $curTo);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, &$out) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $window, &$out) {
             $cur = $current[(string) $c->getKey()]['roas'];
             $prev = $previous[(string) $c->getKey()]['roas'];
-            if ($cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
+            // ALERT-CRITERIA-001 — a comparable previous window: enough orders to compare against.
+            $enough = (float) ($previous[(string) $c->getKey()]['conversions'] ?? 0) >= self::COMPARISON_RULES['roas_drop']['min_previous_results'];
+            if ($enough && $cur !== null && $prev !== null && $prev > 0 && ($prev - $cur) / $prev * 100 >= $pct) {
                 $out[] = [
                     'entity_type' => UnifiedCampaign::class,
                     'entity_id' => (string) $c->id,
@@ -1159,7 +1731,7 @@ final class AlertEvaluator
                     'title' => 'ROAS dropped',
                     // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window, stated.
                     'message' => $c->name.' ROAS fell from '.round($prev, 2).' to '.round($cur, 2).' — '.$this->deteriorationBasis($days, $pct, 'drop'),
-                    'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days],
+                    'context' => ['roas_current' => round($cur, 4), 'roas_previous' => round($prev, 4), 'threshold_pct' => $pct, 'window_days' => $days] + $window,
                 ];
             }
         });
@@ -1204,8 +1776,9 @@ final class AlertEvaluator
     private function metricAnomalies(AlertRule $rule, Carbon $now): array
     {
         $days = max(self::ANOMALY_MIN_WINDOW_DAYS, (int) ($rule->threshold['days'] ?? 21));
-        $from = $now->copy()->subDays($days);
-        $earliest = $now->copy()->subDays(self::ANOMALY_RECENCY_DAYS)->toDateString();
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — complete days ending yesterday (Riyadh); today is still being written.
+        [$from, $to] = self::completeDays($now, $days);
+        $earliest = $to->copy()->subDays(self::ANOMALY_RECENCY_DAYS - 1)->toDateString();
 
         $out = [];
 
@@ -1221,11 +1794,11 @@ final class AlertEvaluator
             return [];
         }
         $metrics = $this->campaignMetrics($campaigns);
-        $series = $metrics->timeseriesByCampaign($from, $now);
+        $series = $metrics->timeseriesByCampaign($from, $to);
         $timeline = new ChangeTimeline($metrics);
 
         $campaigns
-            ->each(function (UnifiedCampaign $c) use ($series, $timeline, $from, $now, $earliest, &$out) {
+            ->each(function (UnifiedCampaign $c) use ($series, $timeline, $from, $to, $earliest, &$out) {
                 $points = array_values(array_filter(
                     $timeline->fromSeries($series[(string) $c->getKey()] ?? [])['points'],
                     static fn (array $p): bool => $p['date'] >= $earliest,
@@ -1247,7 +1820,7 @@ final class AlertEvaluator
                      * why — so the value, the baseline and how far apart they are all travel with
                      * the alert, which is what the alerts surface renders as context chips.
                      */
-                    'context' => ['points' => $points, 'window_days' => $from->diffInDays($now)],
+                    'context' => ['points' => $points, 'window_days' => (int) round($from->diffInDays($to)) + 1],
                 ];
             });
 
@@ -1612,18 +2185,16 @@ final class AlertEvaluator
      */
     private function costPerIncreases(AlertRule $rule, Carbon $now, string $key, string $resultKey): array
     {
-        $pct = (float) ($rule->threshold['pct'] ?? 25);
+        $pct = self::pctFor($rule, 25);
         $days = (int) ($rule->threshold['days'] ?? 7);
         $out = [];
-        $curFrom = $now->copy()->subDays($days);
-        $prevFrom = $now->copy()->subDays($days * 2);
-        $prevTo = $now->copy()->subDays($days + 1);
+        [$curFrom, $curTo, $prevFrom, $prevTo] = self::completeDays($now, $days);
         $label = strtoupper($key);
 
         // ALERT-DELIVERING-YESTERDAY-001 — only a campaign running and delivering yesterday has a cost worth a decision.
-        $campaigns = $this->eligibleOnly($rule, UnifiedCampaign::query()
+        $campaigns = $this->eligibleOnly($rule, self::ofFamilies((string) $rule->type, UnifiedCampaign::query()
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
-            ->get(), $now, $days);
+            ->get()), $now, $days);
         if ($campaigns->isEmpty()) {
             return [];
         }
@@ -1648,17 +2219,18 @@ final class AlertEvaluator
          * PERF-RECOVERY-001 — the coverage block of an across-projects read is the tenant's, the same for every campaign, so it is read
          * once per window and an incomplete one withdraws every verdict of this rule at once, as it always did one campaign at a time.
          */
-        $curComplete = ($metrics->coverageOfWindow($curFrom, $now)['state'] ?? 'complete') === 'complete';
+        $curComplete = ($metrics->coverageOfWindow($curFrom, $curTo)['state'] ?? 'complete') === 'complete';
         $prevComplete = ($metrics->coverageOfWindow($prevFrom, $prevTo)['state'] ?? 'complete') === 'complete';
 
         if (! $curComplete || ! $prevComplete) {
             return [];
         }
 
-        $current = $metrics->figuresByCampaign($curFrom, $now);
+        $current = $metrics->figuresByCampaign($curFrom, $curTo);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
-        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, &$out) {
+        $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, $window, &$out) {
             $cur = $current[(string) $c->getKey()];
             $prev = $previous[(string) $c->getKey()];
 
@@ -1670,6 +2242,10 @@ final class AlertEvaluator
             $was = $prev[$key] ?? null;
 
             if ($now_ === null || $was === null || $was <= 0) {
+                return;
+            }
+            // ALERT-CRITERIA-001 — a cost compared against too few results in the previous window is noise, not a rise.
+            if ((float) ($prev[$resultKey] ?? 0) < (self::COMPARISON_RULES[$key === 'cpl' ? 'cpl_increase' : 'cpa_increase']['min_previous_results'])) {
                 return;
             }
 
@@ -1693,7 +2269,7 @@ final class AlertEvaluator
                     $key.'_previous' => round($was, 4),
                     'rise_pct' => round($rise, 2),
                     $resultKey => (int) ($cur[$resultKey] ?? 0),
-                ],
+                ] + $window,
             ];
         });
 

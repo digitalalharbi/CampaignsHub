@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
+use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
@@ -52,32 +53,21 @@ final class OperationalDigestMail extends Mailable
 
     private function cadence(bool $ar): string
     {
-        return match ($this->kind) {
-            'monthly' => $ar ? 'الشهر' : 'month',
-            'weekly' => $ar ? 'الأسبوع' : 'week',
-            default => $ar ? 'اليوم' : 'daily',
-        };
+        return DigestSchedule::periodWord($this->kind, $ar);
     }
 
     public function envelope(): Envelope
     {
         $ar = $this->lang === 'ar';
         $name = $this->scope === 'project' ? (string) $this->model['name'] : '';
-        // DIGESTS-CADENCE-BUDGETS-001 — the cross-project mail is «ملخص المشاريع» on every rhythm; a project's own is its report.
-        $title = $this->scope === 'project'
-            ? match ($this->kind) {
-                'monthly' => $ar ? 'تقرير الشهر' : 'Monthly report',
-                'weekly' => $ar ? 'تقرير الأسبوع' : 'Weekly report',
-                default => $ar ? 'تقرير اليوم' : 'Daily report',
-            }
-        : match ($this->kind) {
-            'monthly' => $ar ? 'ملخص المشاريع · الشهر' : 'Projects summary · month',
-            'weekly' => $ar ? 'ملخص المشاريع · الأسبوع' : 'Projects summary · week',
-            default => $ar ? 'ملخص المشاريع · اليوم' : 'Projects summary · today',
-        };
+        /*
+         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص المشاريع • أمس» / «• الأسبوع الماضي» / «• الشهر الماضي», and the one
+         * project's «ملخص المشروع • أمس»: the period word of each rhythm, then its dates in the mail's head.
+         */
+        $title = DigestSchedule::title($this->scope === 'project' ? 'project' : 'portfolio', $this->kind, $ar);
         $tail = $this->scope === 'project'
             ? ($this->model['status']['label'] ?? '')
-            : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج انتباهًا" : 'كل شيء مستقر') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need attention" : 'all steady'));
+            : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج قرار" : 'ما فيه شيء يحتاج قرار') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need a decision" : 'nothing needs a decision'));
 
         return new Envelope(subject: MailSubject::of(trim(($name !== '' ? "{$name} — " : '').$title.($tail !== '' ? ": {$tail}" : '')), $ar));
     }
@@ -88,11 +78,13 @@ final class OperationalDigestMail extends Mailable
         $project = $this->scope === 'project';
         $m = $this->model;
 
-        $preheader = $project
-            ? implode(' · ', array_filter([$m['status']['reason'] ?? '', ($m['kpis'][0]['label'] ?? '').' '.($m['kpis'][0]['value'] ?? '')]))
-            : (($m['budgets']['total']['state'] ?? null) === 'ok' ? ($ar ? 'المتبقي ' : 'Remaining ').$m['budgets']['total']['remaining'].'  —  ' : '').($ar
-                ? "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} من {$m['coverage']['total']} مفحوصة"
-                : "✕ {$m['health']['bad']} · ! {$m['health']['watch']} · ✓ {$m['health']['ok']} · – {$m['health']['none']}  —  {$m['coverage']['checked']} of {$m['coverage']['total']} checked");
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the preheader leads with PERFORMANCE: the period, the spend and its change; never sync counts.
+        $spend = $project ? ($m['kpis'][0] ?? null) : ($m['kpis'][0] ?? null);
+        $preheader = trim(implode(' · ', array_filter([
+            (string) ($this->periodLabel ?? ''),
+            $spend !== null ? trim(($spend['label'] ?? '').' '.($spend['value'] ?? '').' '.($spend['change'] ?? '')) : '',
+            $project ? (string) ($m['status']['reason'] ?? '') : '',
+        ])));
 
         $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader, footerNote: MailDisclaimer::note($this->lang, $this->copy($ar)['unit_note']));
         $t = $this->copy($ar);
@@ -120,11 +112,7 @@ final class OperationalDigestMail extends Mailable
     /** @return array<string,string> */
     private function copy(bool $ar): array
     {
-        $kindNote = match ($this->kind) {
-            'monthly' => $ar ? 'مقارنة بالشهر السابق' : 'against the previous month',
-            'weekly' => $ar ? 'مقارنة بالأسبوع السابق' : 'against the previous week',
-            default => $ar ? 'مقارنة بالفترة السابقة (آخر 7 أيام)' : 'against the previous 7 days',
-        };
+        $kindNote = DigestSchedule::comparedWith($this->kind, $ar);
 
         return $ar ? [
             'kind_note' => $kindNote,
@@ -154,7 +142,8 @@ final class OperationalDigestMail extends Mailable
             'unit_note' => 'المبالغ بعملة العرض الموحدة؛ «لا بيانات» تعني أن الرقم لم يصل أو لا يمكن حسابه، وليس صفرًا.',
             'space' => 'مساحة الإنفاق اليومي',
             'follow' => 'متابعة العملاء',
-            'sync_note' => 'بعض المصادر لم تتحدث، فقد تكون الأرقام ناقصة.',
+            'sync_note' => 'بعض المصادر ما تحدّثت، فالأرقام ممكن تكون ناقصة.',
+            'linking' => 'ملخص الربط',
         ] : [
             'kind_note' => $kindNote,
             'needs' => 'Needs a decision',
@@ -184,6 +173,7 @@ final class OperationalDigestMail extends Mailable
             'space' => 'Daily spend',
             'follow' => 'Lead follow-up',
             'sync_note' => 'Some sources have not refreshed, so figures may be incomplete.',
+            'linking' => 'Connections summary',
         ];
     }
 }

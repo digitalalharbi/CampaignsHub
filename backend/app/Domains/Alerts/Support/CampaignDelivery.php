@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Alerts\Support;
 
 use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Campaigns\Models\ExternalAd;
+use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Support\ObjectiveResult;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingTimezone;
@@ -38,7 +41,13 @@ use Illuminate\Support\Collection;
  *    «weak performance»). A lifetime budget in another currency than the stored spend cannot be compared: `not_available`.
  *    A daily budget fully spent yesterday is recorded (`daily_budget_reached`) but does not withhold a verdict: it resumes the
  *    next day by itself.
- * 4–5. Setup (bid cap, audience, ad review) and payment/funding are not fetched today: recorded `not_available`, never guessed.
+ * 4. **Setup** (for a running campaign that spent nothing yesterday) — from what the structure sync stores: every ad rejected or
+ *    in review (proof nothing can deliver), and a bid or cost cap on an ad set (a fact, never named «the cause»). The audience's
+ *    size is not fetched: `not_available`.
+ * 5. **Payment / funding** and the platforms' learning flag are not fetched today: `not_available`, never guessed.
+ *
+ * `last_delivered` and, for a campaign no longer running, `stopped_yesterday` (delivered the day before yesterday, not
+ * yesterday, and its platform says it is not running) are recorded too: «توقفت أمس» is said once, from that.
  *
  * Eligible campaigns carry `from`–`to`: the judgement window, the run since `active_since` capped to the rule's window, so spend
  * from before a pause or a restart is never counted.
@@ -88,7 +97,7 @@ final class CampaignDelivery
         'unknown' => ['spend' => 30.0, 'impressions' => 1000],
     ];
 
-    /** @var array<string, array{platform: array<string, list<array<string, mixed>>>, series: array<string, list<array<string, mixed>>>, syncs: array<string, list<array{0: string, 1: string}>>}> */
+    /** @var array<string, array{platform: array<string, list<array<string, mixed>>>, series: array<string, list<array<string, mixed>>>, syncs: array<string, list<array{0: string, 1: string}>>, setup: array<string, array<string, mixed>>}> */
     private array $memo = [];
 
     public function __construct(
@@ -100,6 +109,21 @@ final class CampaignDelivery
     public function forget(): void
     {
         $this->memo = [];
+        $this->cards = [];
+    }
+
+    /** @var array<string, array{providers: list<string>, accounts: list<string>, ad_set: ?string}> */
+    private array $cards = [];
+
+    /**
+     * What an alert card names for a campaign this instance assessed — read with its delivery, so a sweep raising many alerts
+     * costs no statement per alert.
+     *
+     * @return array{providers: list<string>, accounts: list<string>, ad_set: ?string}
+     */
+    public function cardFacts(string $campaignId): array
+    {
+        return $this->cards[$campaignId] ?? ['providers' => [], 'accounts' => [], 'ad_set' => null];
     }
 
     /**
@@ -139,7 +163,7 @@ final class CampaignDelivery
         $out = [];
         foreach ($campaigns as $c) {
             $id = (string) $c->getKey();
-            $out[$id] = $this->verdict($c, $days[(string) $c->project_id], $read['platform'][$id] ?? [], $read['series'][$id] ?? [], $read['syncs'], $sample);
+            $out[$id] = $this->verdict($c, $days[(string) $c->project_id], $read['platform'][$id] ?? [], $read['series'][$id] ?? [], $read['syncs'], $read['setup'], $sample);
         }
 
         return $out;
@@ -150,10 +174,11 @@ final class CampaignDelivery
      * @param  list<array<string, mixed>>  $platform
      * @param  list<array<string, mixed>>  $series
      * @param  array<string, list<array{0: string, 1: string}>>  $syncs  account → successful sync windows
+     * @param  array<string, array<string, mixed>>  $setup  campaign → what its stored ads and ad sets say ({@see setupFacts()})
      * @param  array{min_spend?: mixed, min_impressions?: mixed}  $sample
      * @return array{reason: ?string, from: ?string, to: string, days: int, status: string, active_since: ?string, checks: array<string, mixed>}
      */
-    private function verdict(UnifiedCampaign $c, array $d, array $platform, array $series, array $syncs, array $sample): array
+    private function verdict(UnifiedCampaign $c, array $d, array $platform, array $series, array $syncs, array $setup, array $sample): array
     {
         $status = $this->effectiveStatus($c, $platform);
         $checks = [
@@ -168,8 +193,33 @@ final class CampaignDelivery
             return array_merge($base, $over, ['reason' => $reason, 'checks' => $checks]);
         };
 
+        $byDay = [];
+        foreach ($series as $point) {
+            $byDay[(string) $point['date']] = $point;
+        }
+        $delivered = static fn (string $day): bool => isset($byDay[$day]) && ((float) ($byDay[$day]['spend'] ?? 0) > 0 || (float) ($byDay[$day]['impressions'] ?? 0) > 0);
+        $last = null;
+        foreach (array_keys($byDay) as $day) {
+            if ($day <= $d['yesterday'] && $delivered($day) && ($last === null || $day > $last)) {
+                $last = $day;
+            }
+        }
+        $checks['last_delivered'] = $last;
+
         // 1. Running now.
         if ($status !== CampaignStatus::Active->value) {
+            /*
+             * §6 — the one paused-related message: «توقفت أمس», once. Proven by the platform's own status (not running now) and the
+             * figures (it delivered the day before yesterday and not yesterday). The next day the last delivery is older, so it is
+             * never said twice.
+             */
+            // The platform itself must say it is not running (not our row), and yesterday's figures must have arrived for every
+            // linked account — otherwise «last delivered the day before yesterday» is only «yesterday's figures are late».
+            $known = array_values(array_filter($platform, static fn (array $p): bool => ! in_array($p['status'], ['', CampaignStatus::Unknown->value], true)));
+            $platformStopped = $known !== [] && ! in_array(CampaignStatus::Active->value, array_column($known, 'status'), true);
+            $arrived = $platform !== [] && array_filter($platform, fn (array $p): bool => $p['account'] === '' || ! $this->covered($syncs[$p['account']] ?? [], $d['yesterday'])) === [];
+            $checks['stopped_yesterday'] = $last !== null && $last === Carbon::parse($d['yesterday'])->subDay()->toDateString() && $platformStopped && $arrived;
+
             return $decide(self::INACTIVE);
         }
 
@@ -187,11 +237,6 @@ final class CampaignDelivery
         }
 
         // 2. Delivering yesterday, and since when.
-        $byDay = [];
-        foreach ($series as $point) {
-            $byDay[(string) $point['date']] = $point;
-        }
-        $delivered = static fn (string $day): bool => isset($byDay[$day]) && ((float) ($byDay[$day]['spend'] ?? 0) > 0 || (float) ($byDay[$day]['impressions'] ?? 0) > 0);
         if (! $delivered($d['yesterday'])) {
             foreach ($platform as $p) {
                 if ($p['account'] !== '' && ! $this->covered($syncs[$p['account']] ?? [], $d['yesterday'])) {
@@ -201,6 +246,8 @@ final class CampaignDelivery
                 }
             }
             $checks['delivered_yesterday'] = false;
+            // §10أ check 4 — running, its figures arrived, and it spent nothing: what its stored setup says about why.
+            $checks['setup'] = $setup[(string) $c->getKey()] ?? ['ads' => null, 'bid_limit' => null, 'audience' => 'not_available'];
 
             return $decide(self::NOT_DELIVERING);
         }
@@ -261,6 +308,55 @@ final class CampaignDelivery
         return $decide(null, $over);
     }
 
+    /**
+     * Bid strategies that cap what the platform may pay — a setting that can hold delivery back, stated as a fact, never as «the
+     * cause». The values are the platforms' own enums as the connectors store them (lower-cased):
+     * - Meta ad set `bid_strategy` (Marketing API, Ad Set reference): LOWEST_COST_WITH_BID_CAP, COST_CAP, LOWEST_COST_WITH_MIN_ROAS.
+     * - Snapchat ad squad `bid_strategy` (Marketing API, Ad Squads): LOWEST_COST_WITH_MAX_BID, TARGET_COST, MIN_ROAS.
+     * - TikTok ad group `bid_type` (Business API, Ad Group): BID_TYPE_CUSTOM (a bid or cost cap).
+     * - Google ad group: a target CPA (`targetCpaMicros`, stored as `target_cpa`).
+     * - X line item `bid_strategy` (Ads API, Line Items): MAX, TARGET.
+     */
+    public const BID_LIMITS = ['lowest_cost_with_bid_cap', 'cost_cap', 'lowest_cost_with_min_roas', 'lowest_cost_with_max_bid', 'target_cost', 'min_roas', 'bid_type_custom', 'target_cpa', 'max', 'target'];
+
+    /**
+     * §10أ check 4, from what the structure sync already stores: the ads' review verdicts (`external_ads.review_status`, each
+     * connector's own mapping of its platform's review answer to approved / pending / rejected) and the ad sets' bid strategies.
+     * `ads` is `rejected` or `in_review` only when no ad of the campaign is approved and at least one carries that answer — then
+     * nothing of it can deliver, which is proof. The audience's size is not fetched: `not_available`.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, array<string, mixed>>
+     */
+    private function setupFacts(array $ids): array
+    {
+        $out = [];
+        ExternalAd::query()->withoutGlobalScope(ProjectScope::class)
+            ->whereIn('unified_campaign_id', $ids)
+            ->toBase()->get(['unified_campaign_id', 'review_status'])
+            ->groupBy('unified_campaign_id')
+            ->each(static function ($ads, $cid) use (&$out): void {
+                // Proof only when EVERY ad carries a review answer that stops it: all rejected → «rejected»; all rejected or
+                // pending with one pending → «in_review». An ad with no answer (Meta's PAUSED, say) or an approved one: no claim.
+                $answers = $ads->pluck('review_status')->map(static fn ($v): string => strtolower((string) $v))->all();
+                $out[(string) $cid]['ads'] = array_diff($answers, ['rejected']) === [] ? 'rejected'
+                    : (array_diff($answers, ['rejected', 'pending']) === [] ? 'in_review' : null);
+            });
+        ExternalAdSet::query()->withoutGlobalScope(ProjectScope::class)
+            ->whereIn('unified_campaign_id', $ids)
+            ->whereIn('bid_strategy', self::BID_LIMITS)
+            ->where('status', 'active')
+            ->toBase()->get(['unified_campaign_id', 'bid_strategy'])
+            ->each(static function ($set) use (&$out): void {
+                $out[(string) $set->unified_campaign_id]['bid_limit'] = (string) $set->bid_strategy;
+            });
+        foreach ($out as $cid => $facts) {
+            $out[$cid] = $facts + ['ads' => null, 'bid_limit' => null, 'audience' => 'not_available'];
+        }
+
+        return $out;
+    }
+
     /** @param  list<array{0: string, 1: string}>  $windows */
     private function covered(array $windows, string $day): bool
     {
@@ -318,7 +414,7 @@ final class CampaignDelivery
      * The platform campaigns and the daily series for a campaign set, read once per set and clock.
      *
      * @param  list<string>  $ids
-     * @return array{platform: array<string, list<array<string, mixed>>>, series: array<string, list<array<string, mixed>>>, syncs: array<string, list<array{0: string, 1: string}>>}
+     * @return array{platform: array<string, list<array<string, mixed>>>, series: array<string, list<array<string, mixed>>>, syncs: array<string, list<array{0: string, 1: string}>>, setup: array<string, array<string, mixed>>}
      */
     private function read(array $ids, Carbon $from, Carbon $to): array
     {
@@ -331,11 +427,12 @@ final class CampaignDelivery
         ExternalCampaign::query()->withoutGlobalScope(ProjectScope::class)
             ->whereIn('unified_campaign_id', $ids)
             ->whereNull('unlinked_at')
-            ->get(['unified_campaign_id', 'external_account_id', 'status', 'last_synced_at', 'ends_at', 'daily_budget', 'lifetime_budget', 'currency'])
+            ->get(['unified_campaign_id', 'external_account_id', 'provider', 'status', 'last_synced_at', 'ends_at', 'daily_budget', 'lifetime_budget', 'currency'])
             ->each(static function (ExternalCampaign $e) use (&$platform): void {
                 $platform[(string) $e->unified_campaign_id][] = [
                     'status' => strtolower((string) $e->status),
                     'account' => (string) ($e->external_account_id ?? ''),
+                    'provider' => (string) $e->provider,
                     // Only a sync proves what the platform said and when; a row never synced proves nothing about freshness.
                     'synced_at' => $e->last_synced_at,
                     'ends_at' => $e->ends_at,
@@ -385,6 +482,23 @@ final class CampaignDelivery
                 });
         }
 
-        return $this->memo[$key] = ['platform' => $platform, 'series' => $series, 'syncs' => $syncs];
+        // What an alert card names (§10أ): the platforms, the ad accounts' names, and the ad set when the campaign has exactly one.
+        $names = $accounts === [] ? [] : ExternalAccount::query()->withoutGlobalScopes()->whereIn('id', array_keys($accounts))->pluck('name', 'id')->all();
+        $sets = [];
+        ExternalAdSet::query()->withoutGlobalScope(ProjectScope::class)->whereIn('unified_campaign_id', $ids)
+            ->toBase()->get(['unified_campaign_id', 'name'])
+            ->each(static function ($r) use (&$sets): void {
+                $sets[(string) $r->unified_campaign_id][] = (string) $r->name;
+            });
+        foreach ($ids as $cid) {
+            $rows = $platform[$cid] ?? [];
+            $this->cards[$cid] = [
+                'providers' => array_values(array_unique(array_column($rows, 'provider'))),
+                'accounts' => array_values(array_unique(array_filter(array_map(static fn (array $p): string => (string) ($names[$p['account']] ?? ''), $rows)))),
+                'ad_set' => count($sets[$cid] ?? []) === 1 ? $sets[$cid][0] : null,
+            ];
+        }
+
+        return $this->memo[$key] = ['platform' => $platform, 'series' => $series, 'syncs' => $syncs, 'setup' => $this->setupFacts($ids)];
     }
 }
