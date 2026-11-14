@@ -619,7 +619,10 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertSame('USD', $this->live($raw)['currency']);
         $files = $this->surfaces($usd, $share, $raw);
         $this->assertStringContainsString('USD', $files['csv']);
-        $this->assertStringNotContainsString('SAR', $files['csv'], 'the file states a currency its rows are not held in');
+        // The «Reference» row is a random code (UC3CH-XXXXX) that can spell «SAR» by chance; it states no currency.
+        $withoutReference = preg_replace('/^"Reference \/ [^\n]*\n/mu', '', $files['csv']);
+        $this->assertStringNotContainsString('Reference /', $withoutReference, 'the reference row was not stripped');
+        $this->assertStringNotContainsString('SAR', $withoutReference, 'the file states a currency its rows are not held in');
 
         // Two currencies in one scope have no unit: none is stated, rather than one of them over the sum.
         DB::table('daily_metrics')->where('project_id', $this->project->getKey())->where('provider', 'meta')->update(['project_currency' => 'SAR']);
