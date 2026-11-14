@@ -37,6 +37,42 @@ final class ContentCopy
     }
 
     /**
+     * SHARE-COPY-LEAK-001 — a preview envelope obeys the same four switches as the row it belongs to.
+     *
+     * `CreativePresenter::preview()` gives a text-only creative (a ChatGPT chat card, an X post, a Google
+     * search ad) its own words in `text` so the card can draw them where no picture exists. Those words ARE
+     * the headline and the ad copy: a link with both switched off stripped them from the row and from every
+     * carousel card and still published them in `preview.text` — on the live payload, the content endpoints
+     * and the summary. The keys are removed, not blanked, and an envelope left with no words carries
+     * `text: null`, the presenter's own value for «no words», so nothing renders an empty text card.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, mixed>
+     */
+    public static function preview(array $preview, CreativeVisibility $visibility): array
+    {
+        if (is_array($preview['text'] ?? null)) {
+            $text = $preview['text'];
+            if (! $visibility->adCopy) {
+                unset($text['body']);
+            }
+            if (! $visibility->headline) {
+                unset($text['headline']);
+            }
+            $preview['text'] = array_filter($text, static fn ($v): bool => $v !== null && $v !== '') === [] ? null : $text;
+        }
+
+        if (is_array($preview['cards'] ?? null)) {
+            $preview['cards'] = array_map(
+                static fn ($card) => is_array($card) ? self::card($card, $visibility) : $card,
+                $preview['cards'],
+            );
+        }
+
+        return $preview;
+    }
+
+    /**
      * Master task 10 (REPORT-OPENABLE-OPTIONS-001) — «ما يمكن فتحه» on the report's own content lists, as on the creative endpoints.
      *
      * `SharedCreativeView` honoured `video`, `image_zoom` and `download` on the content endpoints only; the gallery in the link's own payload
@@ -89,11 +125,8 @@ final class ContentCopy
             $row = self::card($row, $visibility);
             $row = self::media($row, $visibility);
 
-            if (isset($row['preview']['cards']) && is_array($row['preview']['cards'])) {
-                $row['preview']['cards'] = array_map(
-                    static fn ($card) => is_array($card) ? self::card($card, $visibility) : $card,
-                    $row['preview']['cards'],
-                );
+            if (isset($row['preview']) && is_array($row['preview'])) {
+                $row['preview'] = self::preview($row['preview'], $visibility);
             }
 
             foreach (['ads', 'groups'] as $nested) {
