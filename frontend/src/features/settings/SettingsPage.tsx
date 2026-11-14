@@ -1,3 +1,4 @@
+import { UsageMeterPanel } from '@/features/subscriptions/UsageMeterPanel'
 import { useSearchParams } from 'react-router-dom'
 import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell, Blocks, LayoutDashboard } from 'lucide-react'
 import { GeneralTab } from './tabs/GeneralTab'
@@ -134,7 +135,13 @@ export function SettingsPage({ only, title, subtitle, navigation = true }: Props
         )}
 
         <div className="min-w-0">
-          {tab === 'general' && <GeneralTab />}
+          {tab === 'general' && (
+            <>
+              {/* PLAN-LIMITS-METER-001 — the plan's limits, colour-coded, with the way to lift one. */}
+              <UsageMeterPanel />
+              <GeneralTab />
+            </>
+          )}
           {tab === 'disclaimer' && <DisclaimerTab />}
           {tab === 'clients' && <ClientsTab />}
           {tab === 'team' && <TeamTab />}

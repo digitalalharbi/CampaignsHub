@@ -43,6 +43,8 @@ export const COPY = {
     f_reports: 'التقارير', f_campaign_tracking: 'تتبّع الحملات',
     sup_community: 'مجتمع المستخدمين', sup_email: 'بريد إلكتروني', sup_priority: 'أولوية',
     review: 'مراجعة التغيير', cancel: 'إلغاء',
+    fit_title: 'استخدامك أكبر من حدود هذه الباقة', fit_note: 'لن نحذف أو نوقف أي شيء. قلّل ما فوق الحد ثم غيّر الباقة.',
+    fit_row: (label: string, used: number, limit: number, over: number) => `${label}: ${used} من ${limit} (زيادة ${over})`,
     quote_title: 'تفاصيل تغيير الباقة',
     quote_loading: 'جارٍ حساب الفرق…',
     days_left: 'الأيام المتبقية في الدورة الحالية',
@@ -93,6 +95,8 @@ export const COPY = {
     f_reports: 'Reports', f_campaign_tracking: 'Campaign tracking',
     sup_community: 'Community', sup_email: 'Email', sup_priority: 'Priority',
     review: 'Review this change', cancel: 'Cancel',
+    fit_title: 'Your usage is above this plan’s limits', fit_note: 'Nothing is deleted or stopped for you. Reduce what is over the limit, then change plan.',
+    fit_row: (label: string, used: number, limit: number, over: number) => `${label}: ${used} of ${limit} (${over} over)`,
     quote_title: 'What this change costs',
     quote_loading: 'Working out the difference…',
     days_left: 'Days left in the current period',
@@ -390,6 +394,7 @@ export function SubscriptionsPage() {
             <ProrationReview
               plan={chosen}
               quote={quoteQ.data?.quote ?? null}
+              fit={quoteQ.data?.fit ?? null}
               loading={quoteQ.isPending}
               error={quoteQ.isError ? toApiError(quoteQ.error).message : null}
               busy={changeM.isPending}
@@ -632,10 +637,11 @@ function PendingChangeBanner({
  * charged twice for the same month.
  */
 function ProrationReview({
-  plan, quote, loading, error, busy, c, onCancel, onConfirm,
+  plan, quote, fit, loading, error, busy, c, onCancel, onConfirm,
 }: {
   plan: SubscriptionPlan
   quote: import('./api').ProrationQuote | null
+  fit: import('./api').PlanFit | null
   loading: boolean
   error: string | null
   busy: boolean
@@ -646,6 +652,7 @@ function ProrationReview({
   const money = (value: string, currency: string) => `${value} ${currency}`
   const isDowngrade = quote?.effective === 'period_end'
   const owes = quote !== null && Number(quote.due_now) > 0
+  const blocked = fit !== null && !fit.fits
 
   return (
     <section data-testid="proration-review" className="flex flex-col gap-3 rounded-2xl border border-brand-500 bg-surface p-5">
@@ -687,11 +694,22 @@ function ProrationReview({
             {isDowngrade ? c.downgrade_note : c.upgrade_note}
           </p>
 
+          {/* PLAN-LIMITS-METER-001 — a plan the current usage does not fit is never entered; this says exactly what is over. */}
+          {blocked && fit && (
+            <div data-testid="fit-blocked" role="alert" className="rounded-xl border border-danger/40 bg-[var(--negative-background)] p-3 text-sm">
+              <p className="font-bold text-danger">{c.fit_title}</p>
+              <ul className="mt-1.5 grid gap-1 text-text-primary">
+                {fit.exceeds.map((e) => <li key={e.metric} data-testid={`fit-over-${e.metric}`} className="tnum">{c.fit_row(e.label, e.used, e.limit, e.over)}</li>)}
+              </ul>
+              <p className="mt-1.5 text-xs text-text-secondary">{c.fit_note}</p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               data-testid="confirm-plan-change"
-              disabled={busy}
+              disabled={busy || blocked}
               onClick={onConfirm}
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
             >

@@ -65,7 +65,8 @@ describe('UpgradeRequiredDialog', () => {
     show()
     view()
 
-    expect(screen.getByTestId('upgrade-link')).toHaveAttribute('href', '/app/subscriptions')
+    expect(screen.getByTestId('upgrade-link')).toHaveAttribute('href', '/app/subscriptions?compare=1#plans')
+    expect(screen.getByTestId('upgrade-link')).toHaveTextContent(/ترقية|Upgrade/)
   })
 
   /** A section refusal has no cap to report, and «0 / 0» would be a lie about the reason. */
