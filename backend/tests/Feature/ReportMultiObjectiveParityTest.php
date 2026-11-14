@@ -55,7 +55,8 @@ final class ReportMultiObjectiveParityTest extends TestCase
     private const FIGURES = ['spend' => 500.0, 'impressions' => 90000.0, 'clicks' => 1200.0, 'add_to_cart' => 40.0, 'purchases' => 12.0, 'revenue' => 3000.0];
 
     /** Traffic (spend · impressions · clicks · ctr · cpc) ∪ sales (… · add_to_cart · purchases · revenue · roas), in that order. */
-    private const UNION = ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'add_to_cart', 'purchases', 'revenue', 'roas'];
+    // KPI-SET-PER-OBJECTIVE-001 — the traffic preset gained CPM and frequency (Owner 2026-11-13); the union keeps traffic's order, then sales'.
+    private const UNION = ['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'frequency', 'cpc', 'add_to_cart', 'purchases', 'revenue', 'roas'];
 
     protected function setUp(): void
     {

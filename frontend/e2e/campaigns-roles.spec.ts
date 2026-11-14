@@ -41,8 +41,17 @@ async function selectFirstClientAndProject(page: import('@playwright/test').Page
 
     for (let i = 1; i < options; i++) {
       await client.selectOption({ index: i })
-      await expect(project).toBeAttached()
-      if (await project.isEnabled()) break
+      /*
+       * CLIENT-UNIT-001 — a client with ONE project has no project step: the project is the scope the moment the client is
+       * picked, so «a project is in context» is read from the stored scope, not from a select that is no longer drawn.
+       */
+      const chosen = await page
+        .waitForFunction(() => {
+          try { return Boolean(JSON.parse(window.localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId) } catch { return false }
+        }, null, { timeout: 3000 })
+        .then(() => true, () => false)
+      if (chosen) return
+      if ((await project.count()) > 0 && (await project.isEnabled())) break
     }
   }
 

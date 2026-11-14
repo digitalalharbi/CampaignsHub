@@ -586,6 +586,11 @@ function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: L
  * needs no line: the order is the report's own objective.
  */
 export function basisLine(basis: LivePayload['ads_basis'], ar: boolean): string | null {
+  // The objective's result was not reported: say that, plainly, instead of naming a family the order does not rest on.
+  if (basis?.fallback && basis.metric) {
+    const note = ar ? basis.note_ar : basis.note_en
+    if (note) return note
+  }
   if (!basis || !basis.metric || !basis.family) return null
   const family = (ar ? basis.family_label_ar : basis.family_label_en) ?? basis.family
   return ar ? `مرتّبة على أداء ${family}` : `Ranked by ${family.toLowerCase()} performance`

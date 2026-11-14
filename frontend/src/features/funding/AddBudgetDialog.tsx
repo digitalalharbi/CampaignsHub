@@ -33,12 +33,15 @@ export function AddBudgetDialog({
   open,
   onClose,
   fixed,
+  defaults,
   onAdded,
 }: {
   open: boolean
   onClose: () => void
   fixed?: { clientId: string; clientName: string; projectId: string; projectName: string }
-  onAdded?: (projectId: string) => void
+  /** Smart defaults: the project the reader is looking at is already chosen. */
+  defaults?: { clientName: string; projectName: string }
+  onAdded?: (projectId: string, entryId?: string) => void
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const t = (k: keyof typeof L) => {
@@ -51,6 +54,9 @@ export function AddBudgetDialog({
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(today())
   const [reference, setReference] = useState('')
+  // The period: empty start means «from the first day of spend» (the server's default); an empty end means open.
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
   const [key, setKey] = useState(newKey)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,14 +66,16 @@ export function AddBudgetDialog({
     const opening = open && !wasOpen.current
     wasOpen.current = open
     if (!opening) return
-    setClient(fixed?.clientName ?? '')
-    setProject(fixed?.projectName ?? '')
+    setClient(fixed?.clientName ?? defaults?.clientName ?? '')
+    setProject(fixed?.projectName ?? defaults?.projectName ?? '')
+    setPeriodStart('')
+    setPeriodEnd('')
     setAmount('')
     setDate(today())
     setReference('')
     setKey(newKey())
     setError(null)
-  }, [open, fixed])
+  }, [open, fixed, defaults])
 
   const clients = useQuery({ queryKey: ['funding', 'client-options'], enabled: open && !fixed, queryFn: () => listClients({}) })
   const projects = useQuery({ queryKey: ['funding', 'project-options'], enabled: open && !fixed, queryFn: () => listProjects() })
@@ -82,16 +90,20 @@ export function AddBudgetDialog({
   )
 
   const value = Number(amount)
-  const ready = client.trim() !== '' && project.trim() !== '' && value > 0 && date !== ''
+  // A renewal keeps the budget's own period; only a first amount states one.
+  const period = fixed ? {} : { period_start: periodStart || null, period_end: periodEnd || null }
+  const periodOk = !(periodStart && periodEnd && periodEnd < periodStart)
+
+  const ready = client.trim() !== '' && project.trim() !== '' && value > 0 && date !== '' && periodOk
 
   const submit = () => {
     setError(null)
     add.mutate(
       fixed
         ? { client_workspace_id: fixed.clientId, project_id: fixed.projectId, amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key }
-        : { client_name: client.trim(), project_name: project.trim(), amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key },
+        : { client_name: client.trim(), project_name: project.trim(), amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key, ...period },
       {
-        onSuccess: (res) => { onAdded?.(res.project_id); onClose() },
+        onSuccess: (res) => { onAdded?.(res.project_id, res.payment_id); onClose() },
         onError: (e) => setError(toApiError(e).message),
       },
     )
@@ -148,6 +160,16 @@ export function AddBudgetDialog({
         <Field label={t('date')} htmlFor="budget-date" required>
           <DateField id="budget-date" value={date} onChange={setDate} />
         </Field>
+        {!fixed && (
+          <>
+            <Field label={`${t('period')} · ${t('from')}`} htmlFor="budget-period-start">
+              <DateField id="budget-period-start" value={periodStart} onChange={setPeriodStart} placeholder={ar ? 'من أول إنفاق' : 'From first spend'} />
+            </Field>
+            <Field label={`${t('period')} · ${t('to')}`} htmlFor="budget-period-end">
+              <DateField id="budget-period-end" value={periodEnd} onChange={setPeriodEnd} placeholder={t('open')} />
+            </Field>
+          </>
+        )}
         <div className="sm:col-span-2">
           <Field label={t('reference')} htmlFor="budget-reference">
             <Input id="budget-reference" value={reference} onChange={(e) => setReference(e.target.value)} maxLength={120} />
