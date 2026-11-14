@@ -7,7 +7,8 @@ import { EmptyState, ErrorState, NoPermission } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { AddBudgetDialog } from './AddBudgetDialog'
-import { BudgetBoardRow, TotalsStrip } from './BudgetBoard'
+import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
+import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { BudgetDrawer } from './BudgetDrawer'
 import { DeleteBudgetDialog, EditBudgetDialog } from './EditBudgetDialog'
 import { UndoToast } from './UndoToast'
@@ -95,7 +96,8 @@ export function BudgetsPage() {
         <EmptyState title={tx(L.empty)} />
       ) : (
         <>
-          <ul className="flex min-w-0 flex-col gap-1 overflow-y-auto lg:max-h-[calc(100dvh-17rem)]" data-testid="budgets-list">
+          <BoardHeader ar={ar} />
+          <ul className="flex min-w-0 flex-col gap-1 overflow-y-auto lg:max-h-[calc(100dvh-20rem)]" data-testid="budgets-list">
             {rows.map((r) => (
               <li key={r.project_id} className="min-w-0">
                 <BudgetBoardRow row={r} active={r.project_id === open} onOpen={() => choose(r.project_id)} ar={ar} />
@@ -104,6 +106,8 @@ export function BudgetsPage() {
           </ul>
         </>
       )}
+
+      <FinancialDisclaimer className="px-1" />
 
       <BudgetDrawer
         projectId={open}
