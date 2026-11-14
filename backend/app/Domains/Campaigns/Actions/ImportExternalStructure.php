@@ -14,7 +14,9 @@ use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * STRUCT-001 — the one place a platform's hierarchy becomes rows.
@@ -52,7 +54,7 @@ final class ImportExternalStructure
     {
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
-            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'unified_campaign_id'])
+            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'unified_campaign_id', 'provider', 'objective'])
             ->keyBy('external_id');
 
         $counts = ['ad_sets' => 0, 'ads' => 0, 'creatives' => 0, 'skipped' => 0];
@@ -133,7 +135,7 @@ final class ImportExternalStructure
                         'name' => (string) ($row['name'] ?? $externalId),
                         'status' => (string) ($row['status'] ?? 'unknown'),
                         'review_status' => $row['review_status'] ?? null,
-                        'destination_url' => $row['destination_url'] ?? null,
+                        'destination_url' => $this->url($row['destination_url'] ?? null),
                         'source_type' => 'api',
                         'is_demo' => false,
                         'last_synced_at' => Carbon::now(),
@@ -143,6 +145,8 @@ final class ImportExternalStructure
                 $counts['ads']++;
             }
         });
+
+        $this->liftAdSetObjectives($campaigns, $adSets);
 
         /*
          * LEAD-DESTINATION-001 — the ad sets are what state the destination, and the campaigns were
@@ -159,6 +163,76 @@ final class ImportExternalStructure
         }
 
         return $counts;
+    }
+
+    /**
+     * OBJECTIVE-GAPS-001 — a campaign objective the platform states on the AD SET (X's line items).
+     *
+     * Only rows that carry `campaign_objective` take part, and only X's connector sends it. A campaign
+     * whose own objective is empty takes its ad sets' value when they all agree; the resolver that runs
+     * next translates it through the usual table and — being the one guarded path — never replaces a
+     * manual objective or an earlier platform classification. Ad sets that disagree leave the campaign
+     * unclassified and their words are recorded on the unified campaign (`objective_platform_value`),
+     * so an operator sees what to settle; the source stays `unset`, so nothing reads it as a class.
+     *
+     * @param  Collection<string, ExternalCampaign>  $campaigns
+     * @param  list<array<string,mixed>>  $adSets
+     */
+    private function liftAdSetObjectives($campaigns, array $adSets): void
+    {
+        $stated = [];
+        foreach ($adSets as $row) {
+            $value = $row['campaign_objective'] ?? null;
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $stated[(string) ($row['campaign_external_id'] ?? '')][strtoupper(trim($value))] = true;
+        }
+
+        foreach ($stated as $externalId => $values) {
+            $campaign = $campaigns->get($externalId);
+            if ($campaign === null || (trim((string) $campaign->objective) !== '' && ! $this->wasLifted($campaign))) {
+                continue;
+            }
+
+            $words = array_keys($values);
+            sort($words);
+
+            if (count($words) === 1) {
+                if ($campaign->objective !== $words[0]) {
+                    ExternalCampaign::withoutGlobalScopes()->whereKey($campaign->getKey())->update(['objective' => $words[0]]);
+                    $campaign->objective = $words[0];
+                }
+
+                continue;
+            }
+
+            if ($campaign->objective !== null) {
+                ExternalCampaign::withoutGlobalScopes()->whereKey($campaign->getKey())->update(['objective' => null]);
+                $campaign->objective = null;
+            }
+
+            Log::warning('objective.ad_sets_disagree', ['external_campaign_id' => (string) $campaign->getKey(), 'values' => $words]);
+
+            if ($campaign->unified_campaign_id !== null) {
+                UnifiedCampaign::withoutGlobalScopes()
+                    ->whereKey($campaign->unified_campaign_id)
+                    ->where('objective_source', '!=', 'manual')
+                    ->update(['objective_platform_value' => implode(' · ', $words)]);
+            }
+        }
+    }
+
+    /**
+     * Whether the campaign's stored objective came from its ad sets rather than from the campaign row.
+     *
+     * Only X states it there, and X's campaign object carries no objective at all, so for X any stored
+     * value was lifted by this method and may be re-derived; for every other platform it is the
+     * platform's own campaign word and is never touched here.
+     */
+    private function wasLifted(ExternalCampaign $campaign): bool
+    {
+        return in_array(strtolower((string) $campaign->provider), ['x', 'twitter'], true);
     }
 
     /**
@@ -237,12 +311,20 @@ final class ImportExternalStructure
                  */
                 'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
-                'destination_url' => $creative['destination_url'] ?? null,
+                'destination_url' => $this->url($creative['destination_url'] ?? null),
                 // OPENAI-CHAT-CARD-TEXT-001 — the copy, when the connector sent it. Only written when it
                 // was sent: a provider that sends none must not blank copy another writer stored.
                 ...array_filter([
-                    'headline' => is_string($creative['headline'] ?? null) && $creative['headline'] !== '' ? $creative['headline'] : null,
+                    /*
+                     * CONTENT-TEXT-CTA-001 — the call to action and the description too, which no writer ever stored: the
+                     * `cta` column was empty for every platform in Production (2026-11-13) while the connectors had it.
+                     * Each is cut to its column (headline 500, description 1000, cta 64): one over-long string must not
+                     * fail the whole structure sync with «value too long», as an unrounded duration once did.
+                     */
+                    'headline' => $this->copy($creative['headline'] ?? null, 500),
                     'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
+                    'description' => $this->copy($creative['description'] ?? null, 1000),
+                    'cta' => $this->copy($creative['cta'] ?? null, 64),
                     // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
                     'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
                     'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,
@@ -275,6 +357,21 @@ final class ImportExternalStructure
         $counts['creatives']++;
 
         return (string) $row->getKey();
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 — a destination that fits its column (varchar 2048), or null. Never cut: a shortened URL is a
+     * broken link, and one over-long URL (tracking macros) must not fail the whole structure sync.
+     */
+    private function url(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' && strlen($value) <= 2048 ? $value : null;
+    }
+
+    /** A non-empty string cut to its column's length, or null. */
+    private function copy(mixed $value, int $max): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? mb_substr($value, 0, $max) : null;
     }
 
     /**

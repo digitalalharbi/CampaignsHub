@@ -28,7 +28,7 @@ export function TenantCreditsPanel({ tenantId, ar }: { tenantId: string; ar: boo
 
   return (
     <section data-testid="tenant-credits" className="mt-5">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'رصيد الاستهلاك' : 'Usage balance'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'رصيد الاستخدام' : 'Usage balance'}</h3>
       {credits.data && (
         <>
           <p className="mt-2 text-sm text-text-primary">

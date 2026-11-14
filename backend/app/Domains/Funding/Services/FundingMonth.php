@@ -27,27 +27,24 @@ final class FundingMonth
     {
         $start = Carbon::createFromFormat('Y-m-d', $month.'-01')->startOfDay();
         $end = $start->copy()->endOfMonth()->startOfDay();
-        $from = $this->refresher->countsFrom($funding);
         $project = $funding->project_id;
 
         $approvedBefore = (float) DB::table('funding_payments')->where('project_id', $project)->where('paid_on', '<', $start->toDateString())->sum('amount_sar');
-        $spentBefore = $from === null ? 0.0 : (float) DB::table('funding_spend_days')->where('project_id', $project)
-            ->where('spend_date', '>=', $from->toDateString())->where('spend_date', '<', $start->toDateString())->sum('amount_sar');
+        $spentBefore = (float) $this->refresher->spendRows($funding)->where('spend_date', '<', $start->toDateString())->sum('amount_sar');
 
         $added = DB::table('funding_payments as p')->leftJoin('users as u', 'u.id', '=', 'p.created_by')
             ->where('p.project_id', $project)->whereBetween('p.paid_on', [$start->toDateString(), $end->toDateString()])
             ->orderBy('p.paid_on')->orderBy('p.created_at')
-            ->get(['p.paid_on', 'p.kind', 'p.amount', 'p.currency', 'p.amount_sar', 'p.reference', 'p.note', 'u.name as added_by', 'p.created_at'])
+            ->get(['p.paid_on', 'p.kind', 'p.amount', 'p.currency', 'p.amount_sar', 'p.reference', 'p.note', 'p.reason', 'u.name as added_by', 'p.created_at'])
             ->map(static fn ($r): array => [
                 'date' => Carbon::parse((string) $r->paid_on)->toDateString(), 'kind' => (string) $r->kind,
                 'amount' => (float) $r->amount, 'currency' => (string) $r->currency, 'amount_sar' => (float) $r->amount_sar,
-                'reference' => $r->reference, 'note' => $r->note, 'added_by' => $r->added_by,
+                'reference' => $r->reference, 'note' => $r->note, 'reason' => $r->reason, 'added_by' => $r->added_by,
                 'added_at' => Carbon::parse((string) $r->created_at)->toIso8601String(),
             ])->all();
 
-        $spendInMonth = DB::table('funding_spend_days')->where('project_id', $project)
-            ->whereBetween('spend_date', [$start->toDateString(), $end->toDateString()])
-            ->when($from !== null, fn ($q) => $q->where('spend_date', '>=', $from->toDateString()), fn ($q) => $q->whereRaw('false'));
+        $spendInMonth = $this->refresher->spendRows($funding)
+            ->whereBetween('spend_date', [$start->toDateString(), $end->toDateString()]);
         $byPlatform = (clone $spendInMonth)->whereNotNull('amount_sar')->selectRaw('provider, SUM(amount_sar) AS spent')
             ->groupBy('provider')->orderByDesc('spent')->get()
             ->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2)])->all();
@@ -62,6 +59,8 @@ final class FundingMonth
             'to' => $end->toDateString(),
             'payment_method' => $funding->payment_method,
             'currency' => 'SAR',
+            'period_start' => $this->refresher->countsFrom($funding)?->toDateString(),
+            'period_end' => $this->refresher->countsTo($funding)?->toDateString(),
             'remaining_start' => $prepaid ? round($approvedBefore - $spentBefore, 2) : null,
             'added' => round($addedTotal, 2),
             'spent' => round($spent, 2),
@@ -71,6 +70,44 @@ final class FundingMonth
             'movements' => $added,
             'spend_without_rate' => $withoutRate,
         ];
+    }
+
+    /**
+     * BUDGET-MODES-001 — «المستحق للفوترة» of a credit budget: the spend of each month of its period, in SAR, oldest first,
+     * with each platform's part. A month is `closed` once it is over (the current one is still running). Spend with no dated
+     * rate is never read as zero: the month says how many days are `unconverted`, and its figure is then a floor.
+     * Nothing is invoiced here and nothing moves: these are the figures finance invoices from.
+     *
+     * @return list<array{month: string, from: string, to: string, closed: bool, spent: float, unconverted_days: int, last_spend_day: string|null, by_platform: list<array{provider: string, spent: float}>}>
+     */
+    public function invoiceMonths(ProjectFunding $funding, ?Carbon $today = null): array
+    {
+        $today = Carbon::parse(($today ?? Carbon::today('Asia/Riyadh'))->toDateString());
+        $rows = $this->refresher->spendRows($funding)
+            ->selectRaw("to_char(spend_date, 'YYYY-MM') AS m, provider, COALESCE(SUM(amount_sar), 0) AS spent")
+            ->selectRaw('SUM(CASE WHEN amount_sar IS NULL AND original_amount > 0 THEN 1 ELSE 0 END) AS unconverted')
+            ->selectRaw('MAX(spend_date) AS last_day')
+            ->groupByRaw("to_char(spend_date, 'YYYY-MM')")->groupBy('provider')->get();
+
+        $months = [];
+        foreach ($rows->groupBy('m') as $month => $group) {
+            $start = Carbon::createFromFormat('Y-m-d', $month.'-01')->startOfDay();
+            $platforms = $group->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2)])
+                ->sortByDesc('spent')->values()->all();
+            $months[(string) $month] = [
+                'month' => (string) $month,
+                'from' => $start->toDateString(),
+                'to' => $start->copy()->endOfMonth()->toDateString(),
+                'closed' => $start->copy()->endOfMonth()->startOfDay()->lt($today),
+                'spent' => round((float) $group->sum('spent'), 2),
+                'unconverted_days' => (int) $group->sum('unconverted'),
+                'last_spend_day' => Carbon::parse((string) $group->max('last_day'))->toDateString(),
+                'by_platform' => $platforms,
+            ];
+        }
+        ksort($months);
+
+        return array_values($months);
     }
 
     /**

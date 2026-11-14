@@ -159,7 +159,7 @@ function IntegrationsSection({ ar }: { ar: boolean }) {
   ) : bad > 0 ? (
     <Pill tone="danger" testId="ops-integrations-status">{bad} {ar ? 'تحتاج إصلاحاً' : 'need fixing'}</Pill>
   ) : warn > 0 ? (
-    <Pill tone="warning" testId="ops-integrations-status">{warn} {ar ? 'تحتاج انتباهاً' : 'need attention'}</Pill>
+    <Pill tone="warning" testId="ops-integrations-status">{warn} {ar ? 'تنبيهات' : 'need attention'}</Pill>
   ) : (
     <Pill tone="success" testId="ops-integrations-status">{rows.length} {ar ? 'تعمل' : 'healthy'}</Pill>
   )

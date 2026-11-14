@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 return [
     'no_mobile_on_file' => 'No mobile number was given for this application.',
+    'nothing_to_verify' => 'This application is not held at a verification step.',
     'signup_capacity_reached' => 'Sign-up has reached its daily limit. Please try again later.',
 
     'oauth_awaiting_credentials' => 'This sign-in method is awaiting provider credentials.',

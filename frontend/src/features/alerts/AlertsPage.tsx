@@ -8,13 +8,14 @@ import { alertCategory, alertCategoryLabel, alertNextAction, ALERT_CATEGORY_ORDE
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock, ListChecks, Plus, Settings2, Truck } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock, ListChecks, Pencil, Plus, Settings2, Trash2, Truck } from 'lucide-react'
 import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import {
-  createAlertRule, createTaskFromAlert, listAlertEvents, listAlertRules,
-  resolveAlert, snoozeAlert, type AlertEvent, type AlertRule, type AlertType, type NewAlertRule,
+  createAlertRule, createTaskFromAlert, deleteAlertRule, listAlertEvents, listAlertRules, listRuleRecipients,
+  resolveAlert, snoozeAlert, updateAlertRule, type AlertEvent, type AlertRule, type AlertRulePatch, type AlertType, type NewAlertRule,
 } from './api'
+import { confirmDialog } from '@/stores/dialogs'
 import { listDeliveries, type NotificationDeliveryRow } from '@/features/notifications/api'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
@@ -28,7 +29,7 @@ import { toApiError } from '@/lib/api/client'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
   ar: {
-    title: 'التنبيهات', subtitle: 'راقب المخاطر التشغيلية وتصرّف عليها — الميزانية، النتائج، المزامنة، التوكنات، ومتابعة العملاء المحتملين.',
+    title: 'التنبيهات', subtitle: 'راقب الميزانية والنتائج والربط ومتابعة المهتمين، وتصرّف بسرعة.',
     tab_alerts: 'التنبيهات', tab_rules: 'القواعد', tab_prefs: 'التفضيلات', tab_deliveries: 'سجل التسليم',
     all: 'الكل', active: 'نشِطة', snoozed: 'مؤجّلة', resolved: 'مُغلقة', none: 'لا يوجد شيء هنا.',
     no_rules: 'لا توجد قاعدة مراقبة في مساحة العمل هذه — لن يصل أي تنبيه حتى تُضاف واحدة.',
@@ -42,9 +43,9 @@ const COPY = {
     resolve: 'إغلاق', snooze: 'تأجيل', create_task: 'إنشاء مهمة', task_created: 'أُنشئت المهمة',
     severity: 'الخطورة', source: 'المصدر', value: 'القيمة', threshold: 'الحد', triggered: 'أُطلق',
     sev_info: 'معلومة', sev_warning: 'تحذير', sev_critical: 'حرِج',
-    new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'فترة التهدئة (دقائق)',
-    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'حفظ', load_error: 'تعذّر تحميل الخيارات', err_title: 'يرجى تصحيح الأخطاء التالية',
-    threshold_hint: 'الحد (اختياري): نسبة/أيام/قيمة حسب النوع.',
+    new_rule: 'قاعدة جديدة', rule_name: 'اسم القاعدة', rule_type: 'النوع', cooldown: 'المدة بين التنبيهات',
+    channels: 'القنوات', create_task_toggle: 'إنشاء مهمة تلقائيًا', active_toggle: 'مُفعّلة', save: 'احفظ', load_error: 'تعذّر تحميل الخيارات', err_title: 'يرجى تصحيح الأخطاء التالية',
+    threshold_hint: 'الحد اختياري (نسبة أو أيام حسب النوع). المدة بالدقائق.',
     prefs_title: 'قنوات الإشعار وساعات الهدوء', ch_in_app: 'داخل التطبيق', ch_email: 'البريد', ch_whatsapp: 'واتساب',
     quiet: 'ساعات الهدوء', quiet_enabled: 'تفعيل ساعات الهدوء', from: 'من', to: 'إلى', saved: 'تم الحفظ',
     delivery_note: 'التسليم صادق: لا تُسجَّل أي رسالة كـ«مُرسلة» قبل ربط مزوّد حقيقي.',
@@ -55,6 +56,10 @@ const COPY = {
     account_wide: 'على مستوى مساحة العمل',
     project: 'المشروع', all_projects: 'كل المشاريع',
     none_clear_all: 'لا تنبيهات مفتوحة — لم تُطلق أي قاعدة مفعّلة في مساحة العمل هذه.',
+    edit_rule: 'عدّل القاعدة', edit: 'عدّل', cancel: 'إلغاء', pause: 'أوقف', resume: 'شغّل', running: 'شغّالة', paused: 'موقوفة', remove: 'احذف',
+    remove_title: 'تحذف القاعدة؟', remove_body: 'التنبيهات اللي رفعتها تبقى في السجل، والمفتوحة منها تنقفل بدون رسالة.',
+    recipients: 'المستلمون', rcpt_default: 'كل من اختار تنبيهات البريد', rcpt_manager: 'مدير المشروع', rcpt_people: 'أشخاص من الفريق',
+    rcpt_manager_hint: 'اختر مشروع أول', rule_project: 'المشروع', type_locked: 'النوع ما يتغيّر — للنوع الثاني أضف قاعدة جديدة.',
   },
   en: {
     title: 'Alerts', subtitle: 'Watch and act on operational risk — budget, results, sync, tokens, and lead follow-up.',
@@ -71,9 +76,9 @@ const COPY = {
     resolve: 'Resolve', snooze: 'Snooze', create_task: 'Create task', task_created: 'Task created',
     severity: 'Severity', source: 'Source', value: 'Value', threshold: 'Threshold', triggered: 'Triggered',
     sev_info: 'Info', sev_warning: 'Warning', sev_critical: 'Critical',
-    new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Cooldown (minutes)',
+    new_rule: 'New rule', rule_name: 'Rule name', rule_type: 'Type', cooldown: 'Time between alerts',
     channels: 'Channels', create_task_toggle: 'Auto-create a task', active_toggle: 'Active', save: 'Save', load_error: 'Could not load options', err_title: 'Please fix the following errors',
-    threshold_hint: 'Threshold (optional): pct / days / value depending on type.',
+    threshold_hint: 'Threshold is optional (percent or days by type). Time is in minutes.',
     prefs_title: 'Notification channels & quiet hours', ch_in_app: 'In-app', ch_email: 'Email', ch_whatsapp: 'WhatsApp',
     quiet: 'Quiet hours', quiet_enabled: 'Enable quiet hours', from: 'From', to: 'To', saved: 'Saved',
     delivery_note: 'Honest delivery: nothing is logged as "sent" before a real provider is wired.',
@@ -84,6 +89,10 @@ const COPY = {
     account_wide: 'Workspace-wide',
     project: 'Project', all_projects: 'All projects',
     none_clear_all: 'No open alerts — no active rule has fired in this workspace.',
+    edit_rule: 'Edit rule', edit: 'Edit', cancel: 'Cancel', pause: 'Pause', resume: 'Resume', running: 'Running', paused: 'Paused', remove: 'Delete',
+    remove_title: 'Delete this rule?', remove_body: 'The alerts it raised stay in the log; the open ones close without a message.',
+    recipients: 'Recipients', rcpt_default: 'Everyone who chose alert email', rcpt_manager: 'Project manager', rcpt_people: 'Team members',
+    rcpt_manager_hint: 'Pick a project first', rule_project: 'Project', type_locked: 'The type cannot change — add a new rule for another type.',
   },
 }
 
@@ -106,20 +115,20 @@ const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   cpa_increase: { ar: 'ارتفاع CPA', en: 'CPA increase' },
   cpl_increase: { ar: 'ارتفاع CPL', en: 'CPL increase' },
   roas_drop: { ar: 'انخفاض ROAS', en: 'ROAS drop' },
-  no_results: { ar: 'إنفاق بلا نتائج', en: 'No results' },
+  no_results: { ar: 'صرف بدون نتائج', en: 'Spend with no results' },
   sync_failure: { ar: 'فشل المزامنة', en: 'Sync failure' },
-  token_expiry: { ar: 'انتهاء التوكن', en: 'Token expiry' },
+  token_expiry: { ar: 'صلاحية الربط تنتهي', en: 'Connection access expiring' },
   report_failed: { ar: 'فشل التقرير', en: 'Report failed' },
   sla_warning: { ar: 'تحذير SLA', en: 'SLA warning' },
-  lead_unassigned: { ar: 'عميل محتمل بلا مسؤول', en: 'Lead with no owner' },
-  lead_no_contact: { ar: 'لم يُتواصل مع العميل المحتمل', en: 'Lead not contacted' },
+  lead_unassigned: { ar: 'مهتم بدون مسؤول', en: 'Lead with no owner' },
+  lead_no_contact: { ar: 'ما أحد تواصل مع المهتم', en: 'Lead not contacted' },
   lead_follow_up_overdue: { ar: 'متابعة متأخرة', en: 'Follow-up overdue' },
   /* Same wording as the taxonomy option the picker reads — one name for one type. */
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'Unusual day' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
-  measurement_outage: { ar: 'انقطاع القياس (الموقع)', en: 'Measurement outage (Website)' },
-  tracking_health: { ar: 'سلامة التتبع', en: 'Tracking health' },
-  launch_advance: { ar: 'مرحلة إطلاق أفضل متاحة', en: 'Better launch stage available' },
+  measurement_outage: { ar: 'توقف قياس الموقع', en: 'Website measurement stopped' },
+  tracking_health: { ar: 'حالة التتبع', en: 'Tracking status' },
+  launch_advance: { ar: 'الحساب جاهز لمرحلة أقوى', en: 'Account ready for a stronger stage' },
 }
 
 /** ALERTS-VISUAL-UI-001 — the severity read at a glance: the stripe on the card and the badge beside the title. */
@@ -707,16 +716,43 @@ function SnoozeMenu({ c, onPick }: { c: Copy; onPick: (m: number) => void }) {
   )
 }
 
+const EMPTY_RULE: NewAlertRule = { type: 'budget_risk', name: '', severity: 'warning', cooldown_minutes: 720, channels: ['in_app', 'email'], create_task: false, active: true, project_id: null, recipients: null }
+
+/** The one number a rule's threshold box shows: the stored value, whichever key the type reads. */
+function thresholdText(threshold: Record<string, number> | null): string {
+  const v = threshold ? Object.values(threshold)[0] : undefined
+  return v === undefined ? '' : String(v)
+}
+
+/**
+ * ALERT-RULES-MANAGE-001 — master task 3: rules are listed, edited in place, paused and removed.
+ *
+ * One form serves both: «قاعدة جديدة» until a row's «عدّل» loads that rule into it. The type is locked while editing
+ * (the server refuses a type change — it decides what the threshold means). Pause is a switch on the row; remove asks
+ * first in an in-app dialog and says what happens to the alerts the rule raised. Every write goes through the shared
+ * save layer (SAVE-STATE-001), so the screen shows the save and refreshes in place.
+ *
+ * Compact by the Owner's one-screen rule: dense rows beside the form, the ready-made rules folded away once the
+ * workspace has rules of its own.
+ */
 function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['alert-rules'], queryFn: listAlertRules })
-  const [form, setForm] = useState<NewAlertRule>({ type: 'budget_risk', name: '', severity: 'warning', cooldown_minutes: 720, channels: ['in_app', 'email'], create_task: false, active: true })
+  const [form, setForm] = useState<NewAlertRule>(EMPTY_RULE)
+  const [editing, setEditing] = useState<AlertRule | null>(null)
   const [thresholdRaw, setThresholdRaw] = useState('')
   // Type / severity / channels are fed by the taxonomy engine (alert.type / alert.severity / alert.channel).
   // These are system definitions, so their option keys are exactly the AlertController Rule::in values.
   const typeTax = useTaxonomyOptions('alert.type')
   const severityTax = useTaxonomyOptions('alert.severity')
   const channelTax = useTaxonomyOptions('alert.channel')
+  const projectsQ = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
+  const recipientsQ = useQuery({
+    queryKey: ['alert-rule-recipients', form.project_id ?? null],
+    queryFn: () => listRuleRecipients(form.project_id ?? null),
+    retry: false,
+  })
+  const refresh = () => qc.invalidateQueries({ queryKey: ['alert-rules'] })
   /*
    * One create path, two ways to reach it — the form, and the suggestion below the empty list.
    *
@@ -727,8 +763,22 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
    */
   const createM = useMutation({
     mutationFn: (rule: NewAlertRule) => createAlertRule(rule),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['alert-rules'] }); setForm((f) => ({ ...f, name: '' })); setThresholdRaw('') },
+    onSuccess: () => { void refresh(); reset() },
   })
+  const updateM = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AlertRulePatch }) => updateAlertRule(id, patch),
+    onSuccess: () => { void refresh(); reset() },
+  })
+  // Pause / resume is its own mutation, so a refused toggle on one row never lands in the edit form's errors.
+  const toggleM = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => updateAlertRule(id, { active }),
+    onSuccess: () => { void refresh() },
+  })
+  const deleteM = useMutation({
+    mutationFn: (id: string) => deleteAlertRule(id),
+    onSuccess: (_d, id) => { void refresh(); if (editing?.id === id) reset() },
+  })
+  function reset() { setForm(EMPTY_RULE); setThresholdRaw(''); setEditing(null); updateM.reset(); createM.reset() }
   const rules = q.data?.rules ?? []
   /*
    * The server bounds this list (newest first). Saying so is not a footnote: a truncated list
@@ -737,17 +787,74 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
    */
   const total = q.data?.total ?? rules.length
   const capped = total > rules.length
-  const summaryErrors: FieldError[] = createM.isError
-    ? (() => { const api = toApiError(createM.error); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: f === 'name' ? 'rule-name' : f, message: m[0] }] : [])) : [] })()
+  const formError = editing ? updateM.error : createM.error
+  const summaryErrors: FieldError[] = formError
+    ? (() => { const api = toApiError(formError); return api.errors ? Object.entries(api.errors).flatMap(([f, m]) => (m?.length ? [{ field: f === 'name' ? 'rule-name' : f, message: m[0] }] : [])) : [] })()
     : []
+  const saving = createM.isPending || updateM.isPending
+  const busyRow = (id: string) => (updateM.isPending && updateM.variables?.id === id) || (toggleM.isPending && toggleM.variables?.id === id) || (deleteM.isPending && deleteM.variables === id)
+  const projects = projectsQ.data ?? []
+  const projectName = (id: string | null) => (id ? projects.find((p) => p.id === id)?.name ?? '' : c.account_wide)
+  const people = recipientsQ.data ?? []
+  const peopleOptions: Option[] = people.map((p) => ({ value: String(p.id), label: `${p.name} · ${p.email}`, label_ar: `${p.name} · ${p.email}`, label_en: `${p.name} · ${p.email}` }))
+  const rcpt = form.recipients ?? { project_manager: false, user_ids: [] }
+  const setRcpt = (next: { project_manager: boolean; user_ids: number[] }) =>
+    setForm((f) => ({ ...f, recipients: !next.project_manager && next.user_ids.length === 0 ? null : next }))
+
+  const startEdit = (r: AlertRule) => {
+    updateM.reset()
+    setEditing(r)
+    setForm({
+      type: r.type as AlertType, name: r.name, severity: r.severity, cooldown_minutes: r.cooldown_minutes,
+      // A rule stored without channels uses the default (in-app + email); an edit must not turn that into «none».
+      channels: r.channels ?? ['in_app', 'email'], create_task: r.create_task, active: r.active, project_id: r.project_id, recipients: r.recipients ?? null,
+    })
+    setThresholdRaw(thresholdText(r.threshold))
+  }
+  const remove = async (r: AlertRule) => {
+    if (await confirmDialog({ title: c.remove_title, body: `«${r.name}» — ${c.remove_body}`, confirmLabel: c.remove, danger: true })) deleteM.mutate(r.id)
+  }
+  const submit = () => {
+    if (editing) {
+      /*
+       * Only what changed is sent. Sending every field re-checked untouched recipients on a simple rename, and a
+       * person who had since lost the project turned «rename» into a refusal about somebody nobody edited.
+       */
+      const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      const threshold = parseThreshold(thresholdRaw, form.type) ?? null
+      const patch: AlertRulePatch = {}
+      if (form.name !== editing.name) patch.name = form.name
+      if (form.severity !== editing.severity) patch.severity = form.severity
+      if (form.cooldown_minutes !== editing.cooldown_minutes) patch.cooldown_minutes = form.cooldown_minutes
+      if (!same(form.channels, editing.channels ?? ['in_app', 'email'])) patch.channels = form.channels
+      if (form.create_task !== editing.create_task) patch.create_task = form.create_task
+      if ((form.project_id ?? null) !== editing.project_id) patch.project_id = form.project_id ?? null
+      if (!same(form.recipients, editing.recipients)) patch.recipients = form.recipients ?? null
+      if (!same(threshold, editing.threshold)) patch.threshold = threshold
+      if (Object.keys(patch).length === 0) { reset(); return }
+      updateM.mutate({ id: editing.id, patch })
+    } else {
+      createM.mutate({ ...form, threshold: parseThreshold(thresholdRaw, form.type) })
+    }
+  }
+  const recipientsLine = (r: AlertRule): string => {
+    const x = r.recipients
+    if (!x || (!x.project_manager && x.user_ids.length === 0)) return c.rcpt_default
+    return [x.project_manager ? c.rcpt_manager : null, x.user_ids.length > 0 ? `${c.rcpt_people} (${x.user_ids.length})` : null].filter(Boolean).join(' + ')
+  }
+  const input = 'rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary'
+  const label = 'flex flex-col gap-1 text-xs font-semibold text-text-secondary'
 
   return (
-    <div className="flex flex-col gap-4">
-    <RulePresets rules={rules} busy={createM.isPending} ar={locale === 'ar'} onAdd={(rule) => createM.mutate(rule)} />
-    <div className="grid gap-4 md:grid-cols-[1fr_320px]">
-      <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
+    <details data-testid="rule-presets-fold" open={rules.length === 0} className="rounded-2xl border border-border bg-surface [&>summary]:cursor-pointer">
+      <summary className="px-3.5 py-2 text-xs font-semibold text-text-secondary">{locale === 'ar' ? 'قواعد جاهزة' : 'Ready-made rules'}</summary>
+      <RulePresets rules={rules} busy={createM.isPending} ar={locale === 'ar'} onAdd={(rule) => createM.mutate(rule)} bare />
+    </details>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="flex min-w-0 flex-col gap-1.5">
         {capped && (
-          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5 text-xs text-text-secondary">
+          <p data-testid="alert-rules-capped" className="rounded-xl border border-border bg-surface-secondary px-3.5 py-2 text-xs text-text-secondary">
             {locale === 'ar'
               ? `تُعرض أحدث ${rules.length} قاعدة من ${total}.`
               : `Showing the most recent ${rules.length} of ${total} rules.`}
@@ -756,22 +863,13 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
 
         {rules.length === 0 ? (
           /*
-           * AUTOMATION-FIRST-OPERATIONS-001 — «Nothing here.» was the whole empty state.
-           *
-           * The events list three hundred lines above carries a comment saying exactly why that
-           * sentence is wrong — it reads as a page that failed to load — and this list was the one
-           * still using it. It is the worse of the two places to use it, because an empty EVENT
-           * ledger is good news and an empty RULE list means the monitoring is off. A workspace
-           * seeing this has never been told that.
-           *
-           * The suggestion is the one type that can be offered as a finished rule: everything else
-           * needs a number somebody has to justify. It creates on a click rather than on load —
-           * enrolling an account into notifications it did not ask for is not a default anybody
-           * should get silently.
+           * AUTOMATION-FIRST-OPERATIONS-001 — an empty RULE list means the monitoring is off, unlike an
+           * empty EVENT ledger, which is good news. The suggestion is the one type that can be offered as
+           * a finished rule (it needs no threshold), and it creates on a click, never on load.
            */
           <div
             data-testid="alert-rules-empty"
-            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-8 text-center"
+            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-6 text-center"
           >
             <p className="text-sm text-text-secondary">{c.no_rules}</p>
             <p className="max-w-prose text-xs text-text-muted">{c.suggest_anomaly_why}</p>
@@ -794,39 +892,68 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             </button>
           </div>
         ) : (
-          rules.map((r: AlertRule) => (
-            <div key={r.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-text-primary">{r.name}</span>
-                <span className="text-xs text-text-secondary">
-                  {typeLabel(r.type, locale)} · {c.severity}: {sevLabel(r.severity, c)} · {c.cooldown}: {r.cooldown_minutes}
-                  {r.threshold ? ` · ${c.threshold}: ${Object.entries(r.threshold).map(([k, v]) => `${k}=${v}`).join(', ')}` : ''}
+          <ul className="flex flex-col gap-1.5" data-testid="alert-rules-list">
+          {rules.map((r: AlertRule) => (
+            <li
+              key={r.id}
+              data-testid={`alert-rule-${r.id}`}
+              className={`flex min-w-0 items-center gap-2.5 rounded-xl border bg-surface px-3 py-2 ${editing?.id === r.id ? 'border-brand-500' : 'border-border'} ${r.active ? '' : 'opacity-70'}`}
+            >
+              <span className={`h-8 w-1 shrink-0 rounded-full ${sevClass[r.severity]}`} aria-hidden />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold text-text-primary">{r.name}</span>
+                  <span className="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-xs font-semibold text-text-secondary">{typeLabel(r.type, locale)}</span>
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ${sevBadge[r.severity]}`}>{sevLabel(r.severity, c)}</span>
                 </span>
                 {/*
-                The channels in the reader's language, from the engine that already fed the picker.
-                This printed `in_app · email` — the raw option keys, on the row that reports back
-                what the person just chose in a control that showed them «داخل التطبيق». The
-                taxonomy is loaded on this tab regardless, so naming them costs a lookup; a key
-                that has no option falls back to itself rather than disappearing.
-              */}
-              <span className="text-[11px] text-text-muted">{(r.channels ?? []).map((k) => channelLabel(k, channelTax.options, locale)).join(' · ')}{r.create_task ? ` · ${c.create_task_toggle}` : ''}</span>
+                  The channels in the reader's language, from the engine that already fed the picker — never
+                  the raw option keys; a key that has no option falls back to itself rather than disappearing.
+                */}
+                <span className="truncate text-xs text-text-muted">
+                  {r.threshold ? `${c.threshold} ${thresholdText(r.threshold)} · ` : ''}
+                  <Clock size={10} className="inline" aria-hidden /> {r.cooldown_minutes} {locale === 'ar' ? 'د' : 'min'}
+                  {' · '}{(r.channels ?? []).map((k) => channelLabel(k, channelTax.options, locale)).join(' · ')}{r.create_task ? ` · ${c.create_task_toggle}` : ''}
+                  {' · '}{recipientsLine(r)}
+                  {r.project_id ? ` · ${projectName(r.project_id)}` : ''}
+                </span>
               </div>
-              <span className={`h-2 w-2 rounded-full ${r.active ? 'bg-success' : 'bg-border'}`} aria-hidden />
-            </div>
-          ))
+              <button
+                type="button"
+                role="switch"
+                aria-checked={r.active}
+                aria-label={r.active ? c.pause : c.resume}
+                title={r.active ? c.pause : c.resume}
+                data-testid={`alert-rule-toggle-${r.id}`}
+                disabled={busyRow(r.id)}
+                onClick={() => toggleM.mutate({ id: r.id, active: !r.active })}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${r.active ? 'bg-success' : 'bg-border'}`}
+              >
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${r.active ? 'start-[18px]' : 'start-0.5'}`} />
+              </button>
+              <span className="hidden w-12 shrink-0 text-xs font-semibold text-text-muted sm:inline">{r.active ? c.running : c.paused}</span>
+              <button type="button" data-testid={`alert-rule-edit-${r.id}`} aria-label={`${c.edit} ${r.name}`} title={c.edit} disabled={busyRow(r.id)} onClick={() => startEdit(r)}
+                className="shrink-0 rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50"><Pencil size={14} /></button>
+              <button type="button" data-testid={`alert-rule-delete-${r.id}`} aria-label={`${c.remove} ${r.name}`} title={c.remove} disabled={busyRow(r.id)} onClick={() => void remove(r)}
+                className="shrink-0 rounded-lg p-1.5 text-danger hover:bg-surface-hover disabled:opacity-50"><Trash2 size={14} /></button>
+            </li>
+          ))}
+          </ul>
         )}
       </div>
 
       <form
-        onSubmit={(ev) => { ev.preventDefault(); createM.mutate({ ...form, threshold: parseThreshold(thresholdRaw, form.type) }) }}
-        className="flex h-fit flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
+        data-testid="alert-rule-form"
+        onSubmit={(ev) => { ev.preventDefault(); submit() }}
+        className="flex h-fit min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-surface p-3.5"
       >
-        <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary"><Plus size={15} /> {c.new_rule}</h3>
+        <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+          {editing ? <Pencil size={14} /> : <Plus size={15} />} {editing ? c.edit_rule : c.new_rule}
+        </h3>
         {summaryErrors.length > 0 && <ErrorSummary errors={summaryErrors} title={c.err_title} />}
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary" htmlFor="rule-name">
+        <label className={label} htmlFor="rule-name">
           {c.rule_name}
-          <input id="rule-name" required minLength={2} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
+          <input id="rule-name" required minLength={2} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={input} />
         </label>
         <SelectField
           label={c.rule_type}
@@ -837,19 +964,21 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           optionsError={typeTax.error}
           onRetry={() => typeTax.refetch()}
           clearable={false}
+          disabled={editing !== null}
+          hint={editing ? c.type_locked : undefined}
         />
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
-          {c.threshold}
-          <input value={thresholdRaw} onChange={(e) => setThresholdRaw(e.target.value)} placeholder="0.9"
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
-          <span className="text-[11px] font-normal text-text-muted">{c.threshold_hint}</span>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-secondary">
-          {c.cooldown}
-          <input type="number" min={5} value={form.cooldown_minutes}
-            onChange={(e) => setForm((f) => ({ ...f, cooldown_minutes: Number(e.target.value) }))}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-text-primary" />
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={label}>
+            {c.threshold}
+            <input value={thresholdRaw} onChange={(e) => setThresholdRaw(e.target.value)} placeholder="0.9" inputMode="decimal" dir="ltr" className={input} />
+          </label>
+          <label className={label}>
+            {c.cooldown}
+            <input type="number" min={5} value={form.cooldown_minutes} dir="ltr"
+              onChange={(e) => setForm((f) => ({ ...f, cooldown_minutes: Number(e.target.value) }))} className={input} />
+          </label>
+        </div>
+        <span className="-mt-1 text-xs font-normal text-text-muted">{c.threshold_hint}</span>
         <SelectField
           label={c.severity}
           value={form.severity ?? 'warning'}
@@ -869,14 +998,58 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           optionsError={channelTax.error}
           onRetry={() => channelTax.refetch()}
         />
+        <label className={label}>
+          {c.rule_project}
+          <select
+            data-testid="alert-rule-project"
+            value={form.project_id ?? ''}
+            onChange={(e) => {
+              const project_id = e.target.value || null
+              // The people list is per project; a choice made for another project is not carried over.
+              setForm((f) => ({ ...f, project_id, recipients: null }))
+            }}
+            className={input}
+          >
+            <option value="">{c.account_wide}</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <fieldset className="flex flex-col gap-1.5 rounded-xl border border-border p-2.5" data-testid="alert-rule-recipients">
+          <legend className="px-1 text-xs font-semibold text-text-secondary">{c.recipients}</legend>
+          <label className="flex items-center gap-2 text-xs text-text-secondary">
+            <input type="checkbox" data-testid="alert-rule-rcpt-manager" disabled={!form.project_id} checked={rcpt.project_manager}
+              onChange={(e) => setRcpt({ ...rcpt, project_manager: e.target.checked })} />
+            {c.rcpt_manager}{!form.project_id && <span className="text-xs text-text-muted">({c.rcpt_manager_hint})</span>}
+          </label>
+          <MultiSelectField
+            label={c.rcpt_people}
+            value={rcpt.user_ids.map(String)}
+            onChange={(v) => setRcpt({ ...rcpt, user_ids: v.map(Number) })}
+            options={peopleOptions}
+            loading={recipientsQ.isPending}
+            optionsError={recipientsQ.error}
+            onRetry={() => recipientsQ.refetch()}
+            maxSelections={20}
+            bulkActions={false}
+          />
+          {form.recipients === null || form.recipients === undefined ? <span className="text-xs text-text-muted">{c.rcpt_default}</span> : null}
+        </fieldset>
         <label className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
           <input type="checkbox" checked={form.create_task} onChange={(e) => setForm((f) => ({ ...f, create_task: e.target.checked }))} />
           {c.create_task_toggle}
         </label>
-        <button type="submit" disabled={createM.isPending}
-          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50">
-          {c.save}
-        </button>
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} data-testid="alert-rule-save"
+            className="flex-1 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50">
+            {c.save}
+          </button>
+          {editing && (
+            <button type="button" onClick={reset} disabled={saving} data-testid="alert-rule-cancel"
+              className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover disabled:opacity-50">
+              {c.cancel}
+            </button>
+          )}
+        </div>
       </form>
     </div>
     </div>

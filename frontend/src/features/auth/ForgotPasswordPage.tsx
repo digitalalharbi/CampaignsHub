@@ -17,7 +17,7 @@ import { useT } from '@/lib/i18n'
 export function ForgotPasswordPage() {
   const t = useT()
   const [email, setEmail] = useState('')
-  const mutation = useMutation({ mutationFn: requestPasswordReset })
+  const mutation = useMutation({ meta: { feedback: 'none' }, mutationFn: requestPasswordReset })
   const error = mutation.isError ? toApiError(mutation.error) : null
 
   return (

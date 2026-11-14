@@ -42,7 +42,7 @@ test('alerts page renders all sections and a rule created in the UI persists', a
    * a filter, no rule was created, and the failure read as a broken form.
    */
   await page.locator('#rule-name').fill(unique)
-  await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
+  await page.getByTestId('alert-rule-save').click()
   await expect(page.getByText(unique)).toBeVisible({ timeout: 10_000 })
 
   // Preferences tab → channels + quiet hours render.

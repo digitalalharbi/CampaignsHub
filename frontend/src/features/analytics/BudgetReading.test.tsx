@@ -17,7 +17,7 @@ const reading = (over: Partial<BudgetExplanationPayload> = {}): BudgetExplanatio
     slowest: { campaign: 'Always-on', value: 0.41 },
   },
   context: { scope: 'budget', lines: 4, from: '2026-08-01', to: '2026-08-30' },
-  explanation: { ar: 'الإيقاع محسوب على ما مضى', en: 'Pace is measured against the part of the window that has elapsed' },
+  explanation: { ar: 'سرعة الصرف محسوبة على ما مضى', en: 'Pace is measured against the part of the window that has elapsed' },
   evidence: ['budget', 'spent', 'pace'],
   action: { ar: 'قارن', en: 'Check «Eid push» against its plan' },
   silent_reason: null,

@@ -12,8 +12,10 @@ use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
+use App\Domains\Billing\Console\RedactWebhookSecretsCommand;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
+use App\Domains\Campaigns\Console\ReclassifyObjectivesCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
@@ -91,6 +93,7 @@ use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Http\Middleware\NoStoreApiResponses;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\TrustProxies;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -102,6 +105,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\TrustProxies as FrameworkTrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
@@ -189,6 +193,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileContentMetricsCommand::class,
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
+        // OBJECTIVE-RECLASSIFY-RUN-001 — the Owner-approved reclassification, dry run first.
+        ReclassifyObjectivesCommand::class,
         GoogleAdsAccessCommand::class,
         MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
@@ -232,12 +238,20 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
+        // PAY-WEBHOOK-SECRET-REDACT-001 — dry run by default; `--apply` on Production only with the Owner's approval.
+        RedactWebhookSecretsCommand::class,
         // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
         SweepPlatformPaymentAlerts::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
         $middleware->statefulApi();
+
+        /*
+         * EDGE-CLIENT-IP-001 — the real client address behind Caddy and the frontend nginx. Only the proxies in
+         * `security.trusted_proxies`, only `X-Forwarded-For`. See App\Http\Middleware\TrustProxies.
+         */
+        $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
 
         /*
          * The sandbox gateway's confirm form (PAY-SANDBOX-001).
