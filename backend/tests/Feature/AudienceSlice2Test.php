@@ -243,6 +243,12 @@ final class AudienceSlice2Test extends TestCase
         $this->getJson('/api/v1/client/audience', $headers)->assertStatus(403);
     }
 
+    public function test_the_client_audience_route_refuses_a_caller_without_a_portal_session(): void
+    {
+        $this->getJson('/api/v1/client/audience')->assertUnauthorized();
+        $this->getJson('/api/v1/client/audience', ['X-Client-Token' => 'not-a-session'])->assertUnauthorized();
+    }
+
     public function test_the_probe_prints_a_meta_breakdown_and_writes_nothing(): void
     {
         [$tenant, $project] = $this->world();

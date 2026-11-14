@@ -2,7 +2,7 @@
     "a": {
         "daily_metrics": {
             "rows": 1703,
-            "sha256": "6e3b6a8d1c0b04e217cd5cdbd28f8f260f81fcfeb98acc0cef00a289c2734776",
+            "sha256": "e55f3ce0cccc628ee52b0f1853da978bd3d74e978d105261ea35454b5fce88aa",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -43,7 +43,7 @@
         },
         "entity_daily_metrics": {
             "rows": 740,
-            "sha256": "ca8a2b5c1ac82af88acd11a8d7b4cbc33eea21ce9e8487fd08249cedb72bcb32",
+            "sha256": "32894a5908b60138697296c455240596909566f8f0e735b0c762bb4279b15ce6",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -94,7 +94,7 @@
         },
         "creative_daily_metrics": {
             "rows": 246,
-            "sha256": "cd0af4f753747eb99cba6ab84fff8f93b67b6b77b56e7463299895b1a58555ea",
+            "sha256": "e966b796a8a6f26503e8acb6022eb21639f7b1a7a5e38c6c4999e5091f63c714",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -211,7 +211,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -228,7 +228,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002875",
+                "id": "00000000-0000-4000-8000-000000002883",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -242,7 +242,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -259,7 +259,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002975",
+                "id": "00000000-0000-4000-8000-000000002991",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -290,7 +290,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002977",
+                "id": "00000000-0000-4000-8000-000000002993",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -321,7 +321,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002979",
+                "id": "00000000-0000-4000-8000-000000002995",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -942,10 +942,130 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002968",
+                "id": "00000000-0000-4000-8000-000000002874",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002875",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002876",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002877",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002878",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002879",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002880",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002881",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002976",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -957,10 +1077,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002969",
+                "id": "00000000-0000-4000-8000-000000002977",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -972,10 +1092,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002970",
+                "id": "00000000-0000-4000-8000-000000002978",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -987,10 +1107,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002971",
+                "id": "00000000-0000-4000-8000-000000002979",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -1002,10 +1122,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002972",
+                "id": "00000000-0000-4000-8000-000000002980",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -1017,15 +1137,135 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002973",
+                "id": "00000000-0000-4000-8000-000000002981",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
                 "window_end": "2026-10-21",
                 "payload": "9420a5b34aaeea156f38f04e803043ef9c03fc13aff59b89c95f7ddfc93687d2",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002982",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002983",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002984",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002985",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002986",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002987",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002988",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002989",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
                 "normalised_rows": 0,
                 "fetched_at": "2026-10-21 09:00:00+00",
                 "created_at": "2026-10-21 09:00:00+00",
@@ -1074,7 +1314,7 @@
     "b": {
         "daily_metrics": {
             "rows": 1719,
-            "sha256": "0ac28b7904103bd92a8258a9014f415d621c56c77bc8cf0487e7eb2e918e38f1",
+            "sha256": "f13b4ca152abf6e5a1d67b252708298a3339100f6e19634a1a720ac61764174e",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -1115,7 +1355,7 @@
         },
         "entity_daily_metrics": {
             "rows": 760,
-            "sha256": "11f1a3cc8c864c4982be152defc40ec663a9830678ab6d63859365e7ded4cb23",
+            "sha256": "dbfeaf7aaeabf70107314b192398bb801d3448ec75f4b8e1e8e5375214927b2f",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -1166,7 +1406,7 @@
         },
         "creative_daily_metrics": {
             "rows": 248,
-            "sha256": "1670b4804fbe8708babd9f2f75ef035cbabab5a962f15b618dcd09732b4e004b",
+            "sha256": "68f1eafccc231adb51c0b4faee40d7e90756f1708946062955982150fa4a714b",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -1283,7 +1523,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1300,7 +1540,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002875",
+                "id": "00000000-0000-4000-8000-000000002883",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -1314,7 +1554,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -1331,7 +1571,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002975",
+                "id": "00000000-0000-4000-8000-000000002991",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -1362,7 +1602,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002977",
+                "id": "00000000-0000-4000-8000-000000002993",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -1393,7 +1633,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002979",
+                "id": "00000000-0000-4000-8000-000000002995",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -1424,7 +1664,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002982",
+                "id": "00000000-0000-4000-8000-000000002998",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -1455,7 +1695,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002984",
+                "id": "00000000-0000-4000-8000-000000003000",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -1486,7 +1726,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002986",
+                "id": "00000000-0000-4000-8000-000000003002",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -1500,7 +1740,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1517,7 +1757,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003110",
+                "id": "00000000-0000-4000-8000-000000003126",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -1531,7 +1771,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -1548,7 +1788,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003234",
+                "id": "00000000-0000-4000-8000-000000003250",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -1579,7 +1819,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003236",
+                "id": "00000000-0000-4000-8000-000000003252",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -1610,7 +1850,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003238",
+                "id": "00000000-0000-4000-8000-000000003254",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -2231,10 +2471,130 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002968",
+                "id": "00000000-0000-4000-8000-000000002874",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002875",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002876",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002877",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002878",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002879",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002880",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002881",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002976",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2246,10 +2606,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002969",
+                "id": "00000000-0000-4000-8000-000000002977",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2261,10 +2621,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002970",
+                "id": "00000000-0000-4000-8000-000000002978",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2276,10 +2636,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002971",
+                "id": "00000000-0000-4000-8000-000000002979",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2291,10 +2651,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002972",
+                "id": "00000000-0000-4000-8000-000000002980",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2306,10 +2666,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002973",
+                "id": "00000000-0000-4000-8000-000000002981",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2321,10 +2681,130 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003103",
+                "id": "00000000-0000-4000-8000-000000002982",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002983",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002984",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002985",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002986",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002987",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002988",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002989",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000003119",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2336,10 +2816,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003104",
+                "id": "00000000-0000-4000-8000-000000003120",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2351,10 +2831,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003105",
+                "id": "00000000-0000-4000-8000-000000003121",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2366,10 +2846,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003106",
+                "id": "00000000-0000-4000-8000-000000003122",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2381,10 +2861,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003107",
+                "id": "00000000-0000-4000-8000-000000003123",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2396,10 +2876,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003108",
+                "id": "00000000-0000-4000-8000-000000003124",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2411,10 +2891,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003227",
+                "id": "00000000-0000-4000-8000-000000003243",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2426,10 +2906,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003228",
+                "id": "00000000-0000-4000-8000-000000003244",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2441,10 +2921,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003229",
+                "id": "00000000-0000-4000-8000-000000003245",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2456,10 +2936,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003230",
+                "id": "00000000-0000-4000-8000-000000003246",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2471,10 +2951,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003231",
+                "id": "00000000-0000-4000-8000-000000003247",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2486,10 +2966,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003232",
+                "id": "00000000-0000-4000-8000-000000003248",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -2543,7 +3023,7 @@
     "c": {
         "daily_metrics": {
             "rows": 1719,
-            "sha256": "0ac28b7904103bd92a8258a9014f415d621c56c77bc8cf0487e7eb2e918e38f1",
+            "sha256": "f13b4ca152abf6e5a1d67b252708298a3339100f6e19634a1a720ac61764174e",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -2584,7 +3064,7 @@
         },
         "entity_daily_metrics": {
             "rows": 760,
-            "sha256": "11f1a3cc8c864c4982be152defc40ec663a9830678ab6d63859365e7ded4cb23",
+            "sha256": "dbfeaf7aaeabf70107314b192398bb801d3448ec75f4b8e1e8e5375214927b2f",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -2635,7 +3115,7 @@
         },
         "creative_daily_metrics": {
             "rows": 248,
-            "sha256": "1670b4804fbe8708babd9f2f75ef035cbabab5a962f15b618dcd09732b4e004b",
+            "sha256": "68f1eafccc231adb51c0b4faee40d7e90756f1708946062955982150fa4a714b",
             "by_date": [
                 {
                     "day": "2026-10-17",
@@ -2752,7 +3232,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2769,7 +3249,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002875",
+                "id": "00000000-0000-4000-8000-000000002883",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -2783,7 +3263,7 @@
                 "started_at": "2026-10-21 09:00:00+00",
                 "finished_at": "2026-10-21 09:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"region\": {\"state\": \"stored\", \"stored\": 0, \"fetched\": 0, \"skipped_unknown_ad_set\": 0}}, \"queued_at\": \"2026-10-21T09:00:00+00:00\", \"entity_ads\": 8, \"entity_ad_sets\": 8, \"entity_failure\": null, \"provider_requests\": 14, \"entity_ads_failure\": null, \"entity_ads_fetched\": 8, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 3, \"entity_parents_asked\": 2, \"creative_ids_received\": 3, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 12, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 8, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:00:00+00",
                 "updated_at": "2026-10-21 09:00:00+00",
                 "is_demo": false,
@@ -2800,7 +3280,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002975",
+                "id": "00000000-0000-4000-8000-000000002991",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -2831,7 +3311,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002977",
+                "id": "00000000-0000-4000-8000-000000002993",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -2862,7 +3342,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002979",
+                "id": "00000000-0000-4000-8000-000000002995",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -2893,7 +3373,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002982",
+                "id": "00000000-0000-4000-8000-000000002998",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -2924,7 +3404,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002984",
+                "id": "00000000-0000-4000-8000-000000003000",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -2955,7 +3435,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000002986",
+                "id": "00000000-0000-4000-8000-000000003002",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -2969,7 +3449,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -2986,7 +3466,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003110",
+                "id": "00000000-0000-4000-8000-000000003126",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -3000,7 +3480,7 @@
                 "started_at": "2026-10-21 09:30:00+00",
                 "finished_at": "2026-10-21 09:30:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T09:30:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 09:30:00+00",
                 "updated_at": "2026-10-21 09:30:00+00",
                 "is_demo": false,
@@ -3017,7 +3497,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003234",
+                "id": "00000000-0000-4000-8000-000000003250",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -3048,7 +3528,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003236",
+                "id": "00000000-0000-4000-8000-000000003252",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -3079,7 +3559,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003238",
+                "id": "00000000-0000-4000-8000-000000003254",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -3110,7 +3590,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003240",
+                "id": "00000000-0000-4000-8000-000000003256",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -3141,7 +3621,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003242",
+                "id": "00000000-0000-4000-8000-000000003258",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -3172,7 +3652,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003244",
+                "id": "00000000-0000-4000-8000-000000003260",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -3186,7 +3666,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": null,
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3203,7 +3683,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003368",
+                "id": "00000000-0000-4000-8000-000000003384",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000000568",
@@ -3217,7 +3697,7 @@
                 "started_at": "2026-10-21 10:00:00+00",
                 "finished_at": "2026-10-21 10:00:00+00",
                 "error": "4 of 12 row(s) named a campaign that has not been discovered yet or is not yet filed under this project, so they were not stored.",
-                "meta": "{\"source\": \"scheduler\", \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
+                "meta": "{\"source\": \"scheduler\", \"audience\": {\"state\": \"throttled\", \"last_synced_at\": null}, \"queued_at\": \"2026-10-21T10:00:00+00:00\", \"entity_ads\": 16, \"entity_ad_sets\": 16, \"entity_failure\": null, \"provider_requests\": 6, \"entity_ads_failure\": null, \"entity_ads_fetched\": 16, \"entity_ads_skipped\": 0, \"entity_ads_unkeyed\": 0, \"creative_ids_mapped\": 4, \"entity_parents_asked\": 2, \"creative_ids_received\": 4, \"creative_ids_unmapped\": 0, \"creative_rows_skipped\": 0, \"creative_ids_ambiguous\": 0, \"creative_rows_received\": 16, \"entity_ad_sets_failure\": null, \"entity_ad_sets_fetched\": 16, \"entity_ad_sets_skipped\": 0, \"entity_ad_sets_unkeyed\": 0, \"creative_unmapped_sample\": []}",
                 "created_at": "2026-10-21 10:00:00+00",
                 "updated_at": "2026-10-21 10:00:00+00",
                 "is_demo": false,
@@ -3234,7 +3714,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003492",
+                "id": "00000000-0000-4000-8000-000000003508",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -3265,7 +3745,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003494",
+                "id": "00000000-0000-4000-8000-000000003510",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000003",
                 "connection_id": "00000000-0000-4000-8000-000000001290",
@@ -3296,7 +3776,7 @@
                 "redriven_by": null
             },
             {
-                "id": "00000000-0000-4000-8000-000000003496",
+                "id": "00000000-0000-4000-8000-000000003512",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "project_id": "00000000-0000-4000-8000-000000000004",
                 "connection_id": "00000000-0000-4000-8000-000000000006",
@@ -3917,10 +4397,130 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002968",
+                "id": "00000000-0000-4000-8000-000000002874",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002875",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002876",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002877",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002878",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002879",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002880",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002881",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000569",
+                "sync_run_id": "00000000-0000-4000-8000-000000002775",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002976",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -3932,10 +4532,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002969",
+                "id": "00000000-0000-4000-8000-000000002977",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -3947,10 +4547,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002970",
+                "id": "00000000-0000-4000-8000-000000002978",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -3962,10 +4562,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002971",
+                "id": "00000000-0000-4000-8000-000000002979",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -3977,10 +4577,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002972",
+                "id": "00000000-0000-4000-8000-000000002980",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -3992,10 +4592,10 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000002973",
+                "id": "00000000-0000-4000-8000-000000002981",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000002875",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4007,10 +4607,130 @@
                 "updated_at": "2026-10-21 09:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003103",
+                "id": "00000000-0000-4000-8000-000000002982",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002983",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002984",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002985",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002986",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002987",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002988",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000002989",
+                "tenant_id": "00000000-0000-4000-8000-000000000001",
+                "external_account_id": "00000000-0000-4000-8000-000000000929",
+                "sync_run_id": "00000000-0000-4000-8000-000000002883",
+                "provider": "snapchat",
+                "resource": "insights",
+                "window_start": "2026-10-18",
+                "window_end": "2026-10-21",
+                "payload": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "normalised_rows": 0,
+                "fetched_at": "2026-10-21 09:00:00+00",
+                "created_at": "2026-10-21 09:00:00+00",
+                "updated_at": "2026-10-21 09:00:00+00"
+            },
+            {
+                "id": "00000000-0000-4000-8000-000000003119",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4022,10 +4742,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003104",
+                "id": "00000000-0000-4000-8000-000000003120",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4037,10 +4757,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003105",
+                "id": "00000000-0000-4000-8000-000000003121",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4052,10 +4772,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003106",
+                "id": "00000000-0000-4000-8000-000000003122",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4067,10 +4787,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003107",
+                "id": "00000000-0000-4000-8000-000000003123",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4082,10 +4802,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003108",
+                "id": "00000000-0000-4000-8000-000000003124",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000002986",
+                "sync_run_id": "00000000-0000-4000-8000-000000003002",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4097,10 +4817,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003227",
+                "id": "00000000-0000-4000-8000-000000003243",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4112,10 +4832,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003228",
+                "id": "00000000-0000-4000-8000-000000003244",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4127,10 +4847,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003229",
+                "id": "00000000-0000-4000-8000-000000003245",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4142,10 +4862,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003230",
+                "id": "00000000-0000-4000-8000-000000003246",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4157,10 +4877,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003231",
+                "id": "00000000-0000-4000-8000-000000003247",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4172,10 +4892,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003232",
+                "id": "00000000-0000-4000-8000-000000003248",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003110",
+                "sync_run_id": "00000000-0000-4000-8000-000000003126",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4187,10 +4907,10 @@
                 "updated_at": "2026-10-21 09:30:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003361",
+                "id": "00000000-0000-4000-8000-000000003377",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4202,10 +4922,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003362",
+                "id": "00000000-0000-4000-8000-000000003378",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4217,10 +4937,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003363",
+                "id": "00000000-0000-4000-8000-000000003379",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4232,10 +4952,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003364",
+                "id": "00000000-0000-4000-8000-000000003380",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4247,10 +4967,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003365",
+                "id": "00000000-0000-4000-8000-000000003381",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4262,10 +4982,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003366",
+                "id": "00000000-0000-4000-8000-000000003382",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000569",
-                "sync_run_id": "00000000-0000-4000-8000-000000003244",
+                "sync_run_id": "00000000-0000-4000-8000-000000003260",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4277,10 +4997,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003485",
+                "id": "00000000-0000-4000-8000-000000003501",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4292,10 +5012,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003486",
+                "id": "00000000-0000-4000-8000-000000003502",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4307,10 +5027,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003487",
+                "id": "00000000-0000-4000-8000-000000003503",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4322,10 +5042,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003488",
+                "id": "00000000-0000-4000-8000-000000003504",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4337,10 +5057,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003489",
+                "id": "00000000-0000-4000-8000-000000003505",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
@@ -4352,10 +5072,10 @@
                 "updated_at": "2026-10-21 10:00:00+00"
             },
             {
-                "id": "00000000-0000-4000-8000-000000003490",
+                "id": "00000000-0000-4000-8000-000000003506",
                 "tenant_id": "00000000-0000-4000-8000-000000000001",
                 "external_account_id": "00000000-0000-4000-8000-000000000929",
-                "sync_run_id": "00000000-0000-4000-8000-000000003368",
+                "sync_run_id": "00000000-0000-4000-8000-000000003384",
                 "provider": "snapchat",
                 "resource": "insights",
                 "window_start": "2026-10-18",
