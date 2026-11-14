@@ -155,7 +155,8 @@ final class DiagnosticRefundArmTest extends TestCase
         $data = $this->summary('&provider=meta&objective=sales');
 
         $this->assertSame([], $data['refunds']['filter_scope']['applied'] ?? null);
-        $this->assertEqualsCanonicalizing(['provider', 'objective'], $data['refunds']['filter_scope']['unapplied'] ?? []);
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chooses KPIs and narrows nothing, so it is neither applied nor declined.
+        $this->assertEqualsCanonicalizing(['provider'], $data['refunds']['filter_scope']['unapplied'] ?? []);
         /* And the figure is still the project's — declared, not withheld. */
         $this->assertEqualsWithDelta(200.0, (float) $data['current']['refunds'], 0.01);
     }

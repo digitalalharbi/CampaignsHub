@@ -76,4 +76,6 @@
     @else
         <div style="font-size:12px; color:#5b6b68; line-height:1.7; margin-top:14px;">{{ $ar ? 'وصلتك هذه الرسالة لمتابعة ميزانية المشاريع المذكورة وتجديدها مع العميل.' : 'You receive this to follow the budgets of the projects above and renew them with the client.' }}</div>
     @endif
+    {{-- BUDGET-DISCLAIMER-001 — the one financial disclaimer, wherever money figures appear (external recipients included). --}}
+    <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($ar ? 'ar' : 'en') }}</div>
 </div>
