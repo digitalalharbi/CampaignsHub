@@ -18,9 +18,10 @@
                     <div style="font-size:13px; font-weight:800; color:#0b1a16; line-height:1.4;">@include('mail.digest._chip', ['state' => $state, 'size' => 16]) {{ ($showProject ?? true) ? $d['project'] : '' }}@if (($showProject ?? true) && $d['platform'] !== '') <span style="color:#8b9a97; font-weight:400;">·</span> @endif{{ $d['platform'] }}@if (! empty($d['objective'])) <span style="display:inline-block; padding:0 7px; border-radius:999px; font-size:10px; font-weight:800; background-color:#e8f5f1; color:#0a6b57;">{{ $d['objective'] }}</span>@endif</div>
                 @endif
                 <div style="font-size:13px; font-weight:700; color:{{ \App\Domains\Notifications\Support\DigestStatus::INK[$state] }}; line-height:1.5;">{{ $d['headline'] }}</div>
-                @if ($d['viz'])
-                    @include('mail.digest._viz', ['viz' => $d['viz']])
-                @elseif ($d['figure'] !== '')
+                @if (! empty($d['cause']))<div data-block="cause" style="font-size:12px; color:#3d4742; line-height:1.5;">{{ $d['cause'] }}</div>@endif
+                {{-- ALERT-VISUAL-EVERY-CARD-001 — always a graphic: the finding's own drawing, or the ring when it has none. --}}
+                @include('mail.partials.visual', ['viz' => $d['viz'], 'state' => $state, 'timeline' => $d['timeline'] ?? null, 'size' => 26])
+                @if (! $d['viz'] && $d['figure'] !== '')
                     <div style="font-size:12px; color:#3d4742; line-height:1.5;" dir="auto">{{ $d['figure'] }}</div>
                 @endif
             </td>

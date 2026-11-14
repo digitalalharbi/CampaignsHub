@@ -91,14 +91,15 @@ final class PlainFindings
                 return [
                     'tone' => 'warn',
                     'headline' => $ar ? "{$label} زادت {$pct}" : ucfirst($label)." rose {$pct}",
-                    'text' => $ar ? "صارت {$value}. غالبًا منافسة أعلى أو محتوى تعب." : "Now {$value}. Often higher competition or tired content.",
+                    // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured fact, never a guessed cause.
+                    'text' => $ar ? "صارت {$value}." : "Now {$value}.",
                     'action' => $ar ? 'قارن المنصات ← ثم المحتوى الأقل أداءً.' : 'Compare the platforms and review the weakest content.',
                 ];
             case 'falling_rate':
                 return [
                     'tone' => 'warn',
                     'headline' => $ar ? "{$label} نزل {$pct}" : ucfirst($label)." fell {$pct}",
-                    'text' => $ar ? "صار {$value}. ممكن المحتوى بدأ يخف أثره." : "Now {$value}. The content may be wearing out.",
+                    'text' => $ar ? "صار {$value}." : "Now {$value}.",
                     'action' => $ar ? 'راجع المحتوى ← جدّد الأقل أداءً.' : 'Review content performance and refresh the weakest.',
                 ];
             case 'frequency_saturation':

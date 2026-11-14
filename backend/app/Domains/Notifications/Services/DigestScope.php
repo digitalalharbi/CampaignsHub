@@ -74,6 +74,24 @@ final class DigestScope
     }
 
     /**
+     * The membership's ceiling only — every project this person may open in the tenant, BEFORE their own digest preference
+     * narrows it. For deciding what they may hand to someone else (SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001), not what they receive.
+     *
+     * @return list<string>
+     */
+    public function visibleProjectIds(User $user, string $tenantId): array
+    {
+        $membership = Membership::query()
+            ->with('scopes')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $user->getKey())
+            ->where('status', 'active')
+            ->first();
+
+        return $membership === null ? [] : $this->ceilingFor($user, $membership, $tenantId);
+    }
+
+    /**
      * Whether this person's own preference NARROWED the digest, and by how much.
      *
      * PROJECT-DIGEST-SCOPE-001. A digest covering three of somebody's twelve projects reads exactly

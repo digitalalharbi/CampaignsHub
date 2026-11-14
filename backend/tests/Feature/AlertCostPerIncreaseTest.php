@@ -115,7 +115,7 @@ final class AlertCostPerIncreaseTest extends TestCase
 
         // EMAIL-ALERT-DETERIORATION-001 — the metric, the threshold and the window are stated, not implied.
         $event = AlertEvent::query()->sole();
-        $this->assertStringContainsString('the last 7 days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
+        $this->assertStringContainsString('the last 7 complete days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
         $this->assertSame(7, $event->context['window_days']);
     }
 

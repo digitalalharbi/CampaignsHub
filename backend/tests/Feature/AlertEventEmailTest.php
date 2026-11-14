@@ -114,7 +114,8 @@ final class AlertEventEmailTest extends TestCase
                 && count($m->items) === 2
                 && $m->lang === 'ar'
                 && $m->items[0]['severity'] === 'warning'
-                && str_contains((string) $m->items[0]['title'], 'متوقفة')
+                // LINK-HEALTH-YESTERDAY-001 — the one link text: yesterday's data did not arrive.
+                && str_contains((string) $m->items[0]['title'], 'بيانات أمس ما وصلت')
                 && str_starts_with((string) $m->items[0]['context'], 'Ramadan Push');
         });
         $this->assertSame(2, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'sent')->count());
@@ -139,7 +140,8 @@ final class AlertEventEmailTest extends TestCase
         $this->assertDatabaseHas('digest_sends', ['user_id' => $this->user->id, 'kind' => AlertEventMailer::KIND, 'status' => 'unsubscribed', 'reason' => 'unsubscribed']);
     }
 
-    public function test_a_recovery_is_mailed_as_an_info_item_and_the_person_s_choices_are_honoured(): void
+    /** LINK-HEALTH-YESTERDAY-001 (§7أ) — a link that delivered yesterday again closes WITHOUT a mail; the person's choices still hold. */
+    public function test_a_link_recovery_is_silent_and_the_person_s_choices_are_honoured(): void
     {
         Mail::fake();
         $this->withConfiguredEmail();
@@ -153,10 +155,7 @@ final class AlertEventEmailTest extends TestCase
         $this->syncRun($connId, 'success', now()->subMinutes(5));
         $evaluator->evaluateAll();
 
-        Mail::assertSent(AlertBundleMail::class, 2);
-        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
-            return count($m->items) === 1 && $m->items[0]['severity'] === 'info' && $m->items[0]['title'] === 'رجعت الأمور طبيعية';
-        });
+        Mail::assertSent(AlertBundleMail::class, 1);
 
         // Switched off for email: a new failure raises an event and an in-app notification, but no mail.
         DB::table('notification_preferences')->where('user_id', $this->user->id)
@@ -165,7 +164,7 @@ final class AlertEventEmailTest extends TestCase
         // A fresh evaluator, as a real sweep is: the choices are memoised per instance.
         $counts = app(AlertEvaluator::class)->evaluateAll() > 0 ? 'raised' : 'none';
         $this->assertSame('raised', $counts);
-        Mail::assertSent(AlertBundleMail::class, 2);
+        Mail::assertSent(AlertBundleMail::class, 1);
     }
 
     /**

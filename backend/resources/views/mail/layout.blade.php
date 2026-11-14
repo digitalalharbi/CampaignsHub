@@ -97,9 +97,10 @@
                     <tr>
                         <td class="ch-hdr" align="{{ $align }}" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; background-image:linear-gradient(#0b1a16,#0b1a16); padding:0; border-bottom:3px solid #0b7a62; text-align:{{ $align }}; font-family:{!! $font !!}; font-size:20px; line-height:1.4; font-weight:700; color:#f7f5f0;">
                             {{-- The banner IS the band: as wide as the card on every screen, with the mark on the reader's side (Owner, 2026-11-05). Blocked images show the alt text on the same ground. --}}
-                            <a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; color:#f7f5f0;">
+                            {{-- SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — a standalone message (to someone outside the platform) carries no link into it. --}}
+                            @if (! ($standalone ?? false))<a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; color:#f7f5f0;">@endif
                                 <img src="{{ $logoUrl }}" width="{{ \App\Domains\Notifications\Support\MailShell::LOGO_WIDTH }}" height="{{ \App\Domains\Notifications\Support\MailShell::LOGO_HEIGHT }}" alt="{{ $wordmark }}" style="display:block; width:100%; max-width:600px; height:auto; border:0; outline:none; text-decoration:none; color:#f7f5f0;" />
-                            </a>
+                            @if (! ($standalone ?? false))</a>@endif
                             @if (!empty($scopeNote ?? ''))
                                 <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; font-weight:400; color:#b7c9c2; padding:0 24px 12px; text-align:{{ $align }};">{{ $scopeNote }}</div>
                             @endif
@@ -146,6 +147,7 @@
                     <tr>
                         <td class="ch-pad ch-ftr" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:22px 24px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">
                             <table role="presentation" data-mail-footer="1" dir="{{ $dir }}" align="{{ $align }}" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; direction:{{ $dir }};">
+                                @if (! ($standalone ?? false))
                                 <tr>
                                     <td data-footer-line="policies" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:13px; line-height:1.8; padding:0 0 8px;">
                                         <a href="{{ $urls['privacy'] }}" style="{!! $ftrLink !!}">{{ $t['privacy'] }}</a>
@@ -157,12 +159,17 @@
                                         <a href="{{ $urls['support'] }}" style="{!! $ftrLink !!}">{{ $t['support'] }}</a>
                                     </td>
                                 </tr>
+                                @endif
                                 <tr>
                                     <td data-footer-line="manage" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:13px; line-height:1.8; padding:0 0 10px;">
+                                        @if ($standalone ?? false)
+                                            @if (! empty($unsubscribeUrl ?? null))<a href="{{ $unsubscribeUrl }}" data-unsubscribe="1" style="color:#0b7a62; font-weight:700; text-decoration:underline; white-space:nowrap;">{{ $t['unsubscribe'] }}</a>@endif
+                                        @else
                                         <a href="{{ $urls['preferences'] }}" style="color:#0b7a62; font-weight:700; text-decoration:underline; white-space:nowrap;">{{ $t['manage_preferences'] }}</a>
                                         @if (($showPreferences ?? true) === true && ! empty($unsubscribeUrl ?? null))
                                             &nbsp;·&nbsp;
                                             <a href="{{ $unsubscribeUrl }}" style="{!! $ftrLink !!}">{{ $t['unsubscribe'] }}</a>
+                                        @endif
                                         @endif
                                     </td>
                                 </tr>
@@ -175,7 +182,7 @@
                                 @endif
                                 <tr>
                                     <td data-footer-line="copyright" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0 0 4px;">
-                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub · <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a></span>
+                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub @if (! ($standalone ?? false))· <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a>@endif</span>
                                     </td>
                                 </tr>
                                 <tr>
