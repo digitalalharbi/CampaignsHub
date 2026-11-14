@@ -35,6 +35,10 @@ Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 // PAY-RECONCILE-001 — a payment the gateway took is settled even when its webhook was dropped after the gateway's retries.
 Schedule::command('subscriptions:reconcile-payments')->everyFifteenMinutes()->withoutOverlapping();
 
+// PLATFORM-PAYMENT-ALERTS-001 — tells the platform owner about customers stuck at payment or sign-up. Reads only; a
+// unique key per attempt makes a re-run inert. Offset from the reconcile sweep so a payment it settles is not reported.
+Schedule::command('platform:payment-alerts')->cron('7,22,37,52 * * * *')->withoutOverlapping();
+
 // FORMS-PDPL-001 — the evidence around a form submission expires; the consent record does not.
 Schedule::command('forms:purge-evidence')->dailyAt('02:30')->withoutOverlapping();
 
@@ -81,6 +85,10 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes()->withoutOverlapping(
  * that out.
  */
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
+// FIN-LOOP-001 — count the spend the sync just stored against each project's approved budget (idempotent per account-day).
+Schedule::command('funding:refresh')->cron('20,50 * * * *')->withoutOverlapping();
+// FIN-LOOP-001 — fix last month's budget summary once; daily so a missed day is caught; a fixed month is never rewritten.
+Schedule::command('funding:close-month')->dailyAt('02:40')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 // PERF-SYNC-ISOLATION-001 — the half-hourly sweep above asks 3 days back; this daily pass re-asks the
 // fortnight in which providers restate (late attribution, corrected spend). Same command, same
@@ -156,6 +164,8 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
 // the scheduler's own clock is UTC. The sweep is hourly and asks each reader's own hour (08:00 Asia/Riyadh by default), so the pin
 // states the frame the 08:00 promise is made in rather than moving any send.
 Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh')->withoutOverlapping();
+// SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق»: hourly, acting from 08:00 in the reader's timezone; idempotent per period. At :10, after the digests.
+Schedule::command('notifications:send-spend-summaries')->hourlyAt(10)->timezone('Asia/Riyadh')->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 

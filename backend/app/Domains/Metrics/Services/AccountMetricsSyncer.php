@@ -361,7 +361,7 @@ final class AccountMetricsSyncer
             /*
              * Never asked, and that is not a failure — it is a fact about the provider.
              *
-             * Only Snapchat implements `ReportsCreativeInsights`. A TikTok creative showing «no
+             * Snapchat, TikTok, Meta, X and LinkedIn implement `ReportsCreativeInsights`. A creative showing «no
              * data» implies numbers that failed to arrive; «هذه المنصة لا توفر بيانات أداء لكل
              * محتوى» is the truth, and it is a different sentence.
              */

@@ -1775,3 +1775,52 @@ export function updateServiceRequest(
 ): Promise<{ request: ServiceRequestDetail }> {
   return patchData(`/admin/service-requests/${encodeURIComponent(id)}`, body)
 }
+
+/*
+ * PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, for the platform owner only.
+ *
+ * The server writes every word and draws every card (the same card the owner's email carries), from recorded facts
+ * only. The screen lays it out; it adds no figure of its own.
+ */
+export type PlatformAlertState = 'ok' | 'watch' | 'bad' | 'none'
+
+export type PlatformAlertViz =
+  | { type: 'steps'; steps: { label: string; state: PlatformAlertState }[] }
+  | { type: 'count'; n: number; blocks: number; more: boolean; label: string; state: PlatformAlertState }
+
+export interface PlatformAlertRow {
+  id: string
+  kind: 'checkout_abandoned' | 'payment_unverified' | 'payment_activation_mismatch' | 'settlement_missing' | 'customer_blocking_error'
+  severity: 'critical' | 'warning'
+  card: {
+    severity: string
+    title: string
+    context: string
+    line: string
+    more: string[]
+    steps: string
+    viz: PlatformAlertViz
+    links: { label: string; path: string }[]
+  }
+  occurrences: number
+  first_seen_at: string | null
+  last_seen_at: string | null
+  emailed_at: string | null
+  resolved_at: string | null
+  acknowledged_at: string | null
+  contact: { email: string | null; phone: string | null } | null
+}
+
+export interface PlatformAlertList {
+  alerts: PlatformAlertRow[]
+  counts: { open: number; critical: number; by_kind: Record<string, number> }
+  settlement_check: 'available' | 'BLOCKED_EXTERNAL_CREDENTIALS'
+}
+
+export function fetchPlatformAlerts(scope: 'open' | 'all' = 'open'): Promise<PlatformAlertList> {
+  return getData<PlatformAlertList>(`/admin/platform-alerts?status=${scope}`)
+}
+
+export function acknowledgePlatformAlert(id: string, acknowledged: boolean): Promise<{ alert: PlatformAlertRow }> {
+  return patchData(`/admin/platform-alerts/${encodeURIComponent(id)}`, { acknowledged })
+}

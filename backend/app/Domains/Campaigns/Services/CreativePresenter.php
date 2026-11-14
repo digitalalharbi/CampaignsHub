@@ -625,6 +625,21 @@ final class CreativePresenter
      */
     private function storedReasonNote(ExternalCreative $creative): ?array
     {
+        // X-TWEET-CONTENT-001 — the Ads API answered and did not return this tweet (deleted, or out of every promotable user's reach).
+        if (strtolower((string) $creative->provider) === 'x' && (((array) ($creative->raw ?? []))['media_reason'] ?? null) === 'x_tweet_not_returned') {
+            return [
+                'note_ar' => 'إعلان إكس: لم تُرجع إكس هذه التغريدة عند طلبها من حساب الإعلانات، فلا نص ولا صورة لها — غالبًا حُذفت التغريدة.',
+                'note_en' => 'An X ad: X did not return this post when the ads account asked for it, so it has no text or picture — usually the post was deleted.',
+            ];
+        }
+
+        if (strtolower((string) $creative->provider) === 'linkedin') {
+            $raw = (array) ($creative->raw ?? []);
+            $said = is_string($raw['provider_message'] ?? null) && trim($raw['provider_message']) !== '' ? trim($raw['provider_message']) : null;
+
+            return $this->linkedinReasonNote((string) ($raw['media_reason'] ?? ''), $said);
+        }
+
         if (strtolower((string) $creative->provider) !== 'tiktok') {
             return null;
         }
@@ -645,6 +660,49 @@ final class CreativePresenter
             'spark_identity_unknown' => [
                 'note_ar' => 'إعلان Spark: لم ترسل TikTok هوية الحساب الناشر للمنشور، فلا يمكن طلب غلافه.',
                 'note_en' => 'A Spark ad: TikTok did not name the identity that owns the post, so its cover cannot be requested.',
+            ],
+            default => null,
+        };
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — why a LinkedIn sponsored post draws nothing, in the connector's stored word.
+     *
+     * LINKEDIN-SCOPES-001 — the remedy is the ADVERTISER's reconnect: a token holds only the scopes its consent asked
+     * for, so approving a product on the LinkedIn app changes nothing until LinkedIn is linked again (proven on
+     * Production 2026-11-13). The old note sent the Owner to the app, where everything was already approved. When
+     * LinkedIn refused with the scope granted, its own sentence is shown — it names the API that refused.
+     *
+     * @return array{note_ar: string, note_en: string}|null
+     */
+    private function linkedinReasonNote(string $reason, ?string $said = null): ?array
+    {
+        $reconnect = [
+            'note_ar' => 'أعد ربط لينكدإن لمنح صلاحية قراءة المنشورات',
+            'note_en' => 'Reconnect LinkedIn to allow reading posts (r_organization_social).',
+        ];
+
+        return match ($reason) {
+            'linkedin_reconnect_for_posts' => $reconnect,
+            // A row written before the grant was read first carries no sentence; its cause was the missing grant.
+            'linkedin_post_scope_missing' => $said === null ? $reconnect : [
+                'note_ar' => 'لينكدإن رفضت قراءة المنشور: '.$said,
+                'note_en' => 'LinkedIn refused to read the post: '.$said,
+            ],
+            'linkedin_media_scope_missing' => $said === null ? [
+                'note_ar' => 'أعد ربط لينكدإن لمنح صلاحية قراءة الصور والفيديو',
+                'note_en' => 'Reconnect LinkedIn to allow reading images and videos (rw_ads).',
+            ] : [
+                'note_ar' => 'لينكدإن رفضت قراءة ملف الصورة أو الفيديو: '.$said,
+                'note_en' => 'LinkedIn refused to read the image or video file: '.$said,
+            ],
+            'linkedin_post_unreadable', 'linkedin_media_unreadable' => [
+                'note_ar' => 'منشور ممول في لينكدإن: لم ترجع لينكدإن المنشور أو ملفه في آخر تحديث.',
+                'note_en' => 'A LinkedIn sponsored post: LinkedIn did not return the post or its file on the last refresh.',
+            ],
+            'linkedin_no_post_reference' => [
+                'note_ar' => 'إعلان لينكدإن لا يشير إلى منشور، فلا صورة له.',
+                'note_en' => 'This LinkedIn ad names no post, so it has no picture.',
             ],
             default => null,
         };

@@ -105,6 +105,9 @@ export function campaignPaceVerdict(row: BudgetRow): CampaignPaceReason | null {
   return null
 }
 
+/** The alert types that speak about a link — the server's `LinkHealth::TYPES`. */
+const LINK_TYPES = new Set(['sync_failure', 'sync_outage', 'measurement_outage', 'token_expiry'])
+
 export function buildActionCentre(input: {
   alerts?: AlertEvent[]
   limits?: SpendLimitReading[]
@@ -119,9 +122,26 @@ export function buildActionCentre(input: {
 }): ActionItem[] {
   const items: ActionItem[] = []
 
+  /*
+   * LINK-HEALTH-YESTERDAY-001 — a link alert counts only when the server's one rule said yesterday's data did not arrive,
+   * and once per connection: «ما يحتاج قرارًا الآن» and «تتبع وبيانات» count what the cards show.
+   */
+  const linkSeen = new Set<string>()
+  /* A project-level outage restates its connections' cards: it is an item only where no connection-level link item exists. */
+  const connectionLinked = (input.alerts ?? []).some(
+    (a) => a.status === 'open' && LINK_TYPES.has(a.type) && a.type !== 'sync_outage' && (a.context ?? {}).link_state === 'not_synced',
+  )
+
   /* Only what is still OPEN. A resolved alert is history, and history is not a thing to do. */
   for (const alert of input.alerts ?? []) {
     if (alert.status !== 'open') continue
+    if (alert.type === 'sync_outage' && connectionLinked) continue
+    if (LINK_TYPES.has(alert.type)) {
+      if ((alert.context ?? {}).link_state !== 'not_synced') continue
+      const key = `${alert.entity_type ?? ''}:${alert.entity_id ?? alert.id}`
+      if (linkSeen.has(key)) continue
+      linkSeen.add(key)
+    }
 
     items.push({
       id: `alert:${alert.id}`,

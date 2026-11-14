@@ -23,7 +23,7 @@ use Tests\TestCase;
  *
  * X: the Ads API's own `accounts/:id/tweets` read (same host, same signing). LinkedIn: only a Text Ad states
  * its words in the creatives response; a sponsored post's picture needs `r_organization_social`, which this
- * connector does not hold, so those stay null. IMPLEMENTED_NOT_VERIFIED — no live account in CI.
+ * connector does not hold, so they keep their identity and no picture. IMPLEMENTED_NOT_VERIFIED — no live account in CI.
  */
 final class XAndLinkedInCreativeFaceTest extends TestCase
 {
@@ -115,7 +115,9 @@ final class XAndLinkedInCreativeFaceTest extends TestCase
         $this->assertSame('Hire fast', $ads[0]['creative']['headline']);
         $this->assertSame('Post a job today', $ads[0]['creative']['body']);
         $this->assertSame('https://jobs.example', $ads[0]['destination_url']);
-        $this->assertArrayNotHasKey('creative', $ads[1], 'a sponsored post has no readable picture under r_ads');
+        // X-LINKEDIN-CONTENT-001 — a sponsored post IS content: it gets its creative row, with no picture invented.
+        $this->assertSame('2', $ads[1]['creative']['external_id']);
+        $this->assertArrayNotHasKey('thumbnail_url', $ads[1]['creative'], 'a sponsored post has no readable picture under r_ads');
     }
 
     private ?ProviderConnection $connection = null;
