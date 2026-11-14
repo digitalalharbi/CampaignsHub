@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { confirmDialog } from '@/stores/dialogs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, Copy, CreditCard, KeyRound, Loader2, Settings2, Star, Webhook } from 'lucide-react'
 import {
@@ -254,7 +255,7 @@ function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting
               data-testid={`payment-enable-${provider.provider}`}
               size="sm"
               disabled={provider.status !== 'ready' || activation.isPending}
-              onClick={() => { if (provider.mode !== 'live' || window.confirm(copy.confirmLive)) activation.mutate(true) }}
+              onClick={() => { void (provider.mode !== 'live' ? Promise.resolve(true) : confirmDialog({ title: copy.enable, body: copy.confirmLive, confirmLabel: copy.enable, danger: true })).then((ok) => { if (ok) activation.mutate(true) }) }}
             >
               {copy.enable}
             </Button>
@@ -264,7 +265,7 @@ function ProviderCard({ provider, ar, copy }: { provider: PaymentProviderSetting
               data-testid={`payment-make-primary-${provider.provider}`}
               size="sm"
               disabled={primary.isPending}
-              onClick={() => { if (window.confirm(copy.confirmPrimary)) primary.mutate() }}
+              onClick={() => { void confirmDialog({ title: copy.makePrimary, body: copy.confirmPrimary, confirmLabel: copy.makePrimary }).then((ok) => { if (ok) primary.mutate() }) }}
             >
               <Star size={13} /> {copy.makePrimary}
             </Button>

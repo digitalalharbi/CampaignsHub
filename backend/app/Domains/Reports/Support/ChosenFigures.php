@@ -49,7 +49,7 @@ final class ChosenFigures
     private const SPEND = [
         'spend', 'spend_original', 'spend_withheld_rows', 'spend_withheld', 'spend_share', 'spend_coverage', 'spend_not_reported', 'funnel_spend', 'cost_per',
         'spent', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under', 'excluded_spend', 'includes_non_sales_spend',
-        'spend_by_kind', 'spend_mix',
+        'spend_by_kind', 'spend_mix', 'total_spend',
     ];
 
     /** The amount earned and everything that states it. */

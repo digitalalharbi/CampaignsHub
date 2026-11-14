@@ -8,6 +8,7 @@ use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Support\CampaignDelivery;
 use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchReadiness;
@@ -31,6 +32,7 @@ use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
@@ -195,6 +197,8 @@ final class AlertEvaluator
     public function evaluateAll(?Carbon $now = null): int
     {
         $now ??= Carbon::now();
+        // Read afresh every sweep: the ad sets a campaign carries change between sweeps.
+        $this->multiGoal = [];
         $raised = 0;
         MetricsAggregator::sweep('alerts:'.spl_object_id($this).':'.$now->format('U.u'));
 
@@ -707,6 +711,8 @@ final class AlertEvaluator
     {
         $this->outbox[] = [
             'event_id' => (string) $event->id,
+            // ALERT-RULES-MANAGE-001 — the mailer reads the rule's channels and recipients from it.
+            'rule_id' => (string) $rule->id,
             'notification_type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
             // EMAIL-DIGESTS-OPERATIONAL-001 — what the finding is ABOUT, so the mail can say it plainly and link to the exact page.
             'rule_type' => (string) ($b['type'] ?? $rule->type),
@@ -1359,17 +1365,24 @@ final class AlertEvaluator
                 }
 
                 if ((float) $consumed >= $ratio) {
+                    /*
+                     * Master task 2 — a budget the platform's spend has REACHED is a fact, not a risk: «خلصت ميزانية
+                     * الحملة», with renewal as the next step. Said only when the measured spend reached the budget
+                     * (OWNER_NOTIFICATIONS_RULES §7); below it the alert stays «قربت تخلص».
+                     */
+                    $exhausted = (float) $consumed >= 1.0;
                     $out[] = [
                         'entity_type' => UnifiedCampaign::class,
                         'entity_id' => (string) $c->id,
                         'project_id' => (string) $c->project_id,
-                        'title' => 'Budget at risk',
+                        'title' => $exhausted ? 'Campaign budget ran out' : 'Budget at risk',
                         'message' => $c->name.' has spent '.round((float) $consumed * 100).'% of its budget.',
                         'context' => [
                             'basis_class' => 'measured',
                             'spend' => $row['spent'],
                             'budget' => $row['budget'],
                             'ratio' => round((float) $consumed, 4),
+                            'budget_exhausted' => $exhausted,
                         ],
                     ];
                 }
@@ -1714,11 +1727,15 @@ final class AlertEvaluator
             return [];
         }
         $metrics = $this->campaignMetrics($campaigns);
-        $current = $metrics->figuresByCampaign($curFrom, $curTo);
-        $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        $current = $this->withSalesPath($metrics->figuresByCampaign($curFrom, $curTo), $campaigns, $curFrom, $curTo);
+        $previous = $this->withSalesPath($metrics->figuresByCampaign($prevFrom, $prevTo), $campaigns, $prevFrom, $prevTo);
         $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
         $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $window, &$out) {
+            // OBJECTIVE-PATHS-001 — a sales-path ROAS is never compared with a whole-campaign one.
+            if (($current[(string) $c->getKey()]['sales_path'] ?? false) !== ($previous[(string) $c->getKey()]['sales_path'] ?? false)) {
+                return;
+            }
             $cur = $current[(string) $c->getKey()]['roas'];
             $prev = $previous[(string) $c->getKey()]['roas'];
             // ALERT-CRITERIA-001 — a comparable previous window: enough orders to compare against.
@@ -1853,6 +1870,73 @@ final class AlertEvaluator
         }, $points);
 
         return $campaign.': '.implode('; ', $parts).'.';
+    }
+
+    /**
+     * OBJECTIVE-PATHS-001 — ROAS and CPA from the SALES PATH of a campaign that buys several things.
+     *
+     * A sales campaign whose squads also buy branch visits has its campaign ROAS diluted by that
+     * spend and its CPA inflated by it. For those campaigns only, the store path's own spend, revenue
+     * and orders replace the campaign figures these two alerts read; every other campaign is unchanged.
+     *
+     * @param  array<string, array<string, mixed>>  $figures
+     * @param  Collection<int, UnifiedCampaign>  $campaigns
+     * @return array<string, array<string, mixed>>
+     */
+    private function withSalesPath(array $figures, Collection $campaigns, Carbon $from, Carbon $to): array
+    {
+        /*
+         * Only a campaign whose ad sets carry more than one optimisation goal can have more than one
+         * path, so only those go through the path read — one cheap statement per sweep instead of the
+         * path read on every rule and window (AlertSweepBatchedReadsTest holds the sweep's statements).
+         */
+        $candidates = $campaigns->filter(fn (UnifiedCampaign $c): bool => isset($this->multiGoalCampaigns()[(string) $c->id]));
+        if ($candidates->isEmpty()) {
+            return $figures;
+        }
+
+        $paths = (new ObjectivePerformance(
+            projectIds: $candidates->pluck('project_id')->map(static fn ($p): string => (string) $p)->unique()->values()->all(),
+            campaignIds: $candidates->map(static fn (UnifiedCampaign $c): string => (string) $c->id)->values()->all(),
+        ))->salesPathByCampaign($from, $to);
+
+        foreach ($paths as $id => $path) {
+            if (! isset($figures[$id])) {
+                continue;
+            }
+            $figures[$id]['roas'] = $path['roas'];
+            $figures[$id]['cpa'] = $path['cpa'];
+            $figures[$id]['conversions'] = $path['conversions'];
+            $figures[$id]['sales_path'] = true;
+        }
+
+        return $figures;
+    }
+
+    /** @var array<string, array<string, true>> tenant => campaign ids whose ad sets carry more than one goal */
+    private array $multiGoal = [];
+
+    /**
+     * OBJECTIVE-PATHS-001 — the current tenant's campaigns whose ad sets carry more than one goal, read once.
+     *
+     * @return array<string, true>
+     */
+    private function multiGoalCampaigns(): array
+    {
+        $tenant = (string) app(TenantContext::class)->tenantId();
+
+        return $this->multiGoal[$tenant] ??= array_fill_keys(
+            DB::table('external_ad_sets')
+                ->where('tenant_id', $tenant)
+                ->whereNotNull('unified_campaign_id')
+                ->whereNotNull('optimization_goal')
+                ->groupBy('unified_campaign_id')
+                ->havingRaw('COUNT(DISTINCT LOWER(optimization_goal)) > 1')
+                ->pluck('unified_campaign_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all(),
+            true,
+        );
     }
 
     /**
@@ -2133,9 +2217,9 @@ final class AlertEvaluator
                     'severity' => 'info',
                     'title' => "{$name} can move to a better launch stage",
                     'message' => "When «{$plan->name}» went out, {$name} was at «{$before}»; its synced results now support «{$now['stage']}»".($event === null ? '' : " (optimise for {$event})").'. Nothing was changed — open the launch page to decide.',
-                    'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل",
+                    'title_ar' => "نتائج حساب {$name} صارت تدعم مرحلة أعلى",
                     'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.',
-                    'context' => ['plan_id' => (string) $plan->getKey(), 'account_id' => (string) $account->id, 'from' => $before, 'to' => $now['stage'], 'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل", 'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.'],
+                    'context' => ['plan_id' => (string) $plan->getKey(), 'account_id' => (string) $account->id, 'from' => $before, 'to' => $now['stage'], 'title_ar' => "نتائج حساب {$name} صارت تدعم مرحلة أعلى", 'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.'],
                 ];
             }
         }
@@ -2228,11 +2312,28 @@ final class AlertEvaluator
 
         $current = $metrics->figuresByCampaign($curFrom, $curTo);
         $previous = $metrics->figuresByCampaign($prevFrom, $prevTo);
+        if ($key === 'cpa') {
+            $current = $this->withSalesPath($current, $campaigns, $curFrom, $curTo);
+            $previous = $this->withSalesPath($previous, $campaigns, $prevFrom, $prevTo);
+        }
         $window = ['window_from' => $curFrom->toDateString(), 'window_to' => $curTo->toDateString()];
 
         $campaigns->each(function (UnifiedCampaign $c) use ($current, $previous, $pct, $days, $key, $resultKey, $label, $window, &$out) {
             $cur = $current[(string) $c->getKey()];
             $prev = $previous[(string) $c->getKey()];
+
+            /*
+             * OBJECTIVE-PATHS-001 — a cost per ORDER is a sales figure. A traffic or awareness campaign's
+             * `spend ÷ conversions` is not its cost and is never alerted on; a campaign with a sales path
+             * beside other paths is judged on that path alone (see withSalesPath()).
+             */
+            if ($key === 'cpa' && ($cur['result_family'] ?? null) !== ObjectiveFamily::Sales->value && ! ($cur['sales_path'] ?? false)) {
+                return;
+            }
+            // A sales-path CPA is never compared with a whole-campaign one (ad-set rows can lag a window).
+            if ($key === 'cpa' && ($cur['sales_path'] ?? false) !== ($prev['sales_path'] ?? false)) {
+                return;
+            }
 
             if ((int) ($cur['spend_withheld_rows'] ?? 0) > 0 || (int) ($prev['spend_withheld_rows'] ?? 0) > 0) {
                 return;

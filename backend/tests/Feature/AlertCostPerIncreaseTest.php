@@ -7,8 +7,13 @@ namespace Tests\Feature;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -36,6 +41,9 @@ final class AlertCostPerIncreaseTest extends TestCase
     private Tenant $tenant;
 
     private Project $project;
+
+    /** The platform the fixture rows are written under; the mixed-path case needs one with a goal table. */
+    private string $provider = 'sandbox';
 
     protected function setUp(): void
     {
@@ -93,8 +101,8 @@ final class AlertCostPerIncreaseTest extends TestCase
     {
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'external_account_id' => (string) Str::uuid(), 'external_campaign_id' => (string) Str::uuid(),
-            'unified_campaign_id' => $c->id, 'provider' => 'sandbox', 'metric_key' => $key,
+            'external_account_id' => $this->accountId ?? (string) Str::uuid(), 'external_campaign_id' => $this->squadParent ?? (string) Str::uuid(),
+            'unified_campaign_id' => $c->id, 'provider' => $this->provider, 'metric_key' => $key,
             'metric_date' => Carbon::now()->subDays($daysAgo)->toDateString(),
             'value' => $value, 'original_amount' => $original, 'original_currency' => $currency,
             'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
@@ -117,6 +125,122 @@ final class AlertCostPerIncreaseTest extends TestCase
         $event = AlertEvent::query()->sole();
         $this->assertStringContainsString('the last 7 complete days against the 7 before; this rule fires at a 25% rise.', (string) $event->context['message']);
         $this->assertSame(7, $event->context['window_days']);
+    }
+
+    /** OBJECTIVE-PATHS-001 — a traffic campaign's spend ÷ conversions is not its cost; no CPA alert. */
+    public function test_cpa_increase_never_judges_a_traffic_campaign(): void
+    {
+        $c = $this->campaign();
+        $c->forceFill(['objective' => 'traffic'])->save();
+        $this->converted($c, 'spend', 100, 10);
+        $this->converted($c, 'conversions', 10, 10);
+        $this->converted($c, 'spend', 100, 3);
+        $this->converted($c, 'conversions', 4, 3);
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
+    }
+
+    /**
+     * OBJECTIVE-PATHS-001 — a sales campaign with a branches squad is judged on its STORE squad.
+     *
+     * Campaign CPA rises 100 → 200 only because the branches squad's spend joined; the store squad's
+     * own CPA is flat at 10. Judged on the campaign, it would page somebody for a rise that is not one.
+     */
+    public function test_cpa_increase_reads_the_sales_path_of_a_mixed_campaign(): void
+    {
+        $this->provider = 'snapchat';
+        $c = $this->campaign();
+        $store = $this->squad($c, 'pixel_purchase');
+        $branches = $this->squad($c, 'landing_page_view');
+        // Previous window: store 100 / 10 orders, branches 50. Campaign CPA 15, store CPA 10.
+        $this->converted($c, 'spend', 150, 10);
+        $this->converted($c, 'conversions', 10, 10);
+        $this->squadDay($store, ['spend' => 100, 'conversions' => 10], 10);
+        $this->squadDay($branches, ['spend' => 50, 'conversions' => 0, 'landing_page_views' => 150], 10);
+        // Current window: store 100 / 10, branches 300 / 0. Campaign CPA 40 (+167%), store CPA 10 (flat).
+        $this->converted($c, 'spend', 400, 1);
+        $this->converted($c, 'conversions', 10, 1);
+        $this->squadDay($store, ['spend' => 100, 'conversions' => 10], 1);
+        $this->squadDay($branches, ['spend' => 300, 'conversions' => 0, 'landing_page_views' => 900], 1);
+
+        $this->assertSame(0, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
+    }
+
+    /** The same campaign whose STORE path got dearer does alert — the sales path is read, not skipped. */
+    public function test_cpa_increase_fires_when_the_sales_path_itself_gets_dearer(): void
+    {
+        $this->provider = 'snapchat';
+        $c = $this->campaign();
+        $store = $this->squad($c, 'pixel_purchase');
+        $branches = $this->squad($c, 'landing_page_view');
+        $this->converted($c, 'spend', 150, 10);
+        $this->converted($c, 'conversions', 10, 10);
+        $this->squadDay($store, ['spend' => 100, 'conversions' => 10], 10);
+        $this->squadDay($branches, ['spend' => 50, 'conversions' => 0], 10);
+        // Store CPA 10 → 25 (+150%); campaign CPA 15 → 15.6 (+4%, under the threshold).
+        $this->converted($c, 'spend', 156, 1);
+        $this->converted($c, 'conversions', 10, 1);
+        $this->squadDay($store, ['spend' => 100, 'conversions' => 4], 1);
+        $this->squadDay($branches, ['spend' => 56, 'conversions' => 6], 1);
+
+        $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($this->rule('cpa_increase')));
+    }
+
+    private function squad(UnifiedCampaign $c, string $goal): string
+    {
+        $this->squadParent ??= $this->externalCampaignFor($c);
+        $id = (string) Str::uuid();
+        DB::table('external_ad_sets')->insert([
+            'id' => $id, 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_campaign_id' => $this->squadParent, 'unified_campaign_id' => $c->id, 'provider' => $this->provider,
+            'external_id' => 'sq-'.uniqid(), 'name' => $goal, 'status' => 'active', 'optimization_goal' => $goal,
+            'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        ]);
+
+        return $id;
+    }
+
+    private ?string $squadParent = null;
+
+    private ?string $accountId = null;
+
+    private function externalCampaignFor(UnifiedCampaign $c): string
+    {
+        $connection = app(TokenVault::class)->open(
+            tenantId: (string) $this->tenant->id, provider: $this->provider,
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addDays(30)), connectionName: $this->provider,
+        );
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(),
+            'provider' => $this->provider, 'account_type' => 'ad_account',
+            'external_id' => 'acc-'.uniqid(), 'name' => 'A', 'currency' => 'SAR', 'status' => 'active',
+        ]);
+
+        // The account is ASSIGNED to the project, as every real account is before it syncs (ORCH-100).
+        ProjectIntegrationBinding::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'client_workspace_id' => $this->project->client_workspace_id,
+            'project_id' => $this->project->id, 'external_account_id' => $account->getKey(), 'provider' => $this->provider,
+            'purpose' => 'advertising', 'is_active' => true, 'reporting_enabled' => true, 'sync_enabled' => true,
+        ]);
+        $this->accountId = (string) $account->getKey();
+
+        return (string) ExternalCampaign::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $account->getKey(), 'unified_campaign_id' => $c->id,
+            'provider' => $this->provider, 'external_id' => 'ext-'.uniqid(), 'name' => $c->name, 'status' => 'active',
+        ])->getKey();
+    }
+
+    /** @param array<string, float|int> $figures */
+    private function squadDay(string $squad, array $figures, int $daysAgo): void
+    {
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $this->accountId, 'external_campaign_id' => $this->squadParent,
+            'provider' => $this->provider, 'entity_type' => 'ad_set', 'entity_id' => $squad, 'external_entity_id' => 'x-'.uniqid(),
+            'metric_date' => Carbon::now()->subDays($daysAgo)->toDateString(), 'attribution_window' => 'default',
+            'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        ] + $figures);
     }
 
     public function test_cpa_increase_stays_quiet_when_the_rise_is_below_the_threshold(): void
