@@ -1,4 +1,4 @@
-import { BarChart3, BellRing, Bot, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, Plug, RectangleHorizontal, Rocket, Rows3, Settings, ShieldCheck, TrendingUp, Wallet, Workflow } from 'lucide-react'
+import { BarChart3, BellRing, Bot, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, PiggyBank, Plug, RectangleHorizontal, Rocket, Rows3, Settings, ShieldCheck, TrendingUp, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup, NavLeaf } from './SidebarNav'
 
 /**
@@ -71,7 +71,11 @@ export const appNavGroups: readonly NavGroup[] = [
   {
     key: 'finance',
     ar: 'المالية', en: 'Finance', icon: Wallet,
-    leaves: [{ to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' }],
+    leaves: [
+      // FIN-LOOP-001 — the approved budgets (money the client put in); the monitoring lines are «حدود الإنفاق» (style guide).
+      { to: '/app/budgets', ar: 'الميزانيات', en: 'Budgets', icon: PiggyBank, ent: 'analytics' },
+      { to: '/app/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet, ent: 'analytics' },
+    ],
   },
   {
     key: 'operations',

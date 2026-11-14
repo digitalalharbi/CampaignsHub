@@ -200,6 +200,15 @@ final class EnrolledMemberDigestsTest extends TestCase
 
     public function test_every_rhythm_can_be_sent_on_demand_and_an_on_demand_failure_is_never_retried_behind_the_person(): void
     {
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the monthly on demand is the last COMPLETE month, so it needs a figure there.
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        app(UpsertDailyMetrics::class)->handle([new NormalizedMetric(
+            tenantId: (string) $this->tenant->id, projectId: (string) $this->project->id,
+            externalAccountId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'acc')->toString(), externalCampaignId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'camp')->toString(),
+            provider: 'meta', metricKey: 'spend', metricDate: Carbon::today()->subDay()->startOfMonth()->subMonthNoOverflow()->addDays(9), value: 800.0,
+        )]);
+        app(TenantContext::class)->forget();
+
         foreach (['daily', 'weekly', 'monthly'] as $kind) {
             $this->now($kind)->assertOk()->assertJsonPath('data.state', 'sent');
             $this->assertSame(1, DB::table('digest_sends')->where('kind', 'now_'.$kind)->count());

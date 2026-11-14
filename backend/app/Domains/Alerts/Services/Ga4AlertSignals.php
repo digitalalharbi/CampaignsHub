@@ -153,7 +153,7 @@ final class Ga4AlertSignals
             return null;
         }
 
-        return $this->breach($project, 'ga4:tracking', 'Tracking may be broken', 'قد يكون التتبع معطّلًا',
+        return $this->breach($project, 'ga4:tracking', 'Website visits fell while ads kept spending', 'زيارات الموقع نزلت والإعلانات مكمّلة صرف',
             'Website sessions fell '.(int) round($drop * 100).'% while the platforms still report activity.', 'انخفضت زيارات الموقع '.(int) round($drop * 100).'% بينما تواصل المنصات تسجيل نشاط.',
             ['sessions' => $k['current'], 'previous' => $k['previous'], 'drop' => round($drop, 4)], 'critical');
     }

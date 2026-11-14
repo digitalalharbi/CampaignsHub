@@ -44,7 +44,8 @@ final class NoResultsActionFollowsObjectiveTest extends TestCase
             $this->assertStringNotContainsStringIgnoringCase('conversion', $en, $family);
         }
         if ($family === 'traffic') {
-            $this->assertSame('تحقق من رابط الصفحة وسرعتها ← المحتوى.', $ar);
+            // ALERT-CRITERIA-001 (§10أ) — the Owner's order: the content first, the tracking/link next, pausing last and only if needed.
+            $this->assertSame('راجع المحتوى ← تحقق من رابط الصفحة وسرعتها ← أوقفها إن لزم', $ar);
         }
 
         // The finding's own anatomy carries the same advice and names the result it measured.
