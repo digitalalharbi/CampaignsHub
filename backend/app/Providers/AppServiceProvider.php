@@ -28,6 +28,7 @@ use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Performance\PerformanceRecorder;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Platform\Alerts\MoyasarSettlementSource;
 use App\Domains\Platform\Alerts\SettlementSource;
 use App\Domains\Platform\Alerts\UnavailableSettlementSource;
 use App\Domains\Projects\Access\ProjectAbilities;
@@ -72,10 +73,12 @@ class AppServiceProvider extends ServiceProvider
          */
         $this->app->scoped(CreativeDemoPolicy::class);
         /*
-         * PLATFORM-PAYMENT-ALERTS-001 — no Moyasar settlement or payout data exists in this codebase, so the settlement
-         * check answers «unavailable» and raises nothing (BLOCKED_EXTERNAL_CREDENTIALS) until a real source is bound here.
+         * PLATFORM-PAYMENT-ALERTS-SETTLEMENT-001 — Moyasar's Settlement API, read with the stored gateway secret key
+         * (Owner decision 2026-11-13). `none` switches the check off; without a key the source reports itself blocked.
          */
-        $this->app->bind(SettlementSource::class, UnavailableSettlementSource::class);
+        $this->app->bind(SettlementSource::class, fn ($app) => config('platform_alerts.settlement_source') === 'moyasar'
+            ? $app->make(MoyasarSettlementSource::class)
+            : new UnavailableSettlementSource);
         // PERF-RECOVERY-001 — whole-history availability is asked once per account per request.
         $this->app->scoped(CreativeResultAvailability::class);
         // PERF-RECOVERY-001 — the query count belongs to one request or one job.

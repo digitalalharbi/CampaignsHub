@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { DateField } from '@/components/ui/DateField'
+import { ModeChips, PeriodChoice, PlanEditor, emptyPlan, planPayload, planState, type PeriodPreset, type PlanDraftRow } from './BudgetOptions'
+import type { PaymentMode } from './fundingApi'
 import { listClients } from '@/features/clients/api'
 import { listProjects } from '@/features/projects/api'
 import { toApiError } from '@/lib/api/client'
@@ -57,6 +59,12 @@ export function AddBudgetDialog({
   // The period: empty start means «from the first day of spend» (the server's default); an empty end means open.
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
+  const [preset, setPreset] = useState<PeriodPreset>('open')
+  // BUDGET-MODES-001 — the mode (direct by default), the platform split (مخطّطة only) and the ceiling (بالأجل only, behind «+ سقف»).
+  const [mode, setMode] = useState<PaymentMode>('direct')
+  const [planned, setPlanned] = useState(false)
+  const [planRows, setPlanRows] = useState<PlanDraftRow[]>(emptyPlan)
+  const [ceilingOpen, setCeilingOpen] = useState(false)
   const [key, setKey] = useState(newKey)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +78,11 @@ export function AddBudgetDialog({
     setProject(fixed?.projectName ?? defaults?.projectName ?? '')
     setPeriodStart('')
     setPeriodEnd('')
+    setPreset('open')
+    setMode('direct')
+    setPlanned(false)
+    setPlanRows(emptyPlan())
+    setCeilingOpen(false)
     setAmount('')
     setDate(today())
     setReference('')
@@ -94,14 +107,22 @@ export function AddBudgetDialog({
   const period = fixed ? {} : { period_start: periodStart || null, period_end: periodEnd || null }
   const periodOk = !(periodStart && periodEnd && periodEnd < periodStart)
 
-  const ready = client.trim() !== '' && project.trim() !== '' && value > 0 && date !== '' && periodOk
+  const credit = !fixed && mode === 'credit'
+  const needsAmount = !credit || ceilingOpen
+  const body = fixed ? {} : {
+    payment_mode: mode,
+    ...(needsAmount && value > 0 ? { amount: value } : {}),
+    ...(planned ? { platform_plan: planPayload(planRows) } : {}),
+  }
+
+  const ready = client.trim() !== '' && project.trim() !== '' && (!needsAmount || value > 0) && date !== '' && periodOk && (!planned || fixed || planState(planRows).ok)
 
   const submit = () => {
     setError(null)
     add.mutate(
       fixed
         ? { client_workspace_id: fixed.clientId, project_id: fixed.projectId, amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key }
-        : { client_name: client.trim(), project_name: project.trim(), amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key, ...period },
+        : { client_name: client.trim(), project_name: project.trim(), paid_on: date, reference: reference || undefined, idempotency_key: key, ...body, ...period },
       {
         onSuccess: (res) => { onAdded?.(res.project_id, res.payment_id); onClose() },
         onError: (e) => setError(toApiError(e).message),
@@ -116,7 +137,7 @@ export function AddBudgetDialog({
       title={fixed ? t('renew') : t('add')}
       footer={
         <Button onClick={submit} disabled={!ready} loading={add.isPending} data-testid="budget-submit" className="w-full sm:w-auto">
-          {ready ? (ar ? L.addAmount.ar(sar(value)) : L.addAmount.en(sar(value))) : t('add')}
+          {ready && value > 0 && needsAmount ? (ar ? L.addAmount.ar(sar(value)) : L.addAmount.en(sar(value))) : t('add')}
         </Button>
       }
     >
@@ -141,34 +162,56 @@ export function AddBudgetDialog({
             </Field>
           </>
         )}
-        <Field label={`${t('amount')} (${t('sar')})`} htmlFor="budget-amount" required>
-          <Input id="budget-amount" inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {QUICK.map((q) => (
-              <button
-                key={q}
-                type="button"
-                onClick={() => setAmount(String(q))}
-                aria-pressed={value === q}
-                className={`rounded-[8px] border px-2 py-1 text-xs font-semibold ${value === q ? 'border-brand-600 text-brand-600' : 'border-border text-text-secondary'}`}
-              >
-                {sar(q)}
-              </button>
-            ))}
+        {!fixed && (
+          <div className="sm:col-span-2">
+            <ModeChips mode={mode} planned={planned} onMode={setMode} onPlanned={setPlanned} ar={ar} />
           </div>
-        </Field>
+        )}
+        {credit && !ceilingOpen ? (
+          <div className="sm:col-span-2">
+            <button type="button" onClick={() => setCeilingOpen(true)} data-testid="ceiling-chip" className="rounded-[var(--radius-pill)] border border-border px-3 py-1 text-xs font-bold text-brand-700 hover:border-border-strong">
+              {t('plusCeiling')}
+            </button>
+          </div>
+        ) : (
+          <Field label={credit ? t('ceiling') : t('amount')} htmlFor="budget-amount" required={!credit}>
+            <Input id="budget-amount" inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
+            {!credit && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {QUICK.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setAmount(String(q))}
+                    aria-pressed={value === q}
+                    className={`rounded-[8px] border px-2 py-1 text-xs font-semibold ${value === q ? 'border-brand-600 text-brand-600' : 'border-border text-text-secondary'}`}
+                  >
+                    {sar(q)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </Field>
+        )}
+        {!fixed && planned && (
+          <div className="sm:col-span-2"><PlanEditor rows={planRows} onRows={setPlanRows} ar={ar} /></div>
+        )}
         <Field label={t('date')} htmlFor="budget-date" required>
           <DateField id="budget-date" value={date} onChange={setDate} />
         </Field>
         {!fixed && (
-          <>
-            <Field label={`${t('period')} · ${t('from')}`} htmlFor="budget-period-start">
-              <DateField id="budget-period-start" value={periodStart} onChange={setPeriodStart} placeholder={ar ? 'من أول إنفاق' : 'From first spend'} />
-            </Field>
-            <Field label={`${t('period')} · ${t('to')}`} htmlFor="budget-period-end">
-              <DateField id="budget-period-end" value={periodEnd} onChange={setPeriodEnd} placeholder={t('open')} />
-            </Field>
-          </>
+          <div className="sm:col-span-2">
+            <PeriodChoice
+              preset={preset}
+              start={periodStart}
+              end={periodEnd}
+              onPreset={(p, r) => { setPreset(p); if (r) { setPeriodStart(r.start); setPeriodEnd(r.end) } }}
+              onStart={setPeriodStart}
+              onEnd={setPeriodEnd}
+              ar={ar}
+              idPrefix="budget-period"
+            />
+          </div>
         )}
         <div className="sm:col-span-2">
           <Field label={t('reference')} htmlFor="budget-reference">

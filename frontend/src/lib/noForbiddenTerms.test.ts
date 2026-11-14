@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest'
  * المتبقي»; the limit is «الحد», never «العتبة»; usage in a subscription is «الاستخدام»; and the client list is
  * not a «محفظة». Comments may still name a retired word to explain why it is gone, so they are stripped first.
  *
- * DEFERRED lists the files another batch owns (alert rules, registrations, payments); each is listed in the PR
- * as follow-up and leaves this list the moment its own batch lands.
+ * DEFERRED lists files another batch owns; it is empty since ALERT-RULES-MANAGE-001 cleaned the alert rules,
+ * registrations and payments screens.
  */
 const TREE: Record<string, string> = import.meta.glob('/src/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true })
 
@@ -18,9 +18,11 @@ const FORBIDDEN = [
   'استهلاك', 'مصروف', 'تحتاج انتباه',
   'الاستهلاك', 'الإيقاع', 'الحدود المضبوطة', 'المُبلَّغة', 'الاستبدالات', 'التهدئة', 'إطلاق الحملات',
   'سلامة التتبع', 'انقطاع القياس', 'يحتاج انتباه',
+  // ALERT-RULES-MANAGE-001 — the alert labels the style guide renamed.
+  'إنفاق بلا نتائج', 'مرحلة إطلاق أفضل',
 ]
 
-const DEFERRED = ['/src/features/alerts/', '/src/features/admin/RegistrationsPage', '/src/features/admin/PaymentSettingsPage']
+const DEFERRED: string[] = []
 
 function code(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
