@@ -408,9 +408,9 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case '__ga4_overview': case '__ga4_acquisition': case '__ga4_gap': case '__ga4_tables': case '__ga4_table':
     case '__ga4_pulse': case '__ga4_attribution': case '__ga4_reasons': case '__ga4_classification': case '__ga4_products':
       return <Ga4Slide slide={slide} data={data} paged={paged} />
-    // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
-    case '__formats': case '__formats_table':
-      return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
+    // CONTENT-FORMAT-COMPARISON-001 / REPORT-FORMAT-COMPARE-COMPACT-001 — «مقارنة أنواع المحتوى»: one compact page per report.
+    case '__formats':
+      return <FormatComparisonSlide data={data} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
