@@ -7,6 +7,7 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
+use App\Domains\Settings\Http\Controllers\ExternalRecipientController;
 use App\Domains\Settings\Http\Controllers\NotificationChannelTestController;
 use App\Domains\Settings\Http\Controllers\NotificationPreferenceController;
 use App\Domains\Settings\Http\Controllers\NotificationVerifyController;
@@ -67,6 +68,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::post('notifications/channel-test', NotificationChannelTestController::class)->middleware('throttle:mail-test-send')->name('notifications.channel-test');
     // NOTIFICATION-ENROLMENT-001 — «send me this now»: one real digest / one marked sample alert, to the signed-in person's own proved address only.
     Route::post('notifications/digest-now/{kind}', [NotificationVerifyController::class, 'digest'])->middleware('throttle:mail-test-send')->name('notifications.digest-now');
+    // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — recipients OUTSIDE the platform for the budget follow-up; `settings.manage` in the controller.
+    Route::get('notifications/external-recipients', [ExternalRecipientController::class, 'index'])->name('notifications.external.index');
+    Route::post('notifications/external-recipients', [ExternalRecipientController::class, 'store'])->middleware('throttle:30,1')->name('notifications.external.store');
+    Route::get('notifications/external-recipients/projects', [ExternalRecipientController::class, 'projects'])->name('notifications.external.projects');
+    Route::post('notifications/external-recipients/test', [ExternalRecipientController::class, 'test'])->middleware('throttle:mail-test-send')->name('notifications.external.test');
+    Route::match(['put', 'patch'], 'notifications/external-recipients/{recipient}', [ExternalRecipientController::class, 'update'])->whereUuid('recipient')->name('notifications.external.update');
+    Route::delete('notifications/external-recipients/{recipient}', [ExternalRecipientController::class, 'destroy'])->whereUuid('recipient')->name('notifications.external.destroy');
     Route::post('notifications/sample-alert', [NotificationVerifyController::class, 'alert'])->middleware('throttle:mail-test-send')->name('notifications.sample-alert');
     Route::post('notifications/whatsapp/start', [WhatsAppOptInController::class, 'start'])->middleware('throttle:5,1')->name('notifications.whatsapp.start');
     Route::post('notifications/whatsapp/confirm', [WhatsAppOptInController::class, 'confirm'])->middleware('throttle:10,1')->name('notifications.whatsapp.confirm');

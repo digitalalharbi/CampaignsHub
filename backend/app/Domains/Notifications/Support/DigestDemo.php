@@ -189,6 +189,12 @@ final class DigestDemo
             'creatives' => null,
             'follow_up' => null,
             'observations' => [],
+            // LINK-HEALTH-YESTERDAY-001 — the one rule's reading per platform: a late or failed source did not deliver yesterday.
+            'link_health' => array_column(array_map(static fn (array $s): array => [$s['provider'], [
+                'arrived' => $s['state'] === 'fresh', 'required_day' => '2026-11-11',
+                'last_day' => $s['state'] === 'fresh' ? '2026-11-11' : ($s['state'] === 'failed' ? '2026-11-08' : '2026-11-10'),
+                'missing_days' => $s['state'] === 'fresh' ? 0 : ($s['state'] === 'failed' ? 3 : 1),
+            ]], $sources), 1, 0),
             'freshness' => [
                 'state' => in_array('stale', array_column($sources, 'state'), true) ? 'stale' : ($failing !== [] ? 'sync_failed' : ($sources === [] ? 'no_data' : 'fresh')),
                 'last_sync_at' => '2026-11-09T05:00:00Z', 'missing_days' => 0, 'sync_failed' => $failing !== [], 'failing' => $failing, 'sources' => $sources,
