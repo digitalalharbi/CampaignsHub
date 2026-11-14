@@ -10,7 +10,7 @@ const status: Record<string, { ar: string; en: string; tone: Tone }> = {
   completed: { ar: 'مكتملة', en: 'Completed', tone: 'info' },
   archived: { ar: 'مؤرشفة', en: 'Archived', tone: 'neutral' },
   pending: { ar: 'قيد المراجعة', en: 'Pending', tone: 'warning' },
-  unknown: { ar: 'غير معروفة', en: 'Unknown', tone: 'neutral' },
+  unknown: { ar: 'بدون بيانات', en: 'Unknown', tone: 'neutral' },
 }
 
 /*

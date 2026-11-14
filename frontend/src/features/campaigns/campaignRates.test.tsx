@@ -75,7 +75,7 @@ describe('the campaign command centre prints a rate once', () => {
     expect(screen.queryByText('479.6%')).not.toBeInTheDocument()
 
     // 36,000 of a 120,000 budget is 30%. It read 3028%.
-    expect(screen.getByText(/استهلاك 30%/)).toBeInTheDocument()
+    expect(screen.getByText(/نسبة الإنفاق 30%/)).toBeInTheDocument()
   })
 
   it('shows a funnel step rate as itself', async () => {

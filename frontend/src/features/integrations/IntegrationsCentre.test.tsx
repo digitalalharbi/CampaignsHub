@@ -280,7 +280,7 @@ describe('the Integrations Centre: five independent statuses', () => {
         statuses: healthy({
           binding: status('discovered_unbound', 'مكتشف وغير مرتبط', 'Discovered, not linked'),
           sync: status('never_started', 'لم تبدأ المزامنة', 'Never synced'),
-          freshness: status('unknown', 'غير معروفة', 'Unknown'),
+          freshness: status('unknown', 'بدون بيانات', 'Unknown'),
         }),
       })],
       connectable: [],

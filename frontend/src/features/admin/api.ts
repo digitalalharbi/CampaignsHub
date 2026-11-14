@@ -526,6 +526,14 @@ export interface AdminRegistration {
   concessions: Record<string, unknown> | null
   created_at: string | null
   tenant_id: string | null
+  /** PLATFORM-INBOX-ATTENTION-001 — the verification step it is held at, or null when it is not held at one. */
+  verification_stage?: {
+    channel: 'email' | 'mobile'
+    since: string | null
+    sends: number
+    last_sent_at: string | null
+    last_outcome: string | null
+  } | null
 }
 
 export interface RegistrationGates {
@@ -681,6 +689,17 @@ export function reevaluateRegistrationVerification(id: string, reason: string): 
   policy: RegistrationGates
 }> {
   return postData(`/admin/registrations/${id}/reevaluate-verification`, { reason })
+}
+
+/**
+ * PLATFORM-INBOX-ATTENTION-001 — a fresh challenge on the step the application is held at. The server sends it and
+ * returns only the outcome: the code or link is the applicant's, and nothing here verifies anything.
+ */
+export function resendRegistrationVerification(id: string): Promise<{
+  registration: AdminRegistration
+  verification: { channel: 'email' | 'mobile'; delivery_status: string; expires_at: string | null }
+}> {
+  return postData(`/admin/registrations/${id}/resend-verification`, {})
 }
 
 export interface RegistrationVerificationPolicy {
@@ -1750,6 +1769,8 @@ export interface ServiceRequestDetail extends ServiceRequestRow {
   messages: { id: number; from_visitor: boolean; author: string | null; body: string; at: string | null }[]
   files: { id: number; name: string; size: number; mime: string | null; at: string | null }[]
   activity: { type: string; from: string | null; to: string | null; message: string | null; actor_id: number | null; at: string | null }[]
+  /** PLATFORM-INBOX-ATTENTION-001 — what the console emailed the visitor, each with the mail ledger's state. */
+  replies?: InboxReply[]
 }
 
 export type ServiceRequestFilter = 'open' | 'unassigned' | 'all'
@@ -1774,6 +1795,117 @@ export function updateServiceRequest(
   body: { status?: string; assigned_to?: number | null; reason?: string },
 ): Promise<{ request: ServiceRequestDetail }> {
   return patchData(`/admin/service-requests/${encodeURIComponent(id)}`, body)
+}
+
+/** PLATFORM-INBOX-ATTENTION-001 — reply to the visitor: on their tracking page, and by email to the request's contact. */
+export function replyToServiceRequest(id: string, body: string): Promise<{ request: ServiceRequestDetail }> {
+  return postData(`/admin/service-requests/${encodeURIComponent(id)}/reply`, { body })
+}
+
+/*
+ * PLATFORM-INBOX-ATTENTION-001 — «الوارد»: contact messages, support tickets and data requests.
+ *
+ * Addressed to the platform, never to a workspace. Opening a row marks it read for everyone; a reply goes by email to
+ * the address the visitor gave, and its state is the mail ledger's — `awaiting_credentials` says no mail left.
+ */
+export type InboxQueue = 'contact' | 'support' | 'data'
+
+export interface InboxSummary {
+  contact: { unread: number; open: number }
+  support: { unread: number; open: number }
+  data: { unread: number; open: number }
+  unread: number
+}
+
+export interface InboxReply { id: string; author: string | null; body: string; delivery_status: string; at: string | null }
+
+interface InboxRowBase {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  status: string
+  read_at: string | null
+  created_at: string
+  locale: string | null
+}
+
+export interface ContactMessageRow extends InboxRowBase {
+  company: string | null
+  topic: string | null
+  source: string | null
+  subject: string | null
+  message: string | null
+}
+
+export interface SupportTicketRow extends InboxRowBase {
+  reference: string
+  subject: string
+  message: string
+  category: string
+  priority: string | null
+}
+
+export interface DataRequestRow extends InboxRowBase {
+  reference: string
+  type: string
+  details: string | null
+  source: string | null
+  verified_at: string | null
+}
+
+export type InboxRow = ContactMessageRow | SupportTicketRow | DataRequestRow
+
+export const INBOX_STATUSES: Record<InboxQueue, readonly string[]> = {
+  contact: ['new', 'read', 'answered', 'closed', 'spam'],
+  support: ['open', 'in_progress', 'waiting_on_customer', 'resolved', 'closed'],
+  data: ['pending', 'verifying', 'in_review', 'blocked', 'completed', 'rejected', 'withdrawn'],
+}
+
+const INBOX_PATH: Record<InboxQueue, string> = {
+  contact: '/admin/legal/contact-messages',
+  support: '/admin/legal/support-tickets',
+  data: '/admin/legal/data-requests',
+}
+
+const INBOX_LIST_KEY: Record<InboxQueue, 'messages' | 'tickets' | 'requests'> = {
+  contact: 'messages',
+  support: 'tickets',
+  data: 'requests',
+}
+
+const INBOX_ROW_KEY: Record<InboxQueue, 'message' | 'ticket' | 'request'> = {
+  contact: 'message',
+  support: 'ticket',
+  data: 'request',
+}
+
+export const fetchInboxSummary = () => getData<InboxSummary>('/admin/inbox/summary')
+
+export async function fetchInbox(queue: InboxQueue, page = 1): Promise<{ rows: InboxRow[]; total: number; unread: number }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}?page=${page}`)
+
+  return {
+    rows: (data[INBOX_LIST_KEY[queue]] as InboxRow[] | undefined) ?? [],
+    total: Number(data.total ?? 0),
+    unread: Number(data.unread ?? 0),
+  }
+}
+
+export async function fetchInboxItem(queue: InboxQueue, id: string): Promise<{ row: InboxRow; replies: InboxReply[] }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`)
+
+  return { row: data[INBOX_ROW_KEY[queue]] as InboxRow, replies: (data.replies as InboxReply[] | undefined) ?? [] }
+}
+
+export function updateInboxStatus(queue: InboxQueue, id: string, status: string): Promise<unknown> {
+  return patchData(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`, { status })
+}
+
+export async function replyToInboxItem(queue: Exclude<InboxQueue, 'data'>, id: string, body: string): Promise<{ delivery_status: string }> {
+  const data = await postData<{ reply: { delivery_status: string } }>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}/reply`, { body })
+
+  return data.reply
 }
 
 /*

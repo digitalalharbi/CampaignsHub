@@ -122,7 +122,7 @@ function AgreementStrip({ c, ar }: { c: Collaboration; ar: boolean }) {
     decline_reason: null, creator_has_access: false, can_send_terms: false,
   }
 
-  const send = useMutation({
+  const send = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => sendTerms(c.id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['influencers', 'collaborations'] }),
   })

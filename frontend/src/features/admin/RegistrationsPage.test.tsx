@@ -15,12 +15,13 @@ vi.mock('./api', async (orig) => {
     requestRegistrationInfo: vi.fn(),
     updateRegistrationTerms: vi.fn(),
     reevaluateRegistrationVerification: vi.fn(),
+    resendRegistrationVerification: vi.fn(),
   }
 })
 
 import {
   approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
-  updateRegistrationTerms,
+  resendRegistrationVerification, updateRegistrationTerms,
 } from './api'
 
 const application = (over: Partial<AdminRegistration> = {}): AdminRegistration => ({
@@ -228,5 +229,33 @@ describe('RegistrationsPage', () => {
     fireEvent.change(screen.getByLabelText(/Why|سبب/), { target: { value: 'Mail provider outage' } })
     fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
     await waitFor(() => expect(reevaluateRegistrationVerification).toHaveBeenCalledWith('reg-1', 'Mail provider outage'))
+  })
+
+  /* PLATFORM-INBOX-ATTENTION-001 — held at a verification step: the step, its history, and a resend that confirms nothing. */
+  it('shows where an application is held and resends the challenge without verifying it', async () => {
+    const held = {
+      state: 'mobile_verification_required', label: 'Awaiting mobile verification', mobile_verified: false,
+      verification: { email: 'verified', mobile: 'required' } as const,
+      verification_stage: { channel: 'mobile' as const, since: '2026-08-14T10:00:00+00:00', sends: 2, last_sent_at: '2026-08-14T10:01:00+00:00', last_outcome: 'awaiting_provider_credentials' },
+    }
+    vi.mocked(fetchRegistration).mockResolvedValue(detail(held))
+    vi.mocked(resendRegistrationVerification).mockResolvedValue({
+      registration: application(held),
+      verification: { channel: 'mobile', delivery_status: 'awaiting_provider_credentials', expires_at: null },
+    })
+
+    renderWithProviders(<RegistrationsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('registration-row'))
+
+    const stage = await screen.findByTestId('registration-stage')
+    expect(stage).toHaveAttribute('data-channel', 'mobile')
+    expect(stage).toHaveTextContent('Mobile confirmation')
+    expect(screen.getByTestId('registration-stage-outcome')).toHaveTextContent('Provider not set up')
+    expect(screen.getByTestId('registration-stage-outcome')).toHaveAttribute('data-outcome', 'awaiting_provider_credentials')
+    // Required and not done reads as not done — never «confirmed».
+    expect(screen.getByTestId('registration-standing-mobile')).toHaveTextContent('Mobile not confirmed yet')
+
+    fireEvent.click(screen.getByTestId('registration-resend'))
+    await waitFor(() => expect(resendRegistrationVerification).toHaveBeenCalledWith('reg-1'))
   })
 })

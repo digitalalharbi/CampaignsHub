@@ -49,7 +49,7 @@ export function PublicForm<T>({ fields, submit, renderSuccess, cta, sending, ar,
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<T | null>(null)
 
-  const mutation = useMutation({
+  const mutation = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => submit(values),
     onSuccess: (r) => {
       setResult(r)
