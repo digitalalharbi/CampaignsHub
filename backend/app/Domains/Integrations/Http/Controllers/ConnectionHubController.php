@@ -12,6 +12,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\GrantedScopes;
 use App\Domains\Integrations\Services\ConnectionRemoval;
 use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Integrations\Status\ConnectionFacts;
@@ -367,6 +368,11 @@ final class ConnectionHubController extends Controller
                 'has_parent' => ProviderHierarchy::hasParent((string) $connection->provider),
                 'discovery_blocked_reason' => $connection->discovery_blocked_reason,
                 'token_expires_at' => $connection->token_expires_at?->toIso8601String(),
+                /*
+                 * LINKEDIN-SCOPES-001 — scopes this product asks for that the recorded grant lacks. Non-empty is a
+                 * reconnect the row must ask for: a token keeps the scopes of its own consent, so nothing else helps.
+                 */
+                'missing_scopes' => GrantedScopes::missing($connection),
                 /*
                  * INTEG-STATUS-MODEL-001 §1.13 — ADDITIVE. Five independent statuses; every field above is unchanged.
                  * `connection_state` / `sync_state` stay the legacy two words; `statuses` is the honest object.
