@@ -53,7 +53,7 @@ final class ClientWorkspace extends Model
     }
 
     /** Mirrors `PORTAL_RESERVED_SEGMENTS` in the front end. */
-    public const RESERVED_SLUGS = ['clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports'];
+    public const RESERVED_SLUGS = ['clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports', 'approvals'];
 
     /** @return HasMany<Project, $this> */
     public function projects(): HasMany
