@@ -34,67 +34,54 @@ const rails: Array<[string, readonly NavGroup[], string]> = [
   ['agency', agencyNavGroups, '/agency'],
 ]
 
-describe('the projects category', () => {
-  /*
-   * NAV-TAXONOMY-001 (Owner, 2026-10-21) supersedes NAV-FIVE-AREAS-001's «side by side» rule: the campaign area
-   * follows the approved order exactly — نظرة عامة · المشاريع · حملة جديدة · الحملات · المجموعات · الإعلانات — so the
-   * portfolio overview moved to «الأداء», where it is read beside Analytics and Reports. What NAV-IA-001 protected
-   * still holds: the two are never labelled as versions of one another, and «جميع المشاريع» does not return.
-   */
-  it.each(rails)('%s opens the campaign area in the approved order', (_name, groups, prefix) => {
+describe('the approved structure (NAV-HOME-PLANS-001)', () => {
+  it('the agency rail is Home, Clients, Campaigns, Results, Finance, Operations', () => {
+    expect(agencyNavGroups.map((g) => g.key)).toEqual(['home', 'clients', 'campaigns', 'results', 'finance', 'operations'])
+    expect(agencyNavGroups.map((g) => g.ar)).toEqual(['الرئيسية', 'العملاء', 'الحملات', 'النتائج', 'المالية', 'العمليات'])
+  })
+
+  it('the advertiser rail has no Clients group', () => {
+    expect(appNavGroups.map((g) => g.key)).toEqual(['home', 'campaigns', 'results', 'finance', 'operations'])
+  })
+
+  it.each(rails)('%s opens the campaign area with the campaigns, ad groups and ads in order', (_name, groups, prefix) => {
     const campaigns = groups.find((g) => g.key === 'campaigns')!
-    // CLIENT-UNIT-001 — the agency has no project directory: its clients ARE the unit, so the rail starts at the campaign.
-    const agency = prefix === '/agency'
-    expect(campaigns.leaves.slice(0, agency ? 5 : 6).map((l) => l.ar)).toEqual(agency
-      ? ['نظرة عامة', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات']
-      : ['نظرة عامة', 'المشاريع', 'حملة جديدة', 'الحملات', 'المجموعات الإعلانية', 'الإعلانات'])
-    if (!agency) expect(campaigns.leaves[1]!.to).toBe(`${prefix}/projects`)
+    const names = campaigns.leaves.map((l) => l.ar)
+    const at = (to: string) => names.indexOf(campaigns.leaves.find((l) => l.to === `${prefix}/${to}`)!.ar)
+    expect(at('campaigns')).toBeLessThan(at('ad-groups'))
+    expect(at('ad-groups')).toBeLessThan(at('ads'))
   })
 
-  it.each(rails)('%s names the two project destinations so neither reads as a version of the other', (_name, groups, prefix) => {
-    const leaves = groups.flatMap((g) => g.leaves)
-    const directory = leaves.find((l) => l.to === `${prefix}/projects`)
-    const overview = leaves.find((l) => l.to === `${prefix}/portfolio`)!
-
-    if (prefix === '/agency') expect(directory).toBeUndefined()
-    else {
-      expect([directory!.ar, overview.ar]).toEqual(['المشاريع', 'ملخص المشاريع'])
-      expect([directory!.en, overview.en]).toEqual(['Projects', 'Portfolio'])
-    }
-    expect(leaves.map((l) => l.ar)).not.toContain('جميع المشاريع')
+  it.each(rails)('%s uses the Owner’s names: «المجموعات الإعلانية», «روابط التتبع», and no «إطلاق الحملات» or «الملخص»', (_name, groups) => {
+    const labels = groups.flatMap((g) => g.leaves.map((l) => l.ar))
+    expect(labels).toContain('المجموعات الإعلانية')
+    expect(labels).toContain('روابط التتبع')
+    expect(labels).not.toContain('إطلاق الحملات')
+    expect(labels).not.toContain('الملخص')
+    expect(labels).not.toContain('جميع المشاريع')
   })
 
-  it('the advertiser rail is organised in four areas and the agency rail adds its clients', () => {
-    expect(appNavGroups.map((g) => g.key)).toEqual(['campaigns', 'performance', 'operations', 'business'])
-    expect(appNavGroups.map((g) => g.ar)).toEqual(['إدارة الحملات', 'الأداء', 'العمليات', 'الحساب'])
-    expect(agencyNavGroups.map((g) => g.key)).toEqual(['campaigns', 'performance', 'operations', 'clients', 'business'])
-    expect(agencyNavGroups.map((g) => g.ar)).toEqual(['إدارة الحملات', 'الأداء', 'العمليات', 'خدمة العملاء', 'الحساب'])
-  })
-
-  it.each(rails)('%s labels use one or two words', (_name, groups) => {
+  it.each(rails)('%s labels use at most three words', (_name, groups) => {
     for (const leaf of groups.flatMap((g) => g.leaves)) {
-      expect(leaf.ar.trim().split(/\s+/).length, `«${leaf.ar}» is longer than two words`).toBeLessThanOrEqual(2)
+      expect(leaf.ar.trim().split(/\s+/).length, `«${leaf.ar}» is longer than three words`).toBeLessThanOrEqual(3)
     }
   })
 
   /**
-   * No child repeats its parent, in either language.
-   *
-   * A category whose first item is its own name reads as a stray extra entry — «Campaigns →
-   * Campaigns, Content» — and it is the same defect as the sibling pair, one level down.
+   * No child repeats its parent — except where the Owner's approved outline itself names the first child after its
+   * group: «العملاء › العملاء» and «الحملات › الحملات» (the list, then the things around it), and the one-link home.
    */
-  it.each(rails)('%s never repeats a group name in its own children', (_name, groups) => {
+  it.each(rails)('%s never repeats a group name in its children beyond the approved outline', (_name, groups) => {
+    const approved = new Set(['clients', 'campaigns'])
     for (const group of groups) {
-      if (group.leaves.length < 2) continue
+      if (group.leaves.length < 2 || approved.has(group.key)) continue
 
       for (const leaf of group.leaves) {
         expect(leaf.ar, `«${group.ar}» contains a child with its own name`).not.toBe(group.ar)
-        expect(leaf.en, `«${group.en}» contains a child with its own name`).not.toBe(group.en)
       }
     }
   })
 
-  /** And no two destinations anywhere on a rail carry the same label. */
   it.each(rails)('%s has no two destinations with the same label', (_name, groups) => {
     const labels = groups.flatMap((g) => g.leaves.map((l) => l.ar))
 

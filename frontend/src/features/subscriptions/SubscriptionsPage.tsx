@@ -1,6 +1,12 @@
 import { AddonsShop } from './AddonsShop'
+import { LimitRings } from './LimitRings'
+import { LockedFeature, PlanCompare } from './PlanCompare'
+import { featureKeys, includes, planWith } from './planAccess'
+import { portalBaseOf } from '@/app/portalPath'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { fetchCurrentUser } from '@/features/auth/api'
 import { UsageCard } from './UsageCard'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -182,9 +188,28 @@ export function SubscriptionsPage() {
   const canView = useAuth((s) => s.hasPermission('subscriptions.view'))
   const canManage = useAuth((s) => s.hasPermission('subscriptions.manage'))
   const qc = useQueryClient()
+  const setUser = useAuth((s) => s.setUser)
+  const [params, setParams] = useSearchParams()
+  const { pathname } = useLocation()
+  const compare = params.get('compare') === '1'
 
   const currentQ = useQuery({ queryKey: ['subscriptions', 'current'], queryFn: getCurrent, retry: false, enabled: canView })
   const plansQ = useQuery({ queryKey: ['subscriptions', 'plans'], queryFn: getPlans, retry: false, enabled: canView })
+
+  /*
+   * Upgrade in the SAME portal, with no sign-out (master task 14): the rail, the home page's levels and every gate read the
+   * account's entitlements from the signed-in user, so a plan that changed must refresh that user. The first value read
+   * is the baseline — only a CHANGE refreshes, so opening this page costs nothing.
+   */
+  const seenPlan = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const code = currentQ.data?.plan?.code ?? null
+    if (currentQ.data === undefined) return
+    if (seenPlan.current !== undefined && seenPlan.current !== code) {
+      void fetchCurrentUser().then((user) => { if (user) setUser(user) })
+    }
+    seenPlan.current = code
+  }, [currentQ.data, setUser])
 
   /*
    * Quote, then confirm — never one click (PAY-002).
@@ -244,7 +269,7 @@ export function SubscriptionsPage() {
   const currentCode = current?.plan?.code ?? null
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-3 md:p-4">
       {/*
         UX-PAGE-HERO-001 — the product's header, not an eighth spelling of one.
 
@@ -272,6 +297,20 @@ export function SubscriptionsPage() {
         <>
           <CurrentPlanCard current={current} c={c} />
 
+          {/* Features the current plan does not include: a lock and the NAME of the plan that has it; pressing opens the comparison. */}
+          {(() => {
+            const mine = plans.find((p) => p.code === currentCode)
+            const locked = mine ? featureKeys(plans).filter((k) => !includes(mine, k) && planWith(plans, k) !== null) : []
+
+            return locked.length === 0 ? null : (
+              <div data-testid="locked-features" className="flex flex-wrap gap-1.5">
+                {locked.map((k) => (
+                  <LockedFeature key={k} feature={k} plans={plans} to={`${portalBaseOf(pathname)}/subscriptions`} label={featureLabel(k, c)} />
+                ))}
+              </div>
+            )
+          })()}
+
           {current.renewal && (
             <RenewalCard
               renewal={current.renewal}
@@ -293,7 +332,11 @@ export function SubscriptionsPage() {
             />
           )}
 
-          <UsageTable usage={current.usage} c={c} />
+          <LimitRings usage={current.usage} labelOf={(m) => metricLabel(m, c)} unlimited={c.unlimited} ar={locale === 'ar'} />
+          <details className="rounded-2xl border border-border bg-surface">
+            <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-text-secondary">{c.usage_title}</summary>
+            <div className="px-3 pb-3"><UsageTable usage={current.usage} c={c} /></div>
+          </details>
 
           {/* PRICING-USAGE-CREDITS-001 — metered usage, own-key caps and the usage balance. */}
           <UsageCard ar={locale === 'ar'} />
@@ -301,10 +344,32 @@ export function SubscriptionsPage() {
           {/* PRICING-ADDONS-001 — capacity and feature packs, beside the usage they extend. */}
           <AddonsShop ar={locale === 'ar'} canManage={canManage} />
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
+              <button
+                type="button"
+                data-testid="compare-toggle"
+                aria-expanded={compare}
+                onClick={() => setParams(compare ? {} : { compare: '1' })}
+                className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+              >
+                {locale === 'ar' ? (compare ? 'أخفِ المقارنة' : 'قارن الباقات') : (compare ? 'Hide comparison' : 'Compare plans')}
+              </button>
+            </div>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
             {!canManage && <p className="text-xs text-text-muted">{c.manage_note}</p>}
             {current.subscription?.commercial_basis === 'complimentary' && <p data-testid="subscription-comp-note" className="text-xs text-text-muted">{c.comp_note}</p>}
+            {compare && (
+              <PlanCompare
+                plans={plans}
+                currentCode={currentCode}
+                featureLabel={(k) => featureLabel(k, c)}
+                limitLabel={(k) => metricLabel(k, c)}
+                valueLabel={(v) => featureValueLabel(v, c)}
+                unlimited={c.unlimited}
+                ar={locale === 'ar'}
+              />
+            )}
             {/* grid-cols-1 + min-w-0 on the cards: a card's badges must never widen a phone's page (sweep @390). */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {plans.map((plan) => (
