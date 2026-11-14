@@ -227,6 +227,36 @@ final class AudienceCenterTest extends TestCase
         $this->assertSame([], $sib['paid_delivery']['groups'], 'a sibling project never reads this project’s rows');
     }
 
+    public function test_rows_of_an_account_not_bound_to_the_project_never_reach_an_audience_figure(): void
+    {
+        $strayAccount = $this->account($this->project, 'meta', 'SAR', 'ad-meta-stray');
+        $straySet = $this->adSet($strayAccount, $this->project, 'meta', 'stray-set', 'STRAY_SET', ['cities' => ['Stray']]);
+        $this->row($strayAccount, $this->project, $straySet, 'region', 'Stray Province', '2026-11-12', 5000, 4000, 50, 500.0, 'SAR');
+        $this->row($strayAccount, $this->project, $straySet, 'region', 'Najran Province', '2026-11-12', 7000, 0, 70, 700.0, 'SAR');
+        DB::table('entity_daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $strayAccount->id,
+            'external_campaign_id' => $this->campaignOf($straySet), 'provider' => 'meta', 'entity_type' => 'ad_set', 'entity_id' => $straySet, 'external_ad_set_id' => $straySet, 'external_entity_id' => 'stray-set',
+            'metric_date' => '2026-11-12', 'impressions' => 10, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $read = fn (): array => app(AudienceCenter::class)->build((string) $this->tenant->id, (string) $this->project->id, Carbon::parse('2026-11-12'), Carbon::parse('2026-11-12'));
+
+        // Bound: the stray rows are part of the figure.
+        $bound = collect($read()['paid_delivery']['groups'])->firstWhere('provider', 'meta');
+        $this->assertEquals(12400.0, $bound['denominator']);
+
+        // Deselected: the account is no longer this project's — its rows leave every audience figure.
+        ProjectIntegrationBinding::withoutGlobalScopes()->where('external_account_id', $strayAccount->id)->update(['is_active' => false]);
+        $r = $read();
+        $meta = collect($r['paid_delivery']['groups'])->firstWhere('provider', 'meta');
+        $this->assertEquals(400.0, $meta['denominator'], 'an unbound account adds nothing to the denominator');
+        $this->assertNull(collect($meta['rows'])->firstWhere('value', 'Stray Province'));
+        $this->assertSame(1, $meta['coverage']['ad_sets_with_rows']);
+        $this->assertSame(0, $meta['coverage']['ad_sets_delivering'], 'an unbound account is not counted as delivering');
+        $this->assertNull(collect($r['targeting']['items'])->firstWhere('ad_set_id', $straySet), 'its targeting is not shown either');
+        $this->assertNotNull(collect($r['targeting']['items'])->firstWhere('ad_set_id', $this->metaSet), 'the bound account stays');
+    }
+
     public function test_the_capability_matrix_covers_seven_platforms_and_eight_dimensions(): void
     {
         $all = AudienceCapabilities::all();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Audience;
 
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -91,6 +92,7 @@ final class AudienceCenter
             ->where('c.tenant_id', $tenantId)->where('c.project_id', $projectId)
             ->where('s.is_demo', false)->where('s.status', 'active')
             ->whereIn('s.provider', $providers)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'c'))
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('c.external_account_id', $this->accounts))
             ->when($this->campaigns !== null, fn ($q) => $q->whereIn('c.unified_campaign_id', $this->campaigns))
             ->orderBy('s.provider')->orderBy('s.name')->limit(200)
@@ -127,6 +129,7 @@ final class AudienceCenter
         $rows = $providers === [] ? collect() : DB::table('audience_breakdown_rows')
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)
             ->whereIn('provider', $providers)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'audience_breakdown_rows'))
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('external_account_id', $this->accounts))
             ->when($this->campaigns !== null, fn ($q) => $q->whereIn('external_campaign_id', $this->campaignSubquery()))
             ->whereBetween('metric_date', [$period['from'], $period['to']])
@@ -208,6 +211,7 @@ final class AudienceCenter
     {
         return (int) DB::table('entity_daily_metrics')
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('provider', $provider)
+            ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
             ->when($this->accounts !== null, fn ($q) => $q->whereIn('external_account_id', $this->accounts))
             ->when($this->campaigns !== null, fn ($q) => $q->whereIn('external_campaign_id', $this->campaignSubquery()))
             ->where('entity_type', 'ad_set')->where('impressions', '>', 0)
