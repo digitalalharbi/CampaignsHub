@@ -16,6 +16,7 @@ import { Ga4VisibilityControl } from './Ga4VisibilityBar'
 import { AttributionTable, Buckets, GapReasonsBlock, MatchBars, campaignRows, platformRows, type MatchRow } from './Ga4MatchBlock'
 import { CLASSIFY_GROUPS, type ClassificationPayload, type ClassificationRow, type ClassifyGroup, type GapReason, type GapReasonsPayload, type MatchPayload } from './matchTypes'
 import { hideParam } from './visibility'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * GA4-ATTRIBUTION-MATCH-001 — the Analytics GA4 tab as one workbench: a visibility control, a filter bar of chips,
@@ -249,11 +250,11 @@ function ViewsRow({ projectId, range, ar, hidden, filters, onApply }: { projectI
       {list.map((v) => (
         <span key={v.id} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs">
           <button type="button" data-testid={`ga4-view-${v.id}`} className="font-bold text-text-secondary hover:text-text-primary" onClick={() => onApply(v.filters?.hidden ?? [], { ...NO_FILTERS, ...((v.filters as { ga4?: Partial<Filters> } | null)?.ga4 ?? {}) })}>{v.name}</button>
-          <button type="button" aria-label={ar ? 'حذف' : 'Delete'} className="text-text-muted hover:text-danger" onClick={() => del.mutate(v.id)}><X size={11} /></button>
+          <button type="button" aria-label={ar ? 'حذف' : 'Delete'} className="text-text-muted hover:text-danger" disabled={del.isPending} onClick={() => del.mutate(v.id)}><X size={11} /></button>
         </span>
       ))}
       <button type="button" data-testid="ga4-view-save" disabled={save.isPending} className="rounded-full border border-brand-600 px-2.5 py-0.5 text-xs font-bold text-brand-600 hover:bg-brand-600/10 disabled:opacity-60"
-        onClick={() => { const name = window.prompt(ar ? 'اسم العرض' : 'View name')?.trim(); if (name) save.mutate({ name, filters: { hidden, ga4: filters } as never, date_range: { days } }) }}>{ar ? 'حفظ' : 'Save'}</button>
+        onClick={async () => { const name = await promptDialog({ title: ar ? 'احفظ العرض' : 'Save this view', label: ar ? 'الاسم' : 'Name' }); if (name) save.mutate({ name, filters: { hidden, ga4: filters } as never, date_range: { days } }) }}>{ar ? 'حفظ' : 'Save'}</button>
     </div>
   )
 }

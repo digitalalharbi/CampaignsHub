@@ -11,6 +11,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { confirmDialog, promptDialog } from '@/stores/dialogs'
 
 const MODES = [
   { value: 'managed', ar: 'مُدار', en: 'Managed' },
@@ -83,8 +84,8 @@ function AgencyClients() {
                     <td className="p-3 text-text-secondary">{(() => { const m = MODES.find((x) => x.value === c.mode); return m ? (ar ? m.ar : m.en) : c.mode })()}</td>
                     <td className="p-3 text-text-secondary"><span className="tnum">{c.projects_count ?? 0}</span></td>
                     <td className="p-3 text-end">
-                      <button onClick={() => { const name = prompt(ar ? 'اسم العميل الجديد' : 'New client name', c.name); if (name && name !== c.name) guard(update.mutateAsync({ id: c.id, name })) }} className="me-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{ar ? 'تعديل' : 'Edit'}</button>
-                      <button onClick={() => { if (confirm(ar ? 'أرشفة هذا العميل؟' : 'Archive this client?')) guard(archive.mutateAsync(c.id)) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>
+                      <button onClick={async () => { const name = await promptDialog({ title: ar ? 'عدّل العميل' : 'Edit the client', label: ar ? 'اسم العميل' : 'Client name', initial: c.name }); if (name && name !== c.name) guard(update.mutateAsync({ id: c.id, name })) }} className="me-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{ar ? 'تعديل' : 'Edit'}</button>
+                      <button onClick={async () => { if (await confirmDialog({ title: ar ? 'أرشف العميل؟' : 'Archive this client?', confirmLabel: ar ? 'أرشف' : 'Archive', danger: true })) guard(archive.mutateAsync(c.id)) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>
                     </td>
                   </tr>
                 ))}

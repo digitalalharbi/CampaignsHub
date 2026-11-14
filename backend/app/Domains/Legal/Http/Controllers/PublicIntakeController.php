@@ -9,6 +9,7 @@ use App\Domains\Legal\Models\ContactMessage;
 use App\Domains\Legal\Models\DataRequest;
 use App\Domains\Legal\Models\SupportTicket;
 use App\Domains\Legal\Services\DeletionBlockers;
+use App\Domains\Legal\Services\PlatformInboxNotifier;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class PublicIntakeController extends Controller
 {
-    public function __construct(private readonly DeletionBlockers $blockers) {}
+    public function __construct(
+        private readonly DeletionBlockers $blockers,
+        private readonly PlatformInboxNotifier $notifier,
+    ) {}
 
     /** Real people never fill a hidden field; bots fill every field they find. */
     private function refuseBots(Request $request): void
@@ -83,7 +87,7 @@ final class PublicIntakeController extends Controller
         $topic = $data['topic'] ?? null;
         $standIn = $topic === null ? null : ContactMessage::subjectForTopic($topic);
 
-        ContactMessage::create([
+        $message = ContactMessage::create([
             ...$data,
             // A topic with no prose still has to read as a message when a human opens the queue.
             'subject' => filled($data['subject'] ?? null) ? $data['subject'] : $standIn,
@@ -91,6 +95,9 @@ final class PublicIntakeController extends Controller
             'source' => $data['source'] ?? 'contact_page',
             ...$this->trace($request),
         ]);
+
+        // PLATFORM-INBOX-ATTENTION-001 — stored, and now somebody is told.
+        $this->notifier->received($message);
 
         /*
          * No reference is returned, deliberately.
@@ -129,6 +136,8 @@ final class PublicIntakeController extends Controller
             'tenant_id' => $user?->currentTenant()?->id,
             ...$this->trace($request),
         ]);
+
+        $this->notifier->received($ticket);
 
         return ApiResponse::success([
             'reference' => $ticket->reference,
@@ -189,6 +198,8 @@ final class PublicIntakeController extends Controller
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 500),
         ]);
+
+        $this->notifier->received($record);
 
         return ApiResponse::success([
             'reference' => $record->reference,

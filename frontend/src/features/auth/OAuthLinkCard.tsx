@@ -117,8 +117,8 @@ export function OAuthLinkCard({
   const [sent, setSent] = useState(false)
   const [expired, setExpired] = useState(false)
 
-  const byPassword = useMutation({ mutationFn: () => confirmLinkWithPassword(password), onSuccess: (r) => onSignedIn(r) })
-  const sendLink = useMutation({
+  const byPassword = useMutation({ meta: { feedback: 'none' }, mutationFn: () => confirmLinkWithPassword(password), onSuccess: (r) => onSignedIn(r) })
+  const sendLink = useMutation({ meta: { feedback: 'none' },
     mutationFn: sendLinkEmail,
     onSuccess: (r) => { setSent(true); setDelivery(r.delivery); setCooldown(r.resend_after) },
   })

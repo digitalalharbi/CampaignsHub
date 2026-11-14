@@ -12,6 +12,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { confirmDialog } from '@/stores/dialogs'
 
 export function ProjectsTab() {
   const ar = useUi((u) => u.locale) === 'ar'
@@ -65,8 +66,8 @@ export function ProjectsTab() {
                     <td className="p-3 text-end">
                       <Link to="/app/campaigns" className="me-3 text-xs font-semibold text-brand-600 hover:underline">{ar ? 'فتح' : 'Open'}</Link>
                       {p.status === 'archived'
-                        ? <button onClick={() => act.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary"><RotateCcw size={13} /> {ar ? 'استعادة' : 'Restore'}</button>
-                        : <button onClick={() => { if (confirm(ar ? 'أرشفة هذا المشروع؟' : 'Archive this project?')) act.mutate({ id: p.id, action: 'archive' }) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>}
+                        ? <button disabled={act.isPending} onClick={() => act.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary"><RotateCcw size={13} /> {ar ? 'استعادة' : 'Restore'}</button>
+                        : <button disabled={act.isPending} onClick={async () => { if (await confirmDialog({ title: ar ? 'أرشف المشروع؟' : 'Archive this project?', confirmLabel: ar ? 'أرشف' : 'Archive', danger: true })) act.mutate({ id: p.id, action: 'archive' }) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>}
                     </td>
                   </tr>
                 ))}

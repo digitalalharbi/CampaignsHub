@@ -81,7 +81,7 @@ export function PaymentsPage() {
   const [sessions, setSessions] = useState<Record<string, PaymentSession>>({})
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  const startM = useMutation({
+  const startM = useMutation({ meta: { feedback: 'none' },
     mutationFn: (invoice: Invoice) => startPayment(invoice.id).then((payment) => ({ payment, invoice })),
     onSuccess: ({ payment, invoice }) => {
       const trip: RoundTrip = {
