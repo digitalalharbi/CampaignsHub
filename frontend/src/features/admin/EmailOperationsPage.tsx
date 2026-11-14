@@ -336,7 +336,7 @@ function TransportBanner({ transport, ar }: { transport: { state: string; provid
  */
 function MailSettingsCard({ transport, ar, test: target }: { transport: EmailLedger['transport']; ar: boolean; test: TestTarget }) {
   const qc = useQueryClient()
-  const test = useMutation({
+  const test = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => sendTestEmail(ar ? 'ar' : 'en', target.target),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
   })
@@ -474,7 +474,7 @@ function PreviewGallery({ ar, test }: { ar: boolean; test: TestTarget }) {
   const list = useQuery({ queryKey: ['admin', 'email', 'previews'], queryFn: fetchEmailPreviews })
   const chosen = key !== '' ? key : (list.data?.keys[0] ?? '')
   const qc = useQueryClient()
-  const sendTest = useMutation({
+  const sendTest = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => sendTestEmail(locale === 'en' ? 'en' : 'ar', test.target, chosen),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['admin', 'email'] }) },
   })

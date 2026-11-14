@@ -24,7 +24,7 @@ export function AttentionDecisionsPanel({ projectId, reportId, ar }: { projectId
   if (q.isError) {
     return (
       <p className="rounded-xl border border-danger/40 p-3 text-sm text-danger" data-testid="attention-panel-failed">
-        {ar ? 'تعذّر تحميل ما يحتاج انتباهًا.' : 'Could not load what needs attention.'}
+        {ar ? 'تعذّر تحميل التنبيهات.' : 'Could not load what needs attention.'}
       </p>
     )
   }

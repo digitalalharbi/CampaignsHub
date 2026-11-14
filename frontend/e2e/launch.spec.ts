@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
- * LAUNCH-001 — «إطلاق الحملات» is its own page in both portals: the rail opens it, it walks the steps, and it
+ * LAUNCH-001 — «حملة جديدة» is its own page in both portals: the rail opens it, it walks the steps, and it
  * tells the truth about the project's accounts before anything could be sent. Seeded demo accounts carry no
  * platform credentials, so the honest outcome here is a page that explains why nothing can be published yet;
  * a real publish needs an authorised account and is never driven by this gate.

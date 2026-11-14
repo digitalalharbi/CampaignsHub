@@ -39,7 +39,7 @@ export const CATEGORY_NOTES: Record<string, Words> = {
     en: 'Notes about how the figures moved: conversion rate, and the comparison with the previous period.',
   },
   budget: {
-    ar: 'ما يكلّفك مالًا وأنت غير منتبه: سرعة الاستهلاك، وارتفاع التكلفة، وتوزيع الإنفاق.',
+    ar: 'ما يكلّفك مالًا وأنت غير منتبه: سرعة الصرف، وارتفاع التكلفة، وتوزيع الإنفاق.',
     en: 'What costs money while nobody is looking: pacing, rising cost, and how spend is distributed.',
   },
   content: {
@@ -67,7 +67,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   falling_rate: { ar: 'انخفاض معدل التحويل', en: 'Conversion rate falling' },
   period_comparison: { ar: 'مقارنة بالفترة السابقة', en: 'Compared with the previous period' },
   // الميزانية
-  budget_pace: { ar: 'سرعة استهلاك الميزانية', en: 'Budget pacing' },
+  budget_pace: { ar: 'سرعة صرف الميزانية', en: 'Budget pacing' },
   rising_cost: { ar: 'ارتفاع تكلفة النتيجة', en: 'Cost per result rising' },
   reallocation: { ar: 'إعادة توزيع الإنفاق', en: 'Spend worth reallocating' },
   budget_risk: { ar: 'تجاوز حدود الميزانية', en: 'Budget threshold crossed' },
@@ -106,7 +106,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   message: { ar: 'رسالة جديدة', en: 'A new message' },
   request: { ar: 'طلب جديد أو تحديث عليه', en: 'A request, new or updated' },
   journey_transition: { ar: 'انتقال طلب إلى مرحلة جديدة', en: 'A request moved to a new stage' },
-  client_needs_attention: { ar: 'عميل يحتاج انتباهًا', en: 'A client needs attention' },
+  client_needs_attention: { ar: 'تنبيه على عميل', en: 'A client needs attention' },
   // NOTIFICATION-CHANNELS-001 — what a rule the person built did, which used to reach the bell and nothing else.
   automation_rule: { ar: 'تطابق قاعدة أتمتة', en: 'An automation rule matched' },
   // FIN-LOOP-001 — the approved budget of a project: added, running low, over.

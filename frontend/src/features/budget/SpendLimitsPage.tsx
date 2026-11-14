@@ -71,7 +71,7 @@ const BASIS: Record<string, { ar: string; en: string }> = {
     en: 'The withheld spend is in more than one currency, so it cannot be added into one figure.',
   },
   currency_mismatch: {
-    ar: 'الحد بعملة والإنفاق بأخرى — القسمة بينهما ليست نسبة استهلاك.',
+    ar: 'الحد بعملة والإنفاق بأخرى — القسمة بينهما ليست نسبة إنفاق.',
     en: 'The limit is in one currency and the spend in another — dividing them is not a utilisation.',
   },
   absent: { ar: 'لا يوجد إنفاق في هذه الفترة.', en: 'There is no spend in this period.' },
@@ -153,13 +153,13 @@ export function SpendLimitsPage() {
         kpis={limits.length === 0 ? undefined : (
           <>
             <StatCard label={ar ? 'حدود مفعّلة' : 'Active limits'} value={counts.total.toLocaleString('en-US')} tone="brand" dot testid="spend-limits-kpi-total" />
-            <StatCard label={ar ? 'تقترب من الحد' : 'Near the limit'} value={counts.approaching.toLocaleString('en-US')} tone={counts.approaching > 0 ? 'warning' : 'neutral'} dot testid="spend-limits-kpi-approaching" />
-            <StatCard label={ar ? 'تجاوزت الحد' : 'Over the limit'} value={counts.over.toLocaleString('en-US')} tone={counts.over > 0 ? 'danger' : 'success'} dot testid="spend-limits-kpi-over" />
+            <StatCard label={ar ? 'قرّبت تخلص' : 'Near the limit'} value={counts.approaching.toLocaleString('en-US')} tone={counts.approaching > 0 ? 'warning' : 'neutral'} dot testid="spend-limits-kpi-approaching" />
+            <StatCard label={ar ? 'تجاوزت الميزانية' : 'Over the limit'} value={counts.over.toLocaleString('en-US')} tone={counts.over > 0 ? 'danger' : 'success'} dot testid="spend-limits-kpi-over" />
             {/*
               «Unknown» is a state and gets a card, not a silence: a limit whose spend could not be
               compared has told nobody they are within it.
             */}
-            <StatCard label={ar ? 'غير معروفة' : 'Not comparable'} value={counts.unknown.toLocaleString('en-US')} tone="neutral" dot testid="spend-limits-kpi-unknown" />
+            <StatCard label={ar ? 'بدون بيانات' : 'Not comparable'} value={counts.unknown.toLocaleString('en-US')} tone="neutral" dot testid="spend-limits-kpi-unknown" />
           </>
         )}
       />
@@ -177,7 +177,7 @@ export function SpendLimitsPage() {
         operational consequence in it.
       */}
       <Panel
-        title={ar ? 'الحدود المضبوطة' : 'Limits in place'}
+        title={ar ? 'حدود الإنفاق' : 'Limits in place'}
         loading={q.isLoading}
         error={q.isError}
       >
@@ -234,8 +234,8 @@ export function SpendLimitsPage() {
               total={limits.length}
               bands={[
                 { key: 'ok', label: ar ? 'ضمن الحد' : 'Within the limit', count: counts.ok, tone: 'success' },
-                { key: 'approaching', label: ar ? 'تقترب من الحد' : 'Near the limit', count: counts.approaching, tone: 'warning' },
-                { key: 'over', label: ar ? 'تجاوزت الحد' : 'Over the limit', count: counts.over, tone: 'danger' },
+                { key: 'approaching', label: ar ? 'قرّبت تخلص' : 'Near the limit', count: counts.approaching, tone: 'warning' },
+                { key: 'over', label: ar ? 'تجاوزت الميزانية' : 'Over the limit', count: counts.over, tone: 'danger' },
                 /*
                  * Neutral, never green. A limit whose spend could not be compared has told nobody
                  * they are within it, and colouring it as success is the page asserting safety it
@@ -312,7 +312,7 @@ function LimitCard({
           testid={`spend-limit-${limit.id}-amount`}
         />
         <StatCard
-          label={ar ? 'المصروف' : 'Consumed'}
+          label={ar ? 'الإنفاق' : 'Consumed'}
           /* Never «0» for a figure nobody could compute — the em dash is the honest answer. */
           value={limit.consumed === null ? '—' : money(limit.consumed, limit.consumed_currency ?? limit.currency)}
           exact={limit.consumed === null ? undefined : moneyExact(limit.consumed, limit.consumed_currency ?? limit.currency ?? null)}
@@ -325,12 +325,12 @@ function LimitCard({
           tone={limit.remaining !== null && limit.remaining < 0 ? 'danger' : 'neutral'}
         />
         <StatCard
-          label={ar ? 'الاستهلاك' : 'Utilisation'}
+          label={ar ? 'نسبة الإنفاق' : 'Utilisation'}
           value={limit.utilisation === null ? '—' : percent(limit.utilisation, 0)}
           testid={`spend-limit-${limit.id}-utilisation`}
         />
         <StatCard
-          label={ar ? 'الإيقاع' : 'Pace'}
+          label={ar ? 'سرعة الصرف' : 'Pace'}
           /* >1 is ahead of plan, against the elapsed share of the limit — not against all of it. */
           value={limit.pace === null ? '—' : `${num(limit.pace * 100)}%`}
           hint={ar
@@ -460,7 +460,7 @@ function LimitPace({ limits, ar, locale }: { limits: SpendLimitReading[]; ar: bo
     <ChartCard
       title={ar ? 'سرعة الإنفاق مقابل الخطة' : 'Spending against the plan'}
       subtitle={ar
-        ? 'المصروف ÷ المتوقَّع حتى الآن. الخط عند 1.0 هو إيقاع الفترة، وما فوقه أسرع منها.'
+        ? 'الإنفاق ÷ المتوقَّع حتى الآن. الخط عند 1.0 هو سرعة صرف الفترة، وما فوقه أسرع منها.'
         : 'Spent ÷ expected by now. The line at 1.0 is the period’s own pace; past it is faster than that.'}
     >
       <RatioBars

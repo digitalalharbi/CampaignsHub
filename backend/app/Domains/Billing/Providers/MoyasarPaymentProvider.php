@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Billing\Providers;
 
 use App\Domains\Billing\Gateways\PaymentGatewaySettings;
+use App\Domains\Billing\Support\WebhookPayloadRedactor;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -142,7 +143,8 @@ final class MoyasarPaymentProvider implements PaymentProvider, ReconcilesCheckou
             'amount' => isset($data['amount']) ? number_format(((int) $data['amount']) / 100, 2, '.', '') : null,
             'currency' => (string) ($data['currency'] ?? 'SAR'),
             'reference' => (string) (($data['metadata']['reference'] ?? '') ?: ''),
-            'payload' => $body,
+            // The shared secret has done its job above; nothing downstream receives it.
+            'payload' => WebhookPayloadRedactor::redact($body),
         ];
     }
 

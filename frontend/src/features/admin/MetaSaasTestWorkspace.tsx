@@ -54,11 +54,11 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
   const [email, setEmail] = useState('')
   // Shown once, from the creation response only; a reload loses it on purpose (a new link needs «forgot password»).
   const [link, setLink] = useState<string | null>(null)
-  const create = useMutation({
+  const create = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => createMetaSaasTestWorkspace(email.trim()),
     onSuccess: (data) => { setLink(data.set_password_link ?? null); onSuccess(data) },
   })
-  const close = useMutation({ mutationFn: closeMetaSaasTestWorkspace, onSuccess })
+  const close = useMutation({ meta: { feedback: 'none' }, mutationFn: closeMetaSaasTestWorkspace, onSuccess })
   const error = create.error ?? close.error
   const code = error ? (toApiError(error).errors?.email?.[0] ?? null) : null
 

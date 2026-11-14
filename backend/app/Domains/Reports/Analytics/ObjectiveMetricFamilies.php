@@ -136,6 +136,10 @@ final class ObjectiveMetricFamilies
         'leads' => ['ar' => 'العملاء المحتملون', 'en' => 'Leads'],
         'cpl' => ['ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
         'purchases' => ['ar' => 'المشتريات', 'en' => 'Purchases'],
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the three figures the report presets name that no family block does.
+        'add_to_cart' => ['ar' => 'الإضافة للسلة', 'en' => 'Add to cart'],
+        'conversion_rate' => ['ar' => 'معدل التحويل', 'en' => 'Conversion rate'],
+        'completion_rate' => ['ar' => 'نسبة الإكمال', 'en' => 'Completion rate'],
         'conversions' => ['ar' => 'التحويلات', 'en' => 'Conversions'],
         'cost_per_conversion' => ['ar' => 'تكلفة التحويل', 'en' => 'Cost per conversion'],
         'revenue' => ['ar' => 'الإيراد', 'en' => 'Revenue'],
@@ -214,7 +218,7 @@ final class ObjectiveMetricFamilies
     {
         return match (true) {
             in_array($key, ['spend', 'revenue', 'cpm', 'cpc', 'cost_per_lpv', 'cpe', 'cost_per_view', 'cpl', 'cpa', 'cost_per_conversion', 'cpi'], true) => 'money',
-            in_array($key, ['ctr', 'engagement_rate'], true) => 'rate',
+            in_array($key, ['ctr', 'engagement_rate', 'conversion_rate', 'completion_rate'], true) => 'rate',
             $key === 'roas' => 'multiplier',
             $key === 'frequency' => 'ratio',
             default => 'count',

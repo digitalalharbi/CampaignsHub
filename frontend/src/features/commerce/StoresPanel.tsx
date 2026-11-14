@@ -110,7 +110,7 @@ export function StoresPanel({ projectId }: { projectId: string }) {
         : false,
   })
 
-  const sync = useMutation({
+  const sync = useMutation({ meta: { feedback: 'none' },
     mutationFn: syncStore,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commerce-stores'] }),
   })

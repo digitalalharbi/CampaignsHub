@@ -38,7 +38,7 @@ export function ResetPasswordPage() {
   const [confirmation, setConfirmation] = useState('')
   const [mismatch, setMismatch] = useState(false)
 
-  const mutation = useMutation({ mutationFn: resetPassword })
+  const mutation = useMutation({ meta: { feedback: 'none' }, mutationFn: resetPassword })
   const error = mutation.isError ? toApiError(mutation.error) : null
 
   /*

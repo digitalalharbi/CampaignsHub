@@ -180,13 +180,14 @@ final class Ga4Visibility
         }
         if (is_array($sections['ga4_classification'] ?? null)) {
             $c = $sections['ga4_classification'];
-            foreach (array_keys((array) $c['groups']) as $g) {
+            $c['groups'] = (array) ($c['groups'] ?? []);
+            foreach (array_keys($c['groups']) as $g) {
                 if (isset($h['dim.'.$g])) {
                     unset($c['groups'][$g]);
 
                     continue;
                 }
-                $c['groups'][$g]['rows'] = array_map(static fn (array $r): array => self::cols($r, $h), (array) $c['groups'][$g]['rows']);
+                $c['groups'][$g]['rows'] = array_map(static fn (array $r): array => self::cols($r, $h), (array) ($c['groups'][$g]['rows'] ?? []));
             }
             $sections['ga4_classification'] = $c['groups'] === [] ? null : $c;
         }

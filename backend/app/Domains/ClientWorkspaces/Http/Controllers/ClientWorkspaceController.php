@@ -8,11 +8,18 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Enums\WorkspaceMode;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Resources\ClientWorkspaceResource;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
+use App\Domains\Subscriptions\Services\SubscriptionService;
+use App\Domains\Tenancy\Context\TenantContext;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
+use App\Rules\UserInCurrentTenant;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -53,19 +60,61 @@ final class ClientWorkspaceController extends Controller
             'mode' => ['required', Rule::in(WorkspaceMode::values())],
             'branding' => ['nullable', 'array'],
             'limits' => ['nullable', 'array'],
+            // CLIENT-UNIT-001 — «عميل جديد» is ONE form: the client, its internal project and its portal.
+            'default_currency' => ['sometimes', 'nullable', 'string', 'size:3'],
+            'account_manager_id' => ['sometimes', 'nullable', 'integer', new UserInCurrentTenant],
+            'create_project' => ['sometimes', 'boolean'],
         ]);
 
-        $workspace = ClientWorkspace::create([
-            'name' => $validated['name'],
-            'slug' => $this->uniqueSlug($validated['name']),
-            'mode' => $validated['mode'],
-            'branding' => $validated['branding'] ?? null,
-            'limits' => $validated['limits'] ?? null,
-        ]);
+        $withProject = (bool) ($validated['create_project'] ?? false);
 
-        $audit->log(action: 'client_workspace.created', entityType: ClientWorkspace::class, entityId: (string) $workspace->id, after: ['name' => $workspace->name, 'mode' => $workspace->mode]);
+        /*
+         * The project is a second thing the plan counts, so its cap is checked HERE, before anything is written: the
+         * `clients` middleware only knows about clients, and a client created without the project it was promised —
+         * or a project past the cap — is the half-made state this form exists to prevent.
+         */
+        if ($withProject) {
+            abort_unless($request->user()->hasPermission('projects.create'), 403);
+            $tenant = Tenant::query()->findOrFail(app(TenantContext::class)->tenantId());
+            if (! app(SubscriptionService::class)->withinLimit($tenant, 'projects')) {
+                return app(EnsureWithinPlanLimit::class)->refusal($tenant, 'projects');
+            }
+        }
 
-        return ApiResponse::success(new ClientWorkspaceResource($workspace), 'Client workspace created.', status: 201);
+        [$workspace, $project] = DB::transaction(function () use ($validated, $withProject): array {
+            $workspace = ClientWorkspace::create([
+                'name' => $validated['name'],
+                'slug' => $this->uniqueSlug($validated['name']),
+                'mode' => $validated['mode'],
+                'branding' => $validated['branding'] ?? null,
+                'limits' => $validated['limits'] ?? null,
+                'default_currency' => isset($validated['default_currency']) ? strtoupper($validated['default_currency']) : null,
+            ]);
+
+            // The internal project carries the client's name and the manager; it is hidden in the interface until a
+            // second project is added (see `meta.internal`). Ids, routes and tenant isolation are unchanged.
+            $project = $withProject ? Project::create([
+                'client_workspace_id' => (string) $workspace->id,
+                'name' => $validated['name'],
+                'account_manager_id' => $validated['account_manager_id'] ?? null,
+                'status' => 'active',
+                'setup_completion' => 0,
+                'meta' => ['internal' => true],
+            ]) : null;
+
+            return [$workspace, $project];
+        });
+
+        $audit->log(action: 'client_workspace.created', entityType: ClientWorkspace::class, entityId: (string) $workspace->id, after: ['name' => $workspace->name, 'mode' => $workspace->mode, 'internal_project_id' => $project?->id]);
+
+        return ApiResponse::success(
+            array_merge((new ClientWorkspaceResource($workspace))->resolve($request), [
+                'project_id' => $project?->id,
+                'portal_path' => '/portal/'.$workspace->slug,
+            ]),
+            'Client workspace created.',
+            status: 201,
+        );
     }
 
     public function show(Request $request, ClientWorkspace $clientWorkspace): JsonResponse

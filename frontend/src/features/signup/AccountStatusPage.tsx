@@ -202,13 +202,13 @@ export function AccountStatusPage() {
     return () => window.clearTimeout(timer)
   }, [cooldown])
 
-  const verify = useMutation({ mutationFn: verifyRegistrationEmail, onSuccess: adopt, onError: failed })
-  const resend = useMutation({
+  const verify = useMutation({ meta: { feedback: 'none' }, mutationFn: verifyRegistrationEmail, onSuccess: adopt, onError: failed })
+  const resend = useMutation({ meta: { feedback: 'none' },
     mutationFn: (channel: 'email' | 'mobile') => resendRegistrationChallenge(id as string, channel),
     onSuccess: adopt,
     onError: failed,
   })
-  const confirmCode = useMutation({
+  const confirmCode = useMutation({ meta: { feedback: 'none' },
     mutationFn: (value: string) => verifyRegistrationMobile(id as string, value),
     onSuccess: adopt,
     onError: failed,
@@ -456,7 +456,7 @@ function PaymentStep({
   // A commitment nobody has agreed to blocks the charge — the server refuses it, so the button does.
   const blocked = terms !== null && terms.commitment_months > 0 && !agreed
 
-  const checkout = useMutation({
+  const checkout = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => startCheckout(reg.id, agreed),
     onSuccess: (r) => { setResult(r); onOpened(r) },
   })

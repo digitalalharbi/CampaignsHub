@@ -54,7 +54,7 @@ export const DEMO_OVERVIEW_VM: OverviewVM = {
   ],
   alerts: [
     { severity: 'high', text: 'ارتفاع تكلفة النتيجة 22% في حملة Google Ads' },
-    { severity: 'medium', text: 'استهلاك الميزانية أسرع من المخطط في Meta' },
+    { severity: 'medium', text: 'صرف الميزانية أسرع من المخطط في Meta' },
     { severity: 'info', text: 'تمت آخر مزامنة قبل دقائق — البيانات محدثة' },
   ],
   topCreatives: [

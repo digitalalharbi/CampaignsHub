@@ -408,9 +408,9 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case '__ga4_overview': case '__ga4_acquisition': case '__ga4_gap': case '__ga4_tables': case '__ga4_table':
     case '__ga4_pulse': case '__ga4_attribution': case '__ga4_reasons': case '__ga4_classification': case '__ga4_products':
       return <Ga4Slide slide={slide} data={data} paged={paged} />
-    // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
-    case '__formats': case '__formats_table':
-      return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
+    // CONTENT-FORMAT-COMPARISON-001 / REPORT-FORMAT-COMPARE-COMPACT-001 — «مقارنة أنواع المحتوى»: one compact page per report.
+    case '__formats':
+      return <FormatComparisonSlide data={data} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
@@ -1720,9 +1720,9 @@ function BudgetSlide({ data }: { data: ReportData }) {
   const bars = drawable.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget), spent: Number(r.spent) }))
   return (
     <div>
-      <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
+      <Title sub="المخطط مقابل الإنفاق وسرعة الصرف">تحليل الميزانية</Title>
       <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" className="flex flex-col items-center justify-center gap-2">
+        <ChartCard title="الإنفاق من الميزانية" className="flex flex-col items-center justify-center gap-2">
           {consumed === null ? (
             /* A total that cannot be stated says so — a ring at 0% would be read as «nothing spent». */
             <p className="px-3 text-center text-xs text-text-muted" data-testid="report-budget-unavailable">
@@ -1742,11 +1742,11 @@ function BudgetSlide({ data }: { data: ReportData }) {
             </>
           )}
         </ChartCard>
-        <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
-          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
+        <ChartCard title="المخطط مقابل الإنفاق" className="lg:col-span-2">
+          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
           {undrawable > 0 && (
             <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
-              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
+              {`${undrawable} منصة بلا إنفاق معلن — غير مرسومة`}
             </p>
           )}
         </ChartCard>
@@ -1764,9 +1764,9 @@ function BudgetSlide({ data }: { data: ReportData }) {
             columns={[
               { key: 'platform', label: 'المنصة', kind: 'text' },
               { key: 'budget', label: 'الميزانية', kind: 'money', currency: data.currency },
-              { key: 'spent', label: 'المصروف', kind: 'money', currency: data.currency },
+              { key: 'spent', label: 'الإنفاق', kind: 'money', currency: data.currency },
               { key: 'remaining', label: 'المتبقي', kind: 'money', currency: data.currency },
-              { key: 'consumed', label: 'الاستهلاك', kind: 'percent', digits: 0 },
+              { key: 'consumed', label: 'نسبة الإنفاق', kind: 'percent', digits: 0 },
               { key: 'pace', label: 'Pace', kind: 'text' },
               { key: 'projected', label: 'الصرف المتوقع', kind: 'money', currency: data.currency },
             ]}
@@ -2060,7 +2060,7 @@ const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
   stale: { ar: 'لم تتحدث مؤخرًا', tone: 'text-warning' },
   failed: { ar: 'تعذّرت المزامنة', tone: 'text-danger' },
   no_data: { ar: 'لا يوجد مصدر مرتبط', tone: 'text-text-muted' },
-  unknown: { ar: 'غير معروفة', tone: 'text-text-muted' },
+  unknown: { ar: 'بدون بيانات', tone: 'text-text-muted' },
 }
 
 /**

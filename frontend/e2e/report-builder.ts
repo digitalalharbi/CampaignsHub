@@ -20,7 +20,7 @@ export async function buildGeneratedClientReport(
 
   const clientSelect = page.getByLabel(/^العميل$|^Client$/)
   await expect(clientSelect).toBeVisible({ timeout: 20_000 })
-  const projectSelect = page.getByLabel(/^المشروع$|^Project$/)
+  const projectSelect = page.getByLabel(/^المشاريع$|^المشروع$|^Project$/)
 
   /*
    * Walk the clients until one has a project.
@@ -66,17 +66,36 @@ export async function buildGeneratedClientReport(
      * It looked like a time-of-day flake because the failures clustered; they cluster by seed speed.
      */
     const wanted = options.project
-    const readOptions = () =>
-      projectSelect.locator('option').evaluateAll(
-        (os, pattern) => {
-          const re = pattern ? new RegExp(pattern.source, pattern.flags) : null
-          return os
-            .map((o) => ({ value: (o as HTMLOptionElement).value, label: (o as HTMLOptionElement).text }))
-            .filter((o) => o.value && (re === null || re.test(o.label)))
-            .map((o) => o.value)
-        },
-        wanted ? { source: wanted.source, flags: wanted.flags } : null,
-      )
+    /*
+     * CLIENT-UNIT-001 — a client with ONE project has no project select: the switcher makes that project the scope the
+     * moment the client is chosen. So the candidates are the select's options when it is drawn (two or more projects),
+     * and otherwise the project the switcher stored, whose name is read from the API to honour `options.project`.
+     */
+    const readOptions = async (): Promise<string[]> => {
+      if ((await projectSelect.count()) > 0) {
+        return projectSelect.locator('option').evaluateAll(
+          (os, pattern) => {
+            const re = pattern ? new RegExp(pattern.source, pattern.flags) : null
+            return os
+              .map((o) => ({ value: (o as HTMLOptionElement).value, label: (o as HTMLOptionElement).text }))
+              .filter((o) => o.value && (re === null || re.test(o.label)))
+              .map((o) => o.value)
+          },
+          wanted ? { source: wanted.source, flags: wanted.flags } : null,
+        )
+      }
+
+      const stored = await page.evaluate(() => {
+        try { return JSON.parse(window.localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId ?? null } catch { return null }
+      })
+      if (typeof stored !== 'string' || stored === '') return []
+      if (wanted === null || wanted === undefined) return [stored]
+
+      const r = await page.request.get(`/api/v1/projects/${stored}`, { headers: API_HEADERS })
+      const name = r.ok() ? String((await r.json()).data?.name ?? '') : ''
+
+      return new RegExp(wanted.source, wanted.flags).test(name) ? [stored] : []
+    }
 
     let values: string[] = []
     for (let attempt = 0; attempt < 20 && values.length === 0; attempt++) {
@@ -100,7 +119,8 @@ export async function buildGeneratedClientReport(
     }
     if (chosen === '') continue
 
-    await projectSelect.selectOption(chosen)
+    const hasSelect = (await projectSelect.count()) > 0
+    if (hasSelect) await projectSelect.selectOption(chosen)
 
     /*
      * The switcher runs after its queries settle and clears a project it does not recognise, so the
@@ -108,7 +128,11 @@ export async function buildGeneratedClientReport(
      * builder will work; if not, this client is skipped rather than walking into a dead dialog.
      */
     await page.waitForTimeout(600)
-    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
+    const held = hasSelect
+      ? (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
+      : (await page.evaluate(() => {
+          try { return JSON.parse(window.localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId ?? null } catch { return null }
+        })) === chosen
 
     if (held) {
       projectId = chosen

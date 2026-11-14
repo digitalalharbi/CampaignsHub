@@ -21,8 +21,8 @@ export function ConsumptionBar({ consumed, expected, total, width = 'w-16' }: { 
     : consumed >= 0.9 ? 'bg-danger' : consumed >= 0.8 ? 'bg-warning' : 'bg-brand-500'
 
   const label = marker === null
-    ? (ar ? `المستهلك ${percent(consumed, 0)}` : `Consumed ${percent(consumed, 0)}`)
-    : (ar ? `المستهلك ${percent(consumed, 0)} — المتوقع حتى اليوم ${percent(marker, 0)}` : `Consumed ${percent(consumed, 0)} — expected by now ${percent(marker, 0)}`)
+    ? (ar ? `الإنفاق ${percent(consumed, 0)}` : `Consumed ${percent(consumed, 0)}`)
+    : (ar ? `الإنفاق ${percent(consumed, 0)} — المتوقع حتى اليوم ${percent(marker, 0)}` : `Consumed ${percent(consumed, 0)} — expected by now ${percent(marker, 0)}`)
 
   return (
     <span className="inline-flex items-center gap-2" data-testid="consumption-bar">

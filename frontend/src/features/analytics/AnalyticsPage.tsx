@@ -196,7 +196,7 @@ const TAB_GROUPS = [
       { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
-      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
+      { id: 'ad_sets', ar: 'المجموعات الإعلانية', en: 'Ad sets' },
       /*
        * ADS-TERMINOLOGY-001 — the DUPLICATION was in the name, not in the surface.
        *
@@ -1739,7 +1739,7 @@ function AccountBudgets({ projectId, range, filters, provider, picked, onPick }:
 
       <MetricTable
         head={ar
-          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت', 'الحملات']
+          ? ['الحساب', 'المنصة', 'الإنفاق', 'حدّ المنصة', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت', 'الحملات']
           : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under', 'Campaigns']}
         rows={rows.map((r) => {
           const unit = r.spent_currency ?? undefined
@@ -1879,7 +1879,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
     {!reading.isLoading && !reading.isError && (
       <BudgetReading reading={reading.data} locale={ar ? 'ar' : 'en'} />
     )}
-    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل الإنفاق وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
       {hiddenUnplaced > 0 && (
         /* A campaign linked to no provider campaign has no place on any rung; it is not hidden silently. */
         <p data-testid="budget-unplaced-note" className="mb-2 text-xs text-text-muted">
@@ -1902,19 +1902,19 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       */}
       <MetricTable
         head={ar
-          ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
           : ['Campaign', 'Budget', 'Platform limit', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => {
           const basisNote = r.pacing_basis === 'currency_mismatch'
             ? (ar
-                ? `المصروف بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
+                ? `الإنفاق بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
                 : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
             : r.pacing_basis === 'no_budget'
               ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
               : r.pacing_basis === 'partial'
-                ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
+                ? (ar ? 'جزء من الإنفاق محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
                 : r.pacing_basis === 'mixed_currency'
-                  ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
+                  ? (ar ? 'الإنفاق بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
                   : r.pacing_basis === 'nothing_measured_in_window'
                     ? (ar ? 'لا أرقام مقاسة لهذا المشروع في هذه الفترة — غياب، لا صفر' : 'Nothing was measured for this project in this period — an absence, not a zero')
                     : undefined
@@ -2301,7 +2301,7 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
           answer, and saying which sources were checked is what makes it believable.
         */}
         {ar
-          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — لا شيء يحتاج انتباهك هنا.'
+          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — ما فيه تنبيهات هنا.'
           : 'Every source in this window is current and complete — nothing here needs your attention.'}
       </p>
     )
@@ -4175,7 +4175,7 @@ function PlatformBudgets({ projectId, range, filters, picked, onPick }: TabProps
   return (
     <Panel
       title={ar ? 'الميزانية حسب المنصة' : 'Budget by platform'}
-      description={ar ? 'المخطط مقابل المصروف لكل منصة' : 'Planned against spent, per platform'}
+      description={ar ? 'المخطط مقابل الإنفاق لكل منصة' : 'Planned against spent, per platform'}
       loading={q.isLoading}
       error={q.isError}
       empty={!q.isLoading && rows.length === 0}
@@ -4191,7 +4191,7 @@ function PlatformBudgets({ projectId, range, filters, picked, onPick }: TabProps
           difference is the decision.
         */
         head={ar
-          ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          ? ['المنصة', 'الميزانية', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
           : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => [
           /* BUDGET-HIERARCHY-001 — a platform row is the first rung of the drill: one click narrows the accounts and campaigns below to it. */

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { PlatformFeaturesPage } from './PlatformFeaturesPage'
 import { renderWithProviders, signOut } from '@/test/utils'
+import { DialogHost } from '@/components/ui/DialogHost'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -30,10 +31,11 @@ describe('PlatformFeaturesPage', () => {
   afterEach(() => signOut())
 
   it('turns a capability off for everyone with the reason given', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('Incident on the redirect service')
-    renderWithProviders(<PlatformFeaturesPage />, { locale: 'en' })
+    renderWithProviders(<><PlatformFeaturesPage /><DialogHost /></>, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('feature-toggle-smart_links'))
+    fireEvent.change(await screen.findByTestId('dialog-input'), { target: { value: 'Incident on the redirect service' } })
+    fireEvent.click(screen.getByTestId('dialog-confirm'))
 
     await waitFor(() => expect(setPlatformCapability).toHaveBeenCalledWith('smart_links', true, 'Incident on the redirect service'))
   })
@@ -46,12 +48,13 @@ describe('PlatformFeaturesPage', () => {
   })
 
   it('includes a module in a plan after saying how many workspaces it reaches, and never offers a switch that changes nothing', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Growth now includes influencers')
-    renderWithProviders(<PlatformFeaturesPage />, { locale: 'en' })
+    renderWithProviders(<><PlatformFeaturesPage /><DialogHost /></>, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('plan-module-growth-influencer_intelligence'))
 
-    expect(prompt.mock.calls[0][0]).toMatch(/Affects 3 workspaces on Growth/)
+    expect(await screen.findByTestId('dialog-body')).toHaveTextContent(/Affects 3 workspaces on Growth/)
+    fireEvent.change(screen.getByTestId('dialog-input'), { target: { value: 'Growth now includes influencers' } })
+    fireEvent.click(screen.getByTestId('dialog-confirm'))
     await waitFor(() => expect(setPlanCapability).toHaveBeenCalledWith('p1', 'influencer_intelligence', true, 'Growth now includes influencers'))
     expect(screen.queryByTestId('plan-module-growth-smart_links')).not.toBeInTheDocument()
     expect(screen.getByTestId('plan-modules')).toHaveTextContent('Everyone has it')

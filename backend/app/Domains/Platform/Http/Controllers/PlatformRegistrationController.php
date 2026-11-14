@@ -8,9 +8,11 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Accounts\Models\RegistrationRequest;
+use App\Domains\Accounts\Models\RegistrationSendLog;
 use App\Domains\Accounts\Services\AdvanceRegistration;
 use App\Domains\Accounts\Services\RegistrationDecisionService;
 use App\Domains\Accounts\Services\RegistrationPolicy;
+use App\Domains\Accounts\Services\RegistrationVerificationService;
 use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
@@ -25,6 +27,8 @@ use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
+use Throwable;
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -49,6 +53,7 @@ final class PlatformRegistrationController extends Controller
         private readonly SubscriptionNotifier $notify,
         private readonly RegistrationVerificationSettings $verificationSettings,
         private readonly RegistrationDecisionService $decisions,
+        private readonly RegistrationVerificationService $verification,
     ) {}
 
     /** GET /api/v1/admin/registrations */
@@ -178,7 +183,7 @@ final class PlatformRegistrationController extends Controller
                 'url' => Frontend::origin()
                     .'/signup/status?request='.$registration->getKey(),
             ], occasion: $registration->getKey().':'.now()->toDateString());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             report($e);
         }
 
@@ -414,6 +419,97 @@ final class PlatformRegistrationController extends Controller
     }
 
     /**
+     * POST /api/v1/admin/registrations/{registration}/resend-verification — PLATFORM-INBOX-ATTENTION-001.
+     *
+     * Three applications sat at «بانتظار تأكيد الجوال» on Production for months with nothing the console could do but
+     * look at them. This issues a fresh challenge on the step the application is actually held at, through the same
+     * `RegistrationVerificationService::send()` the applicant's own «resend» uses — so the same cooldown, the same
+     * per-application and platform send caps, and the same honest delivery outcome.
+     *
+     * What it never does: verify anything, create an account, or show the administrator the code or link. The
+     * applicant still has to prove the address or number themselves. Audited with the outcome.
+     */
+    public function resendVerification(Request $request, RegistrationRequest $registration): JsonResponse
+    {
+        $this->tenants->enterPlatformScope();
+        $this->refuseIfSettled($registration);
+
+        $channel = match ($registration->state) {
+            AccountState::EmailVerificationRequired => 'email',
+            AccountState::MobileVerificationRequired => 'mobile',
+            default => null,
+        };
+
+        abort_if($channel === null, 422, __('accounts.nothing_to_verify'));
+        abort_if($channel === 'mobile' && $registration->phone === null, 422, __('accounts.no_mobile_on_file'));
+
+        /*
+         * The applicant's own path has a cooldown on mobile only. From the console, every channel is bounded: three per
+         * application per hour, so a held application cannot be turned into a stream of SMS (cost) or of replaced email
+         * links (each send retires the link the applicant holds). `hit()` returns the new count — one step.
+         */
+        $key = 'admin-resend-verification:'.$registration->getKey();
+        if (RateLimiter::hit($key, 3600) > 3) {
+            abort(429, __('api.too_many_requests'));
+        }
+
+        try {
+            $issued = $this->verification->send($registration, $channel);
+        } catch (Throwable $e) {
+            // A refusal before anything was sent (the mobile cooldown) does not use up one of the three.
+            RateLimiter::decrement($key, 3600);
+
+            throw $e;
+        }
+
+        $this->audit->log('registration.verification_resent', RegistrationRequest::class, (string) $registration->getKey(),
+            null, ['channel' => $channel, 'delivery_status' => $issued['delivery_status']]);
+
+        return ApiResponse::success([
+            'registration' => $this->row($registration->refresh(), $request),
+            // The outcome only. `dev_code` / `dev_link` are the applicant's secret even outside production.
+            'verification' => [
+                'channel' => $channel,
+                'delivery_status' => $issued['delivery_status'],
+                'expires_at' => $issued['expires_at'],
+            ],
+        ], $issued['delivery_status'] === RegistrationVerificationService::BLOCKED
+            ? 'No message was sent: the sending limit has been reached.'
+            : 'A new verification was issued.');
+    }
+
+    /**
+     * Where an application held at a verification step actually is: which step, since when, how many times a
+     * challenge went out and what the provider answered the last time. Null when it is not held at one.
+     *
+     * @return array{channel: string, since: string|null, sends: int, last_sent_at: string|null, last_outcome: string|null}|null
+     */
+    private function verificationStage(RegistrationRequest $registration): ?array
+    {
+        $channel = match ($registration->state) {
+            AccountState::EmailVerificationRequired => 'email',
+            AccountState::MobileVerificationRequired => 'mobile',
+            default => null,
+        };
+
+        if ($channel === null || $registration->isProvisioned()) {
+            return null;
+        }
+
+        $sends = RegistrationSendLog::query()->where('registration_request_id', $registration->getKey())->where('channel', $channel);
+        /** @var RegistrationSendLog|null $last */
+        $last = (clone $sends)->latest('created_at')->latest('id')->first();
+
+        return [
+            'channel' => $channel,
+            'since' => ($registration->state_changed_at ?? $registration->created_at)?->toIso8601String(),
+            'sends' => (clone $sends)->count(),
+            'last_sent_at' => $last?->created_at?->toIso8601String(),
+            'last_outcome' => $last?->outcome,
+        ];
+    }
+
+    /**
      * A decided application is not re-decidable here.
      *
      * Approving something that already has a workspace would run the whole path again; rejecting one
@@ -461,6 +557,7 @@ final class PlatformRegistrationController extends Controller
                 ])->all(),
             'created_at' => $registration->created_at?->toIso8601String(),
             'tenant_id' => $registration->tenant_id,
+            'verification_stage' => $this->verificationStage($registration),
         ];
     }
 

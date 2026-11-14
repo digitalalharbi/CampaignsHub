@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Platform\Services\ProductionReadiness;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -17,6 +18,10 @@ use Tests\TestCase;
  */
 final class MoyasarCredentialStatusTest extends TestCase
 {
+    // Reads tables (platform settings, provider configurations, currency rates): it must migrate its own database rather
+    // than rely on an earlier class having done so — under ParaTest each worker starts on an empty one.
+    use RefreshDatabase;
+
     // Assembled at runtime: a literal shaped like a live key is refused by GitHub's secret scanning, rightly.
     private const BODY = 'placeholder-key-body-for-tests-only-0000';
 

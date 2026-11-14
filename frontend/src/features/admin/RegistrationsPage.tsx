@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock, CreditCard, Loader2, MailQuestion, ShieldAlert, X } from 'lucide-react'
+import { Clock, CreditCard, Loader2, MailQuestion, Send, ShieldAlert, X } from 'lucide-react'
 import {
   decideRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
-  requestRegistrationInfo, updateRegistrationTerms,
+  requestRegistrationInfo, resendRegistrationVerification, updateRegistrationTerms,
   type AdminRegistration,
 } from './api'
 import { RegistrationDecisionForm } from './RegistrationDecisionForm'
@@ -13,6 +13,7 @@ import { TextInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { fmtDateTime } from '@/lib/datetime'
 
 /**
  * The registration review queue (SIGNUP-003).
@@ -47,6 +48,9 @@ const COPY = {
     defer: 'تأجيل القرار',
     reevaluate: 'إعادة تقييم التحقق', reevaluateHint: 'يطبق سياسة التحقق الحالية على هذا الطلب فقط. لا يغيّر الدفع أو الاعتماد ولا يؤكد شيئًا.',
     selectOne: 'اختر طلبًا لعرض تفاصيله.',
+    pendingEmail: 'البريد لم يتأكد بعد', pendingMobile: 'الجوال لم يتأكد بعد',
+    stuckAt: 'متوقف عند', stageEmail: 'تأكيد البريد', stageMobile: 'تأكيد الجوال', since: 'منذ', sends: 'مرات الإرسال', lastOutcome: 'آخر نتيجة',
+    resend: 'أعد الإرسال', resendHint: 'يرسل رمزًا جديدًا لصاحب الطلب. ما يأكّد شي ولا يفتح حساب.', resent: 'انطلب الإرسال',
   },
   en: {
     title: 'Registration requests',
@@ -70,6 +74,9 @@ const COPY = {
     defer: 'Defer',
     reevaluate: 'Re-evaluate verification', reevaluateHint: 'Applies the current verification policy to this application only. It changes no payment or approval, and proves nothing.',
     selectOne: 'Select an application to see its detail.',
+    pendingEmail: 'Email not confirmed yet', pendingMobile: 'Mobile not confirmed yet',
+    stuckAt: 'Held at', stageEmail: 'Email confirmation', stageMobile: 'Mobile confirmation', since: 'Since', sends: 'Sends', lastOutcome: 'Last outcome',
+    resend: 'Resend', resendHint: 'Sends the applicant a fresh code. It confirms nothing and opens no account.', resent: 'Resend requested',
   },
 } as const
 
@@ -81,6 +88,20 @@ const STATE_ICON: Record<string, typeof Clock> = {
   payment_pending: Clock,
   rejected: ShieldAlert,
 }
+
+/** PLATFORM-INBOX-ATTENTION-001 — what the last send did, in words. An unknown outcome is shown as it is. */
+const OUTCOME: Record<string, { ar: string; en: string }> = {
+  sent: { ar: 'انرسل', en: 'Sent' },
+  queued: { ar: 'بالطابور', en: 'Queued' },
+  pending: { ar: 'عند المزوّد', en: 'With the provider' },
+  failed: { ar: 'فشل الإرسال', en: 'Failed' },
+  awaiting_provider_credentials: { ar: 'مزوّد الإرسال غير مفعّل', en: 'Provider not set up' },
+  blocked_by_send_limit: { ar: 'بلغ حد الإرسال', en: 'Send limit reached' },
+  blocked_global_cap: { ar: 'بلغ الحد اليومي للمنصة', en: 'Platform daily cap reached' },
+  blocked_application_cap: { ar: 'بلغ حد هذا الطلب', en: 'This application\'s cap reached' },
+  reserved: { ar: 'قيد الإرسال', en: 'Sending' },
+}
+const outcomeWord = (key: string, ar: boolean) => (OUTCOME[key] ? (ar ? OUTCOME[key].ar : OUTCOME[key].en) : key)
 
 export function RegistrationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -221,6 +242,8 @@ function RegistrationDetail({ id, ar, copy, onChanged }: { id: string; ar: boole
   const reject = useMutation({ mutationFn: () => rejectRegistration(id, reason), onSuccess: after, onError: failed })
   const info = useMutation({ mutationFn: () => requestRegistrationInfo(id, note), onSuccess: after, onError: failed })
   const reevaluate = useMutation({ mutationFn: () => reevaluateRegistrationVerification(id, why), onSuccess: after, onError: failed })
+  // Its own error line inside the stage block: a cooldown refusal belongs beside the button that was refused.
+  const resend = useMutation({ mutationFn: () => resendRegistrationVerification(id), onSuccess: after })
   const saveTerms = useMutation({
     mutationFn: () => updateRegistrationTerms(id, {
       plan_code: terms.plan_code || undefined,
@@ -259,12 +282,38 @@ function RegistrationDetail({ id, ar, copy, onChanged }: { id: string; ar: boole
 
       <div className="flex flex-wrap gap-2 text-xs">
         <span data-testid="registration-standing-email" data-done={r.email_verified} data-standing={r.verification?.email} className={`rounded-lg px-2.5 py-1 font-semibold ${r.email_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
-          {r.verification?.email === 'not_required_by_policy' ? copy.notRequiredEmail : copy.verifiedEmail}
+          {r.verification?.email === 'not_required_by_policy' ? copy.notRequiredEmail : r.email_verified ? copy.verifiedEmail : copy.pendingEmail}
         </span>
         <span data-testid="registration-standing-mobile" data-done={r.mobile_verified} data-standing={r.verification?.mobile} className={`rounded-lg px-2.5 py-1 font-semibold ${r.mobile_verified ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
-          {r.verification?.mobile === 'not_required_by_policy' ? copy.notRequiredMobile : copy.verifiedMobile}
+          {r.verification?.mobile === 'not_required_by_policy' ? copy.notRequiredMobile : r.mobile_verified ? copy.verifiedMobile : copy.pendingMobile}
         </span>
       </div>
+
+      {/* PLATFORM-INBOX-ATTENTION-001 — held at a verification step: which one, since when, what the last send did. */}
+      {r.verification_stage && !settled && (
+        <div data-testid="registration-stage" data-channel={r.verification_stage.channel} className="rounded-xl border border-border bg-surface-secondary p-3 text-sm">
+          <p className="font-semibold text-text-primary">
+            {copy.stuckAt}: {r.verification_stage.channel === 'mobile' ? copy.stageMobile : copy.stageEmail}
+          </p>
+          <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs text-text-secondary">
+            <dt>{copy.since}</dt><dd><Num>{fmtDateTime(r.verification_stage.since)}</Num></dd>
+            <dt>{copy.sends}</dt><dd><Num>{r.verification_stage.sends}</Num></dd>
+            {r.verification_stage.last_outcome && (<><dt>{copy.lastOutcome}</dt><dd data-testid="registration-stage-outcome" data-outcome={r.verification_stage.last_outcome}>{outcomeWord(r.verification_stage.last_outcome, ar)}</dd></>)}
+          </dl>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button data-testid="registration-resend" size="sm" loading={resend.isPending} onClick={() => resend.mutate()}>
+              <Send size={14} aria-hidden /> {copy.resend}
+            </Button>
+            <span className="text-xs text-text-muted">{copy.resendHint}</span>
+          </div>
+          {resend.isSuccess && <p role="status" className="mt-1 text-xs font-semibold text-success">{copy.resent} · {outcomeWord(resend.data.verification.delivery_status, ar)}</p>}
+          {resend.isError && (
+            <p role="alert" data-testid="registration-resend-error" className="mt-1 text-xs font-semibold text-danger">
+              {toApiError(resend.error).errors?.channel?.[0] ?? toApiError(resend.error).message}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Which gates THIS application must clear — the plan's answer, or a reviewer's override of it. */}
       <div>

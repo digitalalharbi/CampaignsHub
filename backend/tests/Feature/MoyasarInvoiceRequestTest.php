@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Billing\Providers\MoyasarPaymentProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -16,6 +17,10 @@ use Tests\TestCase;
  */
 final class MoyasarInvoiceRequestTest extends TestCase
 {
+    // Reads tables (platform settings, provider configurations, currency rates): it must migrate its own database rather
+    // than rely on an earlier class having done so — under ParaTest each worker starts on an empty one.
+    use RefreshDatabase;
+
     public function test_the_invoice_returns_the_customer_by_success_and_back_url_not_callback_url(): void
     {
         config(['services.moyasar.secret_key' => 'sk_test_x', 'services.moyasar.webhook_token' => 'tok']);
