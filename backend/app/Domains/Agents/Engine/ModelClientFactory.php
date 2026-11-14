@@ -20,8 +20,12 @@ final class ModelClientFactory
     /** Providers whose client exists in this product. The others are configurable and say so. */
     public const SUPPORTED = ['anthropic', 'openai', 'gemini'];
 
-    /** @return array{client: ModelClient, provider: string, model: string, token_limit: int|null, credential_id: string} */
-    public function for(Project $project, string $role): array
+    /**
+     * @param  string|null  $preferredModel  AGENTS-ASSISTANT-001 — the workspace's chosen assistant model; used with an Anthropic key
+     *                                       when the key allows it (or names no models), otherwise the role's configured model.
+     * @return array{client: ModelClient, provider: string, model: string, token_limit: int|null, credential_id: string}
+     */
+    public function for(Project $project, string $role, ?string $preferredModel = null): array
     {
         $credential = AIProviderCredential::query()
             ->where('status', 'active')
@@ -39,6 +43,9 @@ final class ModelClientFactory
 
         $model = (string) (config("agents.models.{$credential->provider}.{$role}") ?? '');
         $allowed = (array) ($credential->allowed_models ?? []);
+        if ($preferredModel !== null && $credential->provider === 'anthropic' && ($allowed === [] || in_array($preferredModel, $allowed, true))) {
+            $model = $preferredModel;
+        }
         if ($allowed !== [] && ! in_array($model, $allowed, true)) {
             $model = (string) $allowed[0];
         }
@@ -49,18 +56,30 @@ final class ModelClientFactory
             throw new RuntimeException('model_not_configured');
         }
 
-        $client = app()->bound(ModelClient::class)
-            ? app(ModelClient::class)
-            : match ($credential->provider) {
-                'openai' => new OpenAiModelClient($credential->revealSecret(), $credential->organization_id, $credential->project_external_id),
-                'gemini' => new GeminiModelClient($credential->revealSecret()),
-                default => new AnthropicModelClient($credential->revealSecret()),
-            };
+        $client = $this->clientFor($credential);
 
         $credential->forceFill(['last_used_at' => now()])->save();
 
         return ['client' => $client, 'provider' => $credential->provider, 'model' => $model,
             'token_limit' => $credential->monthly_token_limit !== null ? (int) $credential->monthly_token_limit : null,
             'credential_id' => (string) $credential->getKey()];
+    }
+
+    /** The client for one stored key. A test binds `ModelClient` in the container, so no test reaches a provider. */
+    public function clientFor(AIProviderCredential $credential): ModelClient
+    {
+        if (app()->bound(ModelClient::class)) {
+            return app(ModelClient::class);
+        }
+        // AGENTS-SANDBOX-001 — the local/E2E model; never in production, whatever the variable says.
+        if (config('agents.model_driver') === 'sandbox' && ! app()->environment('production')) {
+            return app(SandboxModelClient::class);
+        }
+
+        return match ($credential->provider) {
+            'openai' => new OpenAiModelClient($credential->revealSecret(), $credential->organization_id, $credential->project_external_id),
+            'gemini' => new GeminiModelClient($credential->revealSecret()),
+            default => new AnthropicModelClient($credential->revealSecret()),
+        };
     }
 }

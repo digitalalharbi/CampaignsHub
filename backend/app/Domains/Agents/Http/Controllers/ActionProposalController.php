@@ -14,6 +14,7 @@ use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
  * AGENTS-APPROVAL-GATEWAY-001 — the approvals queue, over HTTP.
@@ -87,6 +88,51 @@ final class ActionProposalController extends Controller
         return ApiResponse::success($this->shape($this->service->reject($row, $request->user(), $data['note'] ?? null)), 'Decision recorded.');
     }
 
+    /**
+     * POST agent-proposals/bulk — AGENTS-ASSISTANT-001: decide up to 20 at once. Each id is looked up IN THIS PROJECT and decided one
+     * by one through the same gateway (rules re-read, permissions checked, executor only after an approval); one refusal never stops
+     * the others and every outcome is returned per item. The screen shows each item's exact change before this is called.
+     */
+    public function bulk(Request $request, string $project): JsonResponse
+    {
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject'])],
+            'ids' => ['required', 'array', 'min:1', 'max:20'],
+            'ids.*' => ['uuid', 'distinct'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $rows = ActionProposal::query()->where('project_id', $project)->whereIn('id', $data['ids'])->get()->keyBy(fn (ActionProposal $p): string => (string) $p->getKey());
+        $results = [];
+        foreach ($data['ids'] as $id) {
+            $row = $rows->get($id);
+            if ($row === null) {
+                $results[] = ['id' => $id, 'ok' => false, 'error' => 'not_found'];
+
+                continue;
+            }
+            try {
+                $decided = $data['decision'] === 'approve'
+                    ? $this->service->approve($row, $request->user(), $data['note'] ?? null)
+                    : $this->service->reject($row, $request->user(), $data['note'] ?? null);
+                $results[] = ['id' => $id, 'ok' => true, 'status' => $decided->status];
+            } catch (HttpExceptionInterface $e) {
+                $results[] = ['id' => $id, 'ok' => false, 'error' => $e->getStatusCode() === 403 ? 'forbidden' : 'not_pending'];
+            }
+        }
+
+        return ApiResponse::success(['results' => $results], 'Decisions recorded.');
+    }
+
+    /** PATCH agent-proposals/{proposal} — edit the amount of a pending daily-budget proposal; it still waits for an approval. */
+    public function amend(Request $request, string $project, string $proposal): JsonResponse
+    {
+        $row = $this->find($project, $proposal);
+        $data = $request->validate(['daily_budget' => ['required', 'numeric', 'gt:0'], 'note' => ['nullable', 'string', 'max:500']]);
+
+        return ApiResponse::success($this->shape($this->service->amend($row, $request->user(), (float) $data['daily_budget'], $data['note'] ?? null)), 'Proposal edited.');
+    }
+
     private function find(string $project, string $proposal): ActionProposal
     {
         return ActionProposal::query()->where('project_id', $project)->findOrFail($proposal);
@@ -104,6 +150,8 @@ final class ActionProposalController extends Controller
             'target_external_id' => $p->target_external_id,
             'action' => $p->action,
             'payload' => $p->payload,
+            // The budget when it was asked, for the «before → after» preview; nothing else of the evidence leaves the server.
+            'current_daily_budget' => is_numeric($p->evidence['current_daily_budget'] ?? null) ? (float) $p->evidence['current_daily_budget'] : null,
             'currency' => $p->currency,
             'reason' => $p->reason,
             'status' => $p->status,

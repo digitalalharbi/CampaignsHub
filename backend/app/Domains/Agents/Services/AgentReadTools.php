@@ -73,7 +73,7 @@ final class AgentReadTools
     /**
      * list_campaigns — the project's campaigns over a window, with the previous window for trend.
      *
-     * @return array{window: array{from: string, to: string}, previous: array{from: string, to: string}, campaigns: list<array<string, mixed>>}
+     * @return array{window: array{from: string, to: string}, previous: array{from: string, to: string}, currency: string|null, campaigns: list<array<string, mixed>>}
      */
     public function listCampaigns(Project $project, int $days = 7): array
     {
@@ -90,6 +90,8 @@ final class AgentReadTools
         return [
             'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'previous' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            // The money basis of every figure below; null when the rows hold none or more than one (never guessed).
+            'currency' => $this->engine($project)->currencyBasis($from, $to)['currency'],
             'campaigns' => array_values(array_map(fn (array $r): array => $this->slim($r) + [
                 'on_platform' => ($platform[$r['campaign_id'] ?? ''] ?? collect())->map(fn (ExternalCampaign $e): array => [
                     'provider' => $e->provider, 'external_account_id' => (string) $e->external_account_id,

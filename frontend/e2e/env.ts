@@ -154,4 +154,8 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
   REPORTS_CHROMIUM_ENABLED: 'true',
   // The gate walks the paid-signup journey, which needs a provider it can actually settle against.
   SUBSCRIPTION_PROVIDER: 'sandbox',
+  // AGENTS-SANDBOX-001 — the assistant answers from a local script that reads the real tools; no model provider is ever called.
+  AGENTS_MODEL_DRIVER: 'sandbox',
+  // An approved agent proposal is recorded and never carried to an ad platform from the gate (no real write, no real token).
+  AGENTS_EXECUTE_PROVIDERS: 'none',
 }

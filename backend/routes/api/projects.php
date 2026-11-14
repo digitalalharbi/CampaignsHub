@@ -389,6 +389,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on.
     Route::get('agent-routines', [AgentRoutinesController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-routines.index');
     Route::put('agent-routines', [AgentRoutinesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-routines.update');
+    Route::post('agent-routines/{routine}/run', [AgentRoutinesController::class, 'run'])->middleware('project.can:campaigns.manage')->name('agent-routines.run');
     // AGENTS-AUTONOMY-001 — the trust ladder and an owner's switch per action class.
     Route::get('agent-autonomy', [AgentAutonomyController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-autonomy.show');
     Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
@@ -414,12 +415,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::delete('agent-threads/{thread}', [AgentChatController::class, 'destroy'])->middleware('project.can:campaigns.view')->name('agent-threads.destroy');
     Route::delete('agent-threads', [AgentChatController::class, 'clear'])->middleware('project.can:campaigns.view')->name('agent-threads.clear');
     Route::post('agent-threads', [AgentChatController::class, 'send'])->middleware('project.can:campaigns.view')->name('agent-threads.send');
+    // AGENTS-ASSISTANT-001 — the team by job and autonomy, the live reply, Stop, and rename/pin of my own conversation.
+    Route::get('agents/team', [AgentChatController::class, 'team'])->middleware('project.can:campaigns.view')->name('agents.team');
+    Route::get('agent-threads/{thread}/live', [AgentChatController::class, 'live'])->middleware('project.can:campaigns.view')->name('agent-threads.live');
+    Route::post('agent-threads/{thread}/stop', [AgentChatController::class, 'stop'])->middleware('project.can:campaigns.view')->name('agent-threads.stop');
+    Route::patch('agent-threads/{thread}', [AgentChatController::class, 'update'])->middleware('project.can:campaigns.view')->name('agent-threads.update');
     // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
     Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
     Route::put('agent-rules', [AgentRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-rules.update');
     Route::get('agent-rules/compare', [AgentRulesController::class, 'compare'])->middleware('project.can:analytics.view')->name('agent-rules.compare');
     Route::get('agent-proposals', [ActionProposalController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-proposals.index');
     Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
+    // AGENTS-ASSISTANT-001 — several decisions at once (each one still re-checked one by one) and a person's edit of a pending budget.
+    Route::post('agent-proposals/bulk', [ActionProposalController::class, 'bulk'])->middleware('project.can:campaigns.manage')->name('agent-proposals.bulk');
+    Route::patch('agent-proposals/{proposal}', [ActionProposalController::class, 'amend'])->middleware('project.can:campaigns.manage')->name('agent-proposals.amend');
     Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
     Route::post('agent-proposals/{proposal}/reject', [ActionProposalController::class, 'reject'])->middleware('project.can:campaigns.manage')->name('agent-proposals.reject');
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
