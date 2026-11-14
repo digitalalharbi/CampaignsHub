@@ -9,6 +9,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Providers\ReportsAudienceBreakdowns;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +70,7 @@ final class AudienceBreakdownProbeCommand extends Command
             ->where('c.external_account_id', $account->getKey())->where('s.project_id', $project)->pluck('s.external_id', 's.id');
         $delivering = [];
         foreach (DB::table('entity_daily_metrics')->where('project_id', $project)->where('external_account_id', $account->getKey())
+            ->tap(fn ($q) => BoundAccountVisibility::applyToEntityMetrics($q, 'entity_daily_metrics'))
             ->where('entity_type', 'ad_set')->where('impressions', '>=', max(1, $probe->audienceMinimumImpressions()))->whereBetween('metric_date', [$from, $to])->get(['entity_id', 'metric_date']) as $d) {
             if (isset($sets[(string) $d->entity_id])) {
                 $delivering[(string) $sets[(string) $d->entity_id]][] = substr((string) $d->metric_date, 0, 10);
