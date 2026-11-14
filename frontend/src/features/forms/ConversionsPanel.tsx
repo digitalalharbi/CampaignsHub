@@ -162,9 +162,9 @@ function DestinationCard({ projectId, destination: d, formName }: { projectId: s
       <div className="flex flex-wrap items-center gap-2">
         {sendsFromServer && <Button size="sm" variant="secondary" loading={diagnose.isPending} onClick={() => diagnose.mutate(d.id, { onSuccess: setDiagnosis, onError: fail })} data-testid={`destination-diagnose-${d.id}`}>{ar ? 'تشخيص' : 'Diagnose'}</Button>}
         {d.status !== 'live' && <Button size="sm" onClick={() => setConfirming((v) => !v)} data-testid={`destination-golive-${d.id}`}>{ar ? 'تفعيل مباشر' : 'Go live'}</Button>}
-        {d.status === 'live' && <Button size="sm" variant="secondary" onClick={() => update.mutate({ id: d.id, status: 'test' }, { onError: fail })}>{ar ? 'العودة للاختبار' : 'Back to test'}</Button>}
-        {d.status !== 'off' && <Button size="sm" variant="ghost" onClick={() => update.mutate({ id: d.id, status: 'off' }, { onError: fail })}>{ar ? 'إيقاف' : 'Turn off'}</Button>}
-        <Button size="sm" variant="ghost" onClick={() => remove.mutate(d.id, { onError: fail })} data-testid={`destination-delete-${d.id}`}>{ar ? 'حذف' : 'Delete'}</Button>
+        {d.status === 'live' && <Button size="sm" variant="secondary" disabled={update.isPending} onClick={() => update.mutate({ id: d.id, status: 'test' }, { onError: fail })}>{ar ? 'العودة للاختبار' : 'Back to test'}</Button>}
+        {d.status !== 'off' && <Button size="sm" variant="ghost" disabled={update.isPending} onClick={() => update.mutate({ id: d.id, status: 'off' }, { onError: fail })}>{ar ? 'إيقاف' : 'Turn off'}</Button>}
+        <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate(d.id, { onError: fail })} data-testid={`destination-delete-${d.id}`}>{ar ? 'حذف' : 'Delete'}</Button>
       </div>
 
       {confirming && (

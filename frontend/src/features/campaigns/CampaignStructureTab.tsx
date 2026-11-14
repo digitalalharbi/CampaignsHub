@@ -156,7 +156,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
    * So the honest confirmation is «أُرسل الطلب» — not «تمت المزامنة», which would claim a platform
    * round trip that has not happened yet and may still fail in the worker.
    */
-  const discover = useMutation({
+  const discover = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => postData<{ queued: number }>(`/projects/${projectId}/campaigns/${campaign.id}/structure/sync`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: key })

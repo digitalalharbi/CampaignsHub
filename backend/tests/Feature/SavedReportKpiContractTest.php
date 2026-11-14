@@ -171,7 +171,7 @@ final class SavedReportKpiContractTest extends TestCase
     {
         $this->seedFour();
         $expected = [
-            'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
+            'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'frequency', 'cpc'],
             'awareness' => ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
             'engagement' => ['spend', 'impressions', 'engagements', 'engagement_rate'],
             'app_installs' => ['spend', 'impressions', 'clicks', 'installs', 'cpi'],

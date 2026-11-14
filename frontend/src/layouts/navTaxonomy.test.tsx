@@ -58,7 +58,7 @@ vi.mock('@/features/campaigns/CampaignFormModal', () => ({
   CampaignFormModal: ({ open }: { open: boolean }) => (open ? <div data-testid="campaign-builder" /> : null),
 }))
 
-describe('«إطلاق الحملات» opens the existing builder', () => {
+describe('«حملة جديدة» opens the existing builder', () => {
   beforeEach(() => useProject.getState().setCurrentProjectId('p1'))
   afterEach(() => signOut())
 
