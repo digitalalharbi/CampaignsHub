@@ -99,7 +99,7 @@ final class ShareSectionOverridesTest extends TestCase
         $rows = collect($this->actingAs($this->viewer, 'sanctum')->getJson($this->url($report, $share))->assertOk()->json('data.sections'))->keyBy('key');
 
         $this->assertSame(
-            ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'content_format_comparison', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation'],
+            ['kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'content_format_comparison', 'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'audience_targeting', 'audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional', 'audience_site', 'audience_spend', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation'],
             $rows->keys()->all(),
         );
         $this->assertSame('hidden_by_report', $rows['trends']['state']);
