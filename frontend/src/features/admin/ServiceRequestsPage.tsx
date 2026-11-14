@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { AlarmClock, Download, Inbox, MessageSquare, Paperclip, UserRound, X } from 'lucide-react'
+import { AlarmClock, Download, Inbox, MessageSquare, Paperclip, Send, UserRound, X } from 'lucide-react'
 import {
-  fetchServiceRequest, fetchServiceRequests, serviceRequestFileUrl, updateServiceRequest,
+  fetchServiceRequest, fetchServiceRequests, replyToServiceRequest, serviceRequestFileUrl, updateServiceRequest,
   type ServiceRequestFilter, type ServiceRequestList, type ServiceRequestRow,
 } from './api'
 import { Button } from '@/components/ui/Button'
+import { Replies } from './PlatformInboxPage'
 import { Pager } from '@/features/integrations/PageSizer'
 import { PlatformAlertsPanel } from './PlatformAlertsPanel'
 import { Num } from '@/components/ui/Num'
@@ -39,6 +40,7 @@ const COPY = {
     pickOwner: 'المسؤول', moveTo: 'انقل إلى', save: 'احفظ', saved: 'انحفظ', close: 'أغلق', log: 'السجل',
     late: 'متأخر', created: 'وصل الطلب', assigned: 'تغيّر المسؤول',
     messages: 'الردود', files: 'المرفقات', fromVisitor: 'صاحب الطلب', fromTeam: 'فريقنا', download: 'نزّل',
+    reply: 'رد على صاحب الطلب', send: 'أرسل', replyHint: 'يظهر في صفحة المتابعة ويوصله بالبريد.', sent: 'انحفظ الرد', replies: 'ردود البريد',
   },
   en: {
     title: 'Requests',
@@ -51,6 +53,7 @@ const COPY = {
     pickOwner: 'Owner', moveTo: 'Move to', save: 'Save', saved: 'Saved', close: 'Close', log: 'Log',
     late: 'Late', created: 'Request received', assigned: 'Owner changed',
     messages: 'Replies', files: 'Attachments', fromVisitor: 'Requester', fromTeam: 'Our team', download: 'Download',
+    reply: 'Reply to the requester', send: 'Send', replyHint: 'Shown on their tracking page and emailed.', sent: 'Reply saved', replies: 'Email replies',
   },
 } as const
 
@@ -204,6 +207,16 @@ function Detail({ id, ar, t, list, onClose }: { id: string; ar: boolean; t: Copy
     },
   })
 
+  const [replyBody, setReplyBody] = useState('')
+  const reply = useMutation({
+    mutationFn: () => replyToServiceRequest(id, replyBody.trim()),
+    onSuccess: (data) => {
+      qc.setQueryData(['admin', 'service-request', id], data)
+      setReplyBody('')
+      void qc.invalidateQueries({ queryKey: ['admin', 'service-requests'] })
+    },
+  })
+
   const changed = r !== undefined && (ownerValue !== (r.assignee ? String(r.assignee.id) : '') || statusValue !== r.status.key)
   const name = (key: string) => {
     const s = list.statuses.find((x) => x.key === key)
@@ -281,6 +294,22 @@ function Detail({ id, ar, t, list, onClose }: { id: string; ar: boolean; t: Copy
               </ol>
             </>
           )}
+
+          <form className="mt-5" onSubmit={(e) => { e.preventDefault(); if (replyBody.trim().length >= 2) reply.mutate() }}>
+            <label htmlFor="service-request-reply" className="block text-xs font-semibold text-text-muted">{t.reply}</label>
+            <textarea id="service-request-reply" data-testid="service-request-reply" value={replyBody} onChange={(e) => setReplyBody(e.target.value)}
+              rows={3} maxLength={5000} dir="auto" className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary" />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-xs text-text-muted">{t.replyHint}</span>
+              <Button type="submit" size="sm" data-testid="service-request-reply-send" disabled={replyBody.trim().length < 2 || reply.isPending}>
+                <Send size={14} aria-hidden /> {t.send}
+              </Button>
+            </div>
+            {reply.isSuccess && <p role="status" className="mt-1 text-xs font-semibold text-success">{t.sent}</p>}
+            {reply.isError && <p role="alert" className="mt-1 text-xs font-semibold text-danger">{toApiError(reply.error).message}</p>}
+          </form>
+
+          {(r.replies?.length ?? 0) > 0 && <Replies replies={r.replies ?? []} ar={ar} t={t} />}
 
           {r.files.length > 0 && (
             <>
