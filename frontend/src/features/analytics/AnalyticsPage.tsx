@@ -33,6 +33,7 @@ import {
   useObjectiveExplanations,
   useObjectiveLeaders,
   useObjectiveTrend,
+  useObjectivePaths,
   usePlatformObjectives,
   usePlatforms,
   useDrivers,
@@ -61,6 +62,7 @@ import {
   entityColumnPlan,
 } from './entityObjectiveColumns'
 import { PathAnalysis } from './PathAnalysis'
+import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -3712,6 +3714,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const leaders = useObjectiveLeaders(projectId, range, filters)
   const explanations = useObjectiveExplanations(projectId, range, filters)
   const trend = useObjectiveTrend(projectId, range, filters)
+  // OBJECTIVE-PATHS-001 — one total, the split by objective, one card per objective (ad-set paths).
+  const objectivePaths = useObjectivePaths(projectId, range, filters)
 
   /*
    * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
@@ -3752,6 +3756,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {/* OBJECTIVE-PATHS-001 — feature first: the one total and what each objective did with its share. */}
+      <ObjectivePathCards block={objectivePaths.data?.value} locale={ar ? 'ar' : 'en'} currency={currency} />
       {/*
         ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
 

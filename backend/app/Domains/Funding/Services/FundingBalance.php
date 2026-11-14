@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
  *
  *   remaining = Σ approved amounts (SAR) − Σ real spend (SAR) since the first counted day
  *
- * No periods, so nothing overlaps and nothing resets: a renewal adds to the approved side only.
+ * The spend counted is that of the budget's PERIOD: from its stated start (else the first day of real spend) to its
+ * stated end (else open). A renewal adds to the approved side only; a correction is a signed entry, never an edit.
  * Spend in a currency with no dated rate is COUNTED (`spend_without_rate`) and never read as zero —
  * the remaining figure is then marked incomplete instead of looking healthier than it is.
  * The pace is real spend of the last 7 full days; with no spend in that window there is no pace.
@@ -40,7 +41,7 @@ final class FundingBalance
         $added = DB::table('funding_payments')->where('project_id', $funding->project_id)
             ->selectRaw('paid_on, SUM(amount_sar) AS a')->groupBy('paid_on')->pluck('a', 'paid_on')
             ->mapWithKeys(static fn ($v, $k): array => [Carbon::parse((string) $k)->toDateString() => (float) $v])->all();
-        $spent = DB::table('funding_spend_days')->where('project_id', $funding->project_id)->where('spend_date', '>=', $from->toDateString())
+        $spent = $this->refresher->spendRows($funding)
             ->selectRaw('spend_date, SUM(amount_sar) AS s')->groupBy('spend_date')->pluck('s', 'spend_date')
             ->mapWithKeys(static fn ($v, $k): array => [Carbon::parse((string) $k)->toDateString() => (float) $v])->all();
 
@@ -68,18 +69,22 @@ final class FundingBalance
         $from = $this->refresher->countsFrom($funding);
 
         $approved = (float) DB::table('funding_payments')->where('project_id', $funding->project_id)->sum('amount_sar');
-        $payments = (int) DB::table('funding_payments')->where('project_id', $funding->project_id)->count();
+        $payments = (int) DB::table('funding_payments')->where('project_id', $funding->project_id)->whereIn('kind', ['initial', 'top_up'])->count();
 
-        $spendQuery = fn () => DB::table('funding_spend_days')->where('project_id', $funding->project_id)
-            ->when($from !== null, fn ($q) => $q->where('spend_date', '>=', $from->toDateString()), fn ($q) => $q->whereRaw('false'));
+        $to = $this->refresher->countsTo($funding);
+        $spendQuery = fn () => $this->refresher->spendRows($funding);
 
         $spent = (float) $spendQuery()->sum('amount_sar');
         $withoutRate = (int) $spendQuery()->whereNull('amount_sar')->where('original_amount', '>', 0)->count();
         $lastDay = $spendQuery()->max('spend_date');
 
-        $byPlatform = $spendQuery()->whereNotNull('amount_sar')
-            ->selectRaw('provider, SUM(amount_sar) AS spent')->groupBy('provider')->orderByDesc('spent')->get()
-            ->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2)])->all();
+        // Each platform's own part. A platform with days that have no dated rate says so in its own row
+        // (`unconverted_days`) — its figure is then a floor, never read as the whole of its spend.
+        $byPlatform = $spendQuery()
+            ->selectRaw('provider, COALESCE(SUM(amount_sar), 0) AS spent')
+            ->selectRaw('SUM(CASE WHEN amount_sar IS NULL AND original_amount > 0 THEN 1 ELSE 0 END) AS unconverted')
+            ->groupBy('provider')->orderByDesc('spent')->get()
+            ->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2), 'unconverted_days' => (int) $r->unconverted])->all();
 
         $weekStart = $today->copy()->subDays(7)->toDateString();
         $weekEnd = $today->copy()->subDay()->toDateString();
@@ -95,8 +100,9 @@ final class FundingBalance
 
         $status = match (true) {
             $funding->payment_method === 'unset' => 'unset',
+            $funding->voided_at !== null => 'void',
             $funding->payment_method === 'direct' => 'direct',
-            $payments === 0 => 'no_budget',
+            $approved <= 0 => 'no_budget',
             $remaining < 0 => 'over',
             // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
             $withoutRate > 0 => 'incomplete',
@@ -109,6 +115,11 @@ final class FundingBalance
             'client_workspace_id' => $funding->client_workspace_id,
             'payment_method' => $funding->payment_method,
             'counts_from' => $from?->toDateString(),
+            'period_start' => $from?->toDateString(),
+            'period_end' => $to?->toDateString(),
+            'period_start_stated' => $funding->starts_on !== null,
+            'voided_at' => $funding->voided_at?->toIso8601String(),
+            'void_reason' => $funding->void_reason,
             'alert_floor' => round((float) $funding->alert_floor, 2),
             'currency' => 'SAR',
             'approved' => round($approved, 2),

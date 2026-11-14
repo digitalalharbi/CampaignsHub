@@ -950,7 +950,7 @@ final class ReportGenerator
             $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
-                $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون تحويلات على '.$where, 'platform' => $burning['providers'][0] ?? null,
+                $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون نتائج على '.$where, 'platform' => $burning['providers'][0] ?? null,
                     'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
             }
         }
@@ -1002,7 +1002,7 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'مراجعة الإنفاق غير المُنتج على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
+                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون نتائج — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
             }
             /*
              * «Expand what works» named the top-converting CAMPAIGN. The platform carrying the most
@@ -1181,7 +1181,7 @@ final class ReportGenerator
             $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
             if ($burning !== null) {
                 $out[] = sprintf(
-                    'تنبيه: %s %s من الإنفاق على %s لم تُنتج تحويلات تُذكر — يُنصح بمراجعتها.',
+                    'تنبيه: %s %s من الإنفاق على %s لم تُنتج نتائج تُذكر — يُنصح بمراجعتها.',
                     number_format($burning['spend']),
                     $currency,
                     implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers'])),

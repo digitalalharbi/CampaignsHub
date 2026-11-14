@@ -21,6 +21,9 @@ use Illuminate\Support\Carbon;
  * @property string $project_id
  * @property string $payment_method
  * @property Carbon|null $starts_on
+ * @property Carbon|null $ends_on
+ * @property Carbon|null $voided_at
+ * @property string|null $void_reason
  * @property string $alert_floor
  */
 final class ProjectFunding extends Model
@@ -32,9 +35,9 @@ final class ProjectFunding extends Model
 
     protected $table = 'project_funding';
 
-    protected $fillable = ['tenant_id', 'client_workspace_id', 'project_id', 'payment_method', 'starts_on', 'alert_floor', 'created_by'];
+    protected $fillable = ['tenant_id', 'client_workspace_id', 'project_id', 'payment_method', 'starts_on', 'ends_on', 'alert_floor', 'voided_at', 'void_reason', 'voided_by', 'created_by'];
 
-    protected $casts = ['starts_on' => 'date', 'alert_floor' => 'decimal:2'];
+    protected $casts = ['starts_on' => 'date', 'ends_on' => 'date', 'voided_at' => 'datetime', 'alert_floor' => 'decimal:2'];
 
     /** @return BelongsTo<Project, $this> */
     public function project(): BelongsTo

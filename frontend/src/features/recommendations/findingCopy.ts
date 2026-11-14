@@ -14,7 +14,7 @@ const HEADLINES: Record<string, Pair> = {
   roas_drop: { ar: 'تراجع العائد على الإنفاق', en: 'Return on ad spend fell' },
   cpa_increase: { ar: 'ارتفعت تكلفة النتيجة', en: 'Cost per result rose' },
   cpl_increase: { ar: 'ارتفعت تكلفة العميل المحتمل', en: 'Cost per lead rose' },
-  no_results: { ar: 'إنفاق بلا نتائج', en: 'Spending with no results' },
+  no_results: { ar: 'صرف بدون نتائج', en: 'Spend with no results' },
   budget_risk: { ar: 'الميزانية تقترب من النفاد', en: 'Budget close to exhausted' },
   campaign_over_budget: { ar: 'الحملة تجاوزت ميزانيتها', en: 'Campaign is over its budget' },
   campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
@@ -116,7 +116,7 @@ export const factLabel = (k: FindingFactKey, ar: boolean) => pick(FACTS[k], ar, 
 
 export const extraMetricLabel = (key: string, ar: boolean): string | null =>
   key === 'projected_spend' ? (ar ? 'الإنفاق المتوقع' : 'Projected spend')
-    : key === 'spend_without_results' ? (ar ? 'إنفاق بلا نتائج إضافية' : 'Spend, results flat')
+    : key === 'spend_without_results' ? (ar ? 'صرف بدون نتائج إضافية' : 'Spend, results flat')
       : key === 'lpv_rate' ? (ar ? 'نسبة زيارات صفحة الهبوط' : 'Landing-page view rate')
         : key === 'cost_per_lpv' ? (ar ? 'تكلفة زيارة صفحة الهبوط' : 'Cost per landing-page view')
           : key === 'results' ? (ar ? 'النتائج' : 'Results')

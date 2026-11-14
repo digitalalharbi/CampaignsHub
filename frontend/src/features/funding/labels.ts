@@ -35,7 +35,40 @@ export const L = {
   empty: { ar: 'ما فيه ميزانيات بعد', en: 'No budgets yet' },
   spendUpTo: { ar: 'الإنفاق حتى', en: 'Spend up to' },
   sar: { ar: 'ر.س', en: 'SAR' },
+  edit: { ar: 'عدّل', en: 'Edit' },
+  del: { ar: 'احذف', en: 'Delete' },
+  undo: { ar: 'تراجع', en: 'Undo' },
+  save: { ar: 'احفظ', en: 'Save' },
+  cancel: { ar: 'إلغاء', en: 'Cancel' },
+  reason: { ar: 'السبب', en: 'Reason' },
+  note: { ar: 'ملاحظة', en: 'Note' },
+  period: { ar: 'الفترة', en: 'Period' },
+  from: { ar: 'من', en: 'From' },
+  to: { ar: 'إلى', en: 'To' },
+  open: { ar: 'مفتوحة', en: 'Open' },
+  total: { ar: 'المجموع', en: 'Total' },
+  deleted: { ar: 'المحذوفة', en: 'Deleted' },
+  back: { ar: 'الميزانيات', en: 'Budgets' },
+  close: { ar: 'إغلاق', en: 'Close' },
+  done: { ar: 'تم', en: 'Done' },
+  undone: { ar: 'تم التراجع', en: 'Undone' },
+  undoFailed: { ar: 'تعذّر التراجع', en: 'Undo failed' },
+  delTitle: { ar: 'حذف الميزانية', en: 'Delete budget' },
+  delDone: { ar: 'حُذفت الميزانية', en: 'Budget deleted' },
+  editDone: { ar: 'تم التعديل', en: 'Budget edited' },
+  addDone: { ar: 'أُضيفت الميزانية', en: 'Budget added' },
+  noRate: { ar: 'ناقص سعر صرف', en: 'No FX rate' },
+  pdfOff: { ar: 'PDF غير مفعّل', en: 'PDF is off' },
+  withHistory: { ar: 'مع السجل', en: 'With history' },
 } as const
+
+export const KIND: Record<'initial' | 'top_up' | 'adjustment' | 'void' | 'reversal', { ar: string; en: string }> = {
+  initial: { ar: 'ميزانية', en: 'Budget' },
+  top_up: { ar: 'تجديد', en: 'Renewal' },
+  adjustment: { ar: 'تعديل', en: 'Edit' },
+  void: { ar: 'حذف', en: 'Delete' },
+  reversal: { ar: 'تراجع', en: 'Undo' },
+}
 
 export const STATUS: Record<BudgetStatus, { ar: string; en: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   ok: { ar: 'ضمن الميزانية', en: 'On track', tone: 'success' },
@@ -45,6 +78,7 @@ export const STATUS: Record<BudgetStatus, { ar: string; en: string; tone: 'succe
   no_budget: { ar: 'بدون ميزانية', en: 'No budget', tone: 'neutral' },
   direct: { ar: 'دفع مباشر', en: 'Direct pay', tone: 'neutral' },
   unset: { ar: 'لم يُحدد', en: 'Not set', tone: 'neutral' },
+  void: { ar: 'محذوفة', en: 'Deleted', tone: 'neutral' },
 }
 
 export const TONE_BAR: Record<'success' | 'warning' | 'danger' | 'neutral', string> = {

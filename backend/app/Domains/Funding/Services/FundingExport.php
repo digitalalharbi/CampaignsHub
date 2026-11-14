@@ -17,9 +17,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  */
 final class FundingExport
 {
-    public const SUMMARY_HEAD = ['client', 'project', 'payment_method', 'approved_sar', 'spent_sar', 'remaining_sar', 'status', 'days_left', 'spend_up_to'];
+    public const SUMMARY_HEAD = ['client', 'project', 'payment_method', 'approved_sar', 'spent_sar', 'remaining_sar', 'status', 'days_left', 'spend_up_to', 'period_start', 'period_end', 'platforms_sar'];
 
-    public const MOVEMENTS_HEAD = ['date', 'client', 'project', 'kind', 'amount', 'currency', 'amount_sar', 'rate', 'rate_date', 'reference', 'note', 'added_by', 'added_at'];
+    public const MOVEMENTS_HEAD = ['date', 'client', 'project', 'kind', 'amount', 'currency', 'amount_sar', 'rate', 'rate_date', 'reference', 'note', 'added_by', 'added_at', 'reason'];
 
     /**
      * @param  list<list<mixed>>  $summary

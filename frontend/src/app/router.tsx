@@ -102,6 +102,7 @@ const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOve
 const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
 const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
 const ServiceRequestsPage = lazyPage(() => import('@/features/admin/ServiceRequestsPage'), 'ServiceRequestsPage')
+const PlatformInboxPage = lazyPage(() => import('@/features/admin/PlatformInboxPage'), 'PlatformInboxPage')
 const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
 const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
 const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
@@ -552,6 +553,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site. Platform-owned, never a
             // subscriber's requests: those stay in that subscriber's own `/agency/requests`.
             { path: 'requests', element: <ServiceRequestsPage /> },
+            { path: 'inbox', element: <PlatformInboxPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'addons', element: <AddonsPage /> },
             { path: 'plan-migration', element: <PlanMigrationPage /> },

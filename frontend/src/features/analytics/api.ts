@@ -1,3 +1,4 @@
+import type { ObjectivePathsBlock } from './ObjectivePathCards'
 import type { BudgetExplanationPayload } from './BudgetReading'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getEnvelope, getData, putData } from '@/lib/api/client'
@@ -1224,6 +1225,10 @@ export interface PathTrend {
  */
 export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
+
+/** OBJECTIVE-PATHS-001 — one total spend, its split by objective path, one card per objective. */
+export const useObjectivePaths = (p: string | null, r: Range, f?: MetricFilters) =>
+  useScopedMetric<ObjectivePathsBlock>('objective-paths', p, r, 'objective-paths', f)
 
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)
