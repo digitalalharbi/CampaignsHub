@@ -23,8 +23,23 @@ return [
     // A verification code still unused this long after it expired, with the customer still stuck, is reported.
     'otp_stuck_after_minutes' => (int) env('PLATFORM_ALERTS_OTP_STUCK_MINUTES', 30),
 
-    // A confirmed payment that has not appeared in a settlement after this many days (only with a settlement source).
-    'settlement_after_days' => (int) env('PLATFORM_ALERTS_SETTLEMENT_DAYS', 4),
+    /*
+     * A confirmed payment that has not appeared in a Moyasar settlement after this many days is reported. Moyasar's
+     * Settlement API documentation states no settlement cycle, so the default is a conservative week.
+     */
+    'settlement_after_days' => (int) env('PLATFORM_ALERTS_SETTLEMENT_DAYS', 7),
+
+    // Where settlements are read: `moyasar` (the Settlement API, with the stored gateway secret key) or `none`.
+    'settlement_source' => env('PLATFORM_ALERTS_SETTLEMENT_SOURCE', 'moyasar'),
+
+    // After Moyasar refuses the key for settlements (401/403), the check stays off this long before asking again.
+    'settlement_refused_hours' => (int) env('PLATFORM_ALERTS_SETTLEMENT_REFUSED_HOURS', 6),
+
+    // With no settlement ever on the Moyasar account, the check is information only; asked again after this long.
+    'settlement_history_recheck_hours' => (int) env('PLATFORM_ALERTS_SETTLEMENT_HISTORY_RECHECK_HOURS', 12),
+
+    // A ceiling on pages read per list, so a sweep cannot loop; reaching it makes the answer «unknown», not «unsettled».
+    'settlement_max_pages' => (int) env('PLATFORM_ALERTS_SETTLEMENT_MAX_PAGES', 50),
 
     // A grouped technical error that grows is mailed again, at most this often.
     'group_reannounce_hours' => (int) env('PLATFORM_ALERTS_GROUP_REANNOUNCE_HOURS', 3),

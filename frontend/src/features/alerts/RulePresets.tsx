@@ -20,13 +20,14 @@ export function isPresetAdded(template: RuleTemplate, rules: readonly AlertRule[
   return rules.some((r) => r.type === template.rule.type && same(r.threshold, template.rule.threshold))
 }
 
-export function RulePresets({ rules, onAdd, busy, ar }: { rules: readonly AlertRule[]; onAdd: (rule: NewAlertRule, name: string) => void; busy: boolean; ar: boolean }) {
+/** `bare` drops the frame and the heading when a fold around it already carries the title. */
+export function RulePresets({ rules, onAdd, busy, ar, bare = false }: { rules: readonly AlertRule[]; onAdd: (rule: NewAlertRule, name: string) => void; busy: boolean; ar: boolean; bare?: boolean }) {
   const sev: Record<string, string> = { critical: 'text-danger', warning: 'text-warning', info: 'text-info' }
   const sevLabel: Record<string, string> = ar ? { critical: 'حرج', warning: 'تحذير', info: 'معلومة' } : { critical: 'Critical', warning: 'Warning', info: 'Info' }
 
   return (
-    <section data-testid="rule-presets" className="rounded-2xl border border-border bg-surface p-4">
-      <h3 className="text-sm font-bold text-text-primary">{ar ? 'قواعد جاهزة' : 'Ready-made rules'}</h3>
+    <section data-testid="rule-presets" className={bare ? 'px-3.5 pb-3.5' : 'rounded-2xl border border-border bg-surface p-4'}>
+      {!bare && <h3 className="text-sm font-bold text-text-primary">{ar ? 'قواعد جاهزة' : 'Ready-made rules'}</h3>}
       <p className="mb-3 text-xs text-text-muted">{ar ? 'أضف حماية جاهزة بضغطة واحدة، وعدّلها لاحقًا إن أردت.' : 'Add protection in one click and tune it later if you want.'}</p>
       <div className="space-y-4">
         {TEMPLATE_GROUPS.map((g) => (

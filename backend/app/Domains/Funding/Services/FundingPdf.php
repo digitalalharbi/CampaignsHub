@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\FundingPayment;
+use App\Domains\Funding\Support\FundingDisclaimer;
 use App\Domains\Reports\Services\ChromiumPdfRenderer;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
@@ -32,11 +33,16 @@ final class FundingPdf
     /**
      * @param  list<array<string, mixed>>  $rows  client + project + FundingBalance::of()
      * @param  array<string, list<FundingPayment>>  $history  ledger entries by project id (empty = not asked for)
+     * @param  array<string, mixed>  $statement  `FundingStatement::block()` — the identity header of «البيان المالي»
      */
-    public function html(array $rows, array $history, string $asOf, string $lang = 'ar'): string
+    public function html(array $rows, array $history, string $asOf, string $lang = 'ar', array $statement = []): string
     {
         $lang = $lang === 'en' ? 'en' : 'ar';
-        $prepaid = array_filter($rows, static fn (array $r): bool => $r['payment_method'] === 'prepaid');
+        $direct = array_filter($rows, static fn (array $r): bool => $r['payment_method'] === 'prepaid' && ($r['payment_mode'] ?? 'direct') === 'direct');
+        $credit = array_filter($rows, static fn (array $r): bool => $r['payment_method'] === 'prepaid' && ($r['payment_mode'] ?? 'direct') === 'credit');
+        $statement += ['lang' => $lang, 'title' => $lang === 'ar' ? 'البيان المالي' : 'Financial statement', 'agency' => ['name' => '', 'logo' => null],
+            'disclaimer' => FundingDisclaimer::text($lang), 'fx_note' => FundingDisclaimer::fxNote($lang), 'currency' => 'SAR', 'period' => $asOf,
+            'generated_at' => $asOf, 'generated_by' => '', 'client' => null, 'clients' => count($rows), 'project' => null, 'projects' => count($rows), 'mode' => null, 'budget_period' => null];
 
         return View::make('funding.document', [
             'rows' => $rows,
@@ -44,10 +50,14 @@ final class FundingPdf
             'asOf' => $asOf,
             'lang' => $lang,
             'dir' => $lang === 'ar' ? 'rtl' : 'ltr',
+            'statement' => $statement,
+            // One grid for the head, the rows and the totals row: the same columns, the same order.
             'totals' => [
-                'approved' => array_sum(array_column($prepaid, 'approved')),
-                'spent' => array_sum(array_column($prepaid, 'spent')),
-                'remaining' => array_sum(array_map(static fn (array $r): float => (float) $r['remaining'], $prepaid)),
+                // Prepaid budgets only: a credit ceiling is a limit, not money paid in, and is never added to one.
+                'approved' => (float) array_sum(array_column($direct, 'approved')),
+                'spent' => (float) array_sum(array_column($direct, 'spent')) + (float) array_sum(array_column($credit, 'spent')),
+                'remaining' => (float) array_sum(array_map(static fn (array $r): float => (float) $r['remaining'], $direct)),
+                'to_invoice' => (float) array_sum(array_map(static fn (array $r): float => (float) ($r['this_month'] ?? 0), $credit)),
             ],
         ])->render();
     }
@@ -55,9 +65,10 @@ final class FundingPdf
     /**
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, list<FundingPayment>>  $history
+     * @param  array<string, mixed>  $statement
      * @return string the PDF bytes
      */
-    public function render(array $rows, array $history, string $asOf, string $lang = 'ar'): string
+    public function render(array $rows, array $history, string $asOf, string $lang = 'ar', array $statement = []): string
     {
         if (! $this->available()) {
             throw new RuntimeException('PDF rendering is not enabled on this deployment.');
@@ -65,7 +76,7 @@ final class FundingPdf
 
         $html = tempnam(sys_get_temp_dir(), 'chfund_').'.html';
         $out = tempnam(sys_get_temp_dir(), 'chfund_').'.pdf';
-        file_put_contents($html, $this->html($rows, $history, $asOf, $lang));
+        file_put_contents($html, $this->html($rows, $history, $asOf, $lang, $statement));
 
         $timeout = (int) config('reports.chromium.timeout_ms', 45000);
         $process = new Process(

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -71,6 +72,28 @@ final class DigestScope
         $ceiling = $this->ceilingFor($user, $membership, $tenantId);
 
         return $this->narrowToPreference($ceiling, $user, $tenantId);
+    }
+
+    /**
+     * ALERT-RULES-MANAGE-001 — what this person may reach in this tenant, BEFORE their own digest preference.
+     *
+     * A named alert recipient is checked against the ceiling, not the preference: a preference narrows
+     * what a digest covers, and an alert rule that names somebody is a separate, explicit choice.
+     *
+     * @return list<string>
+     */
+    public function ceilingIdsFor(User $user, string $tenantId): array
+    {
+        // The internal membership: a person who also holds a client-portal login is judged by their staff reach.
+        $membership = Membership::query()
+            ->with('scopes')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $user->getKey())
+            ->where('status', 'active')
+            ->whereIn('portal', [Portal::App->value, Portal::Agency->value])
+            ->first();
+
+        return $membership === null ? [] : $this->ceilingFor($user, $membership, $tenantId);
     }
 
     /**

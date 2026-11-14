@@ -477,7 +477,7 @@
                 "dedup_key": "3d0600b99f362bc17e8dd292986060683d0068ace4213845b76350c3df60a35d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": false}",
                 "notification_id": "00000000-0000-4000-8000-000000005514",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -564,7 +564,7 @@
                 "dedup_key": "2f45c6867ab3fd4a3c7b5e84848556973a9775c582b9851ad0bdcf00e085380c",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": "00000000-0000-4000-8000-000000005526",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -574,7 +574,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -1144,7 +1144,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1154,7 +1154,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -1260,7 +1260,7 @@
                 "dedup_key": "5a0c47edf487116339d88b5c96aaa0b2a60ef226e362c061efac6ff2b443c706",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1270,7 +1270,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -1929,7 +1929,7 @@
                 "user_id": null,
                 "type": "budget_risk",
                 "severity": "warning",
-                "title": "Budget at risk",
+                "title": "Campaign budget ran out",
                 "message": "other-project-budget has spent 980% of its budget.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Campaigns\\Models\\UnifiedCampaign",
@@ -1941,7 +1941,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "1d464a48354bf53303f8a4f8dc0447625ed28fe8d46a11a247d71bfb37a2a640",
-                "title_ar": "ميزانية المنصة قربت تخلص",
+                "title_ar": "خلصت ميزانية المنصة",
                 "message_ar": "الإنفاق 980.00 / 100.00 (⁦980%⁩)"
             },
             {
@@ -2263,7 +2263,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -6574,7 +6574,7 @@
                 "dedup_key": "3d0600b99f362bc17e8dd292986060683d0068ace4213845b76350c3df60a35d",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": false}",
                 "notification_id": "00000000-0000-4000-8000-000000005514",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -6661,7 +6661,7 @@
                 "dedup_key": "2f45c6867ab3fd4a3c7b5e84848556973a9775c582b9851ad0bdcf00e085380c",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": "00000000-0000-4000-8000-000000005526",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -6671,7 +6671,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -7241,7 +7241,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7251,7 +7251,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -7357,7 +7357,7 @@
                 "dedup_key": "5a0c47edf487116339d88b5c96aaa0b2a60ef226e362c061efac6ff2b443c706",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7367,7 +7367,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -8026,7 +8026,7 @@
                 "user_id": null,
                 "type": "budget_risk",
                 "severity": "warning",
-                "title": "Budget at risk",
+                "title": "Campaign budget ran out",
                 "message": "other-project-budget has spent 980% of its budget.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Campaigns\\Models\\UnifiedCampaign",
@@ -8038,7 +8038,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "1d464a48354bf53303f8a4f8dc0447625ed28fe8d46a11a247d71bfb37a2a640",
-                "title_ar": "ميزانية المنصة قربت تخلص",
+                "title_ar": "خلصت ميزانية المنصة",
                 "message_ar": "الإنفاق 980.00 / 100.00 (⁦980%⁩)"
             },
             {
@@ -8360,7 +8360,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -12770,7 +12770,7 @@
                 "dedup_key": "3d0600b99f362bc17e8dd292986060683d0068ace4213845b76350c3df60a35d",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": false}",
                 "notification_id": "00000000-0000-4000-8000-000000005514",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -12857,7 +12857,7 @@
                 "dedup_key": "2f45c6867ab3fd4a3c7b5e84848556973a9775c582b9851ad0bdcf00e085380c",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": "00000000-0000-4000-8000-000000005526",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -12867,7 +12867,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -13437,7 +13437,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -13447,7 +13447,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -13553,7 +13553,7 @@
                 "dedup_key": "5a0c47edf487116339d88b5c96aaa0b2a60ef226e362c061efac6ff2b443c706",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": true}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -13563,7 +13563,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -14222,7 +14222,7 @@
                 "user_id": null,
                 "type": "budget_risk",
                 "severity": "warning",
-                "title": "Budget at risk",
+                "title": "Campaign budget ran out",
                 "message": "other-project-budget has spent 980% of its budget.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Campaigns\\Models\\UnifiedCampaign",
@@ -14234,7 +14234,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "1d464a48354bf53303f8a4f8dc0447625ed28fe8d46a11a247d71bfb37a2a640",
-                "title_ar": "ميزانية المنصة قربت تخلص",
+                "title_ar": "خلصت ميزانية المنصة",
                 "message_ar": "الإنفاق 980.00 / 100.00 (⁦980%⁩)"
             },
             {
@@ -14556,7 +14556,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -19455,7 +19455,7 @@
                 "dedup_key": "3d0600b99f362bc17e8dd292986060683d0068ace4213845b76350c3df60a35d",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": false}",
                 "notification_id": "00000000-0000-4000-8000-000000005514",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -19542,7 +19542,7 @@
                 "dedup_key": "2f45c6867ab3fd4a3c7b5e84848556973a9775c582b9851ad0bdcf00e085380c",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\", \"budget_exhausted\": true}",
                 "notification_id": "00000000-0000-4000-8000-000000005526",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -19552,7 +19552,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -20122,7 +20122,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -20132,7 +20132,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -20238,7 +20238,7 @@
                 "dedup_key": "5a0c47edf487116339d88b5c96aaa0b2a60ef226e362c061efac6ff2b443c706",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\", \"budget_exhausted\": true}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -20248,7 +20248,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -20907,7 +20907,7 @@
                 "user_id": null,
                 "type": "budget_risk",
                 "severity": "warning",
-                "title": "Budget at risk",
+                "title": "Campaign budget ran out",
                 "message": "other-project-budget has spent 980% of its budget.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Campaigns\\Models\\UnifiedCampaign",
@@ -20919,7 +20919,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "1d464a48354bf53303f8a4f8dc0447625ed28fe8d46a11a247d71bfb37a2a640",
-                "title_ar": "ميزانية المنصة قربت تخلص",
+                "title_ar": "خلصت ميزانية المنصة",
                 "message_ar": "الإنفاق 980.00 / 100.00 (⁦980%⁩)"
             },
             {
@@ -21241,7 +21241,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -21793,7 +21793,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 22:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -28408,7 +28408,7 @@
                 "dedup_key": "3d0600b99f362bc17e8dd292986060683d0068ace4213845b76350c3df60a35d",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\"}",
+                "context": "{\"ratio\": 0.95, \"spend\": 950, \"title\": \"Budget at risk\", \"budget\": 1000, \"message\": \"budget-risk has spent 95% of its budget.\", \"basis_class\": \"measured\", \"budget_exhausted\": false}",
                 "notification_id": "00000000-0000-4000-8000-000000005514",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -28495,7 +28495,7 @@
                 "dedup_key": "2f45c6867ab3fd4a3c7b5e84848556973a9775c582b9851ad0bdcf00e085380c",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\", \"budget_exhausted\": true}",
                 "notification_id": "00000000-0000-4000-8000-000000005526",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -28505,7 +28505,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -29075,7 +29075,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -29085,7 +29085,7 @@
                 "updated_at": "2026-10-22 10:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -29191,7 +29191,7 @@
                 "dedup_key": "5a0c47edf487116339d88b5c96aaa0b2a60ef226e362c061efac6ff2b443c706",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Budget at risk\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\"}",
+                "context": "{\"ratio\": 9.8, \"spend\": 980, \"title\": \"Campaign budget ran out\", \"budget\": 100, \"message\": \"other-project-budget has spent 980% of its budget.\", \"closed_at\": \"2026-10-21T22:00:00+00:00\", \"basis_class\": \"measured\", \"closed_reason\": \"campaign_not_running\", \"budget_exhausted\": true}",
                 "notification_id": null,
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -29201,7 +29201,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 980, \"limit\": 100, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": null, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.\", \"en\": \"Decide today: keep the budget, adjust it, or pause what is not delivering.\"}, \"impact\": {\"ar\": \"الحملة صرفت أغلب ميزانيتها.\", \"en\": \"The campaign has used a large share of its budget.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"ميزانية المنصة قربت تخلص\", \"en\": \"The the platform budget is nearly used up\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"جدّد الميزانية ← أو اتركها تنتهي.\", \"en\": \"Renew the budget, or let the campaign end.\"}, \"impact\": {\"ar\": \"الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.\", \"en\": \"Spend reached the whole budget, by the platform's figures.\"}, \"numbers\": {\"ar\": \"الإنفاق 980.00 / 100.00 (⁦980%⁩)\", \"en\": \"Spent 980.00 / 100.00 (⁦980%⁩)\"}, \"problem\": {\"ar\": \"خلصت ميزانية المنصة\", \"en\": \"The the platform budget ran out\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -29889,7 +29889,7 @@
                 "user_id": null,
                 "type": "budget_risk",
                 "severity": "warning",
-                "title": "Budget at risk",
+                "title": "Campaign budget ran out",
                 "message": "other-project-budget has spent 980% of its budget.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Campaigns\\Models\\UnifiedCampaign",
@@ -29901,7 +29901,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "1d464a48354bf53303f8a4f8dc0447625ed28fe8d46a11a247d71bfb37a2a640",
-                "title_ar": "ميزانية المنصة قربت تخلص",
+                "title_ar": "خلصت ميزانية المنصة",
                 "message_ar": "الإنفاق 980.00 / 100.00 (⁦980%⁩)"
             },
             {
@@ -30223,7 +30223,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -30775,7 +30775,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 22:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -31258,7 +31258,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-22 10:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -40475,8 +40475,8 @@
                 },
                 {
                     "severity": "warning",
-                    "title": "ميزانية ميتا قربت تخلص",
-                    "detail": "الحملة صرفت أغلب ميزانيتها.",
+                    "title": "خلصت ميزانية ميتا",
+                    "detail": "الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.",
                     "context": "Other · ميتا · المبيعات · P2",
                     "numbers": "الإنفاق 980.00 / 100.00 (⁦980%⁩)",
                     "figures": {
@@ -40495,7 +40495,7 @@
                             }
                         ]
                     },
-                    "action": "أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.",
+                    "action": "جدّد الميزانية ← أو اتركها تنتهي.",
                     "url": "http://localhost:5173/app/campaigns/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000004917",
                     "button": "افتح الحملة",
                     "secondary": "الحملة: other-project-budget",
@@ -40511,7 +40511,8 @@
                         "basis_class": "measured",
                         "spend": 980,
                         "budget": 100,
-                        "ratio": 9.8
+                        "ratio": 9.8,
+                        "budget_exhausted": true
                     },
                     "chip": {
                         "state": "watch",
@@ -40519,17 +40520,16 @@
                         "label": "انتبه"
                     },
                     "timeline": null,
-                    "line": "الحملة صرفت أغلب ميزانيتها.",
+                    "line": "الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.",
                     "steps": [
-                        "أبقِ الميزانية",
-                        "أو عدّلها",
-                        "أو أوقف الأقل أداءً"
+                        "جدّد الميزانية",
+                        "أو اتركها تنتهي"
                     ]
                 },
                 {
                     "severity": "warning",
-                    "title": "ميزانية ميتا قربت تخلص",
-                    "detail": "الحملة صرفت أغلب ميزانيتها.",
+                    "title": "خلصت ميزانية ميتا",
+                    "detail": "الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.",
                     "context": "Other · ميتا · المبيعات · P2",
                     "numbers": "الإنفاق 980.00 / 100.00 (⁦980%⁩)",
                     "figures": {
@@ -40548,7 +40548,7 @@
                             }
                         ]
                     },
-                    "action": "أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.",
+                    "action": "جدّد الميزانية ← أو اتركها تنتهي.",
                     "url": "http://localhost:5173/app/campaigns/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000004917",
                     "button": "افتح الحملة",
                     "secondary": "الحملة: other-project-budget",
@@ -40564,7 +40564,8 @@
                         "basis_class": "measured",
                         "spend": 980,
                         "budget": 100,
-                        "ratio": 9.8
+                        "ratio": 9.8,
+                        "budget_exhausted": true
                     },
                     "chip": {
                         "state": "watch",
@@ -40572,11 +40573,10 @@
                         "label": "انتبه"
                     },
                     "timeline": null,
-                    "line": "الحملة صرفت أغلب ميزانيتها.",
+                    "line": "الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.",
                     "steps": [
-                        "أبقِ الميزانية",
-                        "أو عدّلها",
-                        "أو أوقف الأقل أداءً"
+                        "جدّد الميزانية",
+                        "أو اتركها تنتهي"
                     ]
                 },
                 {
@@ -42521,7 +42521,8 @@
                         "basis_class": "measured",
                         "spend": 950,
                         "budget": 1000,
-                        "ratio": 0.95
+                        "ratio": 0.95,
+                        "budget_exhausted": false
                     },
                     "chip": {
                         "state": "watch",
@@ -42682,7 +42683,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -42710,7 +42711,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -44073,8 +44074,8 @@
                 },
                 {
                     "severity": "warning",
-                    "title": "The Meta budget is nearly used up",
-                    "detail": "The campaign has used a large share of its budget.",
+                    "title": "The Meta budget ran out",
+                    "detail": "Spend reached the whole budget, by the platform's figures.",
                     "context": "Other · Meta · Sales · P2",
                     "numbers": "Spent 980.00 / 100.00 (⁦980%⁩)",
                     "figures": {
@@ -44093,7 +44094,7 @@
                             }
                         ]
                     },
-                    "action": "Decide today: keep the budget, adjust it, or pause what is not delivering.",
+                    "action": "Renew the budget, or let the campaign end.",
                     "url": "http://localhost:5173/app/campaigns/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000004917",
                     "button": "Open the campaign",
                     "secondary": "Campaign: other-project-budget",
@@ -44109,7 +44110,8 @@
                         "basis_class": "measured",
                         "spend": 980,
                         "budget": 100,
-                        "ratio": 9.8
+                        "ratio": 9.8,
+                        "budget_exhausted": true
                     },
                     "chip": {
                         "state": "watch",
@@ -44117,15 +44119,15 @@
                         "label": "Watch"
                     },
                     "timeline": null,
-                    "line": "The campaign has used a large share of its budget.",
+                    "line": "Spend reached the whole budget, by the platform's figures.",
                     "steps": [
-                        "Decide today: keep the budget, adjust it, or pause what is not delivering"
+                        "Renew the budget, or let the campaign end"
                     ]
                 },
                 {
                     "severity": "warning",
-                    "title": "The Meta budget is nearly used up",
-                    "detail": "The campaign has used a large share of its budget.",
+                    "title": "The Meta budget ran out",
+                    "detail": "Spend reached the whole budget, by the platform's figures.",
                     "context": "Other · Meta · Sales · P2",
                     "numbers": "Spent 980.00 / 100.00 (⁦980%⁩)",
                     "figures": {
@@ -44144,7 +44146,7 @@
                             }
                         ]
                     },
-                    "action": "Decide today: keep the budget, adjust it, or pause what is not delivering.",
+                    "action": "Renew the budget, or let the campaign end.",
                     "url": "http://localhost:5173/app/campaigns/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000004917",
                     "button": "Open the campaign",
                     "secondary": "Campaign: other-project-budget",
@@ -44160,7 +44162,8 @@
                         "basis_class": "measured",
                         "spend": 980,
                         "budget": 100,
-                        "ratio": 9.8
+                        "ratio": 9.8,
+                        "budget_exhausted": true
                     },
                     "chip": {
                         "state": "watch",
@@ -44168,9 +44171,9 @@
                         "label": "Watch"
                     },
                     "timeline": null,
-                    "line": "The campaign has used a large share of its budget.",
+                    "line": "Spend reached the whole budget, by the platform's figures.",
                     "steps": [
-                        "Decide today: keep the budget, adjust it, or pause what is not delivering"
+                        "Renew the budget, or let the campaign end"
                     ]
                 },
                 {
@@ -45291,7 +45294,8 @@
                         "basis_class": "measured",
                         "spend": 950,
                         "budget": 1000,
-                        "ratio": 0.95
+                        "ratio": 0.95,
+                        "budget_exhausted": false
                     },
                     "chip": {
                         "state": "watch",
@@ -46201,7 +46205,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -48675,7 +48679,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -48703,7 +48707,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -49865,7 +49869,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -51061,7 +51065,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -51089,7 +51093,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -52306,7 +52310,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {

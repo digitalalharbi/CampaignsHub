@@ -14,7 +14,9 @@ use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Integrations\Models\ExternalAccount;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * STRUCT-001 — the one place a platform's hierarchy becomes rows.
@@ -52,7 +54,7 @@ final class ImportExternalStructure
     {
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
-            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'unified_campaign_id'])
+            ->get(['id', 'external_id', 'project_id', 'tenant_id', 'unified_campaign_id', 'provider', 'objective'])
             ->keyBy('external_id');
 
         $counts = ['ad_sets' => 0, 'ads' => 0, 'creatives' => 0, 'skipped' => 0];
@@ -144,6 +146,8 @@ final class ImportExternalStructure
             }
         });
 
+        $this->liftAdSetObjectives($campaigns, $adSets);
+
         /*
          * LEAD-DESTINATION-001 — the ad sets are what state the destination, and the campaigns were
          * classified before they existed. Re-derive the objective of every campaign this sweep
@@ -159,6 +163,76 @@ final class ImportExternalStructure
         }
 
         return $counts;
+    }
+
+    /**
+     * OBJECTIVE-GAPS-001 — a campaign objective the platform states on the AD SET (X's line items).
+     *
+     * Only rows that carry `campaign_objective` take part, and only X's connector sends it. A campaign
+     * whose own objective is empty takes its ad sets' value when they all agree; the resolver that runs
+     * next translates it through the usual table and — being the one guarded path — never replaces a
+     * manual objective or an earlier platform classification. Ad sets that disagree leave the campaign
+     * unclassified and their words are recorded on the unified campaign (`objective_platform_value`),
+     * so an operator sees what to settle; the source stays `unset`, so nothing reads it as a class.
+     *
+     * @param  Collection<string, ExternalCampaign>  $campaigns
+     * @param  list<array<string,mixed>>  $adSets
+     */
+    private function liftAdSetObjectives($campaigns, array $adSets): void
+    {
+        $stated = [];
+        foreach ($adSets as $row) {
+            $value = $row['campaign_objective'] ?? null;
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $stated[(string) ($row['campaign_external_id'] ?? '')][strtoupper(trim($value))] = true;
+        }
+
+        foreach ($stated as $externalId => $values) {
+            $campaign = $campaigns->get($externalId);
+            if ($campaign === null || (trim((string) $campaign->objective) !== '' && ! $this->wasLifted($campaign))) {
+                continue;
+            }
+
+            $words = array_keys($values);
+            sort($words);
+
+            if (count($words) === 1) {
+                if ($campaign->objective !== $words[0]) {
+                    ExternalCampaign::withoutGlobalScopes()->whereKey($campaign->getKey())->update(['objective' => $words[0]]);
+                    $campaign->objective = $words[0];
+                }
+
+                continue;
+            }
+
+            if ($campaign->objective !== null) {
+                ExternalCampaign::withoutGlobalScopes()->whereKey($campaign->getKey())->update(['objective' => null]);
+                $campaign->objective = null;
+            }
+
+            Log::warning('objective.ad_sets_disagree', ['external_campaign_id' => (string) $campaign->getKey(), 'values' => $words]);
+
+            if ($campaign->unified_campaign_id !== null) {
+                UnifiedCampaign::withoutGlobalScopes()
+                    ->whereKey($campaign->unified_campaign_id)
+                    ->where('objective_source', '!=', 'manual')
+                    ->update(['objective_platform_value' => implode(' · ', $words)]);
+            }
+        }
+    }
+
+    /**
+     * Whether the campaign's stored objective came from its ad sets rather than from the campaign row.
+     *
+     * Only X states it there, and X's campaign object carries no objective at all, so for X any stored
+     * value was lifted by this method and may be re-derived; for every other platform it is the
+     * platform's own campaign word and is never touched here.
+     */
+    private function wasLifted(ExternalCampaign $campaign): bool
+    {
+        return in_array(strtolower((string) $campaign->provider), ['x', 'twitter'], true);
     }
 
     /**

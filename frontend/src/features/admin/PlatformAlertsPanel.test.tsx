@@ -86,7 +86,7 @@ describe('PlatformAlertsPanel', () => {
     expect(within(group).getByTestId('platform-alert-viz')).toHaveTextContent('2 عميلان')
 
     expect(screen.getByTestId('platform-alerts-count-open')).toHaveTextContent('2')
-    expect(screen.getByTestId('platform-alerts-settlement')).toHaveTextContent('ما عندنا بيانات تسويات من ميسر')
+    expect(screen.getByTestId('platform-alerts-settlement')).toHaveTextContent('ما فيه مفتاح ميسر محفوظ')
     expect(document.body.textContent ?? '').not.toMatch(/[٠-٩]/)
   })
 
@@ -97,6 +97,20 @@ describe('PlatformAlertsPanel', () => {
 
     await waitFor(() => expect(acknowledgePlatformAlert).toHaveBeenCalledWith(abandoned.id, true))
     await waitFor(() => expect(fetchPlatformAlerts).toHaveBeenCalledTimes(2))
+  })
+
+  it('says plainly when Moyasar refused the key for settlements', async () => {
+    vi.mocked(fetchPlatformAlerts).mockResolvedValue({ ...list, settlement_check: 'refused_by_gateway' })
+    renderWithProviders(<PlatformAlertsPanel />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('platform-alerts-settlement')).toHaveTextContent('ميسر رفضت المفتاح لقراءة التسويات')
+  })
+
+  it('says once that Moyasar has no settlements yet, instead of an alert per payment', async () => {
+    vi.mocked(fetchPlatformAlerts).mockResolvedValue({ ...list, alerts: [], settlement_check: 'no_settlement_history' })
+    renderWithProviders(<PlatformAlertsPanel />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('platform-alerts-settlement')).toHaveTextContent('غير متاح — لا توجد تسويات في ميسر')
   })
 
   it('says so plainly when nobody is stuck', async () => {
