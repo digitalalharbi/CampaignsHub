@@ -23,6 +23,7 @@ use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Projects\Concerns\ProjectScope;
@@ -457,6 +458,11 @@ final class DailyDigest
              * product is where a person with the permission goes to see who.
              */
             'follow_up' => $this->followUpFor($tenantId, $projectId, $from, $to),
+            /*
+             * OBJECTIVE-PATHS-001 — one total spend split by what each ad set was bought to do, with each
+             * objective's own result; ROAS on the sales path only. Counts and figures, no campaign names.
+             */
+            'objective_paths' => (new ObjectivePerformance(projectIds: [$projectId]))->objectivePaths($from, $to),
         ];
 
         /*

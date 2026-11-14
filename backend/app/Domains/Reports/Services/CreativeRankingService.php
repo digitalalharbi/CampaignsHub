@@ -20,6 +20,9 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
 final class CreativeRankingService
 {
     /** Metrics an operator scans for by their short name, and the prefix each verdict carries. */
+    /** Volumes a platform reports when it reports none of an objective's own result, in the order they are read. */
+    private const FALLBACK_LADDER = ['clicks'];
+
     private const ACRONYM = [
         'roas' => 'ROAS ', 'cpa' => 'CPA ', 'cpl' => 'CPL ', 'cpc' => 'CPC ', 'cpm' => 'CPM ',
         'cpe' => 'CPE ', 'cpi' => 'CPI ', 'ctr' => 'CTR ', 'aov' => 'AOV ', 'cost_per_view' => 'CPV ',
@@ -290,6 +293,32 @@ final class CreativeRankingService
         return $key;
     }
 
+    /**
+     * The objective family whose own result was not reported, when the order rests on the fallback ladder; else null.
+     *
+     * @param  list<array<string,mixed>>  $items
+     */
+    public function fallbackFamily(string $objective, array $items): ?string
+    {
+        $family = ObjectiveFamily::tryFrom($objective) ?? match ($objective) {
+            'app_installs' => ObjectiveFamily::App,
+            'conversions', 'purchases' => ObjectiveFamily::Sales,
+            default => ObjectiveFamily::Unknown,
+        };
+
+        return $items !== [] && $family !== ObjectiveFamily::Unknown
+            && ! $this->ownMetricUsable($items, $family)
+            && $this->metricFor($objective, $items) !== null ? $family->value : null;
+    }
+
+    /** @param list<array<string,mixed>> $items */
+    private function ownMetricUsable(array $items, ObjectiveFamily $family): bool
+    {
+        $key = $this->ranking->resolveMetric($items, $family);
+
+        return $key !== null && array_any($items, static fn (array $r): bool => is_numeric($r[$key] ?? null) && (float) $r[$key] > 0);
+    }
+
     private function strategy(string $objective, array $items = []): array
     {
         /*
@@ -343,6 +372,34 @@ final class CreativeRankingService
          * made that answer unreachable and put a revenue ordering on creatives nobody measured
          * revenue for — in a client's report, where an order reads as a judgement.
          */
+        /*
+         * «Reported» here means POSITIVE on some spending row. The report's rows carry revenue and conversions cast to
+         * 0.0 when the platform sent none, and a zero is numeric: `resolveMetric` took `revenue` as reported, `rank()`
+         * then dropped every row for being zero, and the ads vanished while the platform had spend.
+         */
+        if ($key !== null && $items !== [] && ! array_any($items, static fn (array $r): bool => is_numeric($r[$key] ?? null) && (float) $r[$key] > 0)) {
+            $key = null;
+        }
+
+        if ($key === null && $items !== [] && $family !== ObjectiveFamily::Unknown) {
+            /*
+             * CHATGPT-ADS-CONTENT-RANKABLE-001 — the objective's result is not reported, the ads still ran.
+             *
+             * A sales campaign on a platform that reports spend, clicks and impressions and NO orders (ChatGPT Ads)
+             * resolved to nothing, so the live link showed «no content with figures» over a platform with spend and
+             * real creatives. The ladder below is the volume the platform DID report, clicks only (never spend: an order on spend is no judgement, REPORT-BEST-NOT-SPEND-001), and it is
+             * only reached when nothing in the objective's own layout was — so an order is never given on a figure
+             * that is not there, and `isFallback()` tells the page to SAY the objective's result was not reported.
+             * It never invents purchases or ROAS: the metric is one the rows carry.
+             */
+            foreach (self::FALLBACK_LADDER as $candidate) {
+                if (array_any($items, static fn (array $r): bool => is_numeric($r[$candidate] ?? null) && (float) $r[$candidate] > 0)) {
+                    $key = $candidate;
+                    break;
+                }
+            }
+        }
+
         if ($key === null) {
             return [null, 'desc', static fn (): string => ''];
         }

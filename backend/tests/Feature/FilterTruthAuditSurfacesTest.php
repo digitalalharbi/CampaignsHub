@@ -355,7 +355,7 @@ final class FilterTruthAuditSurfacesTest extends TestCase
      */
     public function test_every_objective_panel_narrows_by_campaign(): void
     {
-        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend'] as $path) {
+        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend', 'objective-paths'] as $path) {
             $all = $this->fetchData($path);
             $filtered = $this->fetchData($path, ['campaign' => $this->sales->getKey()]);
 
@@ -378,7 +378,7 @@ final class FilterTruthAuditSurfacesTest extends TestCase
      */
     public function test_the_objective_panels_declare_the_axis_they_decline(): void
     {
-        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend'] as $path) {
+        foreach (['platform-objectives', 'objective-leaders', 'objective-explanations', 'objective-trend', 'objective-paths'] as $path) {
             $scope = $this->fetchBody($path, [
                 'campaign' => $this->sales->getKey(),
                 'objective' => 'sales',

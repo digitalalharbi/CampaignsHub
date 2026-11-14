@@ -32,9 +32,13 @@ final class DataRequest extends Model
         'user_id', 'tenant_id', 'ip', 'user_agent', 'locale', 'source', 'source_provider',
     ];
 
+    /** The hash of a six-digit code is the code to anyone with a minute: it never leaves the server in a payload. */
+    protected $hidden = ['verification_hash'];
+
     protected $casts = [
         'blockers' => 'array',
         'reviewed_at' => 'datetime',
+        'read_at' => 'datetime',
         'verification_sent_at' => 'datetime',
         'verification_expires_at' => 'datetime',
         'verified_at' => 'datetime',

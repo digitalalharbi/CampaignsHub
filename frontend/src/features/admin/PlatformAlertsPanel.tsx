@@ -28,7 +28,9 @@ const COPY = {
     empty: 'ما فيه عميل متعثر الحين.', loadError: 'ما قدرنا نحمّل التنبيهات.',
     handled: 'تم التعامل', reopen: 'أعد فتحه', cleared: 'انحلّت', done: 'تعاملت معه',
     firstSeen: 'أول ظهور', lastSeen: 'آخر تحديث', mailed: 'وصل بريدك', contact: 'للتواصل',
-    settlement: 'فحص وصول المبالغ متوقف: ما عندنا بيانات تسويات من ميسر بعد.',
+    settlement: 'فحص وصول المبالغ متوقف: ما فيه مفتاح ميسر محفوظ لقراءة التسويات.',
+    settlementRefused: 'فحص وصول المبالغ متوقف مؤقتًا: ميسر رفضت المفتاح لقراءة التسويات، ونعيد المحاولة تلقائيًا.',
+    settlementNoHistory: 'فحص وصول المبالغ غير متاح — لا توجد تسويات في ميسر. أول ما تبدأ التسويات يشتغل الفحص تلقائيًا.',
     urgent: 'عاجل', watch: 'انتبه',
   },
   en: {
@@ -38,7 +40,9 @@ const COPY = {
     empty: 'No customer is stuck right now.', loadError: 'The alerts could not be loaded.',
     handled: 'Handled', reopen: 'Reopen', cleared: 'Cleared', done: 'Handled',
     firstSeen: 'First seen', lastSeen: 'Last update', mailed: 'Emailed', contact: 'Contact',
-    settlement: 'The settlement check is off: there is no Moyasar settlement data yet.',
+    settlement: 'The settlement check is off: no Moyasar key is stored to read settlements.',
+    settlementRefused: 'The settlement check is paused: Moyasar refused the key for settlements; it retries on its own.',
+    settlementNoHistory: 'The settlement check is unavailable — Moyasar has no settlements for this account yet. It starts on its own with the first one.',
     urgent: 'Urgent', watch: 'Watch',
   },
 } as const
@@ -92,8 +96,11 @@ export function PlatformAlertsPanel() {
         </div>
       </div>
 
-      {list.data?.settlement_check === 'BLOCKED_EXTERNAL_CREDENTIALS' && (
-        <p data-testid="platform-alerts-settlement" className="mt-3 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-text-secondary">{t.settlement}</p>
+      {list.data && list.data.settlement_check !== 'available' && (
+        <p data-testid="platform-alerts-settlement" className="mt-3 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
+          {list.data.settlement_check === 'refused_by_gateway' ? t.settlementRefused
+            : list.data.settlement_check === 'no_settlement_history' ? t.settlementNoHistory : t.settlement}
+        </p>
       )}
 
       <div className="mt-4">

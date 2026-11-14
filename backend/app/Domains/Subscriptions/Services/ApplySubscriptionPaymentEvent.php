@@ -11,6 +11,7 @@ use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\ReconcilesCheckoutSessions;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
+use App\Domains\Billing\Support\WebhookPayloadRedactor;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -643,7 +644,8 @@ final class ApplySubscriptionPaymentEvent
             'event_id' => $eventId,
             'type' => $type,
             'verified' => $verified,
-            'payload' => json_decode($rawBody, true) ?: ['raw' => mb_substr($rawBody, 0, 2000)],
+            // PAY-WEBHOOK-SECRET-REDACT-001 — the body is evidence; the secret that authenticated it is not stored.
+            'payload' => WebhookPayloadRedactor::forStorage($rawBody) ?? ['raw' => ''],
             'processed_at' => $processed ? Carbon::now() : null,
         ]);
 

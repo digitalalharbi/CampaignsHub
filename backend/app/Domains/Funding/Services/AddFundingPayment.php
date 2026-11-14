@@ -47,7 +47,7 @@ final class AddFundingPayment
     ) {}
 
     /**
-     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount: float|int|string, currency?: string|null, paid_on: string, reference?: string|null, note?: string|null, idempotency_key: string}  $input
+     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount: float|int|string, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, reference?: string|null, note?: string|null, idempotency_key: string}  $input
      * @return array{payment: FundingPayment, created: bool}
      */
     public function __invoke(User $actor, array $input, bool $retried = false): array
@@ -82,7 +82,9 @@ final class AddFundingPayment
                     return ['payment' => $existing, 'created' => false];
                 }
 
-                $isFirst = ! FundingPayment::query()->where('project_id', $project->id)->exists();
+                // A budget that was deleted starts over: its old entries stay in the ledger, and the new amount is a first one.
+                $wasVoid = $funding->voided_at !== null;
+                $isFirst = $wasVoid || ! FundingPayment::query()->where('project_id', $project->id)->exists();
 
                 // One account feeds one budget: a project whose selected accounts already feed another budget
                 // cannot START one. A renewal is never blocked — the budget it adds to already exists.
@@ -92,7 +94,13 @@ final class AddFundingPayment
                         throw ValidationException::withMessages(['project_id' => [__('funding.account_taken', ['project' => $taken['project']])]]);
                     }
                 }
-                if (! $isFirst) {
+                if ($isFirst) {
+                    // The period the budget starts with: as stated, else the first day of real spend and open-ended.
+                    $funding->forceFill([
+                        'starts_on' => $input['period_start'] ?? null, 'ends_on' => $input['period_end'] ?? null,
+                        'voided_at' => null, 'void_reason' => null, 'voided_by' => null,
+                    ])->save();
+                } else {
                     $this->refresher->refresh($funding);
                 }
                 $before = $isFirst ? null : $this->balance->of($funding)['remaining'];
