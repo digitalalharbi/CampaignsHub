@@ -94,7 +94,8 @@ final class DigestsVisualV2Test extends TestCase
         }
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio'))->render();
         $this->assertSame(30, substr_count($html, 'data-block="portfolio-row"'));
-        $this->assertStringContainsString('مشروعًا مفحوصة', $html);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — coverage now lives in «ملخص الربط».
+        $this->assertStringContainsString('أرقامها محدّثة', $html);
     }
 
     public function test_the_ranking_is_global_and_nothing_is_dropped_silently(): void
@@ -127,7 +128,8 @@ final class DigestsVisualV2Test extends TestCase
         $d = DigestDemo::payload(30, 6);
         $daily = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->render();
         $weekly = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'weekly'), 'ar', 'م', 'weekly', 'portfolio'))->render();
-        $this->assertStringNotContainsString('data-block="movers"', $daily);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — best and weakest per objective on EVERY rhythm (yesterday against the day before).
+        $this->assertStringContainsString('data-block="movers"', $daily);
         $this->assertStringContainsString('data-block="movers"', $weekly);
         foreach ([$daily, $weekly] as $html) {
             $this->assertStringNotContainsString('هذا ملخص', $html, 'no filler intro');

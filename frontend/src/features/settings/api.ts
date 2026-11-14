@@ -187,6 +187,8 @@ export interface NotifPrefs {
     per_project?: boolean
     per_project_weekly?: boolean
     per_project_monthly?: boolean
+    /** SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the weekly «ملخص الإنفاق». Off unless chosen. */
+    spend_summary?: boolean
   }
   available_digests: string[]
   timezone: string
@@ -255,6 +257,48 @@ export function useSaveNotifPrefs() {
     mutationFn: (b: NotifPrefsInput) => putData<NotifPrefs>('/settings/notifications', b),
     onSuccess: (d) => qc.setQueryData(['settings', 'notifications'], d),
   })
+}
+
+// ---- Recipients outside the platform (SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001) ------------------------
+
+export type ExternalCadence = 'daily' | 'weekly' | 'monthly'
+export interface ExternalRecipient {
+  id: string
+  email: string
+  name: string | null
+  cadence: ExternalCadence
+  active: boolean
+  project_ids: string[]
+}
+export interface ExternalRecipientInput {
+  email?: string
+  name?: string | null
+  cadence?: ExternalCadence
+  active?: boolean
+  project_ids?: string[]
+}
+
+const EXTERNAL = '/settings/notifications/external-recipients'
+
+export function useExternalRecipients() {
+  return useQuery({ queryKey: ['settings', 'external-recipients'], queryFn: () => getData<ExternalRecipient[]>(EXTERNAL) })
+}
+
+/** The projects this member may bind (open AND see the money of) — the server's answer, not the member's own digest choice. */
+export function useExternalBindableProjects() {
+  return useQuery({ queryKey: ['settings', 'external-recipients', 'projects'], queryFn: () => getData<{ id: string; name: string }[]>(`${EXTERNAL}/projects`) })
+}
+
+export function useExternalRecipientActions() {
+  const qc = useQueryClient()
+  const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'external-recipients'] })
+  return {
+    add: useMutation({ mutationFn: (b: ExternalRecipientInput) => postData<ExternalRecipient>(EXTERNAL, b), onSuccess: inv }),
+    update: useMutation({ mutationFn: (b: { id: string } & ExternalRecipientInput) => putData<ExternalRecipient>(`${EXTERNAL}/${b.id}`, b), onSuccess: inv }),
+    remove: useMutation({ mutationFn: (id: string) => deleteData(`${EXTERNAL}/${id}`), onSuccess: inv }),
+    // «أرسل تجربة لي» — to the signed-in member's own address only.
+    test: useMutation({ mutationFn: (b: { cadence: ExternalCadence; project_ids?: string[] }) => postData<{ state: string; projects: number }>(`${EXTERNAL}/test`, b) }),
+  }
 }
 
 // ---- Security ------------------------------------------------------------------------------------

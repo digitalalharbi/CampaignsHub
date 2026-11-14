@@ -5,7 +5,11 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, fetchServiceRequests: vi.fn(), fetchServiceRequest: vi.fn(), updateServiceRequest: vi.fn(), replyToServiceRequest: vi.fn() }
+  return {
+    ...actual, fetchServiceRequests: vi.fn(), fetchServiceRequest: vi.fn(), updateServiceRequest: vi.fn(), replyToServiceRequest: vi.fn(),
+    // PLATFORM-PAYMENT-ALERTS-001 — the alerts panel above the list has its own test file.
+    fetchPlatformAlerts: vi.fn().mockResolvedValue({ alerts: [], counts: { open: 0, critical: 0, by_kind: {} }, settlement_check: 'BLOCKED_EXTERNAL_CREDENTIALS' }),
+  }
 })
 
 import { fetchServiceRequest, fetchServiceRequests, replyToServiceRequest, updateServiceRequest, type ServiceRequestDetail, type ServiceRequestList } from './api'

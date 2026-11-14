@@ -87,6 +87,20 @@ const COPY = {
   },
 }
 
+/*
+ * ALERT-CRITERIA-001 — notices the «صرف بدون نتائج» sweep raises about a campaign. They are event types, not rule types: nobody
+ * creates a rule of them, so they are not in `AlertType` (the rule picker's list) — but the list, the filter and the search
+ * must still name them in words, never as a slug.
+ */
+const NOTICE_LABEL: Record<string, { ar: string; en: string }> = {
+  campaign_stopped: { ar: 'توقفت أمس', en: 'Stopped yesterday' },
+  not_spending: { ar: 'ما تصرف', en: 'Not spending' },
+}
+
+function typeLabel(type: string, locale: 'ar' | 'en'): string {
+  return TYPE_LABEL[type as AlertType]?.[locale] ?? NOTICE_LABEL[type]?.[locale] ?? type
+}
+
 const TYPE_LABEL: Record<AlertType, { ar: string; en: string }> = {
   budget_risk: { ar: 'خطر الميزانية', en: 'Budget risk' },
   cpa_increase: { ar: 'ارتفاع CPA', en: 'CPA increase' },
@@ -285,7 +299,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
     if (type !== 'all' && e.type !== type) return false
     if (category !== 'all' && alertCategory(e.type) !== category) return false
     if (!needle) return true
-    const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}`.toLowerCase()
+    const hay = `${labelFor(e, locale)} ${messageFor(e, locale)} ${typeLabel(e.type, locale)}`.toLowerCase()
     return hay.includes(needle)
   })
   const events = focused ? [focused, ...filtered] : filtered
@@ -342,7 +356,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
           ...(type === 'all' ? [] : [{
             key: `type:${type}`,
             axis: c.source,
-            label: TYPE_LABEL[type as AlertType]?.[locale] ?? type,
+            label: typeLabel(type, locale),
             onRemove: () => setType('all'),
           }]),
         ]}
@@ -418,7 +432,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
             testid="alerts-source"
             options={[
               { value: 'all', label: c.all },
-              ...presentTypes.map((tp) => ({ value: tp, label: TYPE_LABEL[tp as AlertType]?.[locale] ?? tp })),
+              ...presentTypes.map((tp) => ({ value: tp, label: typeLabel(tp, locale) })),
             ]}
             onChange={setType}
           />
@@ -487,7 +501,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                       value, and the severity is already carried by the stripe and the dot.
                     */}
                     <span title={c.source} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                      {TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type}
+                      {typeLabel(e.type, locale)}
                     </span>
                     {e.priority && (
                       <span data-testid={`alert-priority-${e.id}`} className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${PRIORITY_TONE[e.priority]}`}>{e.priority}</span>
@@ -785,7 +799,7 @@ function RulesTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
               <div className="flex flex-col gap-0.5">
                 <span className="font-semibold text-text-primary">{r.name}</span>
                 <span className="text-xs text-text-secondary">
-                  {TYPE_LABEL[r.type as AlertType]?.[locale] ?? r.type} · {c.severity}: {sevLabel(r.severity, c)} · {c.cooldown}: {r.cooldown_minutes}
+                  {typeLabel(r.type, locale)} · {c.severity}: {sevLabel(r.severity, c)} · {c.cooldown}: {r.cooldown_minutes}
                   {r.threshold ? ` · ${c.threshold}: ${Object.entries(r.threshold).map(([k, v]) => `${k}=${v}`).join(', ')}` : ''}
                 </span>
                 {/*
@@ -987,7 +1001,7 @@ function sevLabel(s: AlertEvent['severity'], c: Copy) {
 /* An event that carries its title in the reader's language is read in it; the English the engine has
    always written stays the fallback, so older event types read exactly as before. */
 function labelFor(e: AlertEvent, locale: 'ar' | 'en'): string {
-  const t = TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type
+  const t = typeLabel(e.type, locale)
   const localised = locale === 'ar' && e.context && typeof e.context.title_ar === 'string' ? e.context.title_ar : null
   const title = (e.context && typeof e.context.title === 'string') ? e.context.title : null
   return localised ?? title ?? t
@@ -995,7 +1009,7 @@ function labelFor(e: AlertEvent, locale: 'ar' | 'en'): string {
 function messageFor(e: AlertEvent, locale: 'ar' | 'en'): string {
   if (locale === 'ar' && e.context && typeof e.context.message_ar === 'string') return e.context.message_ar
   if (e.context && typeof e.context.message === 'string') return e.context.message
-  return TYPE_LABEL[e.type as AlertType]?.[locale] ?? e.type
+  return typeLabel(e.type, locale)
 }
 function parseThreshold(raw: string, type: AlertType): Record<string, number> | undefined {
   const n = Number(raw)

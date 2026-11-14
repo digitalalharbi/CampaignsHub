@@ -14,6 +14,7 @@ use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformAddonController;
+use App\Domains\Platform\Http\Controllers\PlatformAlertController;
 use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
@@ -76,6 +77,10 @@ Route::middleware(['auth:sanctum', 'platform'])
         // PLATFORM-INBOX-ATTENTION-001 — answer the visitor: a client-visible reply on their tracking page, and an email.
         Route::post('/service-requests/{id}/reply', [PlatformServiceRequestController::class, 'reply'])
             ->middleware('throttle:20,1')->name('service-requests.reply');
+        // PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, for the platform owner only.
+        Route::get('/platform-alerts', [PlatformAlertController::class, 'index'])->name('platform-alerts.index');
+        Route::patch('/platform-alerts/{id}', [PlatformAlertController::class, 'update'])
+            ->whereUuid('id')->middleware('throttle:60,1')->name('platform-alerts.update');
 
         /*
          * MAIL-014 — what this installation's mail has actually done.
