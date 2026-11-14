@@ -44,7 +44,7 @@ const REFUSAL: Record<string, { ar: string; en: string }> = {
   no_result_metric_for_objective: { ar: 'لا نتيجة لهذا الهدف', en: 'No result for this goal' },
 }
 
-const RESULT_WORDS: Record<string, { ar: string; en: string }> = {
+export const RESULT_WORDS: Record<string, { ar: string; en: string }> = {
   conversions: { ar: 'تحويلات', en: 'Conversions' },
   leads: { ar: 'عملاء محتملون', en: 'Leads' },
   installs: { ar: 'تثبيتات', en: 'Installs' },

@@ -25,3 +25,21 @@ If a PR is refreshed by hand (`git merge origin/main && git push`) the ordinary 
 
 - **GitHub's native merge queue — not available here.** It is offered to repositories owned by an organisation; this repository is owned by a user account (`digitalalharbi`). `ci.yml` keeps a `merge_group` trigger so it works unchanged if the repository ever moves to an organisation.
 - **`MERGE_QUEUE_TOKEN` — not needed.** A personal access token would also work (a push made with it starts the normal run). Its minimum would be Contents, Pull requests and Workflows read/write on this repository only; the queue uses it automatically if the secret exists. Nothing requires one.
+
+## Browser gate tiers (CI-TIER-001, 2026-11-13)
+
+GitHub's own merge queue (`merge_group`) is not available here: the repository belongs to a personal account, and no
+`merge_group` run has ever started. So the tier is decided by a label instead:
+
+- **Every PR** runs backend, frontend, image and the **chromium** gate: 11 jobs, under the 20-job concurrency cap of the
+  free plan. Before this, each PR started 24 jobs and runs sat queued 35-45 minutes behind each other.
+- **The PR being landed** is labelled `full-gate` by the Lander (`ch-scripts/fullgate.sh`, called from `refresh.sh` before any
+  push). Its run adds the **firefox** and **webkit** gates.
+- Without the label those two gates are **skipped, never green**. `waitpr.sh` and `merge-queue.yml` require
+  `gate (firefox)` and `gate (webkit)` to be SUCCESS, so nothing lands without all three browsers.
+- A `merge-queue.yml` run is no longer started every 15 minutes; it runs when CI completes.
+
+**CI-TIER-002 (2026-11-13):** backend, firefox and webkit run 5 shards each (was 4); the long browser jobs are defined first and
+have no `needs`, so they start at once. Measured on #1054 (the first PR landed through the tier): CI 26.5 min, merge 7.8 min after
+CI ended, deploy 5 min, 41 min in all.
+

@@ -9,7 +9,9 @@ use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -58,6 +60,18 @@ final class ReportPlatformDrilldowns
         }
 
         /*
+         * REPORT-SETTINGS-AUDIT-001 — the pages drill into the platform comparison and list its content, so they obey the same
+         * switches as those sections, from the report AND the link (the section overrides, the older flags, the main tabs). Read
+         * through the one resolver every surface uses; before this only the report's slide list was asked, so a link hiding the
+         * platforms or the content still printed a page per platform with up to four ads on it.
+         */
+        $surfaces = app(ReportSectionSurfaces::class);
+        if (! $surfaces->operatorAllows('platform_comparison', $report, $share)) {
+            return [];
+        }
+        $contentAllowed = $surfaces->operatorAllows('content_performance', $report, $share);
+
+        /*
          * SECURITY CLUSTER 5 — a link WITH a ceiling prints inside it. The report's own scope is the operator's; the link is narrower
          * or, for a live-builder report, the only place a scope exists at all.
          */
@@ -93,7 +107,7 @@ final class ReportPlatformDrilldowns
 
             // The section's own content lists: part of the platform drill-down on paper, and gone with a
             // hidden ads section — a document never prints content its operator took out.
-            $content = ! ReportBreakdowns::reportSlideHidden($report, 'ads')
+            $content = $contentAllowed && ! ReportBreakdowns::reportSlideHidden($report, 'ads')
                 ? $this->ads->for($lens->value(), $from, $to, $ceiling !== null
                     ? ['providers' => [$provider]] + $ceiling['content_filters']
                     : [
@@ -106,6 +120,20 @@ final class ReportPlatformDrilldowns
                         'creative_ids' => $scope->creativeIds,
                     ], $form->form, liveMedia: true)
                 : null;
+
+            /*
+             * SHARE-COPY-LEAK-001 — a link's printed platform pages obey its copy switches, through the one rule (`ContentCopy`).
+             *
+             * These lists come straight from the ads builder, so the hero's words, the text card's `preview.text` and every carousel
+             * card's copy printed on paper while the link's page withheld them. Applied on the same terms as the link's own document:
+             * always for a live link (as `LiveReportService::adsFor`), and for a saved report's link once its operator configured the
+             * panel (as `ShareService::sanitize`) — a link made before the panel keeps what it has always printed.
+             */
+            if ($content !== null && $share !== null && ($share->isLive() || $share->creativePanelConfigured())) {
+                foreach (['ads', 'worst'] as $list) {
+                    $content[$list] = ContentCopy::rows($content[$list] ?? [], $share->creativeVisibility());
+                }
+            }
 
             $blocks[] = $form->apply($this->builder->build(
                 provider: $provider,

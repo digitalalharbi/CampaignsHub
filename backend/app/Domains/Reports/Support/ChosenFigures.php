@@ -7,6 +7,7 @@ namespace App\Domains\Reports\Support;
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportAutoComposer;
@@ -117,10 +118,34 @@ final class ChosenFigures
         return new self(self::listedMetrics($report, $share), $columns !== [] ? $columns : ReportColumns::forReport($report)->toArray());
     }
 
-    /** The live payload and its drawers state the link's own lists (`metrics`, `columns`) and no other, so those are what they are cut to. */
+    /**
+     * The live payload and its drawers, cut by the SAME list its PDF is — master task 10, «schema واحد».
+     *
+     * This read the link's own `metrics` only, while `for()` (the PDF and the files of the same link) also read the report's scope and its
+     * customised set: a report whose own KPI list was chosen on the report showed every figure on its link and only the chosen ones in its PDF.
+     */
     public static function forLive(ReportShare $share): self
     {
-        return new self(self::strings(($share->scope ?? [])['metrics'] ?? []), ReportColumns::forShare($share)->toArray());
+        return new self(self::listed($share->report, $share), ReportColumns::forShare($share)->toArray());
+    }
+
+    /**
+     * The KPI list somebody CHOSE for this report through this link — the link's, an automatic composition, the report's scope, its customised
+     * set — or empty when nobody chose one (an objective's preset is not a choice and is not cut to).
+     *
+     * @return list<string>
+     */
+    public static function listed(?Report $report, ?ReportShare $share): array
+    {
+        if ($report === null) {
+            return $share !== null ? self::strings(($share->scope ?? [])['metrics'] ?? []) : [];
+        }
+        // As `for()`: an internal report states every figure.
+        if (($report->audience ?? 'client') === 'internal') {
+            return [];
+        }
+
+        return self::listedMetrics($report, $share);
     }
 
     /** @return list<string> */
@@ -449,6 +474,10 @@ final class ChosenFigures
         }
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
+            // REPORT-SETTINGS-AUDIT-001 — the store block's money leaves with the revenue KPI too, as it does for a link hiding revenue.
+            if (is_array($payload['store_analytics'] ?? null)) {
+                $payload['store_analytics'] = StoreAnalyticsSection::withoutMoney($payload['store_analytics']);
+            }
         }
         if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
             $payload[ContentFormatComparison::KEY] = ContentFormatComparison::withoutMetrics($payload[ContentFormatComparison::KEY], array_keys($cut));

@@ -522,6 +522,8 @@ final class ProviderCatalogue
             capabilities: new ProviderCapabilities(
                 resourceType: ResourceType::AdAccount,
                 accountType: 'ad_account',
+                // X-LINKEDIN-CONTENT-001 — stats per promoted tweet, summed per tweet (the creative).
+                creativeInsights: true,
             ),
         );
     }
@@ -545,7 +547,13 @@ final class ProviderCatalogue
                         .'An unpinned call is rejected outright',
                     'شهر مدعوم بصيغة YYYYMM يُرسل في ترويسة `LinkedIn-Version`. الاستدعاء بلا إصدار مُثبّت يُرفض مباشرة'),
             ],
-            scopes: ['r_ads', 'r_ads_reporting'],
+            /*
+             * LINKEDIN-SCOPES-001 — the consent grants ONLY what this list asks for, whatever the app has approved.
+             * `r_organization_social` reads a sponsored post's words and media (Posts API); `rw_ads` its image/video
+             * file (Images / Videos API). Without them every sponsored post came back «ACCESS_DENIED» (Production,
+             * 2026-11-13). This is the one LinkedIn list — `config/ad_platforms.php` carries none.
+             */
+            scopes: ['r_ads', 'r_ads_reporting', 'r_organization_social', 'rw_ads'],
             usesPkce: false,
             supportsRefresh: true,
             tokenNote: 'Refresh tokens are available only to apps approved for them; otherwise the access '
@@ -571,6 +579,8 @@ final class ProviderCatalogue
                 resourceType: ResourceType::AdAccount,
                 accountType: 'ad_account',
                 tokenExpiry: true,
+                // X-LINKEDIN-CONTENT-001 — adAnalytics `pivot=CREATIVE`, same r_ads_reporting grant.
+                creativeInsights: true,
                 periodReach: true,
             ),
         );

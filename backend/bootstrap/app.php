@@ -14,6 +14,7 @@ use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
+use App\Domains\Campaigns\Console\ReclassifyObjectivesCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
@@ -58,11 +59,13 @@ use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Notifications\Console\SendSpendSummaries;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
 use App\Domains\Ops\Console\ProfileLiveReportCommand;
 use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
+use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
@@ -134,6 +137,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
         RetryFailedDigests::class,
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
+        SendSpendSummaries::class,
         // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
         EnrolMembers::class,
         ConfirmMailDelivery::class,
@@ -184,6 +189,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileContentMetricsCommand::class,
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
+        // OBJECTIVE-RECLASSIFY-RUN-001 — the Owner-approved reclassification, dry run first.
+        ReclassifyObjectivesCommand::class,
         GoogleAdsAccessCommand::class,
         MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
@@ -226,6 +233,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
+        // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
+        SweepPlatformPaymentAlerts::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.

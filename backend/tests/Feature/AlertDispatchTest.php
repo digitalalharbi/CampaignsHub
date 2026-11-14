@@ -287,6 +287,49 @@ final class AlertDispatchTest extends TestCase
     }
 
     /**
+     * ALERT-MAIL-DATED-BARS-001 — the card the Owner approved (2026-11-12), locked: the metric and its % change as the title,
+     * before/after bars that NAME their days (never «الفترة السابقة / الآن»), the numbered action chips in order, and the one
+     * button into the platforms.
+     */
+    public function test_the_performance_alert_card_keeps_the_approved_layout_with_dated_bars(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedFallingCtr();
+
+        app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
+            $html = html_entity_decode($m->render());
+            $text = preg_replace('/\s+/u', ' ', strip_tags($html));
+            $this->assertMatchesRegularExpression('/معدل النقر نزل\s*\S*\d+%/u', $text, 'title: the metric and its % change');
+            $this->assertStringContainsString('data-viz="before_now"', $html, 'the before/after bars');
+            $this->assertStringContainsString('الخميس 6 أغسطس', $text, 'the «before» bar names its day');
+            $this->assertStringContainsString('الجمعة 7 أغسطس', $text, 'the «after» bar names its day');
+            $this->assertStringNotContainsString('الفترة السابقة', $text, 'never the vague «previous period»');
+            $this->assertStringContainsString('data-block="steps"', $html, 'the numbered action chips');
+            $this->assertMatchesRegularExpression('/1<\/span>\s*راجع المحتوى.*2<\/span>\s*جدّد الأقل أداءً/us', $html, '1 راجع المحتوى ← 2 جدّد الأقل أداءً');
+            $this->assertStringContainsString('افتح المنصات داخل النظام', $text);
+
+            return true;
+        });
+    }
+
+    /** ALERT-MAIL-DATED-BARS-001 — a project that did not deliver in the period gets no performance card. */
+    public function test_a_project_that_did_not_deliver_gets_no_performance_card(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedFallingCtr();
+        DB::table('daily_metrics')->where('metric_date', '2026-08-07')->whereIn('metric_key', ['spend', 'impressions'])->update(['value' => 0]);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertSame(0, $counts['sent'] ?? 0);
+        Mail::assertNothingSent();
+    }
+
+    /**
      * The same finding, unchanged, does not arrive again the next day.
      *
      * This is the whole reason the cooldown exists. «Your CTR is still down» every morning is not

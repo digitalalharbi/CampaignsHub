@@ -346,5 +346,19 @@ describe('a tall reel in a report keeps its frame', () => {
       ;(window as unknown as { Image: unknown }).Image = real
     }
   })
+
+  // REPORT-OPENABLE-OPTIONS-001 (master task 10) — «تكبير الصور» and «تحميل الأصل» follow the link's switches, and are absent when off.
+  it('draws zoom and download only when the link allows them', () => {
+    const { unmount } = renderWithProviders(
+      <ReportAdDetail ad={ad({ preview: preview({ can_zoom: true, can_download: true }) })} currency="SAR" locale="en" onClose={() => {}} />,
+    )
+    expect(screen.getByTestId('report-ad-detail-zoom-in')).toBeInTheDocument()
+    expect(screen.getByTestId('report-ad-detail-download').getAttribute('href')).toBe('https://cdn/ad.jpg')
+    unmount()
+
+    renderWithProviders(<ReportAdDetail ad={ad({ preview: preview({ can_zoom: false, can_download: false }) })} currency="SAR" locale="en" onClose={() => {}} />)
+    expect(screen.queryByTestId('report-ad-detail-tools')).toBeNull()
+    expect(screen.getByTestId('report-ad-detail-poster')).toBeInTheDocument()
+  })
 })
 
