@@ -61,8 +61,11 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
   launch_advance: 'performance',
 }
 
+// ALERT-CRITERIA-001 — the campaign notices («توقفت أمس», «ما تصرف») belong with the performance findings they sit beside.
+const NOTICE_CATEGORY: Record<string, AlertCategory> = { campaign_stopped: 'performance', not_spending: 'performance' }
+
 export function alertCategory(type: string): AlertCategory {
-  return CATEGORY[type as AlertType] ?? 'other'
+  return CATEGORY[type as AlertType] ?? NOTICE_CATEGORY[type] ?? 'other'
 }
 
 const CATEGORY_LABEL: Record<AlertCategory, { ar: string; en: string }> = {
