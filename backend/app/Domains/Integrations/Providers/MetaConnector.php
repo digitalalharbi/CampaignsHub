@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
+final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
@@ -1259,6 +1259,84 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         }
 
         return SyncResult::of($rows);
+    }
+
+    /**
+     * AUDIENCE-001 — paid delivery by REGION, per ad set and day: one Graph call per account.
+     *
+     * Documented at https://developers.facebook.com/docs/marketing-api/insights/breakdowns — `region` is
+     * «the regions where people reached are located», derived by Meta from signals such as a person's
+     * current city and hometown. It is therefore NOT the location targeted and NOT proof of where a
+     * single impression was served; the label is stored verbatim and never re-mapped to a city.
+     *
+     * Only delivery fields are asked (impressions, reach, clicks, spend): off-Meta action metrics are
+     * not returned with `region` (Type 1 breakdown), so no conversion is ever attributed to a region.
+     * `reach` here is the daily unique count and is never added across days by any reader.
+     */
+    public function audienceDimensions(): array
+    {
+        return ['region'];
+    }
+
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
+    public function audienceSourceField(string $dimension): string
+    {
+        return 'meta:insights.level=adset.breakdowns='.$dimension;
+    }
+
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
+    {
+        if (! in_array($dimension, $this->audienceDimensions(), true)) {
+            return SyncResult::failed("Meta audience dimension «{$dimension}» is not asked for by this product.");
+        }
+
+        try {
+            $reported = $this->readAll($this->tokens(), "{$adAccountId}/insights", "{$dimension} breakdown", [
+                'level' => 'adset',
+                'time_increment' => 1,
+                'breakdowns' => $dimension,
+                'fields' => 'adset_id,campaign_id,date_start,impressions,reach,clicks,spend,account_currency',
+                'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+                'limit' => 500,
+            ]);
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+
+        return SyncResult::of(self::mapAudienceRows($reported, $dimension));
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $reported
+     * @return list<array<string,mixed>>
+     */
+    public static function mapAudienceRows(array $reported, string $dimension): array
+    {
+        $rows = [];
+        foreach ($reported as $r) {
+            $value = trim((string) ($r[$dimension] ?? ''));
+            $entity = (string) ($r['adset_id'] ?? '');
+            $date = substr((string) ($r['date_start'] ?? ''), 0, 10);
+            if ($value === '' || $entity === '' || $date === '') {
+                continue;
+            }
+            $row = ['entity_id' => $entity, 'campaign_id' => isset($r['campaign_id']) ? (string) $r['campaign_id'] : null, 'date' => $date, 'value' => $value];
+            foreach (['impressions', 'reach', 'clicks', 'spend'] as $m) {
+                if (isset($r[$m]) && is_numeric($r[$m])) {
+                    $row[$m] = (float) $r[$m];
+                }
+            }
+            if (isset($r['account_currency']) && is_string($r['account_currency']) && strlen($r['account_currency']) === 3) {
+                $row['currency'] = strtoupper($r['account_currency']);
+            }
+            $rows[] = $row;
+        }
+
+        return $rows;
     }
 
     /**
