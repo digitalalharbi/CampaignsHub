@@ -469,7 +469,9 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
 
         foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
             'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,'
-                .'creative{id,name,thumbnail_url,object_type,image_url,image_hash,video_id,object_story_spec}',
+                // CONTENT-TEXT-CTA-001 — `body`, `title`, `call_to_action_type` and `asset_feed_spec` are AdCreative fields
+                // (Marketing API reference, «Ad Creative»): the copy of a post-based or dynamic creative lives there, not in a story spec.
+                .'creative{id,name,thumbnail_url,object_type,image_url,image_hash,video_id,object_story_spec,body,title,call_to_action_type,asset_feed_spec}',
             'limit' => 500,
         ]) as $a) {
             if (($a['id'] ?? null) === null) {
@@ -904,7 +906,9 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 ?? $str($video['image_url'] ?? null),
             )?->toIso8601String(),
             'destination_url' => $str($link['link'] ?? null)
-                ?? $str($video['call_to_action']['value']['link'] ?? null),
+                ?? $str($video['call_to_action']['value']['link'] ?? null)
+                // CONTENT-TEXT-CTA-001 — a dynamic creative states its landing page in the asset feed's `link_urls`.
+                ?? $str(((array) (((array) ($creative['asset_feed_spec']['link_urls'] ?? []))[0] ?? []))['website_url'] ?? null),
             /*
              * `null` when Meta sent no `child_attachments`, `[]` when it sent an empty list — two
              * different sentences the presenter already knows how to tell apart, and the reason an
@@ -921,6 +925,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                     ], static fn ($v) => $v !== null),
                     $children,
                 ),
+            ...$this->copyFrom($creative, $spec),
             // META-CONTENT-MEDIA-001 — what the full-size reads ask for: the image's hash, the video's id.
             'raw' => ($refs = array_filter([
                 'image_hash' => $str($creative['image_hash'] ?? null) ?? $str($link['image_hash'] ?? null),
@@ -928,6 +933,64 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 // Whether Meta named a full-size poster for the video — the 64px thumb does not count.
                 'poster' => $str($video['image_url'] ?? null) === null ? null : true,
             ], static fn ($v) => $v !== null)) === [] ? null : ['media_refs' => $refs],
+        ], static fn ($v) => $v !== null);
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 — the ad's own words and its call to action, from the fields Meta states them in.
+     *
+     * Production 2026-11-13: 0 of 959 Meta creatives carried a body, a headline or a call to action, although
+     * `object_story_spec` was already requested — this mapping read only its media. Meta's Marketing API reference
+     * names where each one lives, and they are read in that order, the most specific first:
+     *
+     *   * `object_story_spec.link_data` (AdCreativeLinkData): `message` (the primary text), `name` (the headline),
+     *     `description`, `call_to_action.type`.
+     *   * `object_story_spec.video_data` (AdCreativeVideoData): `message`, `title`, `link_description`,
+     *     `call_to_action.type`.
+     *   * `object_story_spec.template_data` (a catalogue template, same shape as link_data). A value holding Meta's
+     *     `{{product.…}}` tokens is a template, rendered per product at delivery — never stored as if it were copy.
+     *   * The AdCreative's own `body`, `title` and `call_to_action_type` — where a creative built from an existing
+     *     post (`object_story_id`) states its copy, with no story spec at all.
+     *   * `asset_feed_spec` (AdAssetFeedSpec, dynamic / Advantage+ creative): `bodies[].text`, `titles[].text`,
+     *     `descriptions[].text`, `call_to_action_types[]`. Meta tries several and shows one; the first is kept,
+     *     which is the one the advertiser listed first.
+     *
+     * Every value is a string Meta sent; nothing is composed. A creative with none keeps none.
+     *
+     * @param  array<string,mixed>  $creative
+     * @param  array<string,mixed>  $spec
+     * @return array{body?: string, headline?: string, description?: string, cta?: string}
+     */
+    private function copyFrom(array $creative, array $spec): array
+    {
+        $text = static function (mixed $v): ?string {
+            if (! is_string($v) || trim($v) === '') {
+                return null;
+            }
+
+            return preg_match('/\{\{\s*product\./i', $v) === 1 ? null : trim($v);
+        };
+        $first = static fn (mixed $list, string $key): ?string => $text(((array) (((array) ($list ?? []))[0] ?? []))[$key] ?? null);
+
+        $link = (array) ($spec['link_data'] ?? []);
+        $video = (array) ($spec['video_data'] ?? []);
+        $template = (array) ($spec['template_data'] ?? []);
+        $feed = (array) ($creative['asset_feed_spec'] ?? []);
+
+        $cta = $text($link['call_to_action']['type'] ?? null)
+            ?? $text($video['call_to_action']['type'] ?? null)
+            ?? $text($template['call_to_action']['type'] ?? null)
+            ?? $text($creative['call_to_action_type'] ?? null)
+            ?? $text(((array) ($feed['call_to_action_types'] ?? []))[0] ?? null);
+
+        return array_filter([
+            'body' => $text($link['message'] ?? null) ?? $text($video['message'] ?? null) ?? $text($template['message'] ?? null)
+                ?? $text($creative['body'] ?? null) ?? $first($feed['bodies'] ?? null, 'text'),
+            'headline' => $text($link['name'] ?? null) ?? $text($video['title'] ?? null) ?? $text($template['name'] ?? null)
+                ?? $text($creative['title'] ?? null) ?? $first($feed['titles'] ?? null, 'text'),
+            'description' => $text($link['description'] ?? null) ?? $text($video['link_description'] ?? null)
+                ?? $text($template['description'] ?? null) ?? $first($feed['descriptions'] ?? null, 'text'),
+            'cta' => $cta === null ? null : strtoupper($cta),
         ], static fn ($v) => $v !== null);
     }
 

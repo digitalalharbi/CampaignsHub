@@ -432,6 +432,29 @@ final class SharedReportCreativesTest extends TestCase
         $this->assertArrayNotHasKey('external_ids', $hidden);
     }
 
+    /**
+     * CONTENT-TEXT-CTA-001 — a TikTok row synced before `ad_text` was written as the body shows it through `copy`,
+     * so the «نص الإعلان» switch removes it from every byte of the shared payload, exactly like the column.
+     */
+    public function test_tiktok_ad_text_kept_in_the_payload_obeys_the_ad_copy_switch(): void
+    {
+        $creative = $this->creative([
+            'provider' => 'tiktok', 'format' => 'video', 'body' => null, 'headline' => null, 'cta' => 'ORDER_NOW',
+            'raw' => ['media' => 'video', 'ad_text' => 'TIKTOK-AD-TEXT-SENTINEL'],
+        ]);
+        $this->figures($creative, ['spend' => 100, 'impressions' => 20000, 'clicks' => 400]);
+
+        [$open] = $this->link($this->everything());
+        $this->assertSame('TIKTOK-AD-TEXT-SENTINEL', $this->open($open, '/creatives/'.$creative->getKey())->assertOk()->json('data.creative.copy.body'));
+
+        [$closed] = $this->link($this->everything(['ad_copy' => false, 'cta' => false]));
+        foreach (['', '/creatives', '/creatives/'.$creative->getKey()] as $path) {
+            $raw = $this->open($closed, $path)->assertOk()->getContent();
+            $this->assertStringNotContainsString('TIKTOK-AD-TEXT-SENTINEL', (string) $raw, "the ad text leaked on {$path}");
+            $this->assertStringNotContainsString('ORDER_NOW', (string) $raw, "the call to action leaked on {$path}");
+        }
+    }
+
     /** A link that forbids video playback carries no video URL for a player to find. */
     public function test_a_forbidden_video_has_no_url_in_the_payload(): void
     {
