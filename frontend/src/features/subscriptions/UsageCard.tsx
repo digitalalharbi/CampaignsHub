@@ -34,12 +34,12 @@ export function UsageCard({ ar }: { ar: boolean }) {
   return (
     <section data-testid="usage-card" className="rounded-2xl border border-border bg-surface p-5">
       <h2 className="flex items-center gap-2 font-heading text-base font-bold text-text-primary">
-        <Gauge size={16} className="text-brand-600" aria-hidden /> {ar ? 'الاستهلاك هذا الشهر' : 'Usage this month'}
+        <Gauge size={16} className="text-brand-600" aria-hidden /> {ar ? 'الاستخدام هذا الشهر' : 'Usage this month'}
       </h2>
 
       <div data-testid="usage-credits" className="mt-3 flex items-center gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-xs">
         <Wallet size={14} className="text-text-muted" aria-hidden />
-        <span className="text-text-secondary">{ar ? 'رصيد الاستهلاك' : 'Usage balance'}</span>
+        <span className="text-text-secondary">{ar ? 'رصيد الاستخدام' : 'Usage balance'}</span>
         <span className="ms-auto font-semibold text-text-primary"><Num>{credits.balance}</Num> {credits.currency}</span>
       </div>
 
@@ -54,7 +54,7 @@ export function UsageCard({ ar }: { ar: boolean }) {
           <Meter used={usage.data.seats.active} cap={usage.data.seats.cap} testId="usage-seats-bar" />
           {usage.data.seats.replacements_allowed !== null && (
             <p className="mt-1 text-xs text-text-muted">
-              {ar ? 'الاستبدالات خلال 30 يومًا:' : 'Replacements in 30 days:'} <Num>{usage.data.seats.replacements_used}</Num> / <Num>{usage.data.seats.replacements_allowed}</Num>
+              {ar ? 'تبديل الحسابات خلال 30 يومًا:' : 'Replacements in 30 days:'} <Num>{usage.data.seats.replacements_used}</Num> / <Num>{usage.data.seats.replacements_allowed}</Num>
             </p>
           )}
         </div>
@@ -67,7 +67,7 @@ export function UsageCard({ ar }: { ar: boolean }) {
 
       <p className="mt-3 text-xs text-text-muted">
         {keys.length > 0 && (ar
-          ? 'استهلاك مفاتيح الذكاء الاصطناعي الخاصة بك يُدفع لمزوّدك مباشرة ولا يُخصم من رصيدك. '
+          ? 'استخدام مفاتيح الذكاء الاصطناعي الخاصة بك يُدفع لمزوّدك مباشرة ولا يُخصم من رصيدك. '
           : 'Usage on your own AI keys is paid to your provider directly and never taken from your balance. ')}
         {ar ? 'نُنبّهك عند 75% و90% و100% من كل حد شهري. الأسعار لا تشمل ضريبة القيمة المضافة.'
           : 'You are alerted at 75%, 90% and 100% of each monthly cap. Prices exclude VAT.'}

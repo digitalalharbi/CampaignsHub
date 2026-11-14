@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * `/admin/features` — SUPERADMIN-FEATURES-001: a capability on or off for EVERY workspace.
@@ -22,9 +23,9 @@ export function PlatformFeaturesPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'capabilities'] }),
   })
 
-  const toggle = (module: string, disabled: boolean) => {
-    const reason = window.prompt(ar ? 'سبب التغيير (يُسجَّل في سجل التدقيق):' : 'Reason (recorded in the audit trail):')
-    if (reason && reason.trim().length >= 5) change.mutate({ module, disabled, reason: reason.trim() })
+  const toggle = async (module: string, disabled: boolean) => {
+    const reason = await promptDialog({ title: ar ? 'سبب التغيير' : 'Reason for the change', label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail', minLength: 5 })
+    if (reason) change.mutate({ module, disabled, reason })
   }
 
   return (
@@ -78,11 +79,14 @@ function PlanModules({ ar }: { ar: boolean }) {
     onSuccess: (next) => qc.setQueryData(['admin', 'plan-capabilities'], next),
   })
 
-  const toggle = (plan: { id: string; name: string; workspaces: number }, module: string, enabled: boolean) => {
-    const reason = window.prompt(ar
-      ? `يؤثر على ${plan.workspaces} مساحة عمل على خطة ${plan.name}. سبب التغيير (يُسجَّل في سجل التدقيق):`
-      : `Affects ${plan.workspaces} workspaces on ${plan.name}. Reason (recorded in the audit trail):`)
-    if (reason && reason.trim().length >= 5) change.mutate({ plan: plan.id, module, enabled, reason: reason.trim() })
+  const toggle = async (plan: { id: string; name: string; workspaces: number }, module: string, enabled: boolean) => {
+    const reason = await promptDialog({
+      title: ar ? 'سبب التغيير' : 'Reason for the change',
+      body: ar ? `يؤثر على ${plan.workspaces} مساحة عمل على خطة ${plan.name}.` : `Affects ${plan.workspaces} workspaces on ${plan.name}.`,
+      label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail',
+      minLength: 5,
+    })
+    if (reason) change.mutate({ plan: plan.id, module, enabled, reason })
   }
 
   return (

@@ -261,9 +261,9 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     e?.message ? [{ field: FIELD_IDS[field] ?? field, message: String(e.message) }] : [],
   )
 
-  /* LAUNCH-001 — this form is an INTERNAL draft; publishing on the platforms is «إطلاق الحملات». Said on the form so nobody reads «حفظ» as a launch. */
+  /* LAUNCH-001 — this form is an INTERNAL draft; publishing on the platforms is «حملة جديدة». Said on the form so nobody reads «حفظ» as a launch. */
   const draftHint = locale === 'ar'
-    ? 'هذه مسودة داخلية في كامبينز هب ولا تُنشر على أي منصة. للنشر على المنصات استخدم «إطلاق الحملات».'
+    ? 'هذه مسودة داخلية في كامبينز هب ولا تُنشر على أي منصة. للنشر على المنصات استخدم «حملة جديدة».'
     : 'This is an internal draft in CampaignsHub and is not published anywhere. To publish on the platforms use «Launch».'
   return (
     <Modal

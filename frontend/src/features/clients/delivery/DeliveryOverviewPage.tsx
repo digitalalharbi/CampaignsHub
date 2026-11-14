@@ -47,7 +47,7 @@ export function DeliveryOverviewPage() {
   return (
     <div className="space-y-5">
       <PageIntro
-        title={ar ? 'التسليم الدوري والفوترة' : 'Periodic delivery & billing'}
+        title={ar ? 'الجدولة الدورية والفوترة' : 'Periodic delivery & billing'}
         purpose={ar ? 'حالة تقرير كل عميل وفاتورته، والخطوة التالية المطلوبة منك.' : 'Where each client’s report and invoice stand, and the next step for you.'}
       />
 

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Building2, LayoutGrid, Table2, Users } from 'lucide-react'
+import { AlertTriangle, Building2, LayoutGrid, Plus, Table2, Users } from 'lucide-react'
+import { NewClientDialog } from './NewClientDialog'
+import { Button } from '@/components/ui/Button'
 import { getTaxonomy, listClients, type ClientCard, type ClientFilters } from './api'
 import { CLIENT_STATUS_LABELS, INDUSTRY_LABELS, labelOf } from './labels'
 import { SearchableSelect } from '@/components/forms'
@@ -38,6 +40,7 @@ function spendCell(c: ClientCard, mixedLabel: string): string {
 export function ClientsPortfolioPage() {
   const t = useT()
   const lang = useUi((s) => s.locale)
+  const [newOpen, setNewOpen] = useState(false)
   const [view, setView] = useState<'cards' | 'table'>(() => (localStorage.getItem('clients_view') as 'cards' | 'table') || 'cards')
   /*
    * DASHBOARD-DRILLDOWN-001 — a link may name the first filter. The agency dashboard's «clients
@@ -127,12 +130,15 @@ export function ClientsPortfolioPage() {
           title={t('clients_portfolio')}
           purpose={t('clients_subtitle')}
           actions={
+            <>
+            <Button data-testid="new-client" size="sm" onClick={() => setNewOpen(true)}><Plus size={14} /> {ar ? 'عميل جديد' : 'New client'}</Button>
             <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
               <button onClick={() => setView('cards')} aria-label={t('cc_view_cards')} aria-pressed={view === 'cards'}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'cards' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><LayoutGrid size={14} /> {t('cc_view_cards')}</button>
               <button onClick={() => setView('table')} aria-label={t('cc_view_table')} aria-pressed={view === 'table'}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${view === 'table' ? 'bg-brand-primary-soft text-brand-700' : 'text-text-secondary'}`}><Table2 size={14} /> {t('cc_view_table')}</button>
             </div>
+            </>
           }
           kpis={
             /* The total is the SERVER's count; the other three describe the loaded page of rows. */
@@ -245,6 +251,7 @@ export function ClientsPortfolioPage() {
       ) : (
         <ClientTableView rows={rows} t={t} lang={lang} />
       )}
+      <NewClientDialog open={newOpen} onClose={() => setNewOpen(false)} />
     </div>
   )
 }
