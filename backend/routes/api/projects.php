@@ -21,6 +21,7 @@ use App\Domains\Forms\Http\Controllers\FormFunnelController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
+use App\Domains\Metrics\Http\Controllers\AudienceController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
@@ -317,6 +318,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
     Route::get('measurement/attribution', [SiteAnalyticsController::class, 'attribution'])->middleware('project.can:analytics.view')->name('measurement.attribution');
+    // AUDIENCE-001 — targeting / paid delivery / site events / organic, kept apart, per platform.
+    Route::get('audience', [AudienceController::class, 'show'])->middleware('project.can:analytics.view')->name('audience.show');
     Route::get('measurement/gap', [SiteAnalyticsController::class, 'gap'])->middleware('project.can:analytics.view')->name('measurement.gap');
     Route::get('measurement/classification', [SiteAnalyticsController::class, 'classification'])->middleware('project.can:analytics.view')->name('measurement.classification');
     Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
