@@ -275,7 +275,7 @@ final class FundingLedgerActionsTest extends TestCase
         $this->assertSame(1, $this->entries($p));
     }
 
-    public function test_the_pdf_carries_the_same_figures_as_the_sheet_and_real_arabic_text(): void
+    public function test_the_pdf_carries_the_same_figures_as_the_sheet(): void
     {
         $p = $this->project();
         $a = (string) Str::uuid();
@@ -297,12 +297,20 @@ final class FundingLedgerActionsTest extends TestCase
         $this->assertStringContainsString('سناب شات', $html);
         $this->assertStringContainsString('زيادة', $html, 'the history reason is printed');
         $this->assertStringContainsString('dir="rtl"', $html);
+    }
 
+    /** The real file: needs Chromium and playwright-core, which the backend CI job does not have (as for the invoice PDF). */
+    public function test_the_pdf_is_a_real_file_when_the_renderer_is_available(): void
+    {
         if (! config('reports.chromium.enabled') || ! is_dir(base_path('../frontend/node_modules/playwright-core'))) {
-            $this->actingAs($this->finance, 'sanctum')->get('/api/v1/funding/export?format=pdf')->assertStatus(503);
-
-            return;
+            $this->markTestSkipped('Chromium PDF rendering is not available in this environment (not enabled, or playwright-core is not installed).');
         }
+
+        $p = $this->project();
+        $this->spend($p, (string) Str::uuid(), 3, 1_000, 'SAR', 'snapchat');
+        $this->add($p, 10_000)->assertCreated();
+        $this->act($p, 'adjust', ['amount' => 12_000, 'note' => 'زيادة'])->assertOk();
+
         $res = $this->actingAs($this->finance, 'sanctum')->get('/api/v1/funding/export?format=pdf&history=1')->assertOk();
         $bytes = (string) $res->getContent();
         $this->assertStringStartsWith('%PDF', $bytes);

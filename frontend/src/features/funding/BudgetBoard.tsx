@@ -93,9 +93,9 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       <span className="col-span-2 flex min-w-0 flex-col gap-0.5 lg:col-span-1">
         <span className="flex min-w-0 items-baseline justify-between gap-2 text-xs text-text-secondary">
           <Sar n={row.remaining} ar={ar} className={`text-sm font-extrabold ${red ? 'text-danger' : 'text-text-primary'}`} />
-          <span className="tnum flex min-w-0 items-baseline gap-1.5 truncate" dir="ltr">
-            <span>{sar(row.spent)} / {sar(row.approved)}</span>
-            {used !== null && <b className="font-extrabold text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</b>}
+          <span className="tnum min-w-0 truncate">
+            <bdi dir="ltr">{sar(row.spent)} / {sar(row.approved)}</bdi>
+            {used !== null && <bdi dir="ltr" className="ms-1.5 font-extrabold text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>}
           </span>
         </span>
         <span className="h-1.5 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
