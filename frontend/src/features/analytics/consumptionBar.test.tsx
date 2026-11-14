@@ -31,6 +31,6 @@ describe('ConsumptionBar', () => {
 
   it('speaks Arabic', () => {
     renderWithProviders(<ConsumptionBar consumed={0.5} expected={5000} total={10000} />, { locale: 'ar' })
-    expect(screen.getByRole('img', { name: /المستهلك 50%/ })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /الإنفاق 50%/ })).toBeInTheDocument()
   })
 })

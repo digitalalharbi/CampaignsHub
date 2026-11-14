@@ -106,7 +106,9 @@ function ContentStrip({
   action,
   empty,
   columns = 4,
+  note,
 }: {
+  note?: string | null
   columns?: 3 | 4
   title: string
   items: ReportAd[]
@@ -123,6 +125,7 @@ function ContentStrip({
   return (
     <section data-testid={testid}>
       <SectionTitle action={action}>{title}</SectionTitle>
+      {items.length > 0 && note && <p className="-mt-1 mb-3 text-xs text-text-muted" data-testid={`${testid}-basis`}>{note}</p>}
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-text-secondary">{empty}</p>
       ) : (
@@ -631,6 +634,7 @@ function PlatformDetail({
             locale={locale}
             onOpen={onOpenContent}
             ranked
+            note={basisLine(payload.ads_basis, ar)}
             action={goToContent ? <GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} /> : undefined}
             empty={ar ? 'لا يوجد محتوى بأرقام على هذه المنصة في هذه الفترة.' : 'No content with figures on this platform in this period.'}
           />

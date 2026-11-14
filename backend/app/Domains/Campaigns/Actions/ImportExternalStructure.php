@@ -135,7 +135,7 @@ final class ImportExternalStructure
                         'name' => (string) ($row['name'] ?? $externalId),
                         'status' => (string) ($row['status'] ?? 'unknown'),
                         'review_status' => $row['review_status'] ?? null,
-                        'destination_url' => $row['destination_url'] ?? null,
+                        'destination_url' => $this->url($row['destination_url'] ?? null),
                         'source_type' => 'api',
                         'is_demo' => false,
                         'last_synced_at' => Carbon::now(),
@@ -311,12 +311,20 @@ final class ImportExternalStructure
                  */
                 'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
-                'destination_url' => $creative['destination_url'] ?? null,
+                'destination_url' => $this->url($creative['destination_url'] ?? null),
                 // OPENAI-CHAT-CARD-TEXT-001 — the copy, when the connector sent it. Only written when it
                 // was sent: a provider that sends none must not blank copy another writer stored.
                 ...array_filter([
-                    'headline' => is_string($creative['headline'] ?? null) && $creative['headline'] !== '' ? $creative['headline'] : null,
+                    /*
+                     * CONTENT-TEXT-CTA-001 — the call to action and the description too, which no writer ever stored: the
+                     * `cta` column was empty for every platform in Production (2026-11-13) while the connectors had it.
+                     * Each is cut to its column (headline 500, description 1000, cta 64): one over-long string must not
+                     * fail the whole structure sync with «value too long», as an unrounded duration once did.
+                     */
+                    'headline' => $this->copy($creative['headline'] ?? null, 500),
                     'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
+                    'description' => $this->copy($creative['description'] ?? null, 1000),
+                    'cta' => $this->copy($creative['cta'] ?? null, 64),
                     // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
                     'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
                     'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,
@@ -349,6 +357,21 @@ final class ImportExternalStructure
         $counts['creatives']++;
 
         return (string) $row->getKey();
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 — a destination that fits its column (varchar 2048), or null. Never cut: a shortened URL is a
+     * broken link, and one over-long URL (tracking macros) must not fail the whole structure sync.
+     */
+    private function url(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' && strlen($value) <= 2048 ? $value : null;
+    }
+
+    /** A non-empty string cut to its column's length, or null. */
+    private function copy(mixed $value, int $max): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? mb_substr($value, 0, $max) : null;
     }
 
     /**

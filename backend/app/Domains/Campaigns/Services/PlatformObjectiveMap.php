@@ -251,11 +251,15 @@ final class PlatformObjectiveMap
      *   - TARGET_CPM, MANUAL_CPM         → bid on being seen: awareness
      *   - TARGET_CPV, MANUAL_CPV         → bid on views: video views
      *
-     * NOT listed (Owner decision, ambiguous): MAXIMIZE_CONVERSION_VALUE (a «value» can be a lead's
-     * score as well as a sale), TARGET_IMPRESSION_SHARE (also used to defend a search position),
-     * MAXIMIZE_CONVERSIONS and TARGET_CPA (a «conversion» can be a purchase, a lead or a call), and
-     * MANUAL_CPC and ENHANCED_CPC (a manual bid states no goal). Those campaigns stay unclassified,
-     * with the platform's word kept, until a person sets them.
+     *   - MAXIMIZE_CONVERSION_VALUE, MAXIMIZE_CONVERSIONS → sales (GOOGLE-CONVERSION-BIDDING-SALES-001,
+     *     Owner decision 2026-11-13, on Performance Max, Search and Display alike: these accounts bid on
+     *     store purchases. A campaign that is really a lead buy is corrected by hand, and a manual
+     *     objective is never replaced by this rule.)
+     *
+     * NOT listed (ambiguous, no decision): TARGET_IMPRESSION_SHARE (also used to defend a search
+     * position), TARGET_CPA (a «conversion» can be a purchase, a lead or a call), and MANUAL_CPC and
+     * ENHANCED_CPC (a manual bid states no goal). Those campaigns stay unclassified, with the
+     * platform's word kept, until a person sets them.
      *
      * Read from the stored raw campaign (`campaign.biddingStrategyType`), so it applies to every
      * sync from now on and to nothing until then.
@@ -287,6 +291,9 @@ final class PlatformObjectiveMap
     /** @var array<string, CampaignObjective> */
     private const GOOGLE_BIDDING = [
         'TARGET_ROAS' => CampaignObjective::Sales,
+        // GOOGLE-CONVERSION-BIDDING-SALES-001 — Owner decision, 2026-11-13.
+        'MAXIMIZE_CONVERSION_VALUE' => CampaignObjective::Sales,
+        'MAXIMIZE_CONVERSIONS' => CampaignObjective::Sales,
         'TARGET_SPEND' => CampaignObjective::Traffic,
         'TARGET_CPM' => CampaignObjective::Awareness,
         'MANUAL_CPM' => CampaignObjective::Awareness,
