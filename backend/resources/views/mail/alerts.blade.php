@@ -58,4 +58,9 @@
                 ? 'وصلتك لأنك تتابع هذه المشاريع.'
                 : 'Sent because you follow these projects.') }}
     </div>
+
+    {{-- MONEY-MARKS-001 — the one financial disclaimer (BUDGET-DISCLAIMER-001), wherever a team member's mail carries money figures. --}}
+    @if (collect($items)->contains(fn ($it) => \App\Domains\Funding\Support\FundingMoney::textHasMoney(trim(($it['numbers'] ?? '').' '.json_encode($it['figures'] ?? [], JSON_UNESCAPED_UNICODE)))))
+        <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($dir === 'rtl' ? 'ar' : 'en') }}</div>
+    @endif
 </div>

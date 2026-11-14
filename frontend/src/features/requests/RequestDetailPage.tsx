@@ -18,6 +18,7 @@ import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { fieldDef } from './paidMediaFields'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { withMark } from '@/lib/money/mark'
 
 const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
@@ -213,7 +214,7 @@ export function RequestDetailPage() {
                   <li key={b.quote_id} className="rounded-xl border border-border p-2.5">
                     <Link to="/app/billing" className="flex items-center justify-between gap-2 hover:text-brand-600">
                       <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{b.number}</span>
-                      <span className="tnum text-xs font-bold" dir="ltr">{Number(b.total).toLocaleString('en-US')} {b.currency}</span>
+                      <span className="tnum text-xs font-bold" dir="ltr">{withMark(Number(b.total).toLocaleString('en-US'), b.currency)}</span>
                     </Link>
                     {b.invoice && (
                       <Link to="/app/billing/invoices" className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-1 text-text-secondary hover:text-brand-600">

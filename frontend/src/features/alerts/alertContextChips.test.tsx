@@ -56,7 +56,7 @@ describe('the chips beside a budget alert', () => {
   it('states the currency the budget is in', async () => {
     show({ basis_class: 'measured', spend: 950, budget: 1000, ratio: 0.95, budget_currency: 'SAR' })
 
-    expect(await screen.findByText(/1000 SAR/)).toBeInTheDocument()
+    expect(await screen.findByText(/1000 ر.س/)).toBeInTheDocument()
   })
 
   it('says why there is no percentage when the budget cannot be compared', async () => {

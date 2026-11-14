@@ -47,7 +47,7 @@ describe('a table that owns its own formatting', () => {
     const [name, spend, results, ctr, roas] = cellsOf(0)
 
     expect(name).toBe('Eid')
-    expect(spend).toContain('USD')
+    expect(spend).toContain('$')
     expect(results).toMatch(/1\.23M|1,234,567/)
     expect(ctr).toContain('%')
     expect(roas).toContain('×')
@@ -88,7 +88,7 @@ describe('a table that owns its own formatting', () => {
   /**
    * The money contract reaches the tables: no currency means the figure goes out BARE.
    *
-   * «18.05 SAR» on a USD account is a different number wearing a label, and a table is exactly the
+   * «18.05 ر.س» on a USD account is a different number wearing a label, and a table is exactly the
    * surface where a reader would never think to check.
    */
   it('prints money with no currency bare rather than under a guessed one', () => {

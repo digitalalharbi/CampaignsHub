@@ -69,7 +69,7 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     // label sits in a row of its own beside the delta, with the figure below it.
     const spend = (await screen.findByText('الإنفاق')).closest('div.rounded-2xl') as HTMLElement
     expect(within(spend).getByText('—')).toBeInTheDocument()
-    expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^500\.00 (?:USD|\$)$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/1,000/)).not.toBeInTheDocument()
 
     // Utilisation cannot be drawn from a withheld spend, so its «استهلاك …%» caption is absent entirely
@@ -89,7 +89,7 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     // parent is still the row.
     const spent = (await screen.findByText('الإنفاق')).parentElement as HTMLElement
     expect(within(spent).getByText('—')).toBeInTheDocument()
-    expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^500\.00 (?:USD|\$)$/)).not.toBeInTheDocument()
 
     // The forecast is a projection off spend; with no comparable spend it is «—», not a SAR number.
     const forecast = screen.getByText('توقع نهاية الحملة').parentElement as HTMLElement

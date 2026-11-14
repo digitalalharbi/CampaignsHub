@@ -40,7 +40,7 @@ import { getSharedCreative, getSharedCreativeSummary, getSharedCreatives } from 
  * design and the real amount is in `spend_original`. A client's report must say:
  *
  *   converted        the figure, in the report's reporting currency
- *   original-only    the amount and ITS currency — «412.50 USD» — where the link permits spend
+ *   original-only    the amount and ITS currency — «412.50 $» — where the link permits spend
  *   reported zero    «0», because a measured zero is a fact about a creative
  *   unavailable      a truthful absence, never «0»
  *   redacted         nothing at all — not a dash, not a labelled blank
@@ -369,7 +369,7 @@ describe.each(LOCALES)('a client report states spend truthfully ($locale)', ({ l
     expect((await screen.findAllByText('Hero image')).length).toBeGreaterThan(0)
     const figures = screen.getAllByText(/412\.5/)
     expect(figures.length).toBeGreaterThan(0)
-    expect(figures[0].textContent).toMatch(/USD/)
+    expect(figures[0].textContent).toMatch(/\$/)
   })
 
   /** «Not reported» must not become «0» — the state the owner named explicitly. */

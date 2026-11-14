@@ -1,5 +1,6 @@
 import type { CreativeMetrics } from './api'
 import type { Locale } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * §15.15 — showing a figure, or saying honestly why there isn't one.
@@ -299,7 +300,7 @@ export function formatMetric(state: MetricState, key: string, locale: Locale, cu
     // bare invites the reader to assume the one they expect.
     if (currency === null) return ar ? 'العملة غير محددة' : 'Currency not stated'
 
-    return `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency}`
+    return withMark(value.toLocaleString('en-US', { maximumFractionDigits: 2 }), currency)
   }
 
   return value.toLocaleString('en-US', { maximumFractionDigits: value % 1 === 0 ? 0 : 2 })

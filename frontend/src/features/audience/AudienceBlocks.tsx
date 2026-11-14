@@ -4,6 +4,7 @@ import { platformColor } from '@/features/analytics/platformColor'
 import { Num } from '@/components/ui/Num'
 import type { AudienceParts, DeliveryGroup, SiteGroup, TargetingItem } from './types'
 import { AUDIENCE_DELIVERY_PARTS } from './types'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * AUDIENCE-001 — the audience as compact, one-screen blocks: a bar list per platform and dimension, the targeting as
@@ -69,7 +70,7 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
             </span>
             {r.spend && r.spend.length > 0 && (
               <span className="tnum mt-0.5 block text-xs text-text-secondary">
-                {t(locale, 'الإنفاق: ', 'Spend: ')}{r.spend.map((s) => `${s.amount.toLocaleString('en-US')} ${s.currency}`).join(' · ')}
+                {t(locale, 'الإنفاق: ', 'Spend: ')}{r.spend.map((s) => withMark(s.amount.toLocaleString('en-US'), s.currency)).join(' · ')}
               </span>
             )}
           </li>

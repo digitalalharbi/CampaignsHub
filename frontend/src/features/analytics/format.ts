@@ -1,4 +1,5 @@
 import { formatMoneyParts, formatMoneyReading, moneyParts, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { withMark } from '@/lib/money/mark'
 import { formatFixed, formatNumber, numberFormatter } from '@/lib/numerals'
 
 /**
@@ -99,7 +100,7 @@ export function money(n: number | null | undefined, currency: string | null | un
    * number wearing a label, and the reader has no way to tell. Where a surface genuinely cannot
    * reach the currency, the figure goes out bare and the surface's own copy says what it is.
    */
-  return currency ? `${compact(n)} ${currency}` : compact(n)
+  return withMark(compact(n), currency)
 }
 
 /**
@@ -137,7 +138,7 @@ export function moneyExact(n: number | null | undefined, currency: string | null
    * An unknown currency prints NO currency, never a guessed one and never a placeholder: «237.90»
    * is incomplete and reads as incomplete, which is the honest state.
    */
-  return currency ? `${figure} ${currency}` : figure
+  return withMark(figure, currency)
 }
 
 export function num(n: number | null | undefined): string {
@@ -202,7 +203,7 @@ export function wholeMoney(n: number | null | undefined, currency?: string): str
     ? numberFormatter('en-US').format(n)
     : numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
-  return currency ? `${figure} ${currency}` : figure
+  return withMark(figure, currency)
 }
 
 /**

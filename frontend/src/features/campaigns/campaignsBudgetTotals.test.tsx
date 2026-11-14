@@ -87,7 +87,7 @@ describe('the project budget card over withheld spend', () => {
   it('refuses a project spend total when the campaigns are not in one currency', async () => {
     routeBudget([
       budgetRow({ campaign_id: 'c1', spent: 1000, spent_currency: 'SAR', spend_withheld: false }),
-      // 500 USD the platform reported, no rate. Real money, and not addable to riyals.
+      // 500 $ the platform reported, no rate. Real money, and not addable to riyals.
       budgetRow({ campaign_id: 'c2', spent: 500, spent_currency: 'USD', spend_withheld: true }),
     ])
     renderWithProviders(<CampaignsPage />, { locale: 'en', route: '/app/campaigns' })
@@ -98,16 +98,16 @@ describe('the project budget card over withheld spend', () => {
       Scoped to the TOTAL card, not the document — CAMPAIGNS-OVERVIEW-FIRST-001.
 
       The page now opens on the overview, which draws the per-campaign pacing table beside this card,
-      and «1.0K SAR» is a correct figure THERE: it is what that one campaign spent. The claim being
+      and «1.0K ر.س» is a correct figure THERE: it is what that one campaign spent. The claim being
       guarded was always about the PROJECT total — «the subset as the whole, the naive sum, the
       coalesced zero» — and a document-wide search stopped distinguishing the two the moment a
       truthful per-row figure appeared on the same screen.
     */
     const total = within(await screen.findByTestId('campaigns-budget-total'))
 
-    expect(total.queryByText(/1\.0K SAR spent/)).not.toBeInTheDocument()
-    expect(total.queryByText(/1\.5K SAR/)).not.toBeInTheDocument()
-    expect(total.queryByText(/0 SAR spent/)).not.toBeInTheDocument()
+    expect(total.queryByText(/1\.0K ر.س spent/)).not.toBeInTheDocument()
+    expect(total.queryByText(/1\.5K ر.س/)).not.toBeInTheDocument()
+    expect(total.queryByText(/0 ر.س spent/)).not.toBeInTheDocument()
   })
 
   it('states the platform figure in its own currency when every row is withheld and agrees', async () => {
@@ -128,9 +128,9 @@ describe('the project budget card over withheld spend', () => {
      * the budget query answers, so asserting on the element the moment it exists asserts on dashes.
      */
     await waitFor(() =>
-      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('USD'),
+      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('$'),
     )
-    // «0 SAR spent» is exactly the lie this branch replaces.
-    expect(screen.queryByText(/SAR spent/)).not.toBeInTheDocument()
+    // «0 ر.س spent» is exactly the lie this branch replaces.
+    expect(screen.queryByText(/(?:SAR|ر\.س) spent/)).not.toBeInTheDocument()
   })
 })

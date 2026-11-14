@@ -98,7 +98,7 @@ describe('the content performance tab', () => {
 
     await openCreative()
 
-    expect(await screen.findByTestId('creative-analysis-table')).toHaveTextContent('412.50 USD')
+    expect(await screen.findByTestId('creative-analysis-table')).toHaveTextContent('412.50 $')
   })
 
   /** A creative the platform does not break out shows «—», never a share of the campaign. */

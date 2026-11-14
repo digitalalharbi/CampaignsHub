@@ -97,7 +97,7 @@ describe('an ad with one converted day and one day awaiting a rate', () => {
 
     const chips = await screen.findAllByTestId('pending-conversion-chip')
     expect(chips[0]).toHaveTextContent('Awaiting EUR conversion')
-    expect(document.body.textContent ?? '').toContain('15.82 EUR')
+    expect(document.body.textContent ?? '').toContain('15.82 €')
   })
 
   it('prints both amounts in the platform tile', async () => {
@@ -105,7 +105,7 @@ describe('an ad with one converted day and one day awaiting a rate', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="USD" form="detailed" />, { route: '/r/tok?view=platforms' })
 
     const tile = await screen.findByTestId('live-platform-card-google')
-    expect(tile.textContent).toContain('28.97 EUR')
+    expect(tile.textContent).toContain('28.97 €')
     expect(tile.textContent).toContain('Awaiting EUR conversion')
   })
 })

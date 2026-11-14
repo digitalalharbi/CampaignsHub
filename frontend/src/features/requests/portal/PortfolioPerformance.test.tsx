@@ -109,7 +109,7 @@ describe('PortfolioPerformance', () => {
     renderWithProviders(<PortfolioPerformance />, { locale: 'en' })
 
     const spend = await screen.findByTestId('portfolio-kpi-spend')
-    expect(spend).toHaveTextContent('11,979.96 USD')
+    expect(spend).toHaveTextContent('11,979.96 $')
     expect(screen.getByTestId('portfolio-kpi-cpa')).toHaveTextContent('—')
   })
 

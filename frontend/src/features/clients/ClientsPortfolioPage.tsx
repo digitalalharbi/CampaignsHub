@@ -15,6 +15,7 @@ import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
+import { withMark } from '@/lib/money/mark'
 
 function statusTone(s: string | null): string {
   switch (s) {
@@ -34,7 +35,7 @@ function fmtDate(iso: string | null): string {
 function spendCell(c: ClientCard, mixedLabel: string): string {
   if (c.spend_currency_mode === 'mixed') return mixedLabel
   if (c.spend === null) return '—'
-  return `${c.spend.toLocaleString('en-US')}${c.currency ? ` ${c.currency}` : ''}`
+  return withMark(c.spend.toLocaleString('en-US'), c.currency)
 }
 
 export function ClientsPortfolioPage() {

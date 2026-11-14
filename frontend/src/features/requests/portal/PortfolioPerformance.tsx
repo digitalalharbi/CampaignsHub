@@ -15,6 +15,7 @@ import { useUi } from '@/stores/ui'
 import { fetchPortalOverview, type PortalOverview } from './portalOverviewApi'
 import { useClientSpacePath } from './clientSpace'
 import { usePortalGuard } from './usePortalGuard'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * CP-DASH-001 — the client's portfolio: a few figures that matter, then compact summaries.
@@ -57,7 +58,7 @@ function format(key: string, v: number | null | undefined, currency: string | nu
   if (key === 'roas') return `${v.toFixed(2)}×`
   const compact = Math.abs(v) >= 100_000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(v) : new Intl.NumberFormat('en', { maximumFractionDigits: key === 'cpa' || key === 'spend' || key === 'revenue' ? 2 : 0 }).format(v)
 
-  return ['spend', 'cpa', 'revenue'].includes(key) && currency ? `${compact} ${currency}` : compact
+  return ['spend', 'cpa', 'revenue'].includes(key) && currency ? withMark(compact, currency) : compact
 }
 
 export function PortfolioPerformance() {
