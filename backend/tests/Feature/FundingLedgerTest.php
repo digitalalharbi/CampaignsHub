@@ -135,6 +135,9 @@ final class FundingLedgerTest extends TestCase
             $this->add($project, $amount, $ago)->assertCreated();
         }
 
+        // BUDGET-PERIOD-001: without a stated start the period begins at the first day of spend; this example states its own.
+        $this->actingAs($this->finance, 'sanctum')->patchJson('/api/v1/funding/projects/'.$project->id, ['starts_on' => $this->day(40)])->assertOk();
+
         $f = $this->figures($project);
         $this->assertSame(41_250.0, (float) $f['approved']);
         $this->assertSame(30_711.0, (float) $f['spent']);
@@ -216,9 +219,10 @@ final class FundingLedgerTest extends TestCase
         $this->spend($project, $account, 12, 4_000);
         $this->spend($project, $account, 3, 500);
         $this->spend($project, (string) Str::uuid(), 2, 100, currency: 'EUR');
+        $this->actingAs($this->finance, 'sanctum')->patchJson('/api/v1/funding/projects/'.$project->id, ['starts_on' => $this->day(10)])->assertOk();
 
         $f = $this->figures($project);
-        $this->assertSame(500.0, (float) $f['spent'], 'day 12 is before the first amount; the EUR day has no rate');
+        $this->assertSame(500.0, (float) $f['spent'], 'day 12 is before the stated start; the EUR day has no rate');
         $this->assertSame(1, $f['spend_without_rate']);
         $this->assertFalse($f['complete']);
 

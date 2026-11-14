@@ -191,13 +191,29 @@ final class PlatformAlertPresenter
             'line' => $ar
                 ? "تأكدت {$this->when($f['paid_at'] ?? null, true)} وما ظهرت في تسويات ميسر بعد {$days} أيام."
                 : "Confirmed {$this->when($f['paid_at'] ?? null, false)}; not in a Moyasar settlement after {$days} days.",
-            'more' => array_values(array_filter([$this->planLine($f, $ar)])),
+            'more' => array_values(array_filter([$this->planLine($f, $ar), $this->coverageLine($f, $ar)])),
             'steps' => $ar ? 'راجع التسويات في لوحة ميسر ← تواصل مع ميسر' : 'Check settlements in Moyasar → contact Moyasar',
             'viz' => ['type' => 'steps', 'steps' => [
                 ['label' => $ar ? 'الدفع' : 'Payment', 'state' => 'ok'],
                 ['label' => $ar ? 'التسوية' : 'Settlement', 'state' => 'bad'],
             ]],
         ];
+    }
+
+    /** @param  array<string,mixed>  $f  what was read from Moyasar — the evidence the money is not in a settlement */
+    private function coverageLine(array $f, bool $ar): ?string
+    {
+        $c = is_array($f['settlement_coverage'] ?? null) ? $f['settlement_coverage'] : null;
+        if ($c === null || ($c['since'] ?? null) === null) {
+            return null;
+        }
+        $n = (int) ($c['settlements'] ?? 0);
+        $since = $this->when($c['since'], $ar);
+        $latest = ($c['latest_at'] ?? null) === null ? null : $this->when($c['latest_at'], $ar);
+
+        return $ar
+            ? "قرأنا تسويات ميسر من {$since}: عددها {$n}".($latest === null ? '' : "، آخرها {$latest}").'، والدفعة مو فيها.'
+            : "Read Moyasar settlements from {$since}: {$n}".($latest === null ? '' : ", the latest {$latest}").'; the payment is in none.';
     }
 
     /** @param  array<string,mixed>  $f */

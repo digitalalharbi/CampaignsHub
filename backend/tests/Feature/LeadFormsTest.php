@@ -216,9 +216,16 @@ final class LeadFormsTest extends TestCase
         $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated();
         $this->postJson("/api/v1/public/forms/{$slug}/submissions", $this->submission())->assertCreated();
 
-        $leads = Lead::withoutGlobalScopes()->orderBy('created_at')->get();
+        $leads = Lead::withoutGlobalScopes()->get();
         $this->assertCount(2, $leads, 'Both submissions are real acquisition events.');
-        $this->assertSame((string) $leads[0]->id, (string) $leads[1]->canonical_lead_id);
+
+        // created_at is stored to the second, so ordering by it is arbitrary for two submissions in
+        // the same second. Identify the roles by the link itself: the original is the one that is
+        // canonical (no canonical_lead_id), the follower is the other and must point at it.
+        $original = $leads->first(fn ($l) => $l->canonical_lead_id === null);
+        $this->assertNotNull($original, 'Exactly one of the two stays canonical.');
+        $follower = $leads->first(fn ($l) => $l->id !== $original->id);
+        $this->assertSame((string) $original->id, (string) $follower->canonical_lead_id);
     }
 
     public function test_a_published_version_is_immutable_and_a_change_starts_the_next_one(): void

@@ -83,7 +83,7 @@ export function FindingsBoard({
           */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="action-center-summary">
             <HealthTile testId="health-active" label={ar ? 'حملات نشطة' : 'Active campaigns'} value={activeCampaigns} tone="brand" />
-            <HealthTile testId="health-attention" label={ar ? 'تحتاج انتباهًا' : 'Need attention'} value={health.attention} tone="warning" />
+            <HealthTile testId="health-attention" label={ar ? 'تنبيهات' : 'Need attention'} value={health.attention} tone="warning" />
             <HealthTile testId="health-critical" label={ar ? 'حرجة' : 'Critical'} value={health.critical} tone="danger" />
             <HealthTile testId="health-next" label={ar ? 'الإجراءات التالية' : 'Next actions'} value={health.nextActions} tone="success" />
           </div>

@@ -1,6 +1,7 @@
 import { Bookmark, Star, Trash2 } from 'lucide-react'
 import { useDeleteView, useRenameView, useSaveView, useSavedViews, useSetDefaultView, type SavedView } from './savedViews'
 import { useUi } from '@/stores/ui'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * DASH-010-E-FE — save / apply / rename / set-default / delete server-persisted dashboard views. The current
@@ -20,8 +21,8 @@ export function SavedViewsBar({
   const setDefault = useSetDefaultView()
   const rename = useRenameView()
 
-  const onSave = () => {
-    const name = window.prompt(ar ? 'اسم العرض المحفوظ' : 'Name this saved view')?.trim()
+  const onSave = async () => {
+    const name = await promptDialog({ title: ar ? 'احفظ العرض' : 'Save this view', label: ar ? 'الاسم' : 'Name' })
     if (!name) return
     save.mutate({ name, filters: { provider: current.providers, objective: current.objective }, date_range: { days: current.days } })
   }
@@ -45,7 +46,7 @@ export function SavedViewsBar({
           </button>
           <button
             type="button"
-            onClick={() => setDefault.mutate(v.id)}
+            disabled={setDefault.isPending} onClick={() => setDefault.mutate(v.id)}
             title={v.is_default ? (ar ? 'العرض الافتراضي' : 'Default view') : (ar ? 'تعيين كافتراضي' : 'Make default')}
             className={v.is_default ? 'text-warning' : 'text-text-muted hover:text-warning'}
           >
@@ -53,8 +54,8 @@ export function SavedViewsBar({
           </button>
           <button
             type="button"
-            onClick={() => {
-              const name = window.prompt(ar ? 'إعادة تسمية العرض' : 'Rename this view', v.name)?.trim()
+            onClick={async () => {
+              const name = await promptDialog({ title: ar ? 'غيّر الاسم' : 'Rename this view', label: ar ? 'الاسم' : 'Name', initial: v.name })
               if (name && name !== v.name) rename.mutate({ id: v.id, name })
             }}
             title={ar ? 'إعادة تسمية' : 'Rename'}
@@ -62,7 +63,7 @@ export function SavedViewsBar({
           >
             ✎
           </button>
-          <button type="button" onClick={() => del.mutate(v.id)} title={ar ? 'حذف' : 'Delete'} className="text-text-muted hover:text-danger">
+          <button type="button" disabled={del.isPending} onClick={() => del.mutate(v.id)} title={ar ? 'حذف' : 'Delete'} className="text-text-muted hover:text-danger">
             <Trash2 size={13} />
           </button>
         </span>

@@ -301,6 +301,17 @@ final class AlertEventText
                     ];
                 }
 
+                if (($ctx['budget_exhausted'] ?? false) === true) {
+                    return [
+                        'headline' => $ar ? "خلصت ميزانية {$who}" : "The {$who} budget ran out",
+                        'text' => $ar ? 'الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.' : 'Spend reached the whole budget, by the platform\'s figures.',
+                        'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
+                            .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
+                        'action' => $ar ? 'جدّد الميزانية ← أو اتركها تنتهي.' : 'Renew the budget, or let the campaign end.',
+                        'link' => 'campaign',
+                    ];
+                }
+
                 return [
                     'headline' => $ar ? "ميزانية {$who} قربت تخلص" : "The {$who} budget is nearly used up",
                     'text' => $ar ? 'الحملة صرفت أغلب ميزانيتها.' : 'The campaign has used a large share of its budget.',

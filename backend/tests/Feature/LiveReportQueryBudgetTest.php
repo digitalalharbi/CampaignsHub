@@ -105,7 +105,8 @@ final class LiveReportQueryBudgetTest extends TestCase
         $this->assertLessThanOrEqual(9, $reach, "the reach-truth aggregate runs {$reach} times: once per campaign again");
         $this->assertLessThanOrEqual(3, $delivery, "the delivery list is read {$delivery} times: once per campaign or account again");
         $this->assertLessThanOrEqual(1, $ceiling, "the account ceiling resolved its campaign list {$ceiling} times");
-        $this->assertLessThanOrEqual(125, count($run), 'a build over 36 campaigns asked '.count($run).' questions (125 allowed; the build before this work asked 338)');
+        // 126: OBJECTIVE-PATHS-001 adds ONE statement per build (the ad-set read behind the objective split), not one per campaign.
+        $this->assertLessThanOrEqual(126, count($run), 'a build over 36 campaigns asked '.count($run).' questions (126 allowed; the build before this work asked 338)');
     }
 
     public function test_no_statement_runs_twice_with_the_same_bindings_inside_one_build(): void

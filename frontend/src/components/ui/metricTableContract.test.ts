@@ -51,6 +51,9 @@ function withoutComments(source: string): string {
 
 /** Surfaces that still render their own analytical table, and why each is still waiting. */
 const EXEMPT: Record<string, string> = {
+  'src/features/reports/FormatComparisonStrip.tsx': 'REPORT-FORMAT-COMPARE-TABLE-001 — a transposed comparison: the COLUMNS are the entities (content types) and the rows are KPIs, '
+    + 'each row with its own unit and its own winner. `MetricTable` lays entities out as rows with one unit per column, and the same table prints '
+    + 'on a PDF page, which has no sort, hover or scroller. Out of scope by kind',
   'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
   'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',

@@ -25,7 +25,7 @@ export function InviteAcceptPage() {
 
   const preview = useQuery({ queryKey: ['invite', token], queryFn: () => previewInvite(token), enabled: !!token, retry: false })
 
-  const accept = useMutation({
+  const accept = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => acceptInvite(token, name, password),
     // Use the user returned by accept directly — no second /auth/me round-trip to race the session cookie.
     // ADR 0002: an invitation grants a membership, so the destination follows from it — an invited
@@ -38,7 +38,7 @@ export function InviteAcceptPage() {
   })
 
   const signedIn = useAuth((s) => s.user)
-  const claim = useMutation({
+  const claim = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => acceptExistingInvite(token),
     // Every cached query and the persisted project belong to the workspace they were in a moment ago.
     onSuccess: () => completeWorkspaceSwitch(queryClient, '/'),

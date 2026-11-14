@@ -82,7 +82,7 @@ final class PlatformAlertInbox
             'grown' => $grown,
             'cleared' => $cleared,
             'mailed' => $mailed,
-            'settlement_check' => $this->detector->settlementCheckAvailable() ? 'available' : UnavailableSettlementSource::STATE,
+            'settlement_check' => $this->detector->settlementCheckState(),
         ];
     }
 

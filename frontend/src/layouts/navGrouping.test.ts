@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { appNavGroups, appNavLeafPaths } from './appNav'
-import { agencyNavGroups, agencyNavLeafPaths } from './agencyNav'
+import { appFoldedPaths, appNavGroups, appNavLeafPaths } from './appNav'
+import { agencyFoldedPaths, agencyNavGroups, agencyNavLeafPaths } from './agencyNav'
 import { navLeaves, type NavGroup } from './SidebarNav'
 
 /**
@@ -36,7 +36,7 @@ const APP_BEFORE = [
  * second — which is the distinction, rather than "the agency has no plan".
  */
 const AGENCY_BEFORE = [
-  '/agency/dashboard', '/agency/clients', '/agency/requests', '/agency/projects',
+  '/agency/dashboard', '/agency/clients', '/agency/requests',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',
@@ -114,7 +114,7 @@ const AGENCY_BEFORE = [
    * the campaign builder on the Campaigns page, the Analytics ad-set and ad tabs (where those rungs are read today),
    * and Approvals, which had a page and no entry.
    */
-  /* LAUNCH-001 — «إطلاق الحملات» is its own page now, a real launch on the platforms' APIs; the campaigns page keeps `?launch=1` for the internal draft form. */
+  /* LAUNCH-001 — «حملة جديدة» is its own page now, a real launch on the platforms' APIs; the campaigns page keeps `?launch=1` for the internal draft form. */
   '/agency/launch',
   /*
    * MOVED by ADV-CAMPAIGN-TABLES-001: «المجموعات» and «الإعلانات» open operational tables of their own now. The
@@ -130,7 +130,7 @@ const MOVED_TO_AGENCY = ['requests', 'clients', 'messages', 'billing']
 
 describe('no section is lost — moved is not the same as deleted', () => {
   it('keeps every advertiser section, in one portal or the other', () => {
-    const everywhere = new Set([...appNavLeafPaths, ...agencyNavLeafPaths].map((p) => p.split('/')[2]))
+    const everywhere = new Set([...appNavLeafPaths, ...agencyNavLeafPaths, ...appFoldedPaths, ...agencyFoldedPaths].map((p) => p.split('/')[2]))
 
     for (const path of APP_BEFORE) {
       expect(everywhere.has(path.split('/')[2]), `${path} exists in no rail`).toBe(true)
@@ -144,12 +144,17 @@ describe('no section is lost — moved is not the same as deleted', () => {
     }
   })
 
-  it('keeps every agency section', () => {
-    expect([...agencyNavLeafPaths].sort()).toEqual([...AGENCY_BEFORE].sort())
+  it('keeps every agency section — in the rail, the settings menu, or folded into a page on purpose', () => {
+    expect([...agencyNavLeafPaths, ...agencyFoldedPaths].sort()).toEqual([...AGENCY_BEFORE].sort())
+  })
+
+  it('names exactly what left the rail (NAV-HOME-PLANS-001)', () => {
+    expect([...agencyFoldedPaths].sort()).toEqual(['/agency/launch', '/agency/portfolio'])
+    expect([...appFoldedPaths].sort()).toEqual(['/app/launch', '/app/portfolio'])
   })
 
   it('lists no section twice', () => {
-    for (const paths of [appNavLeafPaths, agencyNavLeafPaths]) {
+    for (const paths of [[...appNavLeafPaths, ...appFoldedPaths], [...agencyNavLeafPaths, ...agencyFoldedPaths]]) {
       expect(new Set(paths).size).toBe(paths.length)
     }
   })
@@ -192,6 +197,7 @@ describe('the structure rules hold', () => {
   it('never points a section at another portal', () => {
     for (const leaf of navLeaves(appNavGroups)) expect(leaf.to.startsWith('/app/')).toBe(true)
     for (const leaf of navLeaves(agencyNavGroups)) expect(leaf.to.startsWith('/agency/')).toBe(true)
+    for (const p of [...appFoldedPaths]) expect(p.startsWith('/app/')).toBe(true)
   })
 })
 
@@ -201,8 +207,8 @@ describe('the structure rules hold', () => {
  */
 describe('the portals stay distinct', () => {
   it('gives each portal sections the other does not have', () => {
-    const app = new Set(navLeaves(appNavGroups).map((l) => l.to.replace('/app', '')))
-    const agency = new Set(navLeaves(agencyNavGroups).map((l) => l.to.replace('/agency', '')))
+    const app = new Set(appNavLeafPaths.map((p) => p.replace('/app', '')))
+    const agency = new Set(agencyNavLeafPaths.map((p) => p.replace('/agency', '')))
 
     /*
      * REVERSED by CONNECT-001, and the reason it was written is worth keeping.

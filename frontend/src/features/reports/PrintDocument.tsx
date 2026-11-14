@@ -7,6 +7,7 @@ import { hasPlatformMark } from '@/components/brand/PlatformMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { useEffect, type ReactNode } from 'react'
 import type { ReportData } from './InteractiveReport'
+import type { ObjectivePathsBlock } from '@/features/analytics/ObjectivePathCards'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand } from '@/lib/brand'
@@ -314,6 +315,7 @@ export function PrintDocument({
    * per result is stated only where the path was bought for a result — an awareness path prints «—»
    * rather than being ranked on a sales metric it was never asked about.
    */
+  const pathBlock = (data.objective_performance as { objective_paths?: ObjectivePathsBlock } | undefined)?.objective_paths
   const objectiveRows = ((data.objective_performance as { paths?: Row[] } | undefined)?.paths ?? [])
     .filter((p) => Number(p.spend ?? 0) > 0)
     .map((p: Row) => [
@@ -613,6 +615,35 @@ export function PrintDocument({
             head={['Objective', 'Spend', 'Impressions', 'Clicks', 'Results', 'Cost per result']}
             rows={objectiveRows}
           />
+          {/*
+            OBJECTIVE-PATHS-001 — where ad sets bought different things (a store and branches): the one
+            total spend, each objective's share of it and its own result. ROAS on the sales row only.
+          */}
+          {pathBlock?.mixed && (
+            <>
+              {/* A link that hides spend arrives with the money redacted (null): the results stay, no money is printed. */}
+              <h3>{typeof pathBlock.total_spend === 'number' ? `Spend by objective — total ${money(pathBlock.total_spend, currency)}` : 'Results by objective'}</h3>
+              <Table
+                head={typeof pathBlock.total_spend === 'number'
+                  ? ['Objective', 'Spend', 'Share', 'Result', 'Cost per result', 'ROAS']
+                  : ['Objective', 'Result']}
+                rows={pathBlock.paths.map((p) => {
+                  const result = p.result === null || p.result === undefined ? '—' : `${p.result_label?.en ?? ''} ${nfmt(p.result)}`
+
+                  return typeof pathBlock.total_spend === 'number'
+                    ? [
+                        p.label.en,
+                        p.spend === null ? '—' : money(p.spend, currency),
+                        p.spend_share === null ? '—' : `${nfmt(p.spend_share * 100, { maximumFractionDigits: 0 })}%`,
+                        result,
+                        p.cost_per_result === null ? '—' : money(p.cost_per_result, currency),
+                        p.family === 'sales' && p.roas !== null ? `${nfmt(p.roas, { maximumFractionDigits: 2 })}×` : '—',
+                      ]
+                    : [p.label.en, result]
+                })}
+              />
+            </>
+          )}
         </section>
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />

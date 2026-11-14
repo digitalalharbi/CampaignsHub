@@ -100,7 +100,7 @@ export function ProviderReviewPage() {
           <select
             data-testid={`review-${checklist.provider}-${item.key}-status`}
             value={item.status}
-            onChange={(e) => update.mutate({ provider: checklist.provider, requirement: item.key, status: e.target.value as ReviewStatus })}
+            disabled={update.isPending} onChange={(e) => update.mutate({ provider: checklist.provider, requirement: item.key, status: e.target.value as ReviewStatus })}
             className="h-9 shrink-0 rounded-lg border border-border bg-surface px-2 text-xs font-semibold text-text-primary"
           >
             {STATUS_ORDER.map((s) => <option key={s} value={s}>{label(s)}</option>)}

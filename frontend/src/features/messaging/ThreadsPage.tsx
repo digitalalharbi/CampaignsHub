@@ -260,7 +260,7 @@ function ThreadDetailPanel({
     mutationFn: (body: string) => postTeamReply(threadId, body),
     onSuccess: () => { setDraft(''); invalidate() },
   })
-  const readM = useMutation({ mutationFn: () => markThreadRead(threadId, 'team'), onSuccess: invalidate })
+  const readM = useMutation({ meta: { feedback: 'none' }, mutationFn: () => markThreadRead(threadId, 'team'), onSuccess: invalidate })
 
   if (q.isLoading) return <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
   // `!q.data` matters as much as `isError`: between retries neither is true, and dereferencing the

@@ -22,7 +22,7 @@ final class ReportKpiPresetsTest extends TestCase
         $e = $this->engine();
 
         $this->assertSame(['spend', 'impressions', 'reach', 'frequency', 'cpm'], $e->metricSet('awareness'));
-        $this->assertSame(['spend', 'impressions', 'clicks', 'ctr', 'cpc'], $e->metricSet('traffic'));
+        $this->assertSame(['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'frequency', 'cpc'], $e->metricSet('traffic'));
         $this->assertSame(['spend', 'impressions', 'engagements', 'engagement_rate'], $e->metricSet('engagement'));
         // The Owner's sales funnel (REPORT-OBJECTIVE-TEMPLATE-001): the cost per purchase is its own show/hide switch, not a mandatory card.
         $this->assertSame(['spend', 'impressions', 'clicks', 'add_to_cart', 'purchases', 'revenue', 'roas'], $e->metricSet('sales'));

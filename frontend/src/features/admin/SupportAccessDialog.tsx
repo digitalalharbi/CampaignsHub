@@ -14,7 +14,7 @@ import { toApiError } from '@/lib/api/client'
 export function SupportAccessDialog({ tenant, ar, onClose }: { tenant: PlatformTenant; ar: boolean; onClose: () => void }) {
   const [reason, setReason] = useState('')
   const [password, setPassword] = useState('')
-  const start = useMutation({
+  const start = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => startSupportSession(tenant.id, reason.trim(), password),
     onSuccess: (r) => window.location.assign(r.landing_path),
   })

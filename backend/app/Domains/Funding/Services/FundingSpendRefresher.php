@@ -7,6 +7,7 @@ namespace App\Domains\Funding\Services;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\CurrencyConverter;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,6 +33,7 @@ final class FundingSpendRefresher
         if ($from === null) {
             return 0;
         }
+        $to = $this->countsTo($funding);
 
         /*
          * Amount and currency are read from the SAME row (a row's own original figure, else its project-currency
@@ -43,6 +45,7 @@ final class FundingSpendRefresher
             ->where('daily_metrics.project_id', $funding->project_id)
             ->where('daily_metrics.metric_key', 'spend')
             ->where('daily_metrics.metric_date', '>=', $from->toDateString())
+            ->when($to !== null, static fn ($q) => $q->where('daily_metrics.metric_date', '<=', $to->toDateString()))
             ->whereNotIn('daily_metrics.source_type', ['estimated', 'modeled'])
             ->selectRaw('daily_metrics.external_account_id, daily_metrics.provider, daily_metrics.metric_date, daily_metrics.external_campaign_id')
             ->selectRaw("{$currency} AS currency")
@@ -109,15 +112,49 @@ final class FundingSpendRefresher
         return count($rows);
     }
 
-    /** The first day whose spend counts: the stated start, else the first approved amount's date. */
+    /**
+     * The first day whose spend counts: the period's stated start; else the first day of REAL spend of the project's
+     * selected accounts — so a campaign that ran for a week before the budget was typed in is counted from its first
+     * day (BUDGET-PERIOD-001) — and, for a project with no spend yet, the first approved amount's date.
+     */
     public function countsFrom(ProjectFunding $funding): ?Carbon
     {
         if ($funding->starts_on !== null) {
             return Carbon::parse($funding->starts_on->toDateString());
         }
 
-        $first = DB::table('funding_payments')->where('project_id', $funding->project_id)->min('paid_on');
+        $spend = DB::table('daily_metrics')
+            ->where('daily_metrics.project_id', $funding->project_id)
+            ->where('daily_metrics.metric_key', 'spend')
+            ->whereNotIn('daily_metrics.source_type', ['estimated', 'modeled'])
+            ->where('daily_metrics.value', '>', 0);
+        BoundAccountVisibility::apply($spend, 'daily_metrics');
+        $firstSpend = $spend->min('daily_metrics.metric_date');
 
-        return $first === null ? null : Carbon::parse((string) $first);
+        $firstPaid = DB::table('funding_payments')->where('project_id', $funding->project_id)->min('paid_on');
+
+        $days = array_filter([$firstSpend, $firstPaid], static fn ($d): bool => $d !== null);
+
+        return $days === [] ? null : Carbon::parse((string) min(array_map(static fn ($d): string => Carbon::parse((string) $d)->toDateString(), $days)));
+    }
+
+    /** The last day whose spend counts; null while the period is open. */
+    public function countsTo(ProjectFunding $funding): ?Carbon
+    {
+        return $funding->ends_on === null ? null : Carbon::parse($funding->ends_on->toDateString());
+    }
+
+    /**
+     * The spend rows that belong to this budget: its project, inside its period. The one definition every figure
+     * (remaining, the monthly summary, the line chart, the export) reads, so none of them can disagree.
+     */
+    public function spendRows(ProjectFunding $funding): Builder
+    {
+        $from = $this->countsFrom($funding);
+        $to = $this->countsTo($funding);
+
+        return DB::table('funding_spend_days')->where('project_id', $funding->project_id)
+            ->when($from !== null, static fn ($q) => $q->where('spend_date', '>=', $from->toDateString()), static fn ($q) => $q->whereRaw('false'))
+            ->when($to !== null, static fn ($q) => $q->where('spend_date', '<=', $to->toDateString()));
     }
 }

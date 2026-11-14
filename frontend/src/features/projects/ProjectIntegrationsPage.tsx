@@ -160,7 +160,7 @@ export function ProjectIntegrationsPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'integrations'] })
 
-  const syncMutation = useMutation({
+  const syncMutation = useMutation({ meta: { feedback: 'none' },
     mutationFn: (bindingId: string) => syncBinding(projectId, bindingId),
     onSuccess: invalidate,
   })

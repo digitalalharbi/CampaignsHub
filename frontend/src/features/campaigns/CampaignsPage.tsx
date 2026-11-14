@@ -7,7 +7,8 @@ import { listProjects } from '@/features/projects/api'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { portalBaseOf } from '@/app/portalPath'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
@@ -131,6 +132,7 @@ export function CampaignsPage() {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const navigate = useNavigate()
+  const location = useLocation()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
 
   const { currentProjectId: projectId } = useProject()
@@ -230,7 +232,7 @@ export function CampaignsPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» in the rail is this page with its builder open (`?launch=1`). The builder is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» in the rail is this page with its builder open (`?launch=1`). The builder is the
    * same one the «new campaign» button opens; the address only says «open it», and closing it removes the parameter so
    * Back and a reload do not reopen it. Someone without `campaigns.create` is not shown a builder they cannot submit;
    * they are told why instead.
@@ -842,7 +844,7 @@ export function CampaignsPage() {
           <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
           <RangeTabs value={days} onChange={setDays} />
-          {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
+          {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }
         kpis={
@@ -1578,7 +1580,7 @@ export function CampaignsPage() {
       <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
       {launching && !canCreate && (
         <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
+          {ar ? 'إنشاء حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
       <LivePerformanceNotice variant="compact" />
@@ -1743,7 +1745,7 @@ function LandingAnswer({ answer, ar, range, currency }: { answer: ReturnType<typ
       {answer.needsAttention > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-attention">
           <TriangleAlert size={13} className="text-warning" />
-          {ar ? `${answer.needsAttention} تحتاج انتباهًا` : `${answer.needsAttention} need attention`}
+          {ar ? `${answer.needsAttention} تنبيه` : `${answer.needsAttention} need attention`}
         </span>
       )}
       {answer.healthy > 0 && (
@@ -1964,13 +1966,13 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
       {/*
         The bar and the sentence. NOT the four figures again.
 
-        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · المصروف 3.67K · المتبقي
+        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · الإنفاق 3.67K · المتبقي
         791K · المتوقع 3.67K» in the secondary strip and then the same four numbers, same order,
         same currency, in this card a few hundred pixels below. A reader meeting a figure twice does
         not read it twice — they stop to work out which of the two to believe.
 
         The strip keeps them, because it is where the budget's REFUSALS live: «ميزانيات بعملات
-        مختلفة — لا تُجمع» and «المصروف غير متاح» are its wording, under a stricter spend rule than
+        مختلفة — لا تُجمع» and «الإنفاق غير متاح» are its wording, under a stricter spend rule than
         this card applies. What this card has that nothing else does is the pacing — a bar drawn
         against the budget so an overrun is visible past the end rather than clamped away, and one
         sentence naming the overrun in money. That is what it now shows.

@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -103,6 +103,7 @@ const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOve
 const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
 const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
 const ServiceRequestsPage = lazyPage(() => import('@/features/admin/ServiceRequestsPage'), 'ServiceRequestsPage')
+const PlatformInboxPage = lazyPage(() => import('@/features/admin/PlatformInboxPage'), 'PlatformInboxPage')
 const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
 const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
 const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
@@ -120,7 +121,7 @@ const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'Addons
 const PlanMigrationPage = lazyPage(() => import('@/features/admin/PlanMigrationPage'), 'PlanMigrationPage')
 const UsageMetersPage = lazyPage(() => import('@/features/admin/UsageMetersPage'), 'UsageMetersPage')
 const TaxPage = lazyPage(() => import('@/features/admin/TaxPage'), 'TaxPage')
-const AgencyDashboardPage = lazyPage(() => import('@/features/agency/AgencyDashboardPage'), 'AgencyDashboardPage')
+const OverviewDashboard = lazyPage(() => import('@/features/overview/OverviewDashboard'), 'OverviewDashboard')
 const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
 const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
 const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
@@ -356,7 +357,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            * the advertiser portal simply never got one.
            */
           { index: true, element: <Navigate to="/app/dashboard" replace /> },
-          { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
+          { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -556,6 +557,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site. Platform-owned, never a
             // subscriber's requests: those stay in that subscriber's own `/agency/requests`.
             { path: 'requests', element: <ServiceRequestsPage /> },
+            { path: 'inbox', element: <PlatformInboxPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'addons', element: <AddonsPage /> },
             { path: 'plan-migration', element: <PlanMigrationPage /> },
@@ -604,13 +606,15 @@ export const router = createBrowserRouter(withErrorBoundary([
           element: <AgencyShell />,
           children: [
             { index: true, element: <Navigate to="/agency/dashboard" replace /> },
-            { path: 'dashboard', element: <AgencyDashboardPage /> },
+            { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
             { path: 'portfolio', element: <PortfolioPage /> },
-            { path: 'projects', element: <ProjectsPage /> },
+            // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
+            { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
+            { path: 'projects/:projectId', element: <AgencyProjectToClientRedirect /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*

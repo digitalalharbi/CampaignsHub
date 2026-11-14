@@ -80,7 +80,7 @@ export function AgentCenterPage() {
     refetchInterval: (q) => (q.state.data?.status === 'thinking' ? 2000 : false),
   })
 
-  const send = useMutation({
+  const send = useMutation({ meta: { feedback: 'none' },
     mutationFn: (message: string) => sendToAgent(currentProjectId!, threadId ? { thread_id: threadId, message } : { agent, message }),
     onSuccess: (r) => {
       setDraft('')

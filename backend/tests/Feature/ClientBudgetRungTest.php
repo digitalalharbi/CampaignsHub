@@ -186,6 +186,25 @@ final class ClientBudgetRungTest extends TestCase
         $this->assertSame(2, $out['currencies']);
     }
 
+    /** NAV-HOME-PLANS-001 — the card's seven-day line: seven days, today last, summing to what the window spent. */
+    public function test_each_client_carries_a_seven_day_spend_line(): void
+    {
+        $a = $this->client('Line');
+        $this->campaign($a, 10_000, 1_500);
+
+        $this->client('Empty');
+
+        $rows = collect($this->budgets())->keyBy('client_name');
+
+        $line = $rows['Line']['daily_spend_7d'];
+        $this->assertCount(7, $line);
+        // The seeded spend is two days ago, so it is the fifth of seven (today is the last).
+        $this->assertEqualsWithDelta(1_500, $line[4], 0.01);
+        $this->assertEqualsWithDelta(1_500, array_sum($line), 0.01);
+        // A client with nothing to read has no line rather than seven zeros pretending to be a trend.
+        $this->assertNull($rows['Empty']['daily_spend_7d']);
+    }
+
     /** It answers a money question about every client the reader can reach — both permissions, or none. */
     public function test_it_is_refused_without_the_budget_permission(): void
     {

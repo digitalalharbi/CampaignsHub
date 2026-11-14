@@ -13,9 +13,14 @@ use App\Domains\Funding\Services\AddFundingPayment;
 use App\Domains\Funding\Services\FundingAccountGuard;
 use App\Domains\Funding\Services\FundingBalance;
 use App\Domains\Funding\Services\FundingExport;
+use App\Domains\Funding\Services\FundingLedgerActions;
 use App\Domains\Funding\Services\FundingMonth;
+use App\Domains\Funding\Services\FundingPdf;
 use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\FundingSpendRefresher;
+use App\Domains\Funding\Services\FundingStatement;
+use App\Domains\Funding\Support\FundingDisclaimer;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -41,13 +46,21 @@ final class FundingController extends Controller
         private readonly FundingSpendRefresher $refresher,
         private readonly FundingReach $reach,
         private readonly FundingMonth $months,
+        private readonly FundingLedgerActions $ledger,
     ) {}
+
+    /** GET funding/disclaimer — the one financial disclaimer, in both languages, for every money surface of the web app. */
+    public function disclaimer(): JsonResponse
+    {
+        return ApiResponse::success(FundingDisclaimer::both(), 'Disclaimer.');
+    }
 
     /** GET funding — every funded project the reader reaches, with its live figures, needing a decision first. */
     public function index(Request $request): JsonResponse
     {
         $user = $this->reader($request);
-        [$fundings, $names] = $this->reachable($user);
+        $deleted = $request->boolean('deleted');
+        [$fundings, $names] = $this->reachable($user, $deleted);
 
         $rows = $fundings
             ->map(fn (ProjectFunding $f): array => [
@@ -58,17 +71,23 @@ final class FundingController extends Controller
             ->values();
 
         // The four tiles: totals of the prepaid budgets (only they have a remaining), and what needs a decision.
-        $prepaid = $rows->where('payment_method', 'prepaid');
+        // BUDGET-MODES-001 — only direct budgets are prepaid balances; a credit budget has no remaining, so it is in none of these sums.
+        $prepaid = $rows->where('payment_method', 'prepaid')->where('payment_mode', 'direct');
+        $credit = $rows->where('payment_method', 'prepaid')->where('payment_mode', 'credit');
 
         return ApiResponse::success($rows->all(), 'Budgets.', [
             'totals' => [
                 'approved' => round((float) $prepaid->sum('approved'), 2),
                 'spent' => round((float) $prepaid->sum('spent'), 2),
                 'remaining' => round((float) $prepaid->sum('remaining'), 2),
-                'needs_attention' => $rows->whereIn('status', ['over', 'low', 'incomplete'])->count(),
+                'needs_attention' => $rows->filter(static fn (array $r): bool => in_array($r['status'], ['over', 'low', 'incomplete', 'credit_over', 'credit_near'], true) || $r['plan_alerts'] > 0)->count(),
+                'credit_count' => $credit->count(),
+                'credit_spent' => round((float) $credit->sum('spent'), 2),
+                'credit_to_invoice' => round((float) $credit->sum('to_invoice'), 2),
                 'currency' => 'SAR',
             ],
             'can_manage' => $user->hasPermission('funding.manage'),
+            'deleted_count' => $deleted ? $rows->count() : $this->reachable($user, true)[0]->count(),
         ]);
     }
 
@@ -79,20 +98,27 @@ final class FundingController extends Controller
         $funding = $this->funding($user, $funded);
         $this->refresher->refresh($funding);
 
-        $payments = FundingPayment::query()->with('author:id,name')->where('project_id', $funding->project_id)
-            ->orderByDesc('paid_on')->orderByDesc('created_at')->get()
-            ->map(static fn (FundingPayment $p): array => [
-                'id' => $p->id, 'kind' => $p->kind, 'amount' => (float) $p->amount, 'currency' => $p->currency,
-                'amount_sar' => (float) $p->amount_sar, 'paid_on' => $p->paid_on->toDateString(), 'reference' => $p->reference,
-                'note' => $p->note, 'remaining_before' => $p->remaining_before === null ? null : (float) $p->remaining_before,
-                'remaining_after' => $p->remaining_after === null ? null : (float) $p->remaining_after,
-                'added_by' => $p->author?->name, 'added_at' => $p->created_at->toIso8601String(),
-            ])->all();
+        $entries = FundingPayment::query()->with('author:id,name')->where('project_id', $funding->project_id)
+            ->orderByDesc('seq')->get();
+        $reversed = $entries->whereNotNull('reverses_id')->pluck('reverses_id')->flip();
+        $latest = $this->ledger->latestUndoable((string) $funding->project_id)?->id;
+        $payments = $entries->map(static fn (FundingPayment $p): array => [
+            'id' => $p->id, 'kind' => $p->kind, 'amount' => (float) $p->amount, 'currency' => $p->currency,
+            'amount_sar' => (float) $p->amount_sar, 'paid_on' => $p->paid_on->toDateString(), 'reference' => $p->reference,
+            'note' => $p->note, 'reason' => $p->reason, 'reverses_id' => $p->reverses_id,
+            'reversed' => $reversed->has($p->id), 'can_undo' => $p->id === $latest,
+            'remaining_before' => $p->remaining_before === null ? null : (float) $p->remaining_before,
+            'remaining_after' => $p->remaining_after === null ? null : (float) $p->remaining_after,
+            'added_by' => $p->author?->name, 'added_at' => $p->created_at->toIso8601String(),
+            'plan_before' => $p->meta['plan_before'] ?? null, 'plan_after' => $p->meta['plan_after'] ?? null,
+        ])->values()->all();
 
         return ApiResponse::success(['project_name' => $funding->project?->name] + $this->balance->of($funding) + [
             'history' => $payments,
+            'undo_entry_id' => $latest,
             'series' => $this->balance->series($funding),
             'months' => $this->months->months($funding),
+            'invoice_months' => $funding->payment_mode === 'credit' ? $this->months->invoiceMonths($funding) : [],
         ], 'Budget.');
     }
 
@@ -107,9 +133,19 @@ final class FundingController extends Controller
             'client_name' => ['nullable', 'string', 'max:160', 'required_without:client_workspace_id'],
             'project_id' => ['nullable', 'uuid', 'required_without:project_name'],
             'project_name' => ['nullable', 'string', 'max:160', 'required_without:project_id'],
-            'amount' => ['required', 'numeric', 'gt:0', 'max:1000000000'],
+            // BUDGET-MODES-001 — a credit budget may have no amount (no ceiling); a direct one needs it (the service says so).
+            'amount' => ['nullable', 'numeric', 'gte:0', 'max:1000000000', 'required_unless:payment_mode,credit'],
+            'payment_mode' => ['nullable', Rule::in(ProjectFunding::MODES)],
+            'platform_plan' => ['nullable', 'array', 'max:12'],
+            'platform_plan.*' => ['array'],
+            'platform_plan.*.provider' => ['required', 'string', 'max:32'],
+            'platform_plan.*.amount' => ['nullable', 'numeric'],
+            'platform_plan.*.percent' => ['nullable', 'numeric'],
             'currency' => ['nullable', 'string', 'size:3', 'alpha'],
             'paid_on' => ['required', 'date', 'after_or_equal:'.now('Asia/Riyadh')->subYears(3)->toDateString(), 'before_or_equal:'.now('Asia/Riyadh')->toDateString()],
+            // BUDGET-MODES-001 — a period may start in the future («next month»): spend before it is simply not counted.
+            'period_start' => ['nullable', 'date_format:Y-m-d'],
+            'period_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:period_start'],
             'reference' => ['nullable', 'string', 'max:120'],
             'note' => ['nullable', 'string', 'max:500'],
             'idempotency_key' => ['required', 'string', 'max:80'],
@@ -135,6 +171,7 @@ final class FundingController extends Controller
         $data = $request->validate([
             'payment_method' => ['sometimes', Rule::in(ProjectFunding::METHODS)],
             'starts_on' => ['sometimes', 'nullable', 'date', 'before_or_equal:'.now('Asia/Riyadh')->toDateString()],
+            'ends_on' => ['sometimes', 'nullable', 'date', 'after_or_equal:starts_on'],
             'alert_floor' => ['sometimes', 'numeric', 'min:0', 'max:1000000000'],
         ]);
 
@@ -156,6 +193,75 @@ final class FundingController extends Controller
         return ApiResponse::success($this->balance->of($funding), 'Budget updated.');
     }
 
+    /** POST funding/projects/{funded}/adjust — edit the amount (new total, SAR), the period or the note, as an entry. */
+    public function adjust(Request $request, string $funded): JsonResponse
+    {
+        $user = $this->manager($request);
+        $funding = $this->funding($user, $funded);
+
+        $data = $request->validate([
+            'amount' => ['sometimes', 'numeric', 'gte:0', 'max:1000000000'],
+            'payment_mode' => ['sometimes', Rule::in(ProjectFunding::MODES)],
+            'platform_plan' => ['sometimes', 'nullable', 'array', 'max:12'],
+            'platform_plan.*' => ['array'],
+            'platform_plan.*.provider' => ['required', 'string', 'max:32'],
+            'platform_plan.*.amount' => ['nullable', 'numeric'],
+            'platform_plan.*.percent' => ['nullable', 'numeric'],
+            'period_start' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'period_end' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'note' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'idempotency_key' => ['sometimes', 'string', 'max:80'],
+        ]);
+
+        $entry = $this->ledger->adjust($user, $funding, $data);
+
+        return ApiResponse::success(['entry_id' => $entry->id] + $this->balance->of($funding->refresh()), 'Budget edited.');
+    }
+
+    /** POST funding/projects/{funded}/reallocate — «أعد التوزيع»: re-divide the budget among the platforms, as an undoable entry. */
+    public function reallocate(Request $request, string $funded): JsonResponse
+    {
+        $user = $this->manager($request);
+        $funding = $this->funding($user, $funded);
+        $data = $request->validate([
+            'platform_plan' => ['sometimes', 'nullable', 'array', 'max:12'],
+            'platform_plan.*' => ['array'],
+            'platform_plan.*.provider' => ['required', 'string', 'max:32'],
+            'platform_plan.*.amount' => ['nullable', 'numeric'],
+            'platform_plan.*.percent' => ['nullable', 'numeric'],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'idempotency_key' => ['sometimes', 'string', 'max:80'],
+        ]);
+
+        $entry = $this->ledger->reallocate($user, $funding, $data['platform_plan'] ?? null, $data['reason'] ?? null, $data['idempotency_key'] ?? null);
+
+        return ApiResponse::success(['entry_id' => $entry->id] + $this->balance->of($funding->refresh()), 'Budget reallocated.');
+    }
+
+    /** POST funding/projects/{funded}/void — delete: hidden, never removed; a reason is required. */
+    public function void(Request $request, string $funded): JsonResponse
+    {
+        $user = $this->manager($request);
+        $funding = $this->funding($user, $funded);
+        $data = $request->validate(['reason' => ['required', 'string', 'min:2', 'max:300'], 'idempotency_key' => ['sometimes', 'string', 'max:80']]);
+
+        $entry = $this->ledger->void($user, $funding, $data['reason'], $data['idempotency_key'] ?? null);
+
+        return ApiResponse::success(['entry_id' => $entry->id] + $this->balance->of($funding->refresh()), 'Budget deleted.');
+    }
+
+    /** POST funding/projects/{funded}/undo — undo the latest action, as a reversal entry. */
+    public function undo(Request $request, string $funded): JsonResponse
+    {
+        $user = $this->manager($request);
+        $funding = $this->funding($user, $funded);
+        $data = $request->validate(['entry_id' => ['sometimes', 'nullable', 'uuid']]);
+
+        $entry = $this->ledger->undo($user, $funding, $data['entry_id'] ?? null);
+
+        return ApiResponse::success(['entry_id' => $entry->id] + $this->balance->of($funding->refresh()), 'Undone.');
+    }
+
     /** GET funding/projects/{funded}/months/{month} — the fixed summary of a closed month, or the live one of this month. */
     public function month(Request $request, string $funded, string $month): JsonResponse
     {
@@ -166,18 +272,24 @@ final class FundingController extends Controller
         return ApiResponse::success(['project_name' => $funding->project?->name] + $this->months->read($funding, $month), 'Month.');
     }
 
-    /** GET funding/export — the budgets and every approved amount, as XLSX (two sheets) or CSV (one). */
-    public function export(Request $request, FundingExport $export, AuditLogger $audit): Response
+    /** GET funding/export — the budgets and every ledger entry, as XLSX (two sheets), CSV (one) or a PDF of the summary. */
+    public function export(Request $request, FundingExport $export, FundingPdf $pdf, AuditLogger $audit, FundingStatement $statement): Response
     {
         $user = $this->reader($request);
         $data = $request->validate([
-            'format' => ['required', Rule::in(['xlsx', 'csv'])],
-            'sheet' => ['nullable', Rule::in(['summary', 'movements'])],
+            'format' => ['required', Rule::in(['xlsx', 'csv', 'pdf'])],
+            'sheet' => ['nullable', Rule::in(['summary', 'movements', 'invoice', 'plan'])],
             'client_id' => ['nullable', 'uuid'],
             'project_id' => ['nullable', 'uuid'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'history' => ['nullable', 'boolean'],
+            'lang' => ['nullable', Rule::in(['ar', 'en'])],
         ]);
+
+        if ($data['format'] === 'pdf' && ! $pdf->available()) {
+            return ApiResponse::error('PDF rendering is not enabled on this deployment.', status: 503);
+        }
 
         [$fundings, $names] = $this->reachable($user);
         $fundings = $fundings
@@ -185,25 +297,49 @@ final class FundingController extends Controller
             ->when($data['project_id'] ?? null, fn ($c, $id) => $c->where('project_id', $id))
             ->values();
 
-        $summary = $fundings->map(function (ProjectFunding $f) use ($names): array {
-            $b = $this->balance->of($f);
+        $figures = $fundings->map(fn (ProjectFunding $f): array => [
+            'client' => (string) ($names[$f->client_workspace_id] ?? ''), 'project' => (string) ($f->project->name ?? ''),
+        ] + $this->balance->of($f) + [
+            // BUDGET-MODES-001 — the month-by-month spend a credit budget is invoiced from (empty for the others).
+            'invoice_months' => $f->payment_mode === 'credit' ? $this->months->invoiceMonths($f) : [],
+        ])->all();
 
-            return [$names[$f->client_workspace_id] ?? '', $f->project->name ?? '', $b['payment_method'], $b['approved'], $b['spent'],
-                $b['remaining'], $b['status'], $b['days_left'], $b['last_spend_day']];
-        })->all();
+        $num = static fn ($v): string => FundingMoney::plain($v === null ? null : (float) $v);
+        $summary = array_map(static fn (array $b): array => [
+            $b['client'], $b['project'], $b['payment_method'], $b['approved'], $b['spent'], $b['remaining'], $b['status'],
+            $b['days_left'], $b['last_spend_day'], $b['period_start'], $b['period_end'],
+            implode('; ', array_map(static fn (array $p): string => $p['provider'].':'.($p['spent_usd'] === null ? FundingMoney::plain($p['spent']).' SAR' : FundingMoney::plain($p['spent_usd'])), $b['by_platform'])),
+            $b['payment_mode'], $b['ceiling'], $b['to_invoice'], $b['this_month'],
+            implode('; ', array_map(static fn (array $r): string => $r['provider'].': '.($r['planned_usd'] === null ? round((float) $r['percent'], 2).'%' : $num($r['planned_usd'])).' / '.$num($r['spent_usd'] ?? 0), $b['plan'] ?? [])),
+        ], $figures);
 
-        $movements = FundingPayment::query()->with('author:id,name')
+        $invoice = [];
+        $plan = [];
+        foreach ($figures as $b) {
+            foreach ($b['invoice_months'] as $m) {
+                $invoice[] = [$b['client'], $b['project'], $m['month'], $m['from'], $m['to'], $m['closed'] ? 'yes' : 'no', $m['spent'], $m['unconverted_days'],
+                    implode('; ', array_map(static fn (array $p): string => $p['provider'].':'.FundingMoney::plain($p['spent']), $m['by_platform']))];
+            }
+            foreach ($b['plan'] ?? [] as $r) {
+                $plan[] = [$b['client'], $b['project'], $r['provider'], $r['percent'], $r['planned_usd'], $r['spent_usd'],
+                    $r['share_used'] === null ? null : round($r['share_used'] * 100, 2), $r['flag']];
+            }
+        }
+
+        $history = [];
+        $movementsQuery = FundingPayment::query()->with('author:id,name')
             ->whereIn('project_id', $fundings->pluck('project_id')->all())
             ->when($data['from'] ?? null, fn ($q, $d) => $q->where('paid_on', '>=', $d))
             ->when($data['to'] ?? null, fn ($q, $d) => $q->where('paid_on', '<=', $d))
-            ->orderBy('paid_on')->orderBy('created_at')->get()
-            ->map(function (FundingPayment $p) use ($fundings, $names): array {
-                $f = $fundings->firstWhere('project_id', $p->project_id);
+            ->orderBy('paid_on')->orderBy('seq');
+        $movementRows = $movementsQuery->get();
+        $movements = $movementRows->map(function (FundingPayment $p) use ($fundings, $names): array {
+            $f = $fundings->firstWhere('project_id', $p->project_id);
 
-                return [$p->paid_on->toDateString(), $names[$p->client_workspace_id] ?? '', $f?->project->name ?? '', $p->kind,
-                    (float) $p->amount, $p->currency, (float) $p->amount_sar, (float) $p->rate, $p->rate_date?->toDateString(),
-                    $p->reference, $p->note, $p->author?->name, $p->created_at->toIso8601String()];
-            })->all();
+            return [$p->paid_on->toDateString(), $names[$p->client_workspace_id] ?? '', $f?->project->name ?? '', $p->kind,
+                (float) $p->amount, $p->currency, (float) $p->amount_sar, (float) $p->rate, $p->rate_date?->toDateString(),
+                $p->reference, $p->note, $p->author?->name, $p->created_at->toIso8601String(), $p->reason];
+        })->all();
 
         $today = now('Asia/Riyadh')->toDateString();
         $period = ($data['from'] ?? 'start').' .. '.($data['to'] ?? $today);
@@ -211,9 +347,23 @@ final class FundingController extends Controller
             after: ['format' => $data['format'], 'sheet' => $data['sheet'] ?? null, 'projects' => count($summary), 'movements' => count($movements),
                 'client_id' => $data['client_id'] ?? null, 'project_id' => $data['project_id'] ?? null, 'period' => $period]);
 
+        $lang = (string) ($data['lang'] ?? 'ar');
+        $block = $statement->block($user, $figures, $period, $lang);
         $stamp = now('Asia/Riyadh')->format('Y-m-d');
+        if ($data['format'] === 'pdf') {
+            if ($request->boolean('history')) {
+                foreach ($movementRows as $p) {
+                    $history[(string) $p->project_id][] = $p;
+                }
+            }
+
+            return response($pdf->render($figures, $history, $today, $lang, $block), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => "attachment; filename=\"budgets-{$stamp}.pdf\"",
+            ]);
+        }
         if ($data['format'] === 'xlsx') {
-            return response($export->xlsx($summary, $movements, $period, $today), 200, [
+            return response($export->xlsx($summary, $movements, $period, $today, $invoice, $plan, $block), 200, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'Content-Disposition' => "attachment; filename=\"budgets-{$stamp}.xlsx\"",
             ]);
@@ -221,7 +371,16 @@ final class FundingController extends Controller
 
         $sheet = $data['sheet'] ?? 'movements';
 
-        return response($sheet === 'summary' ? $export->csv(FundingExport::SUMMARY_HEAD, $summary) : $export->csv(FundingExport::MOVEMENTS_HEAD, $movements), 200, [
+        $csv = match ($sheet) {
+            'summary' => $export->csv(FundingExport::SUMMARY_HEAD, $summary),
+            'invoice' => $export->csv(FundingExport::INVOICE_HEAD, $invoice),
+            'plan' => $export->csv(FundingExport::PLAN_HEAD, $plan),
+            default => $export->csv(FundingExport::MOVEMENTS_HEAD, $movements),
+        };
+
+        return response($csv, 200, [
+            // BUDGET-DISCLAIMER-001 — a CSV stays machine-readable (no preamble rows to break an import), so the note travels as a header.
+            'X-Financial-Disclaimer' => FundingDisclaimer::text('en'),
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename=\"budgets-{$sheet}-{$stamp}.csv\"",
         ]);
@@ -232,7 +391,7 @@ final class FundingController extends Controller
      *
      * @return array{0: Collection<int, ProjectFunding>, 1: Collection<string, string>}
      */
-    private function reachable(User $user): array
+    private function reachable(User $user, bool $deleted = false): array
     {
         $clients = ClientWorkspace::query()->whereNull('archived_at');
         $this->access->restrictQuery($clients, $user);
@@ -240,7 +399,8 @@ final class FundingController extends Controller
 
         $ceilings = $this->access->projectCeilings($user);
         $fundings = ProjectFunding::query()->with('project:id,name,client_workspace_id')
-            ->whereIn('client_workspace_id', $names->keys()->all())->get()
+            ->whereIn('client_workspace_id', $names->keys()->all())
+            ->when($deleted, static fn ($q) => $q->whereNotNull('voided_at'), static fn ($q) => $q->whereNull('voided_at'))->get()
             ->filter(fn (ProjectFunding $f): bool => $this->access->projectAllowed($ceilings, $f->client_workspace_id, $f->project_id)
                 && ! $this->reach->moneyWithheld($user, $f->project_id))
             ->values();
@@ -249,7 +409,7 @@ final class FundingController extends Controller
     }
 
     /** Lower sorts first: what needs a decision is at the top. */
-    private const NEED = ['over' => 0, 'incomplete' => 1, 'low' => 2, 'no_budget' => 3, 'ok' => 4, 'unset' => 5, 'direct' => 6];
+    private const NEED = ['over' => 0, 'credit_over' => 0, 'incomplete' => 1, 'low' => 2, 'credit_near' => 2, 'no_budget' => 3, 'ok' => 4, 'credit' => 4, 'unset' => 5, 'direct' => 6];
 
     private function reader(Request $request): User
     {
@@ -257,6 +417,14 @@ final class FundingController extends Controller
         abort_unless($user instanceof User && (
             $user->hasPermission('funding.view') || $user->hasPermission('funding.manage') || $user->hasPermission('budget.view')
         ), 403);
+
+        return $user;
+    }
+
+    private function manager(Request $request): User
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User && $user->hasPermission('funding.manage'), 403);
 
         return $user;
     }

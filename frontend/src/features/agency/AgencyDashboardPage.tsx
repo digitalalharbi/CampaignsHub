@@ -4,6 +4,7 @@ import { StatCard, StatGrid, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
+import { ClientCards } from '@/features/overview/ClientCards'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { money, ratio } from '@/features/analytics/format'
 import { ChartCard, RankingBarChart, RatioBars, StatusMixBar } from '@/features/analytics/charts'
@@ -203,7 +204,11 @@ function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: b
   )
 }
 
-export function AgencyDashboardPage() {
+/**
+ * `onOpenClient` is given by `OverviewDashboard` (the home page's two levels). Without it the page is exactly what it was —
+ * the cards are the home's first level, not a property of this page.
+ */
+export function AgencyDashboardPage({ onOpenClient }: { onOpenClient?: (row: ClientBudgetRow) => void } = {}) {
   const ar = useUi((s) => s.locale) === 'ar'
   const query = useQuery({ queryKey: ['agency', 'dashboard'], queryFn: fetchAgencyDashboard })
   /*
@@ -301,6 +306,13 @@ export function AgencyDashboardPage() {
         </span>
       </div>
 
+      {/* NAV-HOME-PLANS-001 — «كل العملاء»: four figures and a card per client, ahead of everything else on the home. */}
+      {onOpenClient !== undefined && (
+        <div className="mb-3">
+          <ClientCards ar={ar} onOpenClient={onOpenClient} />
+        </div>
+      )}
+
       {/* DASHBOARD-FIRST-SCREEN-001 — money, results, cost, movement, platforms, freshness and alerts come first. */}
       <div className="mb-4">
         <AgencyHeadline ar={ar} />
@@ -317,7 +329,7 @@ export function AgencyDashboardPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
           <h2 className="font-heading text-lg font-extrabold text-text-primary">
-            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
+            {ar ? 'تنبيهات' : 'Needs your attention'}
           </h2>
           <ul className="mt-4 space-y-2.5 text-sm">
             {/*
@@ -365,7 +377,7 @@ export function AgencyDashboardPage() {
           tone="brand"
         />
         <Metric
-          to="/agency/projects"
+          to="/agency/clients"
           label={ar ? 'المشاريع' : 'Projects'}
           value={d.projects.total}
           hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}
@@ -592,7 +604,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
       </h2>
       <MetricTable
         head={ar
-          ? ['العميل', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+          ? ['العميل', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
           : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
         rows={rows.map((r) => [
           <div key="c" className="flex flex-col">
@@ -651,7 +663,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
           </h3>
           <MetricTable
             head={ar
-              ? ['المشروع', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+              ? ['المشروع', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
               : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
             rows={(open.projects_breakdown ?? []).map((p) => [
               <div key="n" className="flex flex-col">

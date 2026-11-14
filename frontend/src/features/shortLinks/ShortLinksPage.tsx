@@ -562,7 +562,7 @@ export function ShortLinksPage() {
                     <QrCode size={14} />
                   </Button>
                                     {l.is_active ? (
-                    <Button variant="secondary" onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
+                    <Button variant="secondary" disabled={disable.isPending} onClick={() => disable.mutate(l.id)} data-testid={`short-link-disable-${l.id}`}>{t.disable}</Button>
                   ) : (
                     <Button variant="secondary" onClick={() => enable.mutate(l.id)} disabled={enable.isPending} data-testid={`short-link-enable-${l.id}`}>{t.enable}</Button>
                   )}

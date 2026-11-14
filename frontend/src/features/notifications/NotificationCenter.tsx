@@ -63,8 +63,8 @@ export function NotificationCenter() {
   const ref = useRef<HTMLDivElement>(null)
 
   const q = useQuery({ queryKey: ['notifications'], queryFn: listNotifications, refetchInterval: 60_000 })
-  const markRead = useMutation({ mutationFn: markNotificationRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
-  const markAll = useMutation({ mutationFn: markAllNotificationsRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
+  const markRead = useMutation({ meta: { feedback: 'none' }, mutationFn: markNotificationRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
+  const markAll = useMutation({ meta: { feedback: 'none' }, mutationFn: markAllNotificationsRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
 
   useEffect(() => {
     if (!open) return

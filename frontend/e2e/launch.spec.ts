@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { AUTH, seededProject, selectProject } from './helpers'
 
 /**
- * LAUNCH-001 — «إطلاق الحملات» is its own page in both portals: the rail opens it, it walks the steps, and it
+ * LAUNCH-001 — «حملة جديدة» is its own page in both portals: the rail opens it, it walks the steps, and it
  * tells the truth about the project's accounts before anything could be sent. Seeded demo accounts carry no
  * platform credentials, so the honest outcome here is a page that explains why nothing can be published yet;
  * a real publish needs an authorised account and is never driven by this gate.
@@ -10,9 +10,10 @@ import { AUTH, seededProject, selectProject } from './helpers'
 test.describe('the launcher (advertiser)', () => {
   test.use({ storageState: AUTH.advertiser })
 
-  test('the rail opens /app/launch, a page of its own with the steps and the launch history', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    await page.getByRole('navigation').first().locator('a[href="/app/launch"]').first().click()
+  test('«حملة جديدة» on the campaigns page opens /app/launch, a page of its own with the steps and the launch history', async ({ page }) => {
+    // NAV-HOME-PLANS-001 — the launch page left the rail; the campaigns page's button opens it.
+    await page.goto('/app/campaigns')
+    await page.getByTestId('new-campaign').click()
     await expect(page).toHaveURL(/\/app\/launch$/)
     await expect(page.getByTestId('launch-page')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByTestId('launch-history')).toBeVisible()

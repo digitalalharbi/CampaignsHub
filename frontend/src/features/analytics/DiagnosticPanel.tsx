@@ -136,7 +136,7 @@ export function DiagnosticPanel({
   onRetry?: () => void
   ar: boolean
 }) {
-  const title = ar ? 'أين الضعف' : 'Where the weakness is'
+  const title = ar ? 'مراحل الرحلة' : 'Where the weakness is'
 
   /*
    * Failure outranks every other arm. A panel that cannot read the totals knows nothing about this

@@ -10,7 +10,6 @@ use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Notifications\Mail\AlertBundleMail;
-use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\AlertDispatcher;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -23,6 +22,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Tests\Support\ConfiguredAlertEmailProvider;
 use Tests\TestCase;
 
 /**
@@ -472,31 +472,5 @@ final class AlertDispatchTest extends TestCase
 
         $this->assertSame(2, $counts['sent'], 'one project’s alert was swallowed by the other’s cooldown');
         $this->assertSame(2, DB::table('digest_sends')->where('kind', 'alert')->distinct()->count('period_key'));
-    }
-}
-
-/**
- * A stand-in for a real, credentialed provider.
- *
- * Wired through `config('providers.channels.email')` rather than by mocking `ProviderRegistry`,
- * because the registry is `final` — and because routing the fake through the real registry is what
- * proves the honest «awaiting credentials» mapping is the thing being exercised.
- */
-final class ConfiguredAlertEmailProvider implements MessageProvider
-{
-    public function channel(): string
-    {
-        return 'email';
-    }
-
-    public function isConfigured(): bool
-    {
-        return true;
-    }
-
-    /** @param  array<string,mixed>  $payload */
-    public function send(string $destination, array $payload): array
-    {
-        return ['status' => 'sent', 'provider_message_id' => 'alert-ack', 'error' => null];
     }
 }

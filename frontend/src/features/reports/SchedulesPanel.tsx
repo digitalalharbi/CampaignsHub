@@ -59,7 +59,7 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['report-schedules', projectId] })
 
   const toggle = useMutation({ mutationFn: (id: string) => toggleSchedule(projectId, id), onSuccess: invalidate })
-  const run = useMutation({ mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
+  const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => deleteSchedule(projectId, id), onSuccess: invalidate })
 
   const rows = q.data ?? []

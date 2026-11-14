@@ -41,7 +41,7 @@ async function openSection(page: import('@playwright/test').Page, href: string) 
    */
   await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(/|\\?|$)`))
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» is the campaigns page with its builder OPEN (`?launch=1`). That is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» is the campaigns page with its builder OPEN (`?launch=1`). That is the
    * section arriving, not a stray overlay: the dialog must be the builder, and a person closes it before
    * reaching for the rail again — exactly what the walk now does. Any other link that leaves a dialog
    * open still fails here, on the link that opened it.
@@ -217,21 +217,21 @@ test.describe('the advertiser portal', () => {
   /**
    * METRICS-EMPTY-SCOPE-001 — a filter matching nothing speaks about the FILTER, in either language.
    *
-   * Narrowing to an objective this account never bought used to produce a row of cards each saying
-   * «لم ترسله المنصة» — a claim about Meta and Snapchat derived from an absence of CAMPAIGNS.
+   * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — an objective this account never bought no longer empties anything: it
+   * picks the KPIs and every (sales) campaign stays, so the cards stay. A filter that really matches nothing is a PLATFORM this
+   * account never ran on, and it still must not produce a row of cards each saying «لم ترسله المنصة».
    */
-  test('an objective with no campaigns says so, and says nothing about the platform', async ({ page }) => {
+  test('an objective keeps every campaign; a platform with no campaigns says so, and nothing about the platform', async ({ page }) => {
     await page.goto('/app/dashboard')
     await expect(page.locator('main')).toBeVisible()
 
-    /*
-     * The canonical bucket, not the raw objective it replaced — ANALYTICS-OBJECTIVE-SYSTEM-001.
-     *
-     * Every seeded campaign on this account carries `sales`, so «الوعي والتفاعل» covers four raw
-     * objectives and matches none of them. That is exactly the scope this test needs: a filter that
-     * really does match nothing, rather than one that happens to be empty today.
-     */
+    // Every seeded campaign on this account carries `sales`; choosing «الوعي والتفاعل» changes the KPIs and removes none of them.
     await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+    await expect(page.getByTestId('dashboard-metrics')).toHaveAttribute('data-strip-state', 'rows', { timeout: 20000 })
+    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toHaveCount(0)
+
+    // LinkedIn is in the control and has no campaign on this account: a scope that genuinely holds nothing.
+    await page.getByTestId('dashboard-platform-linkedin').click()
 
     const panel = page.getByTestId('dashboard-metrics-empty-scope')
 

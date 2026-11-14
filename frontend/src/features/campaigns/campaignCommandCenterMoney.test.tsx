@@ -67,27 +67,27 @@ describe('the campaign command centre over a partially-withheld spend', () => {
     // original in USD, and certainly not the coalesced zero.
     // The card, not the label's immediate parent: these KPIs are the shared `StatCard` now, whose
     // label sits in a row of its own beside the delta, with the figure below it.
-    const spend = (await screen.findByText('المصروف')).closest('div.rounded-2xl') as HTMLElement
+    const spend = (await screen.findByText('الإنفاق')).closest('div.rounded-2xl') as HTMLElement
     expect(within(spend).getByText('—')).toBeInTheDocument()
     expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
     expect(screen.queryByText(/1,000/)).not.toBeInTheDocument()
 
     // Utilisation cannot be drawn from a withheld spend, so its «استهلاك …%» caption is absent entirely
     // rather than «استهلاك 125%» (800 vs the 1,000 subset) or «استهلاك 0%» (the coalesced zero).
-    expect(screen.queryByText(/استهلاك/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/نسبة الإنفاق/)).not.toBeInTheDocument()
 
     // «المتبقي» falls to «—», not 800 − 1,000 and not the full 800.
     const remaining = screen.getByText('المتبقي').closest('div.rounded-2xl') as HTMLElement
     expect(within(remaining).getByText('—')).toBeInTheDocument()
   })
 
-  it('Budget tab: «المصروف» refuses a partial figure, and the forecast it would drive reads «—»', async () => {
+  it('Budget tab: «الإنفاق» refuses a partial figure, and the forecast it would drive reads «—»', async () => {
     renderWithProviders(<CampaignBudgetTab campaign={campaign} projectId="p1" range={range} locale="ar" />)
 
-    // «المصروف» is «—» — not «0 SAR», not the SAR-labelled subset, not the USD half on its own.
+    // «الإنفاق» is «—» — not «0 SAR», not the SAR-labelled subset, not the USD half on its own.
     // The budget tab's figures are `Fact` rows, not KPI cards — unchanged markup, so the label's own
     // parent is still the row.
-    const spent = (await screen.findByText('المصروف')).parentElement as HTMLElement
+    const spent = (await screen.findByText('الإنفاق')).parentElement as HTMLElement
     expect(within(spent).getByText('—')).toBeInTheDocument()
     expect(screen.queryByText('500.00 USD')).not.toBeInTheDocument()
 
@@ -137,7 +137,7 @@ describe('the command centre when reporting currency and budget currency differ'
     // 5,000 USD against an 800 SAR budget is not 625% consumed and not −4,200 remaining.
     const remaining = (await screen.findByText('المتبقي')).closest('div.rounded-2xl') as HTMLElement
     expect(within(remaining).getByText('—')).toBeInTheDocument()
-    expect(screen.queryByText(/استهلاك/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/نسبة الإنفاق/)).not.toBeInTheDocument()
   })
 
   it('still paces normally when the two currencies agree — the guard refuses units, not spend', async () => {
@@ -145,6 +145,6 @@ describe('the command centre when reporting currency and budget currency differ'
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
 
     // Same 5,000, now genuinely in the budget's currency: the comparison is available again.
-    expect(await screen.findByText(/استهلاك/)).toBeInTheDocument()
+    expect(await screen.findByText(/نسبة الإنفاق/)).toBeInTheDocument()
   })
 })

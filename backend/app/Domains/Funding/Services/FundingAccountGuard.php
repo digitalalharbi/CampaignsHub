@@ -44,6 +44,7 @@ final class FundingAccountGuard
             ->where('b.is_active', true)
             ->where('b.purpose', 'advertising')
             ->where('f.payment_method', 'prepaid')
+            ->whereNull('f.voided_at')
             ->first(['a.name as account', 'p.name as project']);
 
         return $row === null ? null : ['account' => (string) ($row->account ?? ''), 'project' => (string) $row->project];
@@ -61,7 +62,7 @@ final class FundingAccountGuard
     /** Whether this project tracks a prepaid budget — the only case in which its accounts must be exclusive. */
     public function tracksBudget(string $projectId): bool
     {
-        return DB::table('project_funding')->where('project_id', $projectId)->where('payment_method', 'prepaid')->exists();
+        return DB::table('project_funding')->where('project_id', $projectId)->where('payment_method', 'prepaid')->whereNull('voided_at')->exists();
     }
 
     /** @return list<string> the project's actively selected advertising accounts */

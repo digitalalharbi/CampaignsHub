@@ -270,7 +270,7 @@ export function useNotifPrefs() {
 }
 export type TestChannel = 'in_app' | 'email' | 'whatsapp'
 export function useTestChannel() {
-  return useMutation({
+  return useMutation({ meta: { feedback: 'none' },
     mutationFn: (channel: TestChannel) => postData<{ channel: TestChannel; state: string }>('/settings/notifications/channel-test', { channel }),
   })
 }
@@ -282,7 +282,7 @@ export function useSendDigestNow() {
   })
 }
 export function useSendSampleAlert() {
-  return useMutation({ mutationFn: () => postData<{ state: string }>('/settings/notifications/sample-alert') })
+  return useMutation({ meta: { feedback: 'none' }, mutationFn: () => postData<{ state: string }>('/settings/notifications/sample-alert') })
 }
 export function useWhatsAppOptIn() {
   const qc = useQueryClient()
@@ -367,11 +367,11 @@ export function useSecurityActions() {
   const qc = useQueryClient()
   const inv = () => { qc.invalidateQueries({ queryKey: ['settings', 'security'] }) }
   return {
-    changePassword: useMutation({ mutationFn: (b: { current_password: string; password: string; password_confirmation: string }) => postData('/settings/security/password', b) }),
+    changePassword: useMutation({ meta: { feedback: 'none' }, mutationFn: (b: { current_password: string; password: string; password_confirmation: string }) => postData('/settings/security/password', b) }),
     savePolicy: useMutation({ mutationFn: (policy: SecurityPolicy) => putData('/settings/security/policy', { policy }), onSuccess: inv }),
-    mfaSetup: useMutation({ mutationFn: () => postData<{ secret: string; otpauth_uri: string }>('/settings/security/mfa/setup') }),
-    mfaConfirm: useMutation({ mutationFn: (code: string) => postData('/settings/security/mfa/confirm', { code }), onSuccess: inv }),
-    mfaDisable: useMutation({ mutationFn: (password: string) => postData('/settings/security/mfa/disable', { password }), onSuccess: inv }),
+    mfaSetup: useMutation({ meta: { feedback: 'none' }, mutationFn: () => postData<{ secret: string; otpauth_uri: string }>('/settings/security/mfa/setup') }),
+    mfaConfirm: useMutation({ meta: { feedback: 'none' }, mutationFn: (code: string) => postData('/settings/security/mfa/confirm', { code }), onSuccess: inv }),
+    mfaDisable: useMutation({ meta: { feedback: 'none' }, mutationFn: (password: string) => postData('/settings/security/mfa/disable', { password }), onSuccess: inv }),
   }
 }
 
@@ -406,7 +406,7 @@ export function useClientActions() {
   const qc = useQueryClient()
   const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'clients'] })
   return {
-    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', b), onSuccess: inv }),
+    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', { ...b, create_project: true }), onSuccess: inv }),
     update: useMutation({ mutationFn: (b: { id: string; name?: string; mode?: string }) => putData(`/client-workspaces/${b.id}`, b), onSuccess: inv }),
     archive: useMutation({ mutationFn: (id: string) => deleteData(`/client-workspaces/${id}`), onSuccess: inv }),
   }

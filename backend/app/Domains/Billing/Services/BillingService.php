@@ -12,6 +12,7 @@ use App\Domains\Billing\Models\Quote;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Support\TaxTreatment;
+use App\Domains\Billing\Support\WebhookPayloadRedactor;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -476,7 +477,8 @@ final class BillingService
             'tenant_id' => $payment->tenant_id,
             'payment_id' => $payment->getKey(),
             'status' => $status,
-            'provider_response' => $response,
+            // PAY-WEBHOOK-SECRET-REDACT-001 — a verified result carries the webhook payload; no credential is kept.
+            'provider_response' => WebhookPayloadRedactor::redact($response),
             'created_at' => Carbon::now(),
         ])->save();
     }
@@ -488,9 +490,8 @@ final class BillingService
             return null;
         }
 
-        $decoded = json_decode($rawBody, true);
-
-        return is_array($decoded) ? $decoded : ['raw' => $rawBody];
+        // PAY-WEBHOOK-SECRET-REDACT-001 — the body is evidence; the secret that authenticated it is not stored.
+        return WebhookPayloadRedactor::forStorage($rawBody);
     }
 
     /**

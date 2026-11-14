@@ -168,7 +168,7 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
     onDecided()
   }
 
-  const previewing = useMutation({
+  const previewing = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => previewRegistrationDecision(registration.id, { ...input, reason: reason || 'Preview only' }),
     onSuccess: (p) => { setPreview(p); setError(null) },
     onError: failed,
@@ -386,7 +386,7 @@ function AwaitingSettlement({ registrationId, decision, copy: c, onDone }: {
 }) {
   const [why, setWhy] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const verify = useMutation({
+  const verify = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => verifyRegistrationSettlement(registrationId, decision.id, why),
     onSuccess: onDone,
     onError: (e: unknown) => setError(toApiError(e).message),
