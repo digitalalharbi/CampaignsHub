@@ -165,20 +165,19 @@ final class SettingsTabsTest extends TestCase
 
     public function test_mfa_setup_confirm_and_disable(): void
     {
+        // TWO-STEP-001 — the second step lives at /me/two-factor now; the old settings routes are gone.
         Sanctum::actingAs($this->owner);
-        $this->postJson('/api/v1/settings/security/mfa/setup')->assertOk()->assertJsonStructure(['data' => ['secret', 'otpauth_uri']]);
+        $this->postJson('/api/v1/settings/security/mfa/setup')->assertNotFound();
 
-        $secret = $this->owner->fresh()->two_factor_secret;
-        $this->postJson('/api/v1/settings/security/mfa/confirm', ['code' => '000000'])->assertStatus(422);
+        $secret = (string) $this->postJson('/api/v1/me/two-factor/totp/setup')->assertOk()
+            ->assertJsonStructure(['data' => ['secret', 'otpauth_uri']])->json('data.secret');
+        $this->postJson('/api/v1/me/two-factor/totp/confirm', ['code' => '000000'])->assertStatus(422);
 
-        $totp = app(Totp::class);
-        $ref = new \ReflectionMethod($totp, 'at');
-        $ref->setAccessible(true);
-        $code = $ref->invoke($totp, $secret, intdiv(time(), 30));
-        $this->postJson('/api/v1/settings/security/mfa/confirm', ['code' => $code])->assertOk();
+        $code = app(Totp::class)->codeAt($secret, intdiv(time(), 30));
+        $this->postJson('/api/v1/me/two-factor/totp/confirm', ['code' => $code])->assertOk();
         $this->assertTrue($this->owner->fresh()->two_factor_enabled);
 
-        $this->postJson('/api/v1/settings/security/mfa/disable', ['password' => 'secret123'])->assertOk();
+        $this->postJson('/api/v1/me/two-factor/disable', ['password' => 'secret123'])->assertOk();
         $this->assertFalse($this->owner->fresh()->two_factor_enabled);
     }
 

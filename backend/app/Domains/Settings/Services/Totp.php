@@ -45,18 +45,37 @@ final class Totp
     /** Verify a code within a ±$window step tolerance. */
     public function verify(string $secret, string $code, int $window = 1): bool
     {
+        return $this->matchingStep($secret, $code, $window) !== null;
+    }
+
+    /**
+     * The 30-second step a code belongs to, within ±$window, or null when it matches none.
+     *
+     * TWO-STEP-001 — the step is what replay protection remembers: a code accepted for step N is refused for N and every step
+     * before it, so the same six digits cannot open a second session inside their own validity window. Every candidate is
+     * compared, matched or not, so the time taken does not say which step matched.
+     */
+    public function matchingStep(string $secret, string $code, int $window = 1): ?int
+    {
         $code = preg_replace('/\s+/', '', $code) ?? '';
         if (! preg_match('/^\d{6}$/', $code)) {
-            return false;
+            return null;
         }
         $counter = intdiv(time(), self::PERIOD);
+        $matched = null;
         for ($i = -$window; $i <= $window; $i++) {
             if (hash_equals($this->at($secret, $counter + $i), $code)) {
-                return true;
+                $matched ??= $counter + $i;
             }
         }
 
-        return false;
+        return $matched;
+    }
+
+    /** The code for a given step — used by tests and the acceptance suite to act as an authenticator app would. */
+    public function codeAt(string $secret, int $step): string
+    {
+        return $this->at($secret, $step);
     }
 
     private function at(string $secret, int $counter): string

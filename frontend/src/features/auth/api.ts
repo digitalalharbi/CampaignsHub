@@ -57,11 +57,9 @@ export async function phoneSignInStart(phone: string): Promise<{
 
 export async function phoneSignInVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
   await ensureCsrfCookie()
-  const { user } = await postData<{ user: AuthUser }>('/auth/phone/verify', {
+  return signedInOrTwoStep(await postData<MaybeTwoStep>('/auth/phone/verify', {
     verification_id: verificationId, code, remember,
-  })
-
-  return user
+  }))
 }
 
 /**
@@ -77,8 +75,66 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
  */
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
-  const { user } = await postData<UserEnvelope>('/auth/login', input)
-  return user
+  return signedInOrTwoStep(await postData<MaybeTwoStep>('/auth/login', input))
+}
+
+/**
+ * TWO-STEP-001 — the second step.
+ *
+ * A correct first step for a person who turned on a second one opens NO session: the server answers `user: null` with what the
+ * challenge accepts. Every sign-in call below turns that answer into {@link TwoStepRequired}, so a caller that only knows how to
+ * handle a signed-in user can never mistake a held sign-in for a finished one.
+ */
+export type TwoStepMethod = 'totp' | 'email' | 'sms'
+
+export interface TwoStepInfo {
+  required: true
+  methods: TwoStepMethod[]
+  default: TwoStepMethod | null
+  email_hint: string | null
+  phone_hint: string | null
+  recovery_available: boolean
+  resend_after: number
+}
+
+export class TwoStepRequired extends Error {
+  readonly info: TwoStepInfo | null
+
+  constructor(info: TwoStepInfo | null) {
+    super('two_step_required')
+    this.name = 'TwoStepRequired'
+    this.info = info
+  }
+}
+
+interface MaybeTwoStep {
+  user: AuthUser | null
+  two_factor?: TwoStepInfo | null
+}
+
+function signedInOrTwoStep(data: MaybeTwoStep): AuthUser {
+  if (data.user === null || data.two_factor?.required === true) throw new TwoStepRequired(data.two_factor ?? null)
+  return data.user
+}
+
+export async function fetchTwoStep(): Promise<TwoStepInfo> {
+  const { two_factor } = await getData<{ two_factor: TwoStepInfo }>('/auth/two-factor')
+  return two_factor
+}
+
+export async function sendTwoStepCode(method: 'email' | 'sms'): Promise<{ delivery_status: string; resend_after: number; dev_code: string | null }> {
+  await ensureCsrfCookie()
+  return postData('/auth/two-factor/send', { method })
+}
+
+export async function verifyTwoStep(method: TwoStepMethod | 'recovery', code: string): Promise<{ user: AuthUser; destination: string }> {
+  await ensureCsrfCookie()
+  return postData('/auth/two-factor/verify', { method, code })
+}
+
+export async function cancelTwoStep(): Promise<void> {
+  await ensureCsrfCookie()
+  await deleteData<null>('/auth/two-factor')
 }
 
 export async function logout(): Promise<void> {
@@ -244,7 +300,14 @@ interface LinkedSignIn {
 /** Prove ownership with the account's password: the sign-in form's own check, then link and sign in. */
 export async function confirmLinkWithPassword(password: string): Promise<LinkedSignIn> {
   await ensureCsrfCookie()
-  return postData<LinkedSignIn>('/auth/oauth/pending-link/password', { password })
+  return linkedOrTwoStep(await postData<LinkedSignIn | MaybeTwoStep>('/auth/oauth/pending-link/password', { password }))
+}
+
+function linkedOrTwoStep(data: LinkedSignIn | MaybeTwoStep): LinkedSignIn {
+  if (data.user === null || ('two_factor' in data && data.two_factor?.required === true)) {
+    throw new TwoStepRequired('two_factor' in data ? data.two_factor ?? null : null)
+  }
+  return data as LinkedSignIn
 }
 
 /** Mail a one-time link to the account's own address. `delivery` is honest: `awaiting_credentials` means nothing left. */
@@ -256,7 +319,7 @@ export async function sendLinkEmail(): Promise<{ delivery: string; resend_after:
 /** Spend the mailed link — only works in the browser session that asked for it. */
 export async function confirmLinkWithEmail(token: string): Promise<LinkedSignIn> {
   await ensureCsrfCookie()
-  return postData<LinkedSignIn>('/auth/oauth/pending-link/confirm-email', { token })
+  return linkedOrTwoStep(await postData<LinkedSignIn | MaybeTwoStep>('/auth/oauth/pending-link/confirm-email', { token }))
 }
 
 export async function cancelPendingLink(): Promise<void> {

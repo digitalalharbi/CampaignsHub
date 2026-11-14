@@ -11,7 +11,6 @@ use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -28,9 +27,16 @@ use Illuminate\Validation\ValidationException;
  */
 final class SignInWithPassword
 {
-    public function __construct(private readonly PortalResolver $portals) {}
+    public function __construct(
+        private readonly PortalResolver $portals,
+        private readonly EstablishSession $session,
+    ) {}
 
-    public function execute(Request $request, string $email, string $password, bool $remember, ?string $portal, ?Closure $beforeSession = null): User
+    /**
+     * @return array{user: User, challenge: array<string, mixed>|null} `challenge` is set when the session is held at the second
+     *                                                                 step (TWO-STEP-001); nobody is signed in until it passes
+     */
+    public function execute(Request $request, string $email, string $password, bool $remember, ?string $portal, ?Closure $beforeSession = null, ?string $redirect = null): array
     {
         $this->assertCanOpenASession($request);
 
@@ -43,7 +49,7 @@ final class SignInWithPassword
             ]);
         }
 
-        return $this->openSession($request, $user, $remember, $portal, $beforeSession);
+        return $this->openSession($request, $user, $remember, $portal, $beforeSession, $redirect);
     }
 
     /**
@@ -52,8 +58,13 @@ final class SignInWithPassword
      *
      * Linking a Google account in place proves ownership by password (`execute`) or by a mailed link, and both end here — one
      * set of refusals, one session regeneration, so neither proof can open a door the other would keep shut.
+     *
+     * TWO-STEP-001 — the last step is {@see EstablishSession}, which holds the session at the second step when the person turned
+     * one on. Every refusal above still runs first, so a suspended account is told so before any challenge is offered.
+     *
+     * @return array{user: User, challenge: array<string, mixed>|null}
      */
-    public function openSession(Request $request, User $user, bool $remember, ?string $portal, ?Closure $beforeSession = null): User
+    public function openSession(Request $request, User $user, bool $remember, ?string $portal, ?Closure $beforeSession = null, ?string $redirect = null): array
     {
         $this->assertCanOpenASession($request);
         $this->assertActive($user);
@@ -63,10 +74,9 @@ final class SignInWithPassword
             $beforeSession($user);
         }
 
-        Auth::guard('web')->login($user, $remember);
-        $request->session()->regenerate();
+        $challenge = $this->session->open($request, $user, $remember, ['portal' => $portal, 'redirect' => $redirect]);
 
-        return $user;
+        return ['user' => $user, 'challenge' => $challenge];
     }
 
     /**

@@ -35,4 +35,16 @@ return [
     'code_switch_sms_only' => 'Refused: :count account(s) have an unproved address and no self-service way back except an SMS code. Have them prove the address, or help them with a set-password link, first.',
     'code_switch_signup_unproven' => 'Refused: signup is not proving addresses, and an SMS code is the only self-service way back for those accounts. The two cannot both be off.',
     'code_switch_contacts' => 'Refused: :count client contact(s) would have no way in. They hold no password and no other channel that reaches them.',
+    // TWO-STEP-001
+    'two_factor_required' => 'Two-step verification is required.',
+    'two_factor_expired' => 'The verification step has expired. Sign in again.',
+    'two_factor_locked' => 'Too many attempts. Try again shortly.',
+    'two_factor_enabled' => 'Two-step verification is on.',
+    'two_factor_disabled' => 'Two-step verification is off.',
+    'two_factor_already_active' => 'The authenticator app is already on.',
+    'two_factor_method_inactive' => 'This method is not on.',
+    'two_factor_reconfirm_failed' => 'The password or code is not correct.',
+    'two_factor_email_unverified' => 'Confirm your email first.',
+    'two_factor_phone_unconfirmed' => 'Confirm your mobile number first.',
+    'two_factor_sms_awaiting' => 'Awaiting an SMS provider.',
 ];

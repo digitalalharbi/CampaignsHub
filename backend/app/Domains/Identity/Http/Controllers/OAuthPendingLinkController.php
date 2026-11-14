@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Actions\ResolveOAuthIdentity;
 use App\Domains\Identity\Actions\SignInWithPassword;
 use App\Domains\Identity\Resources\UserResource;
@@ -38,6 +39,9 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
  *
  * Either way the pending link is claimed (once), the identity is linked, and only then does the session open — through the same
  * `openSession` the password form uses, so a suspended account, a wrong portal or a closed origin stops here exactly as it does there.
+ *
+ * TWO-STEP-001 — an account with a second step on is held at it here too: the proof links the provider account, and the session
+ * still opens only after the second step passes. The link alone opens nothing — signing in with that provider meets the same step.
  * Nothing about the profile is in a URL, a log line or an error; every refusal is a short state.
  */
 final class OAuthPendingLinkController extends Controller
@@ -83,13 +87,14 @@ final class OAuthPendingLinkController extends Controller
         }
 
         try {
-            $this->signIn->execute(
+            ['challenge' => $challenge] = $this->signIn->execute(
                 $request,
                 (string) $user->email,
                 (string) $data['password'],
                 true,
                 $pending['portal'],
                 $this->claimAndLink($request, $pending, 'auth.oauth_link_confirmed_by_password'),
+                is_string($pending['redirect'] ?? null) ? $pending['redirect'] : null,
             );
         } catch (ValidationException) {
             // The form's wrong password, on the field this card has. Five of them and the pending link is gone.
@@ -107,7 +112,7 @@ final class OAuthPendingLinkController extends Controller
             throw $refusal;
         }
 
-        return $this->signedIn($request, $user, $pending);
+        return $challenge !== null ? EstablishSession::challengeResponse($challenge) : $this->signedIn($request, $user, $pending);
     }
 
     /** POST /auth/oauth/pending-link/email — mail a one-time link to the account's own address. */
@@ -169,12 +174,13 @@ final class OAuthPendingLinkController extends Controller
         }
 
         try {
-            $this->signIn->openSession(
+            ['challenge' => $challenge] = $this->signIn->openSession(
                 $request,
                 $user,
                 true,
                 $pending['portal'],
                 $this->claimAndLink($request, $pending, 'auth.oauth_link_confirmed_by_email'),
+                is_string($pending['redirect'] ?? null) ? $pending['redirect'] : null,
             );
         } catch (HttpExceptionInterface|HttpResponseException $refusal) {
             $this->pending->record('auth.oauth_link_failed', $pending['user_id'], $pending['provider'], 'refused');
@@ -182,7 +188,7 @@ final class OAuthPendingLinkController extends Controller
             throw $refusal;
         }
 
-        return $this->signedIn($request, $user, $pending);
+        return $challenge !== null ? EstablishSession::challengeResponse($challenge) : $this->signedIn($request, $user, $pending);
     }
 
     /** DELETE /auth/oauth/pending-link — «إلغاء». */

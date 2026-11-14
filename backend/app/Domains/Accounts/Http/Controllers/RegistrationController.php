@@ -9,6 +9,7 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 use App\Domains\Accounts\Services\RegistrationPolicy;
 use App\Domains\Accounts\Services\RegistrationVerificationService;
 use App\Domains\Accounts\Services\RegistrationVerificationSettings;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\DTOs\RegisterData;
 use App\Domains\Identity\Http\Requests\RegisterRequest;
 use App\Domains\Identity\Resources\UserResource;
@@ -197,10 +198,11 @@ final class RegistrationController extends Controller
             /** @var User|null $user */
             $user = User::where('email', $registration->email)->first();
 
+            // TWO-STEP-001 — through the one place a session opens; held at the second step if the account has one on.
             if ($user !== null) {
-                Auth::guard('web')->login($user);
-                $request->session()->regenerate();
-                $payload['user'] = new UserResource($user);
+                $challenge = app(EstablishSession::class)->open($request, $user);
+                $payload['user'] = $challenge === null ? new UserResource($user) : null;
+                $payload['two_factor'] = $challenge;
             }
         }
 
