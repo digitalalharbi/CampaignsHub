@@ -605,6 +605,19 @@ export interface FormatComparisonPayload {
   coverage: { creatives_total: number; creatives_known: number; spend_known_share: number | null }
   objectives: FormatComparisonObjective[]
   sample_rule: { minimum_creatives: number; material_share: number }
+  /** REPORT-FORMAT-COMPARE-TABLE-001 — a report's ONE table (server-built): a column per type, a row per KPI of the report. */
+  table?: FormatComparisonTable | null
+}
+
+export interface FormatComparisonTable {
+  rows: string[]
+  formats: Array<{ format: string; creatives: number; small_sample: boolean }>
+  /** KPI → type → figure. A row a later redaction removed arrives as null. */
+  cells: Record<string, Record<string, number | null> | null>
+  better: Record<string, 'higher' | 'lower'>
+  labels: Record<string, { ar: string; en: string }>
+  kinds: Record<string, 'money' | 'rate' | 'multiplier' | 'ratio' | 'count'>
+  verdict_order: string[]
 }
 
 export const formatComparison = (

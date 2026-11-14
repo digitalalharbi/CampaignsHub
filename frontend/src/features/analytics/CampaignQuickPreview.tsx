@@ -168,7 +168,7 @@ function statusLabel(status: string | null, ar: boolean): string {
   if (status === 'paused') return ar ? 'موقوفة' : 'Paused'
   if (status === 'draft') return ar ? 'مسودة' : 'Draft'
 
-  return ar ? 'غير معروفة' : 'Unknown'
+  return ar ? 'بدون بيانات' : 'Unknown'
 }
 
 /** The operator portals that mount a campaign route; see `CampaignLink` for the whole reasoning. */

@@ -1,4 +1,4 @@
-import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, PiggyBank, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
+import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, PiggyBank, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -66,10 +66,9 @@ export const agencyNavGroups: readonly NavGroup[] = [
     ar: 'إدارة الحملات', en: 'Campaign management', icon: Megaphone,
     leaves: [
       { to: '/agency/dashboard', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard },
-      { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-      { to: '/agency/launch', ar: 'إطلاق الحملات', en: 'Launch', icon: Rocket },
+      { to: '/agency/launch', ar: 'حملة جديدة', en: 'Launch', icon: Rocket },
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
-      { to: '/agency/ad-groups', ar: 'المجموعات', en: 'Ad groups', icon: Rows3 },
+      { to: '/agency/ad-groups', ar: 'المجموعات الإعلانية', en: 'Ad groups', icon: Rows3 },
       { to: '/agency/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal },
       { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },
     ],
@@ -80,9 +79,9 @@ export const agencyNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
-      { to: '/agency/delivery', ar: 'التسليم', en: 'Delivery', icon: Send, cap: 'reports.view' },
-      { to: '/agency/portfolio', ar: 'الملخص', en: 'Portfolio', icon: Layers },
-      { to: '/agency/short-links', ar: 'الروابط', en: 'Links', icon: Link2 },
+      { to: '/agency/delivery', ar: 'الجدولة', en: 'Delivery', icon: Send, cap: 'reports.view' },
+      { to: '/agency/portfolio', ar: 'ملخص المشاريع', en: 'Portfolio', icon: Layers },
+      { to: '/agency/short-links', ar: 'روابط التتبع', en: 'Links', icon: Link2 },
       { to: '/agency/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },
     ],

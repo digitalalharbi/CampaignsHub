@@ -49,7 +49,7 @@ export function AgentHistoryCard({ projectId, ar, roles, current, activeId, onOp
   const list = useQuery({ queryKey: ['agent-threads', projectId, filters], queryFn: () => listThreads(projectId, filters), retry: false })
   const refresh = () => { setConfirm(null); void qc.invalidateQueries({ queryKey: ['agent-threads', projectId] }) }
   const remove = useMutation({ mutationFn: (id: string) => deleteThread(projectId, id), onSuccess: (_r, id) => { onGone([id]); refresh() } })
-  const clear = useMutation({ mutationFn: () => clearThreads(projectId), onSuccess: () => { onGone('all'); refresh() } })
+  const clear = useMutation({ meta: { feedback: 'none' }, mutationFn: () => clearThreads(projectId), onSuccess: () => { onGone('all'); refresh() } })
 
   const rows = list.data?.threads ?? []
   const filtering = debounced !== '' || agent !== '' || status !== ''

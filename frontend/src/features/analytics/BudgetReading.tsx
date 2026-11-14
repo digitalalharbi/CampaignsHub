@@ -36,7 +36,7 @@ const SILENT: Record<string, { ar: string; en: string }> = {
     en: 'Only one line could be paced — a figure, not a range.',
   },
   no_line_could_be_paced: {
-    ar: 'لا يمكن حساب سرعة أي خط في هذه الفترة: المصروف محجوب أو بعملة غير عملة الخطة.',
+    ar: 'لا يمكن حساب سرعة أي خط في هذه الفترة: الإنفاق محجوب أو بعملة غير عملة الخطة.',
     en: 'No line in this window could be paced: the spend is withheld, or it is in a different currency from the plan.',
   },
   no_budgets_set: {
@@ -47,7 +47,7 @@ const SILENT: Record<string, { ar: string; en: string }> = {
 
 const EVIDENCE: Record<string, { ar: string; en: string }> = {
   budget: { ar: 'الميزانية', en: 'Budget' },
-  spent: { ar: 'المصروف', en: 'Spent' },
+  spent: { ar: 'الإنفاق', en: 'Spent' },
   pace: { ar: 'السرعة', en: 'Pace' },
 }
 
@@ -175,7 +175,7 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
       {reading.unmeasured_lines > 0 && (
         <p data-testid="budget-reading-unmeasured" className="mt-2 text-[11px] text-text-muted">
           {ar
-            ? `${reading.unmeasured_lines} خطًا لا يمكن حساب سرعته (مصروف محجوب أو عملة مختلفة) وليس ضمن هذه القراءة.`
+            ? `${reading.unmeasured_lines} خطًا لا يمكن حساب سرعته (إنفاق محجوب أو عملة مختلفة) وليس ضمن هذه القراءة.`
             : `${reading.unmeasured_lines} line(s) could not be paced (withheld spend or a different currency) and are outside this reading.`}
         </p>
       )}
