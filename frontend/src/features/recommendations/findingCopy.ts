@@ -23,6 +23,8 @@ const HEADLINES: Record<string, Pair> = {
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
   sla_warning: { ar: 'تحذير مستوى الخدمة', en: 'Service-level warning' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },
+  // LINK-HEALTH-YESTERDAY-001 — the one link card, the same words as the server's `LinkHealth::STATES['not_synced']`.
+  link_not_synced: { ar: 'بيانات أمس ما وصلت من المنصة', en: 'Yesterday’s data did not arrive from the platform' },
   lead_unassigned: { ar: 'عملاء محتملون بلا مسؤول', en: 'Leads with no owner' },
   lead_no_contact: { ar: 'عملاء محتملون لم يُتواصل معهم', en: 'Leads not contacted' },
   lead_follow_up_overdue: { ar: 'متابعات متأخرة', en: 'Follow-ups overdue' },
@@ -60,6 +62,7 @@ const ACTIONS: Record<FindingAction, Pair> = {
   refresh_creative: { ar: 'جدّد هذا المحتوى أو خفّف الإنفاق عليه', en: 'Refresh this creative or reduce its spend' },
   scale_winner: { ar: 'فكّر في منحه ميزانية أكبر', en: 'Consider giving it more budget' },
   reconnect: { ar: 'أعد ربط المنصة', en: 'Reconnect the platform' },
+  check_sync: { ar: 'افحص المزامنة', en: 'Check the sync' },
   assign_leads: { ar: 'عيّن مسؤولًا لهؤلاء العملاء', en: 'Assign an owner to these leads' },
   contact_leads: { ar: 'تواصل مع هؤلاء العملاء', en: 'Contact these leads' },
   investigate_day: { ar: 'افتح الحملة وافحص هذا اليوم', en: 'Open the campaign and inspect that day' },
@@ -97,6 +100,8 @@ export const impactBasis = (k: ImpactKind, ar: boolean, against?: 'limit' | 'bud
 const FACTS: Record<FindingFactKey, Pair> = {
   provider: { ar: 'المنصة', en: 'Platform' },
   expires_at: { ar: 'تنتهي في', en: 'Expires' },
+  missing_day: { ar: 'اليوم الناقص', en: 'Missing day' },
+  last_day: { ar: 'آخر يوم وصل', en: 'Last day that arrived' },
   error: { ar: 'الخطأ', en: 'Error' },
   count: { ar: 'العدد', en: 'Count' },
   basis: { ar: 'سبب تعذّر القياس', en: 'Why it cannot be measured' },

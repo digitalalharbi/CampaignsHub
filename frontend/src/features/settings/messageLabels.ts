@@ -109,6 +109,8 @@ export const TYPE_LABELS: Record<string, Words> = {
   client_needs_attention: { ar: 'تنبيه على عميل', en: 'A client needs attention' },
   // NOTIFICATION-CHANNELS-001 — what a rule the person built did, which used to reach the bell and nothing else.
   automation_rule: { ar: 'تطابق قاعدة أتمتة', en: 'An automation rule matched' },
+  // FIN-LOOP-001 — the approved budget of a project: added, running low, over.
+  project_budget: { ar: 'ميزانية المشروع', en: 'Project budget' },
   client_request: { ar: 'طلب عميل جديد أو تحديث عليه', en: 'A client request, new or updated' },
   // المالية
   subscription: { ar: 'الاشتراك والفواتير', en: 'Subscription and invoices' },
@@ -155,6 +157,10 @@ export const TYPE_NOTES: Record<string, Words> = {
   automation_rule: {
     ar: 'يصلك على البريد وداخل النظام عندما تطابق قاعدة كتبتها حملة أو إعلانًا.',
     en: 'Reaches your inbox and the bell when a rule you wrote matches a campaign or an ad.',
+  },
+  project_budget: {
+    ar: 'إضافة ميزانية، وقرب نفادها، وتجاوزها.',
+    en: 'A budget added, running low, or over.',
   },
   security_alert: {
     ar: 'عند تسجيل دخول جديد أو تغيير كلمة المرور.',

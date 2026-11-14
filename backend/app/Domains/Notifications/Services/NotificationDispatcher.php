@@ -223,6 +223,8 @@ final class NotificationDispatcher
                 lang: $locale,
                 recipientName: (string) $user->name,
                 path: is_string($path) && $path !== '' ? $path.(is_string($query) ? '?'.$query : '') : '/app/notifications',
+                // FIN-LOOP-001 — a producer that can draw its problem passes the shape; the shell draws it.
+                viz: isset($p['viz']) && is_array($p['viz']) ? $p['viz'] : null,
             ),
             kind: $switchKey,
             template: 'mail.operational',

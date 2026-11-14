@@ -1,4 +1,4 @@
-import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
+import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, PiggyBank, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
 import type { NavGroup } from './SidebarNav'
 
 /**
@@ -96,7 +96,9 @@ export const agencyNavGroups: readonly NavGroup[] = [
       { to: '/agency/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck },
       { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, end: true },
       { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
-      { to: '/agency/spend-limits', ar: 'الميزانية', en: 'Budget', icon: Wallet },
+      // FIN-LOOP-001 — the approved budgets (money the client put in); the monitoring lines are «حدود الإنفاق» (style guide).
+      { to: '/agency/budgets', ar: 'الميزانيات', en: 'Budgets', icon: PiggyBank },
+      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
     ],
   },
   {

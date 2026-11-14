@@ -169,7 +169,7 @@ final class MoyasarPaymentProvider implements PaymentProvider, ReconcilesCheckou
      * Null on any failure, including an unreachable host. The caller MUST NOT read that as consent —
      * an unconfirmed payment stays unconfirmed, and the gateway will redeliver.
      *
-     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string}|null
+     * @return array{status: string, amount: ?string, currency: ?string, reference: ?string, provider_status?: ?string}|null
      */
     public function fetchPayment(string $providerPaymentId): ?array
     {
@@ -200,6 +200,8 @@ final class MoyasarPaymentProvider implements PaymentProvider, ReconcilesCheckou
                 'amount' => isset($body['amount']) ? number_format(((int) $body['amount']) / 100, 2, '.', '') : null,
                 'currency' => isset($body['currency']) ? (string) $body['currency'] : null,
                 'reference' => (string) (($body['metadata']['reference'] ?? '') ?: '') ?: null,
+                // PLATFORM-PAYMENT-ALERTS-001 — Moyasar's own word, verbatim, so an alert can quote it instead of our mapping.
+                'provider_status' => isset($body['status']) ? mb_substr((string) $body['status'], 0, 40) : null,
             ];
         } catch (Throwable) {
             // A gateway we could not reach has told us nothing. Silence is not confirmation.
