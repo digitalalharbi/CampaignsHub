@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { MetricLineChart, CHART_SERIES } from '@/features/analytics/charts'
 import { providerLabel } from '@/features/campaigns/labels'
 import { SlideOver } from './SlideOver'
-import { PeriodChip, PlatformSplit, Sar } from './BudgetBoard'
-import { downloadBudgets, useBudget, useBudgetMonth, type BudgetDetail } from './fundingApi'
-import { KIND, L, STATUS, sar } from './labels'
+import { ModeBadges, PeriodChip, PlatformSplit, Ring, Sar } from './BudgetBoard'
+import { FinancialDisclaimer } from './FinancialDisclaimer'
+import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
+import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
+import { Money, currencyMark, moneyNumber } from './money'
 
 type Lang = { ar: string; en: string }
 
@@ -42,6 +44,7 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
             <span className="truncate text-sm font-extrabold text-text-primary">{data.project_name}</span>
             <span className="flex flex-wrap items-center gap-2">
               <Badge tone={st.tone}>{tx(st)}</Badge>
+              <ModeBadges row={data} ar={ar} />
               <PeriodChip start={data.period_start} end={data.period_end} stated={data.period_start_stated} ar={ar} />
             </span>
           </div>
@@ -50,13 +53,34 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
     >
       {!data ? <div className="min-h-[12rem]" aria-busy /> : (
         <div className="flex min-w-0 flex-col gap-3" data-testid="budget-panel">
-          <div className="grid grid-cols-3 gap-2">
-            <Fig label={L.approved} ar={ar}><Sar n={data.approved} ar={ar} /></Fig>
-            <Fig label={L.spent} ar={ar}><Sar n={data.spent} ar={ar} /></Fig>
-            <Fig label={L.remaining} ar={ar}>
-              <span data-testid="budget-remaining"><Sar n={data.remaining} ar={ar} className={data.remaining !== null && data.remaining < 0 ? 'text-danger' : ''} /></span>
-            </Fig>
-          </div>
+          {data.payment_mode === 'credit' ? (
+            <div className="flex flex-col gap-1.5" data-testid="credit-figures">
+              <div className="grid grid-cols-2 gap-2">
+                <Fig label={L.spentToDate} ar={ar}><Sar n={data.to_date} ar={ar} /></Fig>
+                <Fig label={L.thisMonth} ar={ar}><span data-testid="budget-this-month"><Sar n={data.this_month} ar={ar} /></span></Fig>
+              </div>
+              {data.ceiling !== null && data.ceiling_ratio !== null && (
+                <div className="flex items-center gap-2" data-testid="ceiling-bar">
+                  <span className="text-xs font-semibold text-text-secondary">{tx(L.ceiling)} <Sar n={data.ceiling} ar={ar} /></span>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                    <span className={`block h-full rounded-full ${TONE_BAR[data.status === 'credit_over' ? 'danger' : data.status === 'credit_near' ? 'warning' : 'success']}`} style={{ width: `${Math.min(100, Math.round(data.ceiling_ratio * 100))}%` }} />
+                  </span>
+                  <bdi dir="ltr" className="tnum text-xs font-extrabold">{Math.round(data.ceiling_ratio * 100)}%</bdi>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3" data-testid="direct-figures">
+              {data.used_ratio !== null && <Ring ratio={Math.min(1, data.used_ratio)} tone={data.status === 'over' ? 'danger' : st?.tone ?? 'neutral'} size={44} />}
+              <div className="grid flex-1 grid-cols-3 gap-2">
+                <Fig label={L.approved} ar={ar}><Sar n={data.approved} ar={ar} /></Fig>
+                <Fig label={L.spent} ar={ar}><Sar n={data.spent} ar={ar} /></Fig>
+                <Fig label={L.remaining} ar={ar}>
+                  <span data-testid="budget-remaining"><Sar n={data.remaining} ar={ar} className={data.remaining !== null && data.remaining < 0 ? 'text-danger' : ''} /></span>
+                </Fig>
+              </div>
+            </div>
+          )}
 
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">
@@ -66,7 +90,7 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
             </div>
           )}
 
-          {data.series.length > 1 && (
+          {data.payment_mode === 'direct' && data.series.length > 1 && (
             <div className="min-w-0" data-testid="budget-chart">
               <MetricLineChart
                 data={data.series.map((p) => ({ date: p.date, remaining: p.remaining, approved: p.approved }))}
@@ -80,7 +104,9 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
             </div>
           )}
 
-          {data.by_platform.length > 0 && (
+          {data.plan && data.plan.length > 0 ? (
+            <PlanBars data={data} ar={ar} canManage={canManage} />
+          ) : data.by_platform.length > 0 && (
             <div className="flex min-w-0 flex-col gap-1.5" data-testid="budget-platforms">
               <span className="text-xs font-bold text-text-secondary">{tx(L.platforms)}</span>
               <PlatformSplit items={data.by_platform} ar={ar} height="h-3" />
@@ -88,16 +114,18 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
                 {data.by_platform.map((i, n) => (
                   <li key={i.provider} className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full" style={{ background: CHART_SERIES[n % CHART_SERIES.length] }} aria-hidden />
-                    {providerLabel(i.provider, ar ? 'ar' : 'en')} <span className="tnum font-semibold text-text-primary">{sar(i.spent)}</span>
-                    {!!i.unconverted_days && <span className="text-warning">· {tx(L.noRate)}</span>}
+                    {providerLabel(i.provider, ar ? 'ar' : 'en')} <PlatformFigure item={i} ar={ar} />
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
+          {data.payment_mode === 'credit' && data.invoice_months.length > 0 && <InvoiceMonths data={data} ar={ar} />}
+
           <History data={data} ar={ar} canManage={canManage} onUndo={onUndo} pending={undoPending} />
           <MonthCard projectId={data.project_id} months={data.months} ar={ar} />
+          <FinancialDisclaimer className="border-t border-border pt-2" />
         </div>
       )}
     </SlideOver>
@@ -132,7 +160,7 @@ function History({ data, ar, canManage, onUndo, pending }: { data: BudgetDetail;
               <span className="min-w-0 flex-1 truncate text-text-secondary" title={p.reason ?? p.note ?? ''}>
                 {[p.reference, p.reason ?? p.note, p.added_by].filter(Boolean).join(' · ')}
               </span>
-              <bdi dir="ltr" className={`tnum shrink-0 font-bold ${p.amount_sar < 0 ? 'text-danger' : 'text-success'} ${p.reversed ? 'line-through' : ''}`}>{sign}{sar(p.amount_sar)}</bdi>
+              {p.amount_sar !== 0 && <span className={`shrink-0 font-bold ${p.amount_sar < 0 ? 'text-danger' : 'text-success'} ${p.reversed ? 'line-through' : ''}`}><bdi dir="ltr">{sign}</bdi><Money n={Math.abs(p.amount_sar)} currency="SAR" /></span>}
               {canManage && p.can_undo && (
                 <button
                   type="button"
@@ -213,6 +241,103 @@ function MonthCard({ projectId, months, ar }: { projectId: string; months: strin
           {cell(L.end, data.remaining_end, data.remaining_end !== null && data.remaining_end < 0 ? 'text-danger' : 'text-text-primary')}
         </div>
       )}
+    </div>
+  )
+}
+
+/** A platform's own spend: USD (the platforms' one unit); a day with no rate keeps its own currency and says «بدون سعر صرف». */
+export function PlatformFigure({ item, ar }: { item: BudgetDetail['by_platform'][number]; ar: boolean }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {item.spent_usd !== null && item.spent_usd !== undefined && <Money n={item.spent_usd} currency="USD" className="font-semibold text-text-primary" />}
+      {(item.unconverted ?? []).map((u) => (
+        <span key={u.currency} className="font-semibold text-text-primary"><bdi dir="ltr" className="tnum">{moneyNumber(u.amount)}</bdi> {currencyMark(u.currency)}</span>
+      ))}
+      {!!item.unconverted_days && <Badge tone="warning">{ar ? L.noRate.ar : L.noRate.en}</Badge>}
+    </span>
+  )
+}
+
+/** مخطّطة: one bar per platform — planned against spent, the share in %, and at most one «فرق عن الخطة» chip. «أعد التوزيع» is one click. */
+function PlanBars({ data, ar, canManage }: { data: BudgetDetail; ar: boolean; canManage: boolean }) {
+  const tx = (v: Lang) => (ar ? v.ar : v.en)
+  const realloc = useReallocateBudget()
+  const [failed, setFailed] = useState(false)
+  const rows = data.plan ?? []
+  const off = rows.some((r) => r.flag !== null)
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5" data-testid="budget-plan">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-text-secondary">{tx(L.planVsActual)}</span>
+        <span className="flex items-center gap-1.5">
+          {off && <Badge tone="warning" data-testid="plan-diff-chip">{tx(PLAN_DIFF)}</Badge>}
+          {canManage && data.status !== 'void' && (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={realloc.isPending}
+              data-testid="budget-reallocate"
+              onClick={() => { setFailed(false); realloc.mutate({ projectId: data.project_id, reason: tx(L.reallocAuto) }, { onError: () => setFailed(true) }) }}
+            >
+              {tx(L.realloc)}
+            </Button>
+          )}
+        </span>
+      </div>
+      {failed && <span role="alert" className="text-xs font-semibold text-danger">{tx(L.undoFailed)}</span>}
+      <ul className="flex flex-col gap-2">
+        {rows.map((r, n) => {
+          const share = r.share_used === null ? null : Math.round(r.share_used * 100)
+          const over = (r.share_used ?? 0) >= 1
+
+          return (
+            <li key={r.provider} className="flex min-w-0 flex-col gap-0.5" data-testid={`plan-bar-${r.provider}`}>
+              <span className="flex min-w-0 items-baseline justify-between gap-2 text-xs">
+                <span className="flex items-center gap-1 font-bold text-text-primary">
+                  <span className="h-2 w-2 rounded-full" style={{ background: CHART_SERIES[n % CHART_SERIES.length] }} aria-hidden />
+                  {providerLabel(r.provider, ar ? 'ar' : 'en')}
+                </span>
+                <span className="tnum min-w-0 truncate text-text-secondary">
+                  {r.unconverted_days > 0 ? <Badge tone="warning">{tx(L.noRate)}</Badge> : <Money n={r.spent_usd} currency="USD" />}
+                  {r.planned_usd !== null && <> / <Money n={r.planned_usd} currency="USD" /></>}
+                  {share !== null && <bdi dir="ltr" className="ms-1.5 font-extrabold text-text-primary">{share}%</bdi>}
+                </span>
+              </span>
+              <span className="h-2 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                <span className={`block h-full rounded-full ${over ? 'bg-danger' : (r.share_used ?? 0) >= 0.9 ? 'bg-warning' : 'bg-success'}`} style={{ width: `${Math.min(100, share ?? 0)}%` }} />
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/** بالأجل: the spend of each month, in riyals — what is invoiced from. The running month is marked; the file is one click. */
+function InvoiceMonths({ data, ar }: { data: BudgetDetail; ar: boolean }) {
+  const tx = (v: Lang) => (ar ? v.ar : v.en)
+  const [failed, setFailed] = useState(false)
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5" data-testid="budget-invoice-months">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-text-secondary">{tx(L.invoiceMonths)}</span>
+        <button type="button" data-testid="invoice-export" className="text-xs font-semibold text-brand-600" onClick={() => void downloadBudgets('csv', { project_id: data.project_id, sheet: 'invoice' }).then((ok) => setFailed(!ok))}>
+          {failed ? tx(L.exportFailed) : tx(L.export)}
+        </button>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {[...data.invoice_months].reverse().map((m) => (
+          <li key={m.month} data-testid={`invoice-month-${m.month}`} className="flex min-w-0 items-center gap-2 text-xs">
+            <span className="tnum w-16 shrink-0 text-text-muted">{m.month}</span>
+            <Badge tone={m.closed ? 'success' : 'neutral'}>{m.closed ? tx(L.monthClosed) : tx(L.monthRunning)}</Badge>
+            {m.unconverted_days > 0 && <Badge tone="warning">{tx(L.noRate)}</Badge>}
+            <span className="ms-auto text-sm font-extrabold text-text-primary"><Sar n={m.spent} ar={ar} /></span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

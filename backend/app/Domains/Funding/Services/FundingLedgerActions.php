@@ -33,6 +33,8 @@ final class FundingLedgerActions
         private readonly FundingBalance $balance,
         private readonly FundingSpendRefresher $refresher,
         private readonly AuditLogger $audit,
+        private readonly FundingPlan $plans,
+        private readonly FundingNotifier $notifier,
     ) {}
 
     /** The one entry that can be undone now, or null. */
@@ -48,7 +50,10 @@ final class FundingLedgerActions
     /**
      * Edit: a new approved total (SAR), a new period, a note. Any of them; at least one must change.
      *
-     * @param  array<string, mixed>  $in  amount?, period_start? (null = the first day of spend), period_end? (null = open), note?, idempotency_key?
+     * BUDGET-MODES-001: `payment_mode?` (direct | credit) and `platform_plan?` (null = no plan) are edited the same way; an
+     * amount of 0 is allowed only on a credit budget (no ceiling). Each change is recorded in the entry's meta, so undo restores it.
+     *
+     * @param  array<string, mixed>  $in  amount?, period_start? (null = the first day of spend), period_end? (null = open), payment_mode?, platform_plan?, note?, idempotency_key?
      */
     public function adjust(User $actor, ProjectFunding $funding, array $in): FundingPayment
     {
@@ -79,28 +84,111 @@ final class FundingLedgerActions
             if (isset($in['amount'])) {
                 $delta = round((float) $in['amount'] - (float) $before['approved'], 2);
             }
+            $approvedAfter = round((float) $before['approved'] + $delta, 2);
+
+            $modeBefore = (string) $funding->payment_mode;
+            $modeAfter = array_key_exists('payment_mode', $in) ? (string) $in['payment_mode'] : $modeBefore;
+            if (! in_array($modeAfter, ProjectFunding::MODES, true) || ($modeAfter === 'direct' && $approvedAfter <= 0)) {
+                throw ValidationException::withMessages([$modeAfter === 'direct' ? 'amount' : 'payment_mode' => [__('funding.direct_needs_amount')]]);
+            }
+            $planBefore = $funding->platform_plan;
+            $planAfter = $planBefore;
+            if (array_key_exists('platform_plan', $in)) {
+                $planAfter = empty($in['platform_plan']) ? null : $this->plans->normalise((array) $in['platform_plan'], $approvedAfter);
+            }
+            $planChanged = $planAfter != $planBefore; // loose: JSON gives back 60 for 60.0
+
             $note = isset($in['note']) ? trim((string) $in['note']) : null;
-            if ($delta === 0.0 && $periodAfter === $periodBefore && ($note === null || $note === '')) {
+            if ($delta === 0.0 && $periodAfter === $periodBefore && $modeAfter === $modeBefore && ! $planChanged && ($note === null || $note === '')) {
                 throw ValidationException::withMessages(['amount' => [__('funding.nothing_changed')]]);
             }
 
-            $funding->forceFill(['starts_on' => $periodAfter['start'], 'ends_on' => $periodAfter['end']])->save();
+            $funding->forceFill(['starts_on' => $periodAfter['start'], 'ends_on' => $periodAfter['end'],
+                'payment_mode' => $modeAfter, 'platform_plan' => $planAfter])->save();
             $this->refresher->refresh($funding);
 
             $entry = $this->entry($actor, $funding, 'adjustment', $delta, $key, [
                 'note' => $note === '' ? null : $note,
-                'meta' => ['period_before' => $periodBefore, 'period_after' => $periodAfter, 'approved_before' => $before['approved']],
+                'meta' => ['period_before' => $periodBefore, 'period_after' => $periodAfter, 'approved_before' => $before['approved'],
+                    'mode_before' => $modeBefore, 'mode_after' => $modeAfter, 'plan_before' => $planBefore, 'plan_after' => $planAfter],
                 'reason' => $note === '' ? null : $note,
                 'remaining_before' => $before['remaining'],
             ]);
 
             $this->audit->log('funding.adjusted', FundingPayment::class, (string) $entry->id,
-                before: ['approved' => $before['approved'], 'period' => $periodBefore],
-                after: ['approved' => round((float) $before['approved'] + $delta, 2), 'period' => $periodAfter, 'delta' => $delta],
+                before: ['approved' => $before['approved'], 'period' => $periodBefore, 'payment_mode' => $modeBefore, 'platform_plan' => $planBefore],
+                after: ['approved' => $approvedAfter, 'period' => $periodAfter, 'delta' => $delta, 'payment_mode' => $modeAfter, 'platform_plan' => $planAfter],
                 reason: $entry->reason, userId: $actor->id, tenantId: $funding->tenant_id);
 
             return $entry;
         });
+    }
+
+    /**
+     * BUDGET-MODES-001 — «أعد التوزيع»: re-divide the budget among the platforms, as an entry with who, when and why.
+     * With no `plan` given it is the one-click rebalance (`FundingPlan::rebalance`: what each platform spent stays, the
+     * rest follows what each still had left); with a `plan` it is that plan, entered by hand. Either way the old plan
+     * is kept in the entry, so undo puts it back. Money does not move: only what the plan says changes.
+     *
+     * @param  array<int, mixed>|null  $plan
+     */
+    public function reallocate(User $actor, ProjectFunding $funding, ?array $plan, ?string $reason, ?string $key = null): FundingPayment
+    {
+        $reason = $reason === null ? null : trim($reason);
+
+        $entry = DB::transaction(function () use ($actor, $funding, $plan, $reason, $key): FundingPayment {
+            $this->lock($funding);
+            $funding->refresh();
+            if ($funding->voided_at !== null) {
+                throw ValidationException::withMessages(['project_id' => [__('funding.is_void')]]);
+            }
+            if (! is_array($funding->platform_plan) || $funding->platform_plan === []) {
+                throw ValidationException::withMessages(['platform_plan' => [__('funding.no_plan')]]);
+            }
+            $key ??= 'realloc:'.Str::uuid();
+            $same = FundingPayment::query()->where('project_id', $funding->project_id)->where('idempotency_key', $key)->first();
+            if ($same !== null) {
+                return $same;
+            }
+
+            $this->refresher->refresh($funding);
+            $before = $this->balance->of($funding);
+            $approved = (float) $before['approved'];
+            $planBefore = $funding->platform_plan;
+
+            $auto = $plan === null || $plan === [];
+            if ($auto) {
+                $spentBy = [];
+                foreach ($before['by_platform'] as $p) {
+                    $spentBy[$p['provider']] = (float) $p['spent'];
+                }
+                $planAfter = $this->plans->rebalance((array) $before['platform_plan'], $spentBy, $approved);
+            } else {
+                $planAfter = $this->plans->normalise($plan, $approved);
+            }
+            if ($planAfter == $planBefore) { // loose: JSON gives back 65 for 65.0
+                throw ValidationException::withMessages(['platform_plan' => [__('funding.nothing_changed')]]);
+            }
+
+            $funding->forceFill(['platform_plan' => $planAfter])->save();
+            $entry = $this->entry($actor, $funding, 'reallocation', 0.0, $key, [
+                'reason' => $reason === '' ? null : $reason, 'note' => $reason === '' ? null : $reason,
+                'remaining_before' => $before['remaining'],
+                'meta' => ['plan_before' => $planBefore, 'plan_after' => $planAfter, 'mode' => $auto ? 'auto' : 'manual', 'approved' => $approved,
+                    'spent_by_platform' => array_column($before['by_platform'], 'spent', 'provider')],
+            ]);
+
+            $this->audit->log('funding.reallocated', FundingPayment::class, (string) $entry->id,
+                before: ['platform_plan' => $planBefore], after: ['platform_plan' => $planAfter, 'mode' => $auto ? 'auto' : 'manual'],
+                reason: $entry->reason, userId: $actor->id, tenantId: $funding->tenant_id);
+
+            return $entry;
+        });
+
+        // A new plan ends the warnings about the old one; said after the commit, a failed notice never undoes it.
+        $this->notifier->planChanged($funding);
+
+        return $entry;
     }
 
     /** Delete: the budget is hidden, the entries stay. A reason is required. */
@@ -163,6 +251,13 @@ final class FundingLedgerActions
                     if ($target->kind === 'adjustment' && isset($meta['period_before'])) {
                         $funding->forceFill(['starts_on' => $meta['period_before']['start'] ?? null, 'ends_on' => $meta['period_before']['end'] ?? null])->save();
                     }
+                    // BUDGET-MODES-001 — the mode and the plan an edit or a reallocation replaced are put back with it.
+                    if ($target->kind === 'adjustment' && array_key_exists('mode_before', $meta)) {
+                        $funding->forceFill(['payment_mode' => $meta['mode_before'], 'platform_plan' => $meta['plan_before'] ?? null])->save();
+                    }
+                    if ($target->kind === 'reallocation') {
+                        $funding->forceFill(['platform_plan' => $meta['plan_before'] ?? null])->save();
+                    }
                     if ($target->kind === 'void') {
                         $funding->forceFill(['voided_at' => null, 'void_reason' => null, 'voided_by' => null])->save();
                     }
@@ -176,6 +271,10 @@ final class FundingLedgerActions
                 if (! $stillOpen) {
                     $funding->forceFill(['voided_at' => now(), 'void_reason' => 'undo', 'voided_by' => $actor->id])->save();
                 }
+            }
+
+            if (in_array($target->kind, ['adjustment', 'reallocation'], true)) {
+                DB::afterCommit(fn () => $this->notifier->planChanged($funding));
             }
 
             $this->audit->log('funding.undone', FundingPayment::class, (string) $reversal->id,

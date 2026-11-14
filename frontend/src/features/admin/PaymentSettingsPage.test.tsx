@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { PaymentSettingsPage } from './PaymentSettingsPage'
 import type { PaymentProviderSetting, PaymentSettings } from './api'
 import { renderWithProviders, signOut } from '@/test/utils'
+import { DialogHost } from '@/components/ui/DialogHost'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -115,28 +116,34 @@ describe('PaymentSettingsPage', () => {
       status: 'ready', mode: 'live', environment: 'live', test: { status: 'passed', at: null, message: null, current: true },
     })]))
     vi.mocked(setPaymentGatewayEnabled).mockResolvedValue({ provider: gateway() })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+    // DIALOG-001 — asked in an in-app dialog, never the browser's own box.
+    const confirm = vi.spyOn(window, 'confirm')
+    renderWithProviders(<><PaymentSettingsPage /><DialogHost /></>, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('payment-enable-moyasar'))
+    expect(await screen.findByTestId('dialog-body')).toHaveTextContent(/live keys/i)
+    fireEvent.click(screen.getByTestId('dialog-cancel'))
+    await waitFor(() => expect(screen.queryByTestId('dialog-body')).toBeNull())
     expect(setPaymentGatewayEnabled).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('payment-enable-moyasar'))
+    fireEvent.click(await screen.findByTestId('dialog-confirm'))
     await waitFor(() => expect(setPaymentGatewayEnabled).toHaveBeenCalledWith('moyasar', true, true))
+    expect(confirm).not.toHaveBeenCalled()
     confirm.mockRestore()
   })
 
   it('makes an enabled gateway primary after saying that existing payments stay where they are', async () => {
     vi.mocked(fetchPaymentSettings).mockResolvedValue(settings([gateway({ status: 'enabled', enabled: true, available: true, mode: 'test' })]))
     vi.mocked(setPrimaryPaymentGateway).mockResolvedValue(settings())
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    renderWithProviders(<PaymentSettingsPage />, { locale: 'en' })
+    renderWithProviders(<><PaymentSettingsPage /><DialogHost /></>, { locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('payment-make-primary-moyasar'))
 
-    expect(confirm.mock.calls[0][0]).toMatch(/existing payments and subscriptions stay/i)
+    expect(await screen.findByTestId('dialog-body')).toHaveTextContent(/existing payments and subscriptions stay/i)
+    expect(setPrimaryPaymentGateway).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('dialog-confirm'))
     await waitFor(() => expect(setPrimaryPaymentGateway).toHaveBeenCalledWith('moyasar'))
-    confirm.mockRestore()
   })
 
   it('shows the webhook URL with a copy button and the gateway’s scheme', async () => {
