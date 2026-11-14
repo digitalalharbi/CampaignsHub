@@ -282,9 +282,9 @@ describe('a live link and the form it was shared as', () => {
    * A spend in another currency is printed in THAT currency, and does not order the table.
    *
    * The money contract's rule, at a new surface: a withheld amount is shown as the original the
-   * platform reported — «500.00 USD» — and never converted into the report's SAR, because no rate
+   * platform reported — «500.00 $» — and never converted into the report's SAR, because no rate
    * was on file to convert it with. It is then sorted as an ABSENCE, since ranking a client's
-   * platforms by comparing 500 USD against 900 SAR is an order nobody can check.
+   * platforms by comparing 500 $ against 900 ر.س is an order nobody can check.
    */
   it('prints an unconvertible spend in its own currency and does not sort by it', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({
@@ -312,9 +312,9 @@ describe('a live link and the form it was shared as', () => {
     // Descending by spend: the comparable figure first, the incomparable one last — never the reverse.
     expect(rows[0]).toHaveTextContent('Snapchat')
     expect(rows[1]).toHaveTextContent('Meta')
-    expect(rows[1]).toHaveTextContent('500.00 USD')
+    expect(rows[1]).toHaveTextContent('500.00 $')
     // And never that figure wearing this report's currency.
-    expect(rows[1]).not.toHaveTextContent('500.00 SAR')
+    expect(rows[1]).not.toHaveTextContent('500.00 ر.س')
   })
 
   /**

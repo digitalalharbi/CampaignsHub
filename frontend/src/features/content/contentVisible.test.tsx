@@ -94,7 +94,7 @@ describe('what the owner sees on /content', () => {
    * P0-E — real spend rendered as «No data».
    *
    * `metricState` reads only the CONVERTED column, and on production every Snapchat row is
-   * withheld. So 412.50 USD of measured spend displayed as though the creative had never run.
+   * withheld. So 412.50 $ of measured spend displayed as though the creative had never run.
    */
   it('shows withheld spend as its real amount and currency, never as No data', async () => {
     vi.mocked(listCreatives).mockResolvedValue(page() as never)
@@ -103,10 +103,10 @@ describe('what the owner sees on /content', () => {
 
     await screen.findByText('Summer hero')
 
-    expect(screen.getByText(/412\.50 USD/)).toBeInTheDocument()
+    expect(screen.getByText(/412\.50 \$/)).toBeInTheDocument()
     expect(screen.queryByText(/^No data$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Not provided/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/0 SAR/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 ر.س/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Currency not stated/)).not.toBeInTheDocument()
   })
 
@@ -161,7 +161,7 @@ describe('what the owner sees on /content', () => {
 
     await screen.findByText('Summer hero')
 
-    expect(screen.getByText(/1,500 SAR/)).toBeInTheDocument()
+    expect(screen.getByText(/1,500 ر.س/)).toBeInTheDocument()
   })
 })
 

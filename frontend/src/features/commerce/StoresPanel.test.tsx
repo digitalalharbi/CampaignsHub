@@ -94,7 +94,7 @@ describe('StoresPanel', () => {
 
     const chip = await screen.findByTestId('store-currency-s1')
     expect(chip).toHaveTextContent('?')
-    expect(chip).not.toHaveTextContent('SAR')
+    expect(chip).not.toHaveTextContent(/SAR|ر\.س/)
     expect(chip).toHaveAttribute('title', 'العملة غير معروفة: المبالغ محجوبة')
   })
 

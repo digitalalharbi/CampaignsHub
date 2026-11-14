@@ -6,13 +6,13 @@ import { money } from './format'
  *
  * ## The defect this file exists to prevent, observed in production
  *
- * «تكلفة النتيجة 18.05 SAR» on an account whose spend is denominated in USD. Nothing converted it;
+ * «تكلفة النتيجة 18.05 ر.س» on an account whose spend is denominated in USD. Nothing converted it;
  * nothing claimed a rate. `money()` took a currency parameter that DEFAULTED to `'SAR'`, and a
  * surface that had no currency to hand simply omitted the argument — so the figure was stamped with
  * the market this product happens to sell in, on a page whose Arabic locale made that look
  * deliberate.
  *
- * A wrong currency is worse than a missing one: 18.05 SAR and 18.05 USD are different costs, and a
+ * A wrong currency is worse than a missing one: 18.05 ر.س and 18.05 $ are different costs, and a
  * media buyer acts on the number in front of them.
  *
  * ## Why the guard is a source scan and not only a unit test
@@ -43,8 +43,8 @@ function withoutComments(source: string): string {
 
 describe('a money figure carries its own currency', () => {
   it('never falls back to a currency the caller did not state', () => {
-    expect(money(18.05, 'USD')).toContain('USD')
-    expect(money(18.05, 'SAR')).toContain('SAR')
+    expect(money(18.05, 'USD')).toContain('$')
+    expect(money(18.05, 'SAR')).toContain('ر.س')
     // A figure nobody measured is not a figure in some default currency.
     expect(money(null, 'USD')).toBe('—')
   })
@@ -59,7 +59,7 @@ describe('a money figure carries its own currency', () => {
 
     expect(
       offenders,
-      'these print a money figure without saying which currency it is in — «18.05 SAR» on a USD account is the production defect',
+      'these print a money figure without saying which currency it is in — «18.05 ر.س» on a USD account is the production defect',
     ).toEqual([])
   })
 })

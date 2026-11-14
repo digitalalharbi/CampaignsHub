@@ -25,6 +25,8 @@ import { fmtDateTime } from '@/lib/datetime'
 import { ErrorSummary, MultiSelectField, SelectField, type FieldError, type Option } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
+import { currencyMark } from '@/lib/money/mark'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 const COPY = {
@@ -176,6 +178,7 @@ export function AlertsPage() {
         on that tab asked.
       */}
       <PageIntro testid="alerts-intro" title={c.title} purpose={c.subtitle} />
+      <FinancialDisclaimer />
       <OpsHubBar />
 
       <div className="flex flex-wrap gap-1 border-b border-border">
@@ -657,7 +660,7 @@ function ContextChips({ e, c }: { e: AlertEvent; c: Copy }) {
     beside the figure. On a screen whose whole subject is how much of a budget is gone, a number
     with no unit is the shape the budget-pacing surfaces refuse everywhere else.
   */
-  const unit = typeof ctx.budget_currency === 'string' ? ` ${ctx.budget_currency}` : ''
+  const unit = typeof ctx.budget_currency === 'string' ? ` ${currencyMark(ctx.budget_currency)}` : ''
   /* Named for what it does, not `money` — that name belongs to the shared formatter the
      MONEY-CURRENCY guard scans for, and a local one wearing it defeats the scan. */
   const withUnit = (v: unknown) => `${num(v)}${unit}`

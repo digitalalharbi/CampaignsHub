@@ -35,7 +35,7 @@ describe('what a client is told needs attention', () => {
     const table = screen.getByRole('table')
 
     expect(table).toHaveTextContent('Meta')
-    expect(table).toHaveTextContent('SAR')
+    expect(table).toHaveTextContent('ر.س')
   })
 
   /**
@@ -186,8 +186,8 @@ describe('what a client is told needs attention', () => {
 
     const table = screen.getByRole('table')
 
-    expect(table).toHaveTextContent('SAR')
-    expect(table, 'the report’s currency labelled figures that are not in it').not.toHaveTextContent('USD')
+    expect(table).toHaveTextContent('ر.س')
+    expect(table, 'the report’s currency labelled figures that are not in it').not.toHaveTextContent(/USD|\$/)
   })
 
   /** One column cannot be two units, and guessing which is the mislabel this avoids. */
@@ -205,7 +205,7 @@ describe('what a client is told needs attention', () => {
 
     const table = screen.getByRole('table')
 
-    expect(table).not.toHaveTextContent('SAR')
+    expect(table).not.toHaveTextContent(/SAR|ر\.س/)
     expect(table).not.toHaveTextContent('AED')
     expect(table, 'the figures themselves must survive').toHaveTextContent('Snapchat')
   })

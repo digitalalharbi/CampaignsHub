@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Status\LinkHealth;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -129,7 +130,7 @@ final class AlertEventText
         $parts = [];
         if (is_numeric($card['spend'] ?? null)) {
             $cur = (string) ($card['currency'] ?? '');
-            $parts[] = ($ar ? 'الصرف ' : 'Spent ').self::ltr(number_format((float) $card['spend'], 2).($cur !== '' ? ' '.$cur : '')).($cur === '' ? ($ar ? ' (العملة غير موحّدة)' : ' (currency not single)') : '');
+            $parts[] = ($ar ? 'الصرف ' : 'Spent ').self::ltr(FundingMoney::withMark(number_format((float) $card['spend'], 2), $cur)).($cur === '' ? ($ar ? ' (العملة غير موحّدة)' : ' (currency not single)') : '');
         }
         if (isset($card['result_key']) && is_numeric($card['result'] ?? null)) {
             $unit = self::UNITS[(string) $card['result_key']] ?? null;
@@ -259,6 +260,8 @@ final class AlertEventText
     {
         $who = $platform !== '' ? $platform : ($ar ? 'المنصة' : 'the platform');
         $num = static fn ($v, int $d = 2): string => number_format((float) $v, $d);
+        // MONEY-MARKS-001 — the currency the event states for its spend/budget; none stated prints the figure bare.
+        $mark = isset($ctx['budget_currency']) ? (string) $ctx['budget_currency'] : (isset($ctx['currency']) ? (string) $ctx['currency'] : null);
 
         /*
          * LINK-HEALTH-YESTERDAY-001 — a link item the one rule kept says ONE thing, in the same words on every surface: yesterday's
@@ -285,7 +288,7 @@ final class AlertEventText
                     return [
                         'headline' => $ar ? 'قرّبت توصل للحد اللي حطيته' : 'Close to the limit you set',
                         'text' => $ar ? 'وصل الإنفاق لحد التنبيه.' : 'Spend passed an alert level of the spend limit.',
-                        'numbers' => trim(($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['consumed']).' '.$cur.' / '.$num($ctx['limit']).' '.$cur
+                        'numbers' => trim(($ar ? 'الإنفاق ' : 'Spent ').FundingMoney::withMark($num($ctx['consumed']), $cur).' / '.FundingMoney::withMark($num($ctx['limit']), $cur)
                             .(isset($ctx['threshold']) ? ($ar ? ' (الحد ' : ' (limit ').(int) $ctx['threshold'].'%)' : '')),
                         'action' => $ar ? 'هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.' : 'This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.',
                         'link' => 'analytics',
@@ -305,7 +308,7 @@ final class AlertEventText
                     return [
                         'headline' => $ar ? "خلصت ميزانية {$who}" : "The {$who} budget ran out",
                         'text' => $ar ? 'الإنفاق وصل الميزانية كاملة حسب بيانات المنصة.' : 'Spend reached the whole budget, by the platform\'s figures.',
-                        'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
+                        'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').FundingMoney::withMark($num($ctx['spend']), $mark).' / '.FundingMoney::withMark($num($ctx['budget']), $mark)
                             .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
                         'action' => $ar ? 'جدّد الميزانية ← أو اتركها تنتهي.' : 'Renew the budget, or let the campaign end.',
                         'link' => 'campaign',
@@ -315,7 +318,7 @@ final class AlertEventText
                 return [
                     'headline' => $ar ? "ميزانية {$who} قربت تخلص" : "The {$who} budget is nearly used up",
                     'text' => $ar ? 'الحملة صرفت أغلب ميزانيتها.' : 'The campaign has used a large share of its budget.',
-                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' / '.$num($ctx['budget'])
+                    'numbers' => isset($ctx['spend'], $ctx['budget']) ? ($ar ? 'الإنفاق ' : 'Spent ').FundingMoney::withMark($num($ctx['spend']), $mark).' / '.FundingMoney::withMark($num($ctx['budget']), $mark)
                         .((float) ($ctx['budget'] ?? 0) > 0 ? ' ('.self::ltr($num((float) $ctx['spend'] / (float) $ctx['budget'] * 100, 0).'%').')' : '') : '',
                     'action' => $ar ? 'أبقِ الميزانية ← أو عدّلها ← أو أوقف الأقل أداءً.' : 'Decide today: keep the budget, adjust it, or pause what is not delivering.',
                     'link' => 'campaign',
@@ -345,7 +348,7 @@ final class AlertEventText
                     'headline' => $ar ? "{$who} بدون نتائج" : "Spend on {$who} with no results",
                     'text' => $ar ? 'انصرف مبلغ وما جات أي نتيجة.' : 'Money was spent with no result in the last days.',
                     // OBJECTIVE-RESULT-001 — names the result that is zero (orders, visits …), «النتائج» only for an older event.
-                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').$num($ctx['spend']).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' ')
+                    'numbers' => isset($ctx['spend']) ? ($ar ? 'الإنفاق ' : 'Spent ').FundingMoney::withMark($num($ctx['spend']), $mark).' · '.($ar ? ((string) ($ctx['result_label']['ar'] ?? 'النتائج')).' 0 ' : '0 '.strtolower((string) ($ctx['result_label']['en'] ?? 'results')).' ')
                         .(($w = self::window($ctx, $ar)) !== '' ? '('.$w.')' : ($ar ? 'خلال ' : 'in ').(int) ($ctx['days'] ?? 0).($ar ? ' أيام' : ' days')) : '',
                     'action' => self::noResultsAction($ctx, $ar),
                     'link' => 'campaign',

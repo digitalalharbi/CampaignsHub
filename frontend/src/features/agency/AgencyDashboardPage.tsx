@@ -16,6 +16,7 @@ import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
 import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyHeadline'
 import type { LibraryQuery } from '@/features/content/api'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /**
  * `/agency/dashboard` — the agency's own overview (ADR 0002, AGENCY-002).
@@ -269,6 +270,7 @@ export function AgencyDashboardPage() {
             ? 'كل رقم هنا محسوب على العملاء الذين تصل إليهم فعليًا — لا أكثر.'
             : 'Every figure here covers the clients you can actually reach — and no others.'}
         />
+        <FinancialDisclaimer />
       </div>
 
       {/*

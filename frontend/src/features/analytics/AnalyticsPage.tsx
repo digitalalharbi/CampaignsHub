@@ -166,6 +166,7 @@ import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersi
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
 } from './drilldown'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /*
  * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
@@ -605,6 +606,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </>
         }
       />
+      <FinancialDisclaimer />
 
 
       {/* Declared once and placed by surface: in line on the analysis bar, folded on the dashboard. */}

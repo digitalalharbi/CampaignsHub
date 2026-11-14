@@ -92,7 +92,7 @@ describe('the site measurement block', () => {
   it('states the property’s own currency beside its revenue', () => {
     render(<SiteMeasurementSection payload={measured({ currency: 'USD' })} ar />)
 
-    expect(screen.getByTestId('site-metric-revenue').textContent).toContain('USD')
+    expect(screen.getByTestId('site-metric-revenue').textContent).toContain('$')
   })
 
   /** A rate is a percentage of its own sessions, not a sum of fractions. */

@@ -101,7 +101,7 @@ describe('the content type comparison', () => {
       const text = (container.textContent ?? '')
       const flat = Array.from(container.querySelectorAll('article')).map((a) => (a as HTMLElement).innerText ?? a.textContent ?? '').join(' ').replace(/\s+/g, ' ')
       expect(flat).not.toMatch(MONEY_AS_PERCENT)
-      expect(text).toContain('SAR')
+      expect(text).toContain('ر.س')
       unmount()
     }
   })
@@ -213,7 +213,7 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
     for (const money of ['spend', 'revenue', 'roas']) expect(within(table).queryByTestId(`format-row-${money}`)).toBeNull()
     expect(within(table).getByTestId('format-row-purchases')).toBeInTheDocument()
     expect(screen.getByTestId('format-table-verdict')).toHaveTextContent('المشتريات')
-    expect(screen.getByTestId('format-table-verdict').textContent).not.toMatch(/×|SAR/)
+    expect(screen.getByTestId('format-table-verdict').textContent).not.toMatch(/×|(?:SAR|ر\.س)/)
   })
 
   it('draws nothing where the server did not name the part', () => {

@@ -15,6 +15,7 @@ import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { metricState } from '@/features/content/metrics'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -609,7 +610,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const cash = (v: number | null | undefined, digits = 0) => {
     const text = n(v, digits)
 
-    return text === null ? null : (currency ? `${text} ${currency}` : text)
+    return text === null ? null : withMark(text, currency)
   }
 
   /*
@@ -627,7 +628,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const fmtCash = (value: number | null | undefined, unit?: string) => {
     const text = n(value, 0)
 
-    return text === null ? '—' : (unit ? `${text} ${unit}` : text)
+    return text === null ? '—' : withMark(text, unit)
   }
   const spendText = spendParts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(spendParts, currency ?? null, fmtCash)
 

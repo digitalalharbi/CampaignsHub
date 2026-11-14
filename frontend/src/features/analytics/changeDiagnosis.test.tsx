@@ -49,10 +49,10 @@ describe('the change diagnosis', () => {
 
     expect(drivers).toHaveTextContent('Meta')
     // Compact on the card, exact one hover away — NUMBER-PRESENTATION-001.
-    expect(drivers).toHaveTextContent('+6K SAR')
-    expect(screen.getByTitle('6,000 SAR')).toBeInTheDocument()
+    expect(drivers).toHaveTextContent('+6K ر.س')
+    expect(screen.getByTitle('6,000 ر.س')).toBeInTheDocument()
     // The one moving the other way is shown as such rather than dropped.
-    expect(drivers).toHaveTextContent('−2K SAR')
+    expect(drivers).toHaveTextContent('−2K ر.س')
   })
 
   /**
@@ -91,13 +91,13 @@ describe('the change diagnosis', () => {
   /**
    * A refusal stands alone — no headline figure above it.
    *
-   * «Spend 0 SAR» printed over «there is no previous period» is a confident zero about an account
+   * «Spend 0 ر.س» printed over «there is no previous period» is a confident zero about an account
    * whose figure the product declined to state, arriving from a fallback rather than from a sum.
    */
   it('prints no figure beside a refusal', () => {
     const { container } = render(payload({ drivers: decomposition({ reason: 'no_previous_period', drivers: [] }) }))
 
-    expect(container.textContent).not.toContain('0 SAR')
+    expect(container.textContent).not.toContain('0 ر.س')
   })
 
   it('says when no day departed from the period’s own behaviour', () => {
@@ -128,10 +128,10 @@ describe('the change diagnosis', () => {
     const timeline = screen.getByTestId('change-timeline')
 
     expect(timeline).toHaveTextContent('2026-08-14')
-    expect(timeline).toHaveTextContent('9K SAR')
-    expect(timeline).toHaveTextContent('1.5K SAR')
+    expect(timeline).toHaveTextContent('9K ر.س')
+    expect(timeline).toHaveTextContent('1.5K ر.س')
     // The day's own figure carries its full form.
-    expect(screen.getByTitle('9,000 SAR')).toBeInTheDocument()
+    expect(screen.getByTitle('9,000 ر.س')).toBeInTheDocument()
   })
 
   /**

@@ -7,9 +7,9 @@
  * shown in USD (one unit for platforms). A figure with no rate keeps its own currency's mark and says «بدون سعر صرف».
  * `fundingMoney.test.ts` fails when another funding file formats a figure on its own.
  */
-const MARKS: Record<string, string> = { SAR: 'ر.س', USD: '$', EUR: '€' }
+import { currencyMark } from '@/lib/money/mark'
 
-export const currencyMark = (currency: string): string => MARKS[currency.trim().toUpperCase()] ?? currency.trim().toUpperCase()
+export { currencyMark }
 
 /** The number alone: Latin digits, thousands separators, whole units unless `decimals` says otherwise. */
 export function moneyNumber(n: number, decimals = 0): string {

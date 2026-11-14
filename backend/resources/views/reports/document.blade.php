@@ -38,11 +38,11 @@
   <h2>مؤشرات الأداء الرئيسية</h2>
   <table class="kpis">
     <tr>
-      <td><div class="label">الإنفاق</div><div class="val">{{ number_format($k['spend'] ?? 0) }} {{ $report->currency }}</div></td>
-      <td><div class="label">الإيرادات</div><div class="val">{{ number_format($k['revenue'] ?? 0) }} {{ $report->currency }}</div></td>
+      <td><div class="label">الإنفاق</div><div class="val">{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['spend'] ?? 0), $report->currency) }}</div></td>
+      <td><div class="label">الإيرادات</div><div class="val">{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['revenue'] ?? 0), $report->currency) }}</div></td>
       <td><div class="label">ROAS</div><div class="val">{{ isset($k['roas']) ? number_format($k['roas'],2).'×' : '—' }}</div></td>
       <td><div class="label">النتائج</div><div class="val">{{ number_format($k['conversions'] ?? 0) }}</div></td>
-      <td><div class="label">CPA</div><div class="val">{{ isset($k['cpa']) ? number_format($k['cpa']).' '.$report->currency : '—' }}</div></td>
+      <td><div class="label">CPA</div><div class="val">{{ isset($k['cpa']) ? \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['cpa']), $report->currency) : '—' }}</div></td>
     </tr>
   </table>
 
@@ -58,7 +58,7 @@
     <thead><tr><th>المنصة</th><th>الإنفاق</th><th>الإيرادات</th><th>النتائج</th><th>ROAS</th><th>CPA</th></tr></thead>
     <tbody>
       @foreach(($data['platforms'] ?? []) as $p)
-      <tr><td>{{ $p['provider'] }}</td><td>{{ number_format($p['spend']) }}</td><td>{{ number_format($p['revenue']) }}</td><td>{{ number_format($p['conversions']) }}</td><td>{{ isset($p['roas']) ? number_format($p['roas'],2).'×':'—' }}</td><td>{{ isset($p['cpa']) ? number_format($p['cpa']):'—' }}</td></tr>
+      <tr><td>{{ $p['provider'] }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['spend']), $report->currency) }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['revenue']), $report->currency) }}</td><td>{{ number_format($p['conversions']) }}</td><td>{{ isset($p['roas']) ? number_format($p['roas'],2).'×':'—' }}</td><td>{{ isset($p['cpa']) ? \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['cpa']), $report->currency):'—' }}</td></tr>
       @endforeach
     </tbody>
   </table>
@@ -68,7 +68,7 @@
     <thead><tr><th>الحملة</th><th>المنصة</th><th>الإنفاق</th><th>الإيرادات</th><th>ROAS</th></tr></thead>
     <tbody>
       @foreach(array_slice($data['campaigns'] ?? [], 0, 10) as $c)
-      <tr><td>{{ $c['campaign_name'] ?? '—' }}</td><td>{{ $c['provider'] ?? '' }}</td><td>{{ number_format($c['spend']) }}</td><td>{{ number_format($c['revenue']) }}</td><td>{{ isset($c['roas']) ? number_format($c['roas'],2).'×':'—' }}</td></tr>
+      <tr><td>{{ $c['campaign_name'] ?? '—' }}</td><td>{{ $c['provider'] ?? '' }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($c['spend']), $report->currency) }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($c['revenue']), $report->currency) }}</td><td>{{ isset($c['roas']) ? number_format($c['roas'],2).'×':'—' }}</td></tr>
       @endforeach
     </tbody>
   </table>

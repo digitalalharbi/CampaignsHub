@@ -1,3 +1,4 @@
+import { withMark } from '@/lib/money/mark'
 import { numberFormatter } from '@/lib/numerals'
 
 /**
@@ -491,7 +492,7 @@ export function formatMoneyParts(
 ): string {
   const original = numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parts.original)
 
-  return `${compactFormat(parts.converted, reportingCurrency ?? undefined)} + ${`${original} ${parts.originalCurrency ?? ''}`.trim()}`
+  return `${compactFormat(parts.converted, reportingCurrency ?? undefined)} + ${withMark(original, parts.originalCurrency)}`
 }
 
 /** The chip's words: «بانتظار تحويل اليورو» for EUR, the code itself for any other currency. */
@@ -519,7 +520,7 @@ export function formatMoneyReading(
 
   if (reading.kind === 'withheld') {
     const amount = numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reading.amount)
-    return `${amount} ${reading.currency ?? ''}`.trim()
+    return withMark(amount, reading.currency)
   }
 
   return compactFormat(reading.amount, reading.currency ?? undefined)

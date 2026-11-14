@@ -170,7 +170,7 @@ final class ReportObservationsTest extends TestCase
         $this->assertSame('budget_pace', $notes[0]['kind']);
         $this->assertSame('critical', $notes[0]['severity']);
         $this->assertStringContainsString('ميتا', $notes[0]['title']);
-        $this->assertStringContainsString('8,000.00 SAR', $notes[0]['detail']);
+        $this->assertStringContainsString('8,000.00 ر.س', $notes[0]['detail']);
         $this->assertSame('platform', $notes[0]['scope']['type'], 'the observation still scoped itself to a campaign');
     }
 

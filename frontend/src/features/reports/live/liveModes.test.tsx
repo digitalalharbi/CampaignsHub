@@ -139,12 +139,12 @@ describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
     const cards = await screen.findByTestId('exec-platform-cards')
     expect(within(cards).getByTestId('exec-platform-card-all')).toHaveTextContent('50')
     expect(within(cards).getByTestId('exec-platform-card-meta')).toHaveTextContent('40')
-    expect(cards).not.toHaveTextContent(/700|SAR/)
+    expect(cards).not.toHaveTextContent(/700|(?:SAR|ر\.س)/)
 
     const best = screen.getByTestId('exec-best-content')
     expect(best).toHaveTextContent('Best on meta')
     expect(best).toHaveTextContent('Best on snapchat')
-    expect(best).not.toHaveTextContent(/Spend|ROAS|SAR/)
+    expect(best).not.toHaveTextContent(/Spend|ROAS|(?:SAR|ر\.س)/)
     expect(screen.getByTestId('exec-improve-content')).toHaveTextContent('Weak on meta')
 
     fireEvent.click(screen.getByTestId('exec-platform-card-snapchat'))
@@ -211,8 +211,8 @@ describe('a detailed link', () => {
 
     const strongest = await screen.findByTestId('live-leaders-conversion-strongest')
     expect(strongest).toHaveTextContent('Meta')
-    expect(strongest).toHaveTextContent('17.50 SAR')
-    expect(screen.getByTestId('live-leaders-conversion-weakest')).toHaveTextContent('30 SAR')
+    expect(strongest).toHaveTextContent('17.50 ر.س')
+    expect(screen.getByTestId('live-leaders-conversion-weakest')).toHaveTextContent('30 ر.س')
   })
 
   it('reads one platform through the same endpoint, narrowed, and the view agrees with the whole link', async () => {

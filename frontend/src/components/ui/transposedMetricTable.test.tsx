@@ -56,7 +56,7 @@ describe('the transposed table', () => {
 
     const cells = screen.getAllByRole('cell')
 
-    expect(cells[0]).toHaveTextContent('SAR')
+    expect(cells[0]).toHaveTextContent('ر.س')
     expect(cells[2]).toHaveTextContent('%')
   })
 

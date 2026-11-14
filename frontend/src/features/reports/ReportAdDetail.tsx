@@ -8,6 +8,7 @@ import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -100,7 +101,7 @@ export function ReportAdDetail({
   const cash = (v: number | null | undefined, digits = 0) => {
     const text = n(v, digits)
 
-    return text === null ? null : currency ? `${text} ${currency}` : text
+    return text === null ? null : withMark(text, currency)
   }
 
   /*
@@ -122,7 +123,7 @@ export function ReportAdDetail({
     const fmtCash = (value: number | null | undefined, unit?: string) => {
       const text = n(value, 0)
 
-      return text === null ? '—' : (unit ? `${text} ${unit}` : text)
+      return text === null ? '—' : withMark(text, unit)
     }
     // LIVE-LINK-PARTIAL-MONEY-001 — a partly converted spend prints both amounts, never a dash.
     const parts = moneyParts(ad as MoneyTotals, 'spend')

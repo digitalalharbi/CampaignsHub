@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Funding\Support\FundingMoney;
 
 /**
  * What a report of this kind is allowed to say — §14.6.
@@ -255,7 +256,7 @@ final class ReportObjectiveLens
         return match ($this->rankingMetric()['key']) {
             'roas' => number_format($value, 2).'×',
             'ctr' => number_format($value * 100, 2).'%',
-            default => number_format($value, 2).' '.$currency,
+            default => FundingMoney::withMark(number_format($value, 2), $currency),
         };
     }
 }

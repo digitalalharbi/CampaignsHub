@@ -30,7 +30,7 @@ import { getCreativeGroup, listCreativeGroups } from './api'
  *      Snapchat accounts are USD with no USD→SAR rate, so `spend` is null by FX-001's design and
  *      `spend_original` holds the real amount — and `metricState` called that «no data». The group
  *      card said a film never spent anything while the library card beside it, since #389, said
- *      «412.50 USD» for the same creative. Two answers to one question.
+ *      «412.50 $» for the same creative. Two answers to one question.
  *
  * Both places this page renders figures had it: the group's own card, and the per-platform table
  * inside an open group.
@@ -207,7 +207,7 @@ describe.each(LOCALES)('a group states its spend whatever it was bought for ($lo
     render()
 
     expect(await screen.findByText('The film')).toBeInTheDocument()
-    expect(screen.getByText(/412\.5/).textContent).toMatch(/USD/)
+    expect(screen.getByText(/412\.5/).textContent).toMatch(/\$/)
   })
 
   /** «Not reported» must not become «0». A false zero is a decision made on a lie. */
@@ -248,6 +248,6 @@ describe.each(LOCALES)('a group states its spend whatever it was bought for ($lo
 
     const table = await screen.findByRole('table')
     expect(within(table).getAllByText(spend).length).toBeGreaterThan(0)
-    expect(within(table).getByText(/412\.5/).textContent).toMatch(/USD/)
+    expect(within(table).getByText(/412\.5/).textContent).toMatch(/\$/)
   })
 })

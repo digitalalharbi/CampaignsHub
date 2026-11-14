@@ -175,7 +175,7 @@ describe('Spend survives the objective that does not headline it', () => {
   /**
    * The Snapchat case, which is the one the owner named: no rate, so the ORIGINAL amount shows.
    *
-   * Never «0», and never the reporting currency — 412.50 USD is what the provider said.
+   * Never «0», and never the reporting currency — 412.50 $ is what the provider said.
    */
   it('shows the original amount and currency when no conversion exists', async () => {
     const metrics = await renderCard({
@@ -184,8 +184,8 @@ describe('Spend survives the objective that does not headline it', () => {
       metrics: ORIGINAL_ONLY,
     })
 
-    expect(within(metrics).getByText(/412\.50 USD/)).toBeInTheDocument()
-    expect(within(metrics).queryByText(/^0 SAR$/)).not.toBeInTheDocument()
+    expect(within(metrics).getByText(/412\.50 \$/)).toBeInTheDocument()
+    expect(within(metrics).queryByText(/^0 ر.س$/)).not.toBeInTheDocument()
   })
 
   /** A measured zero is a fact and reads as one — never as «—». */
@@ -216,6 +216,6 @@ describe('Spend survives the objective that does not headline it', () => {
     })
 
     expect(within(metrics).queryByText(/^0$/)).not.toBeInTheDocument()
-    expect(within(metrics).queryByText(/^0 SAR$/)).not.toBeInTheDocument()
+    expect(within(metrics).queryByText(/^0 ر.س$/)).not.toBeInTheDocument()
   })
 })

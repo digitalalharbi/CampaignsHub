@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -951,7 +952,7 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون نتائج على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
+                    'kpi' => 'الإنفاق', 'value' => FundingMoney::withMark(number_format($burning['spend']), $currency), 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
             }
         }
 
@@ -1002,7 +1003,7 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'مراجعة الإنفاق غير المُنتج على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون نتائج — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
+                    'action' => 'pause', 'detail' => FundingMoney::withMark(number_format($burning['spend']), $currency).' دون نتائج — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
             }
             /*
              * «Expand what works» named the top-converting CAMPAIGN. The platform carrying the most
@@ -1165,8 +1166,8 @@ final class ReportGenerator
          */
         $headline = $t[$metric['key']] ?? null;
         $out[] = $headline !== null
-            ? sprintf('إجمالي الإنفاق %s %s خلال الفترة، ومتوسط %s %s.', number_format((float) ($t['spend'] ?? 0)), $currency, $metric['label_ar'], $lens->formatRanking((float) $headline, $currency))
-            : sprintf('إجمالي الإنفاق %s %s خلال الفترة.', number_format((float) ($t['spend'] ?? 0)), $currency);
+            ? sprintf('إجمالي الإنفاق %s خلال الفترة، ومتوسط %s %s.', FundingMoney::withMark(number_format((float) ($t['spend'] ?? 0)), $currency), $metric['label_ar'], $lens->formatRanking((float) $headline, $currency))
+            : sprintf('إجمالي الإنفاق %s خلال الفترة.', FundingMoney::withMark(number_format((float) ($t['spend'] ?? 0)), $currency));
 
         $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
         if ($rated->isNotEmpty()) {
@@ -1181,9 +1182,8 @@ final class ReportGenerator
             $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
             if ($burning !== null) {
                 $out[] = sprintf(
-                    'تنبيه: %s %s من الإنفاق على %s لم تُنتج نتائج تُذكر — يُنصح بمراجعتها.',
-                    number_format($burning['spend']),
-                    $currency,
+                    'تنبيه: %s من الإنفاق على %s لم تُنتج نتائج تُذكر — يُنصح بمراجعتها.',
+                    FundingMoney::withMark(number_format($burning['spend']), $currency),
                     implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers'])),
                 );
             }

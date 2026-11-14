@@ -112,17 +112,17 @@ describe('the budget hierarchy reaches the platform rung', () => {
     const meta = within(table).getByText('Meta').closest('tr')!
     /*
       Asserted CELL BY CELL, not against the row's text.
-      Matching `/5K SAR/` across the whole row passes on the spend cell's «7.5K SAR» — so the
+      Matching `/5K ر.س/` across the whole row passes on the spend cell's «7.5K ر.س» — so the
       assertion survived blanking the column it was meant to be about. `money()` compacts, and the
       compacted forms of these figures overlap; only the position distinguishes them.
     */
     /* The platform name is the row's header cell, so the data cells start at Budget. */
     const cells = within(meta).getAllByRole('cell').map((c) => c.textContent?.trim() ?? '')
 
-    expect(cells[4]).toBe('5K SAR')
-    expect(cells[5]).toBe('500 SAR')
+    expect(cells[4]).toBe('5K ر.س')
+    expect(cells[5]).toBe('500 ر.س')
     /* Signed, so one column carries both directions and an overrun reads as one. */
-    expect(cells[8]).toBe('+4K SAR')
+    expect(cells[8]).toBe('+4K ر.س')
   })
 
   /** A row the contract refuses withholds these three with everything else on it. */
@@ -134,7 +134,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
     const snap = within(table).getByText('Snapchat').closest('tr')!
 
     /* Its BUDGET is known — 4K — and the eight figures derived from a spend it cannot state are not. */
-    expect(snap.textContent).toContain('4K SAR')
+    expect(snap.textContent).toContain('4K ر.س')
     expect(snap.textContent).not.toMatch(/\+/)
     expect((snap.textContent ?? '').match(/—/g) ?? []).toHaveLength(8)
   })

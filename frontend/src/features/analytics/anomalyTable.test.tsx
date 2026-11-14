@@ -32,8 +32,8 @@ describe('the anomaly table', () => {
     render([pt('2026-08-14', 'spend', 9_000, 1_500, 7.2), pt('2026-08-10', 'clicks', 300, 600, -4)])
 
     const row = rowOf('anomaly-row-2026-08-14-spend')
-    expect(row).toHaveTextContent('9K SAR')
-    expect(row).toHaveTextContent('1.5K SAR')
+    expect(row).toHaveTextContent('9K ر.س')
+    expect(row).toHaveTextContent('1.5K ر.س')
     expect(row).toHaveTextContent('+500%')
     expect(row).toHaveTextContent('Strong')
     expect(rowOf('anomaly-row-2026-08-10-clicks')).toHaveTextContent('-50%')

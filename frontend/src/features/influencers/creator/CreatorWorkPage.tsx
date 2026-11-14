@@ -5,6 +5,7 @@ import { CalendarClock, FileSignature, Inbox } from 'lucide-react'
 import { fetchCreatorProfile, fetchMyCollaborations, type CreatorCollaboration } from './api'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * `/influencers/me` — the creator's own home (INFL-002).
@@ -25,7 +26,7 @@ import { useUi } from '@/stores/ui'
  */
 
 const money = (amount: string | null, currency: string) =>
-  amount === null ? null : `${Number(amount).toLocaleString('en-US')} ${currency}`
+  amount === null ? null : withMark(Number(amount).toLocaleString('en-US'), currency)
 
 /**
  * A Latin-script run isolated from the surrounding Arabic.

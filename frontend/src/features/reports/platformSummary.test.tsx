@@ -38,7 +38,7 @@ describe('a platform’s summary in the detailed report', () => {
     render()
 
     const strip = within(screen.getByTestId('report-platform-summary'))
-    expect(strip.getByTestId('report-platform-summary-spend')).toHaveTextContent('1K SAR')
+    expect(strip.getByTestId('report-platform-summary-spend')).toHaveTextContent('1K ر.س')
     expect(strip.getByTestId('report-platform-summary-cpa')).toHaveTextContent('25')
     expect(strip.getByTestId('report-platform-summary-roas')).toHaveTextContent('5.00\u00d7')
     expect(strip.getByTestId('report-platform-summary-spend_share')).toHaveTextContent('35.0%')
@@ -76,8 +76,8 @@ describe('a platform’s summary in the detailed report', () => {
     })
 
     const cell = screen.getByTestId('report-platform-summary-spend')
-    expect(cell).toHaveTextContent('USD')
-    expect(cell).not.toHaveTextContent('SAR')
+    expect(cell).toHaveTextContent('$')
+    expect(cell).not.toHaveTextContent(/SAR|ر\.س/)
   })
 
   /**
@@ -104,7 +104,7 @@ describe('a platform’s summary in the detailed report', () => {
      * a substring of «2.00%»: a check that could pass or fail for reasons unrelated to its name.
      */
     expect(strip.querySelectorAll('span.rounded-full')).toHaveLength(0)
-    expect(within(strip).getByTestId('report-platform-summary-spend')).toHaveTextContent('1K SAR')
+    expect(within(strip).getByTestId('report-platform-summary-spend')).toHaveTextContent('1K ر.س')
   })
 
   it('shows the movement a platform does have', () => {
