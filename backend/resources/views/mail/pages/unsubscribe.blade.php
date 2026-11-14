@@ -32,7 +32,7 @@
     @elseif ($state === 'done')
         <p>{{ $t['done'] }}</p>
         <p class="note">{{ $t['kept'] }}</p>
-        <p class="note"><a href="{{ $preferences }}">{{ $t['change'] }}</a></p>
+        @if ($preferences)<p class="note"><a href="{{ $preferences }}">{{ $t['change'] }}</a></p>@endif
     @else
         <p>{{ $t['invalid'] }}</p>
         <p class="note"><a href="{{ $preferences }}">{{ $t['change'] }}</a></p>

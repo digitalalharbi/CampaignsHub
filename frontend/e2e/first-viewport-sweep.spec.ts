@@ -120,10 +120,8 @@ test.describe('the first viewport, on every operator surface', () => {
             let path = surface.path
             if (surface.project || surface.projectPath) {
               const projectId = await seededProject(request, PROJECT)
-              if (surface.project) {
-                await page.goto('/agency/dashboard')
-                await selectProject(page, projectId)
-              }
+              // NAV-ABORT-001 (see first-viewport-detail.spec.ts) — chosen by init script, no throwaway dashboard first.
+              if (surface.project) await selectProject(page, projectId)
               path = path.replace(':projectId', projectId)
             }
             await page.goto(path)

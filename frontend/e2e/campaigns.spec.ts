@@ -11,7 +11,23 @@ import { AUTH, openCampaignBuilder, seededProject, switchToEnglish, selectProjec
  * is one click away. Every spec that works with cards goes through here.
  */
 async function openCardsView(page: import('@playwright/test').Page) {
+  /*
+   * LOST-CLICK-001 — the switcher is clicked once the page above it has stopped changing shape.
+   *
+   * The view switcher sits under the KPI cards and the budget strip, and both change height as their requests answer:
+   * values replace dashes, and the strip's notes wrap onto a second line. A click sent in that window can put its
+   * `mousedown` on «Cards» and its `mouseup` on whatever moved under the pointer, and then the browser fires no
+   * `click`. Playwright checks only the first event of a click against its target, so the click «succeeded». The
+   * firefox gate on #1025 showed it: the screenshot was still on Overview, and the page made no further request for
+   * 20 s.
+   *
+   * `networkidle` is the state that matters here. Every block above the switcher is drawn from an answer, and once
+   * nothing is in flight nothing above it will move. The assertion after the click turns a lost click into a failure
+   * at the click, not a missing card twenty seconds later.
+   */
+  await page.waitForLoadState('networkidle')
   await page.getByTestId('view-cards').click()
+  await expect(page.getByTestId('view-cards'), 'the Cards view switch did not take').toHaveAttribute('aria-pressed', 'true')
 
   /*
    * Wait for the view to BE the cards view before anybody clicks a card in it.

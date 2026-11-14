@@ -69,6 +69,11 @@ const AGENCY_BEFORE = [
   '/agency/recommendations',
   '/agency/spend-limits',
   /*
+   * ADDED by FIN-LOOP-001, deliberately: the approved budget of each project, beside the spend limits it must not be
+   * confused with (the limits are now labelled «حدود الإنفاق», the style guide's word).
+   */
+  '/agency/budgets',
+  /*
    * ADDED by DELIV-DASH-001, deliberately.
    *
    * The weekly delivery is the agency's own work (preparing, approving and sending a client's report and
