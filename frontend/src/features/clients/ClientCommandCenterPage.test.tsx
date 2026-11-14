@@ -99,7 +99,7 @@ describe('ClientCommandCenterPage — a client outside the caller’s scope', ()
         view_analytics: false, view_reports: false, manage_files: false,
       },
       overview: { projects: 0, active_campaigns: 0, draft_campaigns: 0, open_requests: 1 },
-      projects: [{ id: 'p1', name: 'Q3 Launch', status: 'active', created_at: null }],
+      projects: [{ id: 'p1', name: 'Q3 Launch', status: 'active', created_at: null }, { id: 'p2', name: 'Q4 Push', status: 'draft', created_at: null }],
       campaigns: [{
         id: 'k1', project_id: 'p1', name: 'National Day', objective: 'sales',
         status: 'paused', budget: null, currency: 'SAR',

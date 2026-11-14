@@ -6,7 +6,7 @@ import { getDeliverySettings, saveDeliverySettings, type DeliverySettingsData } 
 
 const COPY = {
   ar: {
-    title: 'إعداد التسليم الدوري', auto: 'تجهيز مسودة التقرير تلقائيًا', autoHint: 'تُجهَّز مسودة فقط؛ لا يُرسل شيء للعميل قبل مراجعتك واعتمادك.',
+    title: 'إعداد الجدولة الدورية', auto: 'تجهيز مسودة التقرير تلقائيًا', autoHint: 'تُجهَّز مسودة فقط؛ لا يُرسل شيء للعميل قبل مراجعتك واعتمادك.',
     cadence: 'الدورة', weekly: 'أسبوعي', monthly: 'شهري', weekStart: 'بداية الأسبوع', monday: 'الاثنين', sunday: 'الأحد',
     mode: 'نوع التقرير', snapshot: 'ثابت للفترة', live: 'مباشر (يتحدّث مع البيانات)', next: 'الفترة القادمة', saving: 'جارٍ الحفظ…',
     reviewer: 'مسؤول المراجعة', nobody: 'بدون تعيين', remind: 'تذكير المراجع بعد', hours: 'ساعة',

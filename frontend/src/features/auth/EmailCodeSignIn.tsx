@@ -92,7 +92,7 @@ export function EmailCodeSignIn({ redirect, onBack, onSignedIn }: {
     return () => window.clearTimeout(id)
   }, [expiresAt])
 
-  const send = useMutation({
+  const send = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => portalLoginStart('email', email.trim()),
     onSuccess: (r) => {
       setStep('code')
@@ -106,7 +106,7 @@ export function EmailCodeSignIn({ redirect, onBack, onSignedIn }: {
     },
   })
 
-  const verify = useMutation({
+  const verify = useMutation({ meta: { feedback: 'none' },
     // The value travels as a variable: the last digit both fills the field and submits, before that state is committed.
     mutationFn: (typed: string) => portalLoginVerify(verificationId!, typed, redirect),
     onSuccess: (r) => onSignedIn(r.destination),

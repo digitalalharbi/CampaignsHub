@@ -33,7 +33,7 @@ export function HealthPanel({ projectId }: { projectId: string }) {
     <section className="space-y-3" data-testid="health-panel" aria-labelledby="health-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 id="health-title" className="text-lg font-bold text-text-primary">{ar ? 'سلامة التتبع' : 'Tracking health'}</h2>
+          <h2 id="health-title" className="text-lg font-bold text-text-primary">{ar ? 'حالة التتبع' : 'Tracking health'}</h2>
           <p className="text-sm text-text-secondary">{ar ? 'هل يمكن الوثوق بتتبع العملاء المحتملين، وما المطلوب حيث لا يمكن.' : 'Whether lead tracking can be trusted, and what to do where it cannot.'}</p>
         </div>
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>

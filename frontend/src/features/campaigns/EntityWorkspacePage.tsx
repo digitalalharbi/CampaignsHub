@@ -63,7 +63,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
   const [choosing, setChoosing] = useState(false)
   const [managing, setManaging] = useState<EntityRow | null>(null)
 
-  const title = level === 'ad_set' ? (ar ? 'المجموعات' : 'Ad groups') : (ar ? 'الإعلانات' : 'Ads')
+  const title = level === 'ad_set' ? (ar ? 'المجموعات الإعلانية' : 'Ad groups') : (ar ? 'الإعلانات' : 'Ads')
   const purpose = level === 'ad_set'
     ? (ar ? 'كل مجموعة إعلانية في المشروع: أداؤها، حالتها، وإدارتها على المنصة حيث تسمح الصلاحيات.' : 'Every ad group in the project: how it performs, whether it is serving, and managing it on the platform where permissions allow.')
     : (ar ? 'كل إعلان في المشروع مع معاينته: أداؤه، حالته، وإدارته على المنصة حيث تسمح الصلاحيات.' : 'Every ad in the project with its preview: how it performs, whether it is serving, and managing it on the platform where permissions allow.')
