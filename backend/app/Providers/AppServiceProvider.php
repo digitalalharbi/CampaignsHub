@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
@@ -87,6 +88,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(PeriodReachReader::class);
         // PERF-RECOVERY-001 — a read repeated inside one report build is answered once; discarded when the build ends.
         $this->app->scoped(ReportReadMemo::class);
+        // ACCESS-CENTER-001 — member override rows, once per request; forgotten on every write.
+        $this->app->scoped(MemberOverrideMemo::class);
         $this->app->scoped(PresentationAudience::class);
         // INTEG-SYNC-ENGINE-001 — what the last request on a connection came to belongs to one job.
         $this->app->scoped(ProviderRateBudget::class);

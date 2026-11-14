@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Access\Services\AccessCenter;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\InvitationService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -34,6 +35,9 @@ final class InvitationController extends Controller
             'project_ids.*' => ['string'],
         ]);
         $tenant = Tenant::findOrFail((string) $this->context->tenantId());
+        // ACCESS-CENTER-001 — this path used to hand out ANY role, the workspace owner included, to whoever held
+        // `users.invite`. It now passes the same rule as every other: grant only what you hold.
+        app(AccessCenter::class)->assignableRole($request->user(), (string) $tenant->id, $data['role_slug']);
         $result = $this->service->invite($tenant, $data['email'], $data['role_slug'], $data['project_ids'] ?? null, $request->user());
 
         return ApiResponse::success($result, 'Invitation created.', status: 201);

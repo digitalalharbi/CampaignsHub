@@ -45,7 +45,7 @@ final class GenericNames
     /** @var array<string, array{ar: string, en: string}> */
     private const WORDS = [
         'campaign' => ['ar' => 'حملة', 'en' => 'Campaign'],
-        'ad_set' => ['ar' => 'مجموعة إعلانية', 'en' => 'Ad set'],
+        'ad_set' => ['ar' => 'مجموعة', 'en' => 'Ad group'],
         'account' => ['ar' => 'حساب إعلاني', 'en' => 'Ad account'],
         'content' => ['ar' => 'محتوى', 'en' => 'Content'],
     ];

@@ -89,7 +89,7 @@ const COPY = {
     findingsHint: 'ملاحظات مبنية على هذه الفترة ومقارنتها بالسابقة — المعروض من الإجمالي:',
     platform: 'المنصة',
     campaign: 'الحملة',
-    adSet: 'المجموعة الإعلانية',
+    adSet: 'المجموعة',
     ad: 'الإعلان',
     /*
      * ADS-TERMINOLOGY-001 draws a line here.

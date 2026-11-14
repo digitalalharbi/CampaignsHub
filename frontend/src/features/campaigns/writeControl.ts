@@ -60,7 +60,7 @@ export const CAPABILITY_LABELS: Record<string, { ar: string; en: string }> = {
   budget_change: { ar: 'تغيير الميزانية', en: 'Budget change' },
   bid_strategy: { ar: 'استراتيجية المزايدة', en: 'Bid strategy' },
   objective: { ar: 'الهدف', en: 'Objective' },
-  ad_set_management: { ar: 'إدارة المجموعات الإعلانية', en: 'Ad set management' },
+  ad_set_management: { ar: 'إدارة المجموعات', en: 'Ad group management' },
   ad_creation: { ar: 'إنشاء إعلان', en: 'Ad creation' },
   creative_binding: { ar: 'ربط الإبداع بالإعلان', en: 'Creative binding' },
   targeting: { ar: 'الاستهداف', en: 'Targeting' },

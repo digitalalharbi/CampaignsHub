@@ -84,7 +84,7 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
         {t(locale, 'المقياس: مرات الظهور · المصدر: ', 'Metric: impressions · Source: ')}<span dir="ltr">{group.source_field}</span>
         {' · '}{t(locale, 'التغطية', 'Coverage')}: <Num>{group.coverage.days_with_rows}</Num>/<Num>{group.coverage.days_in_period}</Num> {t(locale, 'يوم', 'days')}
         {group.coverage.ad_sets_delivering > group.coverage.ad_sets_with_rows && (
-          <> · <span data-testid="audience-partial-coverage" className="font-semibold text-warning-700 dark:text-warning-300">{t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad sets')}</span></>
+          <> · <span data-testid="audience-partial-coverage" className="font-semibold text-warning-700 dark:text-warning-300">{t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad groups')}</span></>
         )}
         {group.reach_note && <> · {t(locale, 'الوصول الفريد لا يُجمع', 'Unique reach is never added')}</>}
       </p>
@@ -144,7 +144,7 @@ export function TargetingList({ items, locale }: { items: TargetingItem[]; local
           <li key={i.ad_set_id} className="min-w-0">
             <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-text-primary">
               <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: platformColor(i.provider) }} aria-hidden />
-              <span className="min-w-0 truncate">{i.ad_set ?? t(locale, 'مجموعة إعلانية', 'Ad set')}</span>
+              <span className="min-w-0 truncate">{i.ad_set ?? t(locale, 'مجموعة', 'Ad group')}</span>
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap gap-1">
               {settingChips(i.settings, locale).map((c) => (

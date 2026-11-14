@@ -87,7 +87,7 @@ const DIMENSION_SINGULAR: Record<string, { ar: string; en: string }> = {
   account: { ar: 'حساب', en: 'account' },
   campaign: { ar: 'حملة', en: 'campaign' },
   objective: { ar: 'هدف', en: 'objective' },
-  ad_set: { ar: 'مجموعة إعلانية', en: 'ad set' },
+  ad_set: { ar: 'مجموعة', en: 'ad group' },
 }
 
 /**
@@ -155,7 +155,7 @@ function driverName(d: DriverRow, by: string, ar: boolean): string {
    * in front of a reader is the raw-identifier defect the portal audit has an E2E against.
    */
   if (by === 'ad_set' && !d.name) {
-    return ar ? 'مجموعة إعلانية لم يعد اسمها محفوظًا' : 'An ad set whose name is no longer held'
+    return ar ? 'مجموعة لم يعد اسمها محفوظًا' : 'An ad group whose name is no longer held'
   }
 
   if (by === 'objective') {
@@ -201,7 +201,7 @@ const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
   account: { ar: 'كل الحسابات', en: 'Every account' },
   objective: { ar: 'كل الأهداف', en: 'Every objective' },
   campaign: { ar: 'كل الحملات', en: 'Every campaign' },
-  ad_set: { ar: 'كل المجموعات الإعلانية', en: 'Every ad set' },
+  ad_set: { ar: 'كل المجموعات', en: 'Every ad group' },
 }
 
 const everythingMovedTogether = (by: string, ar: boolean): string => {

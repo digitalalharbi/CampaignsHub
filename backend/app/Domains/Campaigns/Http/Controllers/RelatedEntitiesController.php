@@ -59,7 +59,7 @@ final class RelatedEntitiesController extends Controller
                     ->map(fn ($a) => ['id' => $a->id, 'label' => $a->name, 'to' => "/projects/{$project}/integrations"])->all(),
             ],
             'ad_sets' => [
-                'label_ar' => 'المجموعات الإعلانية',
+                'label_ar' => 'المجموعات',
                 'count' => $adSetIds->count(),
                 'items' => ExternalAdSet::query()->whereIn('id', $adSetIds)->limit(self::SAMPLE)
                     ->get(['id', 'name'])->map(fn ($s) => ['id' => $s->id, 'label' => $s->name, 'to' => "/campaigns/{$project}/{$model->id}?tab=structure"])->all(),

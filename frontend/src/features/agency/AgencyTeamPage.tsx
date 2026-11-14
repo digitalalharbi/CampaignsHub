@@ -15,6 +15,8 @@ import { toApiError } from '@/lib/api/client'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { AccessCenter } from '@/features/settings/access/AccessCenter'
 
 /**
  * `/agency/team` — who is on the team, and which clients each of them may reach (AGENCY-004).
@@ -55,6 +57,7 @@ export function membershipRoleLabel(role: string, ar: boolean): string {
 
 export function AgencyTeamPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const canRunTeam = useAuth((s) => s.hasPermission('settings.manage'))
   const qc = useQueryClient()
   const team = useQuery({ queryKey: ['agency', 'team'], queryFn: fetchAgencyTeam })
 
@@ -144,6 +147,9 @@ export function AgencyTeamPage() {
   return (
     <div className="w-full">
       {head}
+
+      {/* ACCESS-CENTER-001 — the one place invitations and access are decided, for whoever runs the team. */}
+      {canRunTeam && <div className="mb-4"><AccessCenter /></div>}
 
       <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
         <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />

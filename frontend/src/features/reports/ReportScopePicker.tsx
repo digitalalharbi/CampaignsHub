@@ -58,7 +58,7 @@ const COPY = {
     platforms: 'المنصات',
     accounts: 'الحسابات الإعلانية',
     campaigns: 'الحملات',
-    adSets: 'المجموعات الإعلانية',
+    adSets: 'المجموعات',
     ads: 'الإعلانات',
     /*
      * CONTENT-TERMINOLOGY-001 — a content item is not an ad, and must not answer to its name.
@@ -826,7 +826,7 @@ const AXIS_LABEL: Record<string, { ar: string; en: string }> = {
   providers: { ar: 'المنصات', en: 'Platforms' },
   account_ids: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
   campaign_ids: { ar: 'الحملات', en: 'Campaigns' },
-  ad_set_ids: { ar: 'المجموعات الإعلانية', en: 'Ad sets' },
+  ad_set_ids: { ar: 'المجموعات', en: 'Ad groups' },
   ad_ids: { ar: 'الإعلانات', en: 'Ads' },
   creative_ids: { ar: 'المحتويات', en: 'Content' },
   objectives: { ar: 'الأهداف', en: 'Objectives' },

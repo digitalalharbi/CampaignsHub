@@ -516,13 +516,18 @@ final class FundingNotifier
                 ->pluck('user_id')->all());
         }
         if (in_array('finance', $who, true)) {
-            array_push($ids, ...DB::table('role_user as ru')
+            $finance = DB::table('role_user as ru')
                 ->join('roles as r', 'r.id', '=', 'ru.role_id')
                 ->join('permission_role as pr', 'pr.role_id', '=', 'r.id')
                 ->join('permissions as p', 'p.id', '=', 'pr.permission_id')
                 ->where('p.key', 'funding.manage')
                 ->where(fn ($q) => $q->where('r.tenant_id', $funding->tenant_id)->orWhereNull('r.tenant_id'))
-                ->pluck('ru.user_id')->all());
+                ->pluck('ru.user_id')->map(fn ($i) => (int) $i)->all();
+            // ACCESS-CENTER-001 — a member given finance on their own is a finance reader too; one denied it is not.
+            $overrides = DB::table('member_access_overrides')->where('tenant_id', $funding->tenant_id)->where('permission_key', 'funding.manage')->get(['user_id', 'effect']);
+            $finance = array_merge($finance, $overrides->where('effect', 'allow')->pluck('user_id')->map(fn ($i) => (int) $i)->all());
+            $denied = $overrides->where('effect', 'deny')->pluck('user_id')->map(fn ($i) => (int) $i)->all();
+            array_push($ids, ...array_diff($finance, $denied));
         }
 
         $ids = array_values(array_unique(array_filter(array_map('intval', array_filter($ids)), static fn (int $id): bool => $id !== $exclude)));

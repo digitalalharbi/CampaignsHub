@@ -1,4 +1,5 @@
 import { BarChart3, BellRing, Bot, Building2, ClipboardList, CreditCard, FolderOpen, Images, Inbox, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, MessageSquare, PiggyBank, Plug, Receipt, RectangleHorizontal, Rocket, Rows3, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet, Workflow } from 'lucide-react'
+import { AD_GROUPS } from '../lib/adGroupTerms'
 import type { NavGroup, NavLeaf } from './SidebarNav'
 
 /**
@@ -93,7 +94,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     ar: 'الحملات', en: 'Campaigns', icon: Megaphone,
     leaves: [
       { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
-      { to: '/agency/ad-groups', ar: 'المجموعات الإعلانية', en: 'Ad groups', icon: Rows3 },
+      { to: '/agency/ad-groups', ...AD_GROUPS, icon: Rows3 },
       { to: '/agency/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal },
       { to: '/agency/content', ar: 'المحتويات', en: 'Content', icon: Images },
       { to: '/agency/files', ar: 'الملفات', en: 'Files', icon: FolderOpen },

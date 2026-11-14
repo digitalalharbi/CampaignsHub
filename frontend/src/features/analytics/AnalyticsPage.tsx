@@ -171,7 +171,7 @@ import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersi
 /*
  * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
  *
- * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات الإعلانية · تحليل الإعلانات ·
+ * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات · تحليل الإعلانات ·
  * تحليل الأهداف · تحليل المحتوى». The repeated «تحليل» is on a page already titled «التحليلات», so
  * it carried no information and cost roughly a third of the bar's width — which is why the row
  * wrapped and every label competed with every other.
@@ -201,7 +201,7 @@ const TAB_GROUPS = [
       { id: 'audience', ar: 'الجمهور', en: 'Audience' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
-      { id: 'ad_sets', ar: 'المجموعات الإعلانية', en: 'Ad sets' },
+      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad groups' },
       /*
        * ADS-TERMINOLOGY-001 — the DUPLICATION was in the name, not in the surface.
        *
@@ -301,7 +301,7 @@ export type Surface = 'analytics' | 'dashboard'
 /** Which part of the hierarchy an incomplete sync did not deliver, in the reader's words. */
 const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: string }> = {
   campaign: { ar: 'صفوف حملات لم تُطابَق', en: 'campaign rows not matched' },
-  ad_set: { ar: 'لم تصل بيانات المجموعات الإعلانية', en: 'ad-set figures missing' },
+  ad_set: { ar: 'لم تصل بيانات المجموعات', en: 'ad-group figures missing' },
   ad: { ar: 'لم تصل بيانات الإعلانات', en: 'ad figures missing' },
 }
 
@@ -2875,7 +2875,7 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
 
   const LEVEL_LABEL: Record<DrillLevel, { ar: string; en: string }> = {
     campaign: { ar: 'حملة', en: 'Campaign' },
-    ad_set: { ar: 'مجموعة', en: 'Ad set' },
+    ad_set: { ar: 'مجموعة', en: 'Ad group' },
     ad: { ar: 'إعلان', en: 'Ad' },
     creative: { ar: 'إعلان', en: 'Ad' },
   }
@@ -3348,7 +3348,7 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
   })
 
   const heading = level === 'ad_set'
-    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    ? (ar ? 'المجموعات' : 'Ad groups')
     : (ar ? 'الإعلانات' : 'Ads')
 
   /*

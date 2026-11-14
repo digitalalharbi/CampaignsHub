@@ -64,7 +64,7 @@ function route(entities: unknown[]) {
  */
 async function openAdSets() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Ad sets' }))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
 }
 
 /**
