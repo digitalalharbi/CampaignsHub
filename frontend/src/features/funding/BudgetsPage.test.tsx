@@ -21,7 +21,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   counts_from: '2026-10-01', period_start: '2026-10-01', period_end: null, period_start_stated: false, voided_at: null, void_reason: null,
   alert_floor: 2000, currency: 'SAR', approved: 41_250, payments: 4, spent: 30_711, remaining: 10_539,
   used_ratio: 0.7445, pace_per_day: 1_200, days_left: 8, spend_without_rate: 0, complete: true, last_spend_day: '2026-11-12',
-  by_platform: [{ provider: 'snapchat', spent: 20_000 }, { provider: 'tiktok', spent: 10_711 }], status: 'ok', ...over,
+  by_platform: [{ provider: 'snapchat', spent: 20_000, spent_usd: 5_333 }, { provider: 'tiktok', spent: 10_711, spent_usd: 2_856 }], status: 'ok',
+  payment_mode: 'direct', to_date: null, this_month: null, usd_rate: 3.75, ceiling: null, ceiling_ratio: null, to_invoice: null, planned: false, platform_plan: null, plan: null, plan_alerts: 0, ...over,
 })
 
 const entry = (over: Record<string, unknown> = {}) => ({
@@ -39,7 +40,7 @@ function serve(rows: unknown[], canManage = true, history: unknown[] = [entry({ 
 
     return { ...row(), history, undo_entry_id: 'x',
       series: [{ date: '2026-11-01', approved: 41_250, spent: 26_250, remaining: 15_000, added: 20_000 }, { date: '2026-11-02', approved: 41_250, spent: 30_711, remaining: 10_539, added: 0 }],
-      months: ['2026-11', '2026-10'] } as never
+      months: ['2026-11', '2026-10'], invoice_months: [] } as never
   })
 }
 
@@ -72,17 +73,17 @@ describe('the budgets board', () => {
     const item = await screen.findByTestId('budget-row-p1')
     expect(within(item).getByTestId('period-chip')).toHaveAttribute('title', '2026-11-06 → 2026-12-05')
     expect(within(item).getByTestId('used-percent')).toHaveTextContent('74%')
-    expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/20,000/)
-    expect(within(item).getByTestId('split-tiktok').getAttribute('title')).toMatch(/10,711/)
+    expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/5,333 \$/)
+    expect(within(item).getByTestId('split-tiktok').getAttribute('title')).toMatch(/2,856 \$/)
   })
 
   it('an open period reads as open, and a platform without a rate says so in its tooltip', async () => {
-    serve([row({ by_platform: [{ provider: 'snapchat', spent: 100, unconverted_days: 2 }] })])
+    serve([row({ by_platform: [{ provider: 'snapchat', spent: 0, spent_usd: 0, unconverted_days: 2, unconverted: [{ currency: 'EUR', amount: 100 }] }] })])
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
 
     const item = await screen.findByTestId('budget-row-p1')
     expect(within(item).getByTestId('period-chip')).toHaveTextContent('∞')
-    expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/ناقص سعر صرف/)
+    expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/100 € · بدون سعر صرف/)
   })
 
   it('a row opens the drawer with payments, platforms and the month — the page does not move', async () => {
@@ -92,7 +93,7 @@ describe('the budgets board', () => {
     const drawer = await openDrawer()
     expect(await within(drawer).findByTestId('budget-remaining')).toHaveTextContent('10,539 ر.س')
     expect(within(drawer).getByTestId('budget-payments')).toHaveTextContent('TRX-9')
-    expect(within(drawer).getByTestId('budget-platforms')).toHaveTextContent('20,000')
+    expect(within(drawer).getByTestId('budget-platforms')).toHaveTextContent('5,333 $')
     await waitFor(() => expect(within(drawer).getByTestId('budget-month')).toHaveTextContent('مباشر'))
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByTestId('budget-drawer')).toBeNull())
