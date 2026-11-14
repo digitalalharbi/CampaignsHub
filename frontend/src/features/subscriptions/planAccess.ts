@@ -54,3 +54,30 @@ export function featureKeys(plans: readonly SubscriptionPlan[]): string[] {
 export function limitKeys(plans: readonly SubscriptionPlan[]): string[] {
   return [...new Set(plans.flatMap((p) => Object.keys(p.limits)))]
 }
+
+/**
+ * The one limit the header chip speaks about: the most used of the capped ones (largest used/limit), because the question
+ * it answers is «how close am I to being stopped from adding?». An unmetered or zero-limit metric never leads; with
+ * nothing capped there is no chip. Ties keep the order the server sent, so the pick is stable between reloads.
+ */
+export function pickMeter(usage: Record<string, UsageMetric>): { metric: string; used: number; limit: number; state: Threshold } | null {
+  let best: { metric: string; used: number; limit: number; ratio: number } | null = null
+
+  for (const [metric, u] of Object.entries(usage)) {
+    if (u.limit === null || u.limit <= 0) continue
+    const ratio = u.used / u.limit
+    if (best === null || ratio > best.ratio) best = { metric, used: u.used, limit: u.limit, ratio }
+  }
+
+  return best === null ? null : { metric: best.metric, used: best.used, limit: best.limit, state: thresholdOf({ limit: best.limit, used: best.used, remaining: Math.max(0, best.limit - best.used) }) }
+}
+
+/** Short names for the counted limits, for places too narrow for a table (the header chip, the dialog). */
+export const METER_LABELS: Record<string, { ar: string; en: string }> = {
+  projects: { ar: 'المشاريع', en: 'Projects' },
+  clients: { ar: 'العملاء', en: 'Clients' },
+  team_members: { ar: 'الفريق', en: 'Team' },
+  ad_accounts: { ar: 'الحسابات', en: 'Accounts' },
+  connections: { ar: 'الربط', en: 'Connections' },
+  reports_per_month: { ar: 'التقارير', en: 'Reports' },
+}

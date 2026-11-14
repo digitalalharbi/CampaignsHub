@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { UsageMeterChip } from '@/features/subscriptions/UsageMeterChip'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
@@ -253,7 +254,8 @@ export function AgencyShell() {
             <CampaignsHubMark size={18} />
           </Link>
 
-          <div className="ms-auto flex items-center gap-1.5">
+          <div className="ms-auto flex min-w-0 items-center gap-1.5">
+            <UsageMeterChip />
             <NotificationCenter />
             <button
               onClick={toggleLocale}

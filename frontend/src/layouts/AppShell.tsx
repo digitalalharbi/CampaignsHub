@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/ProjectSwitcher'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { UsageMeterChip } from '@/features/subscriptions/UsageMeterChip'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
@@ -249,7 +250,8 @@ export function AppShell() {
             <kbd className="tnum rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs text-text-muted">⌘K</kbd>
           </button>
 
-          <div className="ms-auto flex items-center gap-1.5">
+          <div className="ms-auto flex min-w-0 items-center gap-1.5">
+            <UsageMeterChip />
             <NotificationCenter />
             {/* OPS-PANEL-001 — desktop only; on a phone the panel does not exist. */}
             <button

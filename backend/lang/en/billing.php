@@ -5,6 +5,7 @@ declare(strict_types=1);
 /* Plans, limits and payment answers, in English (I18N-001). Same keys as `lang/ar/billing.php`. */
 
 return [
+    'plan_change_exceeds' => 'Your current usage is above the limits of :plan. Reduce what is over the limit, then change plan. Nothing is deleted for you.',
     'plan_limit_reached' => 'You have reached your plan limit for :metric (:used of :limit). Upgrade your plan to add more.',
 
     // RUNTIME-100 §10 — how many MORE they may choose is the number that lets them act.
