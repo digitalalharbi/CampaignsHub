@@ -60,12 +60,14 @@ final class DigestsObjectiveKpisTest extends TestCase
         foreach ($aw['platforms'] as $pf) {
             $this->assertNotContains('roas', array_column($pf['figures'], 'key'), 'the platform row shows the objective\'s own figure');
         }
-        // The project's own tile row never blends them: it is money alone.
-        $this->assertSame(['spend'], array_column($m['kpis'], 'key'));
+        // The project's own tile row never blends results: it is the total every objective shares (DIGESTS-YESTERDAY-BY-OBJECTIVE-001).
+        $this->assertSame(['spend', 'impressions', 'clicks'], array_column($m['kpis'], 'key'));
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project'))->render();
         $this->assertSame(2, substr_count($html, 'data-block="group"'));
         $awHtml = substr($html, (int) strpos($html, 'data-objective="awareness"'));
-        $awHtml = substr($awHtml, 0, (int) strpos($awHtml, 'data-block="group"', 10) ?: null);
+        // The group ends at the next group or, since DIGESTS-YESTERDAY-BY-OBJECTIVE-001 put the groups first, at the decisions.
+        $ends = array_filter([strpos($awHtml, 'data-block="group"', 10), strpos($awHtml, 'يحتاج قرارك')]);
+        $awHtml = substr($awHtml, 0, $ends === [] ? null : (int) min($ends));
         $this->assertStringNotContainsString('العائد على الإنفاق', $awHtml);
     }
 

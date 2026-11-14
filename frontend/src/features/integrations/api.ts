@@ -766,6 +766,11 @@ export interface HubConnection {
   has_parent: boolean
   discovery_blocked_reason: string | null
   token_expires_at: string | null
+  /**
+   * LINKEDIN-SCOPES-001 — scopes this product asks for that the provider's RETURNED grant lacks. Non-empty only when the
+   * grant was recorded and proven short; an unknown grant is empty. The remedy is a reconnect (a new consent).
+   */
+  missing_scopes?: string[]
   /** The client this sign-in is filed under. Null is tenant-shared; otherwise it can only feed that client's projects. */
   client_workspace_id?: string | null
   /** INTEG-STATUS-MODEL-001 — five independent statuses of this authorisation, resolved on the server. */

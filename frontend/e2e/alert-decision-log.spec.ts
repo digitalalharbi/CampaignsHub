@@ -95,7 +95,7 @@ test('the board ranks the exception, the drawer records the decision, and the im
 
   // Persisted: a reload and the same alert says the same thing.
   await page.reload()
-  await page.getByRole('button', { name: /مُغلقة|Resolved/ }).click()
+  await showResolved(page) // LOST-CLICK-001 — see below; one line here so the @shots line keys in the skip baseline stay put.
   await page.getByTestId(`alert-details-${event}`).click()
   await expect(page.getByTestId('alert-drawer').getByTestId('drawer-impact')).toHaveAttribute('data-state', 'insufficient_data')
   await expect(page.getByTestId('alert-drawer').getByTestId('drawer-log')).toContainText('راجع النتائج بعد أسبوع')
@@ -118,4 +118,28 @@ for (const [scheme, width, height] of [['dark', 1440, 900], ['light', 1440, 900]
     await expect(page.getByTestId('alert-drawer').getByTestId('drawer-field-evidence')).toBeVisible()
     await shoot(page, `drawer-${width}-${scheme}`)
   })
+}
+
+/**
+ * LOST-CLICK-001 — choose the «resolved» filter only after the content above it has arrived.
+ *
+ * `AttentionBoard` renders nothing until its own request answers, then inserts a section a few hundred pixels tall
+ * ABOVE the status chips. A click sent while that request is still out can land its `mousedown` on «مُغلقة» and its
+ * `mouseup` wherever the chip was pushed away from, and then the browser fires no `click` at all. Playwright checks
+ * only the first event of a click against its target (`setupHitTargetInterceptor`), so it reports success.
+ * The filter stayed on «open», the resolved alert was never listed, and the test timed out 30 s later on
+ * `alert-details-…`. The screenshot showed «مُغلقة 1» with the board already in place. That was firefox in CI
+ * (the first run of #1023, then #1041); it never reproduced locally.
+ *
+ * So: wait for the board, which is the page's final shape, then click. Then ASSERT the click took, so a lost click
+ * is reported where it happened and not as a missing row.
+ *
+ * It lives down here, not inline, because `.github/scripts/gate-allowed-skips.json` keys the `@shots` cases above by
+ * line number.
+ */
+async function showResolved(page: Page) {
+  await expect(page.getByTestId('alert-board')).toBeVisible({ timeout: 20_000 })
+  const resolved = page.getByTestId('alerts-status').getByRole('button', { name: /مُغلقة|Resolved/ })
+  await resolved.click()
+  await expect(resolved, 'the «resolved» filter did not take').toHaveAttribute('aria-pressed', 'true')
 }

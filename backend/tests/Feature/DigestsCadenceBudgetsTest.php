@@ -422,7 +422,7 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $html = MailGallery::render('digest-project-monthly', 'ar');
         $this->assertStringContainsString('data-block="weeks"', (string) $html);
         $this->assertStringContainsString('data-block="budget"', (string) $html);
-        $this->assertStringContainsString('تقرير المشروع · الشهر', (string) $html);
+        $this->assertStringContainsString('ملخص المشروع • الشهر الماضي', (string) $html);
     }
 
     // ── 3. Every alert and notification in the approved grammar ─────────────

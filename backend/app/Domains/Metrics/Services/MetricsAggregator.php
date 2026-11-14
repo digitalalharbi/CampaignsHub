@@ -785,6 +785,19 @@ final class MetricsAggregator
         return $out;
     }
 
+    /** Set by `AlertEvaluator` for the length of one sweep; null everywhere else (no memo outside a sweep). */
+    private static ?string $sweep = null;
+
+    /** @var array<string, array<string, list<string>>> */
+    private static array $sendsMemo = [];
+
+    /** LINK-HEALTH-YESTERDAY-001 — one alert sweep reads the platforms' sent figures once; `$token` null ends it and clears the memo. */
+    public static function sweep(?string $token): void
+    {
+        self::$sweep = $token;
+        self::$sendsMemo = [];
+    }
+
     /**
      * OBJECTIVE-GAPS-001 — a campaign's return on spend exists for the SALES family only.
      *
@@ -830,6 +843,15 @@ final class MetricsAggregator
         if ($providers === []) {
             return [];
         }
+        // Inside one alert sweep the answer cannot change between rules: read it once per tenant, platform set and day.
+        $memoKey = null;
+        if (self::$sweep !== null) {
+            ksort($providers);
+            $memoKey = self::$sweep.'|'.app(TenantContext::class)->tenantId().'|'.implode(',', array_keys($providers)).'|'.$to->toDateString();
+            if (isset(self::$sendsMemo[$memoKey])) {
+                return self::$sendsMemo[$memoKey];
+            }
+        }
 
         $rows = DailyMetric::query()
             ->withoutGlobalScope(ProjectScope::class)
@@ -843,6 +865,10 @@ final class MetricsAggregator
         $out = [];
         foreach ($rows as $row) {
             $out[(string) $row->provider][] = (string) $row->metric_key;
+        }
+
+        if ($memoKey !== null) {
+            self::$sendsMemo[$memoKey] = $out;
         }
 
         return $out;

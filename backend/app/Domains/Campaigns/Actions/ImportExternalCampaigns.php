@@ -14,6 +14,8 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SourceCurrency;
+use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,6 +37,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ImportExternalCampaigns
 {
+    /** Adopted without a person: by this sync, or by the scope cleanup re-filing a campaign. Their status is the platform's. */
+    private const FOLLOWS_PLATFORM = ['sync', 'scope-cleanup'];
+
     /**
      * @param  string|null  $projectId  file rows under this project explicitly (queue workers have no
      *                                  request to inherit one from); null keeps the request-scoped behaviour
@@ -150,6 +155,7 @@ final class ImportExternalCampaigns
                     $campaign->save();
                 } elseif ($campaign->unified_campaign_id !== null) {
                     $this->releaseWithheldBudget($campaign, $account);
+                    $this->followPlatformStatus($campaign);
                 }
 
                 /*
@@ -244,6 +250,40 @@ final class ImportExternalCampaigns
                 ...($currency === null && $campaign->lifetime_budget !== null ? ['budget_currency_unknown' => true] : []),
             ],
         ]);
+    }
+
+    /**
+     * TIKTOK-CAMPAIGN-STATUS-001 — a campaign the sync adopted keeps saying what its platform says.
+     *
+     * Its status was written once, at adoption, and never again: a campaign paused, ended or resumed on the platform kept the
+     * word it was adopted with, and every TikTok campaign adopted while `ENABLE` was not understood kept `unknown`. A status is
+     * the platform's fact (see `adopt()`), so the visible campaign follows it — but only one this action ADOPTED and that stands
+     * for this one platform campaign alone. A campaign somebody authored, or several platform campaigns grouped under one,
+     * carry a person's decision and are not rewritten.
+     */
+    private function followPlatformStatus(ExternalCampaign $campaign): void
+    {
+        // An answer that is not a state (undocumented, missing) never overwrites one that is.
+        if ($campaign->status === null || $campaign->status === CampaignStatus::Unknown->value) {
+            return;
+        }
+
+        // Tenant and project scopes lifted for a queue worker with no request; soft deletes kept — a deleted campaign is not followed.
+        $unified = UnifiedCampaign::withoutGlobalScopes([TenantScope::class, ProjectScope::class])->find($campaign->unified_campaign_id);
+        if ($unified === null
+            || ! in_array($unified->meta['adopted_from'] ?? null, self::FOLLOWS_PLATFORM, true)
+            // A status a person set (pause, activate, edit) is theirs until they hand it back.
+            || ($unified->meta['status_source'] ?? null) === 'manual'
+            || $unified->status === $campaign->status) {
+            return;
+        }
+
+        $linked = ExternalCampaign::withoutGlobalScopes([TenantScope::class, ProjectScope::class])->where('unified_campaign_id', $unified->getKey())->count();
+        if ($linked !== 1) {
+            return;
+        }
+
+        $unified->forceFill(['status' => $campaign->status])->save();
     }
 
     /**
