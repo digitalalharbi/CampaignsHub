@@ -121,7 +121,7 @@ export function SidebarNav({
 /**
  * NAV-TAXONOMY-001 — which leaf is the current page, when two leaves share a path.
  *
- * «المجموعات» and «الإعلانات» are the Analytics page opened on a tab (`/analytics?tab=ad_sets`), and «إطلاق الحملات»
+ * «المجموعات» and «الإعلانات» are the Analytics page opened on a tab (`/analytics?tab=ad_sets`), and «حملة جديدة»
  * is the Campaigns page with its builder open. Router matching reads the path only, so all three would light up
  * together with their parent. A leaf with a query is current when the address carries those parameters; a plain leaf
  * on the same path steps aside for it, so exactly one leaf is current.

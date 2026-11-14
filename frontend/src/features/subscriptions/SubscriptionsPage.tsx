@@ -23,14 +23,14 @@ import { Num } from '@/components/ui/Num'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 export const COPY = {
   ar: {
-    title: 'الاشتراكات', subtitle: 'اطّلع على خطة مساحة العمل الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
+    title: 'الاشتراكات', subtitle: 'اطّلع على خطة مساحة العمل الحالية والاستخدام مقابل الحدود، وبدّل الخطة.',
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل بيانات الاشتراك.',
     current_plan: 'الخطة الحالية', default_plan: 'الخطة الافتراضية (بدون اشتراك مُسجَّل)',
     per_month: '/ شهرياً', per_year: '/ سنوياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
     vat_plus: (tax: string, total: string, cur: string) => `+ ضريبة القيمة المضافة ${tax} = ${total} ${cur} لكل تجديد`,
     vat_in: (tax: string, cur: string) => `يشمل ضريبة القيمة المضافة ${tax} ${cur}`,
-    usage_title: 'الاستهلاك والحدود', metric: 'المقياس', used: 'المُستهلك', remaining: 'المتبقّي', limit: 'الحد',
+    usage_title: 'الاستخدام والحدود', metric: 'المقياس', used: 'المستخدم', remaining: 'المتبقي', limit: 'الحد',
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
     current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
     manage_note: 'تبديل الخطة يتطلّب صلاحية subscriptions.manage.',

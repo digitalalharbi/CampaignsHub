@@ -244,6 +244,31 @@ final class ReportPlatformsAndFixedPeriodTest extends TestCase
         $this->assertEqualsCanonicalizing(['meta', 'tiktok', 'google_ads', 'openai_ads'], $data['platform_order']);
     }
 
+    /**
+     * OBJECTIVES-ARE-INCLUSIVE-001 (Owner, 2026-11-13) — «الأهداف تكون شاملة دون تجاهل الحملات».
+     *
+     * Choosing «مبيعات» decides which KPIs are shown; it never drops a campaign. Every campaign — the
+     * traffic one and the two nobody classified — is still listed, the total spend is unchanged, and
+     * the objective split (OBJECTIVE-PATHS-001) counts the unclassified spend in its one total.
+     */
+    public function test_choosing_sales_kpis_lists_every_campaign_and_leaves_total_spend_unchanged(): void
+    {
+        $this->seedFourObjectives();
+        // Internal: a client report lists no campaigns by name at all (client report rule), so the list is read where it exists.
+        $report = $this->objectiveReport(['objectives' => ['sales']]);
+        $report->forceFill(['audience' => 'internal'])->save();
+
+        $data = app(ReportGenerator::class)->generate($report);
+
+        $this->assertEquals(250.0, $data['kpis']['spend'], 'total spend is the same with the sales KPIs chosen');
+        $this->assertCount(4, $data['campaigns'] ?? [], 'every campaign is listed, whatever its objective');
+        $this->assertEquals(250.0, array_sum(array_map(static fn (array $c): float => (float) ($c['spend'] ?? 0), $data['campaigns'])));
+        $paths = $data['objective_performance']['objective_paths'] ?? null;
+        $this->assertNotNull($paths);
+        $this->assertEquals(250.0, $paths['total_spend'], 'the split counts every campaign once, unclassified included');
+        $this->assertContains('unknown', array_column($paths['paths'], 'family'));
+    }
+
     public function test_campaigns_are_filtered_by_objective_only_when_the_operator_chose_to(): void
     {
         $this->seedFourObjectives();

@@ -53,7 +53,7 @@ export function severityLabel(severity: AppNotification['severity'], ar: boolean
     case 'critical':
       return ar ? 'حرج' : 'Critical'
     case 'warning':
-      return ar ? 'يحتاج انتباهًا' : 'Needs attention'
+      return ar ? 'تنبيه' : 'Needs attention'
     case 'success':
       return ar ? 'تم' : 'Done'
     default:

@@ -26,10 +26,10 @@ import type { NavGroup, NavLeaf } from './SidebarNav'
  */
 /*
  * NAV-TAXONOMY-001 — four areas, short familiar words, campaign work first in the order the Owner approved:
- * نظرة عامة · المشاريع · إطلاق الحملات · الحملات · المجموعات · الإعلانات.
+ * نظرة عامة · المشاريع · حملة جديدة · الحملات · المجموعات · الإعلانات.
  *
  * Regrouped and renamed, never removed: every address this rail offered before is still here (navGrouping.test.ts
- * proves it). «إطلاق الحملات» opened the internal campaign draft form until LAUNCH-001 gave it a page of its own
+ * proves it). «حملة جديدة» opened the internal campaign draft form until LAUNCH-001 gave it a page of its own
  * (/launch) that publishes on the platforms' APIs; «المجموعات» / «الإعلانات» opened the Analytics ad-set and ad tabs until
  * ADV-CAMPAIGN-TABLES-001 gave each rung an operational table of its own (/ad-groups, /ads). Approvals, which had a
  * page and no entry, now has one.
@@ -103,8 +103,8 @@ export const appSettingsGroup: NavGroup = {
 }
 
 export const appFoldedLeaves: readonly NavLeaf[] = [
-  { to: '/app/launch', ar: 'حملة جديدة', en: 'New campaign', icon: Rocket, ent: 'campaigns' },
-  { to: '/app/portfolio', ar: 'ملخص المشاريع', en: 'Projects summary', icon: Layers, ent: 'projects' },
+  { to: '/app/launch', ar: 'حملة جديدة', en: 'Launch', icon: Rocket, ent: 'campaigns' },
+  { to: '/app/portfolio', ar: 'ملخص المشاريع', en: 'Portfolio', icon: Layers, ent: 'projects' },
 ]
 export const appFoldedPaths: readonly string[] = appFoldedLeaves.map((l) => l.to)
 

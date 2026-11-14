@@ -105,7 +105,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
-      { to: '/agency/delivery', ar: 'الجدولة', en: 'Scheduling', icon: Send, cap: 'reports.view' },
+      { to: '/agency/delivery', ar: 'الجدولة', en: 'Delivery', icon: Send, cap: 'reports.view' },
       { to: '/agency/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList },
       { to: '/agency/short-links', ar: 'روابط التتبع', en: 'Tracking links', icon: Link2 },
     ],
@@ -148,9 +148,8 @@ export const agencySettingsGroup: NavGroup = {
 
 /** Addresses that left the rail on purpose and are opened from a page instead. Each one still answers. */
 export const agencyFoldedLeaves: readonly NavLeaf[] = [
-  { to: '/agency/launch', ar: 'حملة جديدة', en: 'New campaign', icon: Rocket },
-  { to: '/agency/portfolio', ar: 'ملخص المشاريع', en: 'Projects summary', icon: Layers },
-  { to: '/agency/projects', ar: 'المشاريع', en: 'Projects', icon: Building2 },
+  { to: '/agency/launch', ar: 'حملة جديدة', en: 'Launch', icon: Rocket },
+  { to: '/agency/portfolio', ar: 'ملخص المشاريع', en: 'Portfolio', icon: Layers },
 ]
 export const agencyFoldedPaths: readonly string[] = agencyFoldedLeaves.map((l) => l.to)
 

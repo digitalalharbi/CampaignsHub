@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Reports\Support\ClientContentName;
 
 /**
@@ -252,9 +253,20 @@ final class ClientEntityBoundary
      */
     public static function spendWithoutResults(array $campaigns, float $floor = 3000, int $under = 2): ?array
     {
+        /*
+         * OBJECTIVE-GAPS-001 — each campaign by ITS OWN result, on the rules of the alert sweep
+         * (`AlertEvaluator::noResults`, #1017). It read `conversions`, so a traffic campaign with
+         * thousands of landing page views was reported as spend that produced nothing. Now: an
+         * active campaign only (a paused one is not a performance finding), an objective nobody set
+         * has no result to be short of, and a result nobody reported is not a zero — none qualify.
+         */
         $burning = array_values(array_filter(
             $campaigns,
-            fn ($c) => (float) ($c['spend'] ?? 0) > $floor && (float) ($c['conversions'] ?? 0) < $under,
+            fn ($c) => ($c['status'] ?? null) === CampaignStatus::Active->value
+                && ($c['result_key'] ?? null) !== null
+                && ($c['result'] ?? null) !== null
+                && (float) ($c['spend'] ?? 0) > $floor
+                && (float) $c['result'] < $under,
         ));
 
         if ($burning === []) {

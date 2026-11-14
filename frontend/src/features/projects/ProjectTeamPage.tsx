@@ -235,7 +235,7 @@ export function ProjectTeamPage() {
                   })()}
                   <button
                     type="button"
-                    onClick={() => removeMutation.mutate(m.id)}
+                    disabled={removeMutation.isPending} onClick={() => removeMutation.mutate(m.id)}
                     className="rounded p-1 text-text-muted hover:text-danger"
                     aria-label={t('remove')}
                   >
