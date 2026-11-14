@@ -16,6 +16,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
@@ -546,6 +547,8 @@ final class ReportGenerator
              * platform rows; a client-facing report never receives the campaigns table.
              */
             ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
+            // AUDIENCE-001 — FROZEN with the snapshot, cut for the report's audience before it is stored.
+            ...$this->audienceSections($report, $scope, $from, $to),
             /*
              * REPORT-WEBSITE-TAB-001 — the layout this snapshot was frozen under. A snapshot WITHOUT this stamp was saved before the
              * website tab existed and renders its pages exactly as then (its store-pulse page included); one with it renders the website
@@ -1242,6 +1245,30 @@ final class ReportGenerator
         ], static fn ($v): bool => $v !== []) ?: null, drillRows: ContentFormatComparison::REPORT_DRILL_ROWS);
 
         return ContentFormatComparison::forAudience($block, $audience !== 'internal', false, false);
+    }
+
+    /**
+     * AUDIENCE-001 — the audience parts of a saved report: a client snapshot never holds money or campaign names.
+     *
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function audienceSections(Report $report, ReportScope $scope, Carbon $from, Carbon $to): array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        $settings = $report->sectionSettings();
+
+        return app(AudienceReportSections::class)->build(
+            (string) $report->tenant_id, (string) $report->project_id, $from, $to,
+            $audience !== 'internal',
+            static fn (string $key): bool => $settings->enabled($registry->get($key), $audience),
+            $scope->providers === [] ? null : array_values($scope->providers),
+            // Axes the audience rows cannot follow: withheld, never widened.
+            ($scope->objectiveFilter && $scope->objectives !== []) || $scope->paths !== [] || $scope->destinations !== []
+                || $scope->creativeIds !== [] || $scope->adSetIds !== [] || $scope->adIds !== [],
+            $scope->accountIds === [] ? null : array_values($scope->accountIds),
+            campaignIds: ($c = $scope->resolvedCampaignIds()) === null ? null : array_values($c),
+        );
     }
 
     /**

@@ -105,7 +105,10 @@ final class LiveReportQueryBudgetTest extends TestCase
         $this->assertLessThanOrEqual(9, $reach, "the reach-truth aggregate runs {$reach} times: once per campaign again");
         $this->assertLessThanOrEqual(3, $delivery, "the delivery list is read {$delivery} times: once per campaign or account again");
         $this->assertLessThanOrEqual(1, $ceiling, "the account ceiling resolved its campaign list {$ceiling} times");
+        // AUDIENCE-001 — three constant reads (the bound ad accounts, the ad sets' targeting, the paid-delivery rows), never per campaign.
+        $this->assertLessThanOrEqual(1, self::matching($run, 'from "audience_breakdown_rows"'), 'the audience delivery rows are read once per build');
         // 126: OBJECTIVE-PATHS-001 adds ONE statement per build (the ad-set read behind the objective split), not one per campaign.
+        // Measured with AUDIENCE-001 merged: still 126 — this build adds no audience statement, so the budget is main's, not raised.
         $this->assertLessThanOrEqual(126, count($run), 'a build over 36 campaigns asked '.count($run).' questions (126 allowed; the build before this work asked 338)');
     }
 
