@@ -100,6 +100,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'platform:payment-alerts',
         // FIN-LOOP-001 — at :20 and :50, after each sync; copies spend into each project budget, one replaced row per account-day.
         'funding:refresh',
+        // FIN-LOOP-001 — daily at 02:40 Riyadh; fixes last month's summary once per project.
+        'funding:close-month',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */

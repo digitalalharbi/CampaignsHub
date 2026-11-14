@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Funding\Services\FundingNotifier;
 use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -23,16 +24,17 @@ final class FundingRefreshCommand extends Command
 
     protected $description = 'Count the latest synced spend against each project\'s approved budget';
 
-    public function handle(FundingSpendRefresher $refresher, TenantContext $context): int
+    public function handle(FundingSpendRefresher $refresher, FundingNotifier $notifier, TenantContext $context): int
     {
         $failed = 0;
         $rows = 0;
 
         ProjectFunding::withoutGlobalScopes()->where('payment_method', '!=', 'unset')
-            ->lazyById(200)->each(function (ProjectFunding $funding) use ($refresher, $context, &$failed, &$rows): void {
+            ->lazyById(200)->each(function (ProjectFunding $funding) use ($refresher, $notifier, $context, &$failed, &$rows): void {
                 $context->setTenantId($funding->tenant_id);
                 try {
                     $rows += $refresher->refresh($funding);
+                    $notifier->evaluate($funding);
                 } catch (Throwable $e) {
                     $failed++;
                     report($e);
