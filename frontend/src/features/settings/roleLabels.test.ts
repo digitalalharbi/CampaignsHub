@@ -9,7 +9,7 @@ import { SYSTEM_ROLE_LABELS, roleLabel } from './roleLabels'
  * cannot read PHP, so they are written out: a system role added there and not here fails HERE.
  */
 describe('role labels', () => {
-  const SYSTEM_SLUGS = ['tenant-owner', 'member', 'analyst', 'account-manager', 'client-viewer', 'client-portal', 'talent-manager']
+  const SYSTEM_SLUGS = ['tenant-owner', 'member', 'analyst', 'account-manager', 'client-viewer', 'client-portal', 'talent-manager', 'project-manager', 'finance', 'media-buyer', 'reporter', 'viewer']
 
   it.each(SYSTEM_SLUGS)('translates the system role %s', (slug) => {
     const label = roleLabel({ slug, name: 'Seeded English', is_system: true }, true)
@@ -38,6 +38,6 @@ describe('role labels', () => {
 
   /** An older payload without the flag is treated as a system role — the case that shipped. */
   it('translates a known slug even when the payload omits is_system', () => {
-    expect(roleLabel({ slug: 'tenant-owner', name: 'Tenant Owner' }, true)).toBe('مالك مساحة العمل')
+    expect(roleLabel({ slug: 'tenant-owner', name: 'Tenant Owner' }, true)).toBe('مدير المساحة')
   })
 })

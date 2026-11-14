@@ -116,7 +116,7 @@ final class DemoAccountsSeeder extends Seeder
             ['tenant_id' => $tenant->id, 'slug' => 'analyst'],
             ['name' => 'Analyst', 'is_system' => true],
         );
-        $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
+        $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'clients.view_all', 'integrations.view', 'reports.view');
 
         $this->ensureUser('agency@campaignshub.io', 'Demo Owner', $tenant, $ownerRole);
 

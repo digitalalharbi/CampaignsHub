@@ -7,6 +7,7 @@ import { usePortalGuard } from './usePortalGuard'
 import { formatDate } from './portalAccountApi'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { RequestSteps } from './RequestSteps'
 
 function statusTone(s: string): string {
   if (['completed', 'delivered'].includes(s)) return 'bg-success/15 text-success'
@@ -57,7 +58,7 @@ function RequestCard({ r, ar }: { r: PortalRequestCard; ar: boolean }) {
         </div>
         <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(r.status)}`}>{ar ? r.status_label : r.status_label_en}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${r.progress}%` }} /></div>
+      <RequestSteps status={r.status} ar={ar} />
       <div className="flex items-center justify-between text-[11px] text-text-muted">
         <span className="tnum">{formatDate(r.updated_at)}</span>
         <span className="flex items-center gap-1 font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'} <ArrowRight size={13} className="rtl:rotate-180" /></span>
