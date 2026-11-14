@@ -58,6 +58,7 @@ use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Notifications\Console\SendSpendSummaries;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
 use App\Domains\Ops\Console\ProfileLiveReportCommand;
@@ -135,6 +136,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
         RetryFailedDigests::class,
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
+        SendSpendSummaries::class,
         // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
         EnrolMembers::class,
         ConfirmMailDelivery::class,

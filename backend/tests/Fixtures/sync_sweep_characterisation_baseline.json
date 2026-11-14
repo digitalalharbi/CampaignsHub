@@ -589,7 +589,7 @@
                 "connection_name": "meta-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -609,7 +609,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -620,7 +621,7 @@
                 "connection_name": "snapchat-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"snapchat-marketing-api\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -640,7 +641,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"snapchat-marketing-api\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -671,7 +673,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[]"
             }
         ],
         "period_reach": [
@@ -1875,7 +1878,7 @@
                 "connection_name": "meta-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -1895,7 +1898,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -1906,7 +1910,7 @@
                 "connection_name": "snapchat-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"snapchat-marketing-api\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -1926,7 +1930,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"snapchat-marketing-api\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -1957,7 +1962,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[]"
             }
         ],
         "period_reach": [
@@ -3558,7 +3564,7 @@
                 "connection_name": "meta-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -3578,7 +3584,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -3589,7 +3596,7 @@
                 "connection_name": "snapchat-conn",
                 "scope": "tenant_shared",
                 "external_owner_id": null,
-                "scopes": "[\"snapchat-marketing-api\"]",
+                "scopes": "[]",
                 "status": "connected",
                 "token_expires_at": "2026-11-20 09:00:00+00",
                 "last_health_check_at": "2026-10-21 09:00:00+00",
@@ -3609,7 +3616,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[\"snapchat-marketing-api\"]"
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -3640,7 +3648,8 @@
                 "provider_identity_label": null,
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
-                "project_id": null
+                "project_id": null,
+                "requested_scopes": "[]"
             }
         ],
         "period_reach": [

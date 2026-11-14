@@ -17,5 +17,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('fund
     Route::get('/', [FundingController::class, 'index'])->name('index');
     Route::post('payments', [FundingController::class, 'store'])->middleware('throttle:30,1')->name('payments.store');
     Route::get('projects/{funded}', [FundingController::class, 'show'])->whereUuid('funded')->name('projects.show');
+    Route::get('projects/{funded}/months/{month}', [FundingController::class, 'month'])->whereUuid('funded')->name('projects.month');
+    Route::get('export', [FundingController::class, 'export'])->middleware('throttle:20,1')->name('export');
     Route::patch('projects/{funded}', [FundingController::class, 'update'])->whereUuid('funded')->name('projects.update');
 });

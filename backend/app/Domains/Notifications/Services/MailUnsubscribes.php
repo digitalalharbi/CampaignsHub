@@ -35,6 +35,12 @@ final class MailUnsubscribes
     /** The alert bundle: several catalogue types in one message, switched by `digests.alerts`. */
     public const ALERTS = 'alerts';
 
+    /** SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — a recipient OUTSIDE the platform leaves the budget follow-up with one signed click. */
+    public const EXTERNAL = 'external_budget';
+
+    /** SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — a workspace reader's weekly «ملخص الإنفاق». */
+    public const SPEND = 'spend_summary';
+
     /**
      * DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, one scope per rhythm, each switching its own `digests` key.
      *
@@ -150,7 +156,7 @@ final class MailUnsubscribes
 
     private static function isOptional(string $scope): bool
     {
-        return $scope === self::ALERTS || isset(self::PROJECT_SCOPES[$scope]) || MessageCatalogue::isUnsubscribable($scope);
+        return in_array($scope, [self::ALERTS, self::EXTERNAL, self::SPEND], true) || isset(self::PROJECT_SCOPES[$scope]) || MessageCatalogue::isUnsubscribable($scope);
     }
 
     private function switchOff(int $userId, string $tenantId, string $scope): void
@@ -159,7 +165,7 @@ final class MailUnsubscribes
             ->where('tenant_id', $tenantId)->where('user_id', $userId)
             ->whereNull('client_workspace_id')->first();
 
-        $digest = $scope === self::ALERTS ? 'alerts' : (self::PROJECT_SCOPES[$scope] ?? MessageCatalogue::DIGEST_SWITCH[$scope] ?? null);
+        $digest = $scope === self::ALERTS ? 'alerts' : ($scope === self::SPEND ? 'spend_summary' : (self::PROJECT_SCOPES[$scope] ?? MessageCatalogue::DIGEST_SWITCH[$scope] ?? null));
         $column = $digest !== null ? 'digests' : 'types';
         $map = json_decode((string) ($row->{$column} ?? '[]'), true);
         $map = is_array($map) ? $map : [];

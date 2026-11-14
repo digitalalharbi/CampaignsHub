@@ -86,6 +86,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — hourly from 08:00 Riyadh; ledger rows make it idempotent.
+        'notifications:send-spend-summaries',
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
@@ -98,6 +100,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'platform:payment-alerts',
         // FIN-LOOP-001 — at :20 and :50, after each sync; copies spend into each project budget, one replaced row per account-day.
         'funding:refresh',
+        // FIN-LOOP-001 — daily at 02:40 Riyadh; fixes last month's summary once per project.
+        'funding:close-month',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */
@@ -169,6 +173,7 @@ final class ScheduledWorkInventoryTest extends TestCase
             'integrations:sync-structure',
             'integrations:refresh-tokens',
             'notifications:send-digests',
+            'notifications:send-spend-summaries',
             'notifications:send-alerts',
             'commerce:sync',
             /*
