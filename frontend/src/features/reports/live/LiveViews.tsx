@@ -1,3 +1,5 @@
+import { ObjectivePathCards } from '@/features/analytics/ObjectivePathCards'
+import { spendHiddenByLink } from './liveMetrics'
 import { basisLine } from './ExecutiveSummary'
 import { carries } from '../chosenFigures'
 import { useMemo, useState } from 'react'
@@ -275,6 +277,16 @@ export function DashboardView({
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} />
       <LiveScopeCounts payload={payload} ar={ar} />
       {/* CLIENT-FACING-PRESENTATION-001 — «at what cost» before «where»; shown only where it says something. */}
+      {/* OBJECTIVE-PATHS-001 — one total, its split by objective, one card per objective. */}
+      {/* Shown where there is more than one objective; one objective is already the KPI board above. */}
+      {sectionOn(payload, 'objective_breakdown') && payload.objective_performance?.objective_paths?.mixed && (
+        <ObjectivePathCards
+          block={payload.objective_performance?.objective_paths}
+          locale={locale}
+          currency={currency}
+          showMoney={!spendHiddenByLink(payload)}
+        />
+      )}
       {splitDiffers(payload) && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
       {/* The charts come before the tables: the reader sees the shape of the period first, then the rows. */}
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
