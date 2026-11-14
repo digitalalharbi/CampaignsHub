@@ -104,6 +104,9 @@ final class ReportGenericLabelsTest extends TestCase
     private function assertNoSentinel(array $surfaces, string $pattern = '/ZZ[A-Z]+ ?[0-9a-f]*/'): void
     {
         foreach ($surfaces as $name => $bytes) {
+            // The share's random trace mark («WAKQN-ZZJF3») and the request id are generated, not data: a mark that happens to hold «ZZ»
+            // matched the sentinel (run 43482161475, 2026-11-13). Mask them; the sentinel is still searched in everything else.
+            $bytes = (string) preg_replace(['/"report_trace":"[^"]*"/', '/"request_id":"[^"]*"/'], ['"report_trace":"-"', '"request_id":"-"'], $bytes);
             preg_match($pattern, $bytes, $m);
             $this->assertSame([], $m, "«{$name}» still carries a hidden name: ".($m === [] ? '' : mb_substr($bytes, max(0, (int) strpos($bytes, $m[0]) - 80), 200)));
         }

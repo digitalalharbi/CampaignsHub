@@ -178,7 +178,8 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
                 'detail' => sprintf(
-                    'ارتفعت %s %s إلى %s %s، ربما بسبب منافسة أعلى أو ضعف أداء المحتوى.',
+                    // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured fact only; a cause is never guessed (no data here proves one).
+                    'ارتفعت %s %s إلى %s %s.',
                     $label,
                     self::percent((float) $change),
                     number_format((float) $value, 2),
@@ -218,7 +219,7 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('تراجع %s', $label),
                 'detail' => sprintf(
-                    'تراجع %s %s إلى %s، وقد يشير إلى بداية ضعف أداء المحتوى.',
+                    'تراجع %s %s إلى %s.',
                     $label,
                     self::percent(abs((float) $change)),
                     self::percent((float) $value, 2),

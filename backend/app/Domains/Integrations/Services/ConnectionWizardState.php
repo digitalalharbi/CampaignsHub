@@ -213,7 +213,8 @@ final class ConnectionWizardState
          * asked for a read scope at all is refused before anything is called.
          */
         $insightsBlocked = $connection->insights_denied_at !== null
-            || ! InsightsAuthorisation::grantedBy($connection->provider, $connection->scopes);
+            // LINKEDIN-SCOPES-001 — an unknown grant falls back to the request: nothing unrequested can have been granted.
+            || ! InsightsAuthorisation::grantedBy($connection->provider, $connection->scopes ?: $connection->requested_scopes);
 
         $userState = match (true) {
             /*
