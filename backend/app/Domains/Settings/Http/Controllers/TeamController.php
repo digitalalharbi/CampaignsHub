@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Services\AccessCenter;
+use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\InvitationService;
@@ -20,7 +22,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Organization team & role management. Roles/permissions are enforced server-side (not just hidden
@@ -212,7 +213,13 @@ final class TeamController extends Controller
         $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
         $target->roles()->syncWithoutDetaching([$role->id]);
 
-        $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before], after: ['roles' => [$role->slug]]);
+        // ACCESS-CENTER-001 — a new category starts clean: overrides were decided against the old one.
+        $overrides = app(AccessCenter::class)->memberOverrides($this->tenantId(), (int) $target->id);
+        if ($overrides['allow'] !== [] || $overrides['deny'] !== []) {
+            app(AccessCenter::class)->writeOverrides($this->tenantId(), (int) $target->id, [], [], $request->user()->id);
+        }
+
+        $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before, 'overrides' => $overrides], after: ['roles' => [$role->slug]], reason: $request->input('reason'));
 
         // EMAIL-TRANSACTIONAL-SET-001 — the person is told, in their language, unless they changed their own role.
         if ($target->id !== $request->user()->id) {
@@ -261,6 +268,8 @@ final class TeamController extends Controller
         }
 
         $audit->log(action: 'settings.team.removed', entityType: 'user', entityId: $target->uuid, before: ['email' => $target->email]);
+        DB::table('member_access_overrides')->where('tenant_id', $this->tenantId())->where('user_id', $target->id)->delete();
+        app(MemberOverrideMemo::class)->forget();
         if ($this->belongsElsewhere($target)) {
             // Shared with another agency: leave THIS team, keep the account (and their access there).
             $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
@@ -344,23 +353,8 @@ final class TeamController extends Controller
      */
     private function assignableRole(Request $request, string $tenantId, string $slug): Role
     {
-        $role = Role::where('tenant_id', $tenantId)->where('slug', $slug)->first();
-
-        if ($role === null && ! WorkspaceRolePresets::isPreset($slug)) {
-            throw ValidationException::withMessages(['role' => 'Unknown role for this workspace.']);
-        }
-
-        // Checked BEFORE a ready-made role is created, so a refused request leaves no row behind.
-        $keys = $role !== null
-            ? $role->permissions()->pluck('key')
-            : collect(WorkspaceRolePresets::defaults($slug));
-
-        $actor = $request->user();
-        if (! $actor->is_platform_admin) {
-            abort_if($keys->diff(WorkspaceRolePresets::heldBy($actor))->isNotEmpty(), 403, 'You can only assign a role whose permissions you hold yourself.');
-        }
-
-        return $role ?? WorkspaceRolePresets::ensure($tenantId, $slug);
+        // ACCESS-CENTER-001 — one rule for every path: grant only what you hold; only the owner hands out the team.
+        return app(AccessCenter::class)->assignableRole($request->user(), $tenantId, $slug);
     }
 
     private function tenantId(): string

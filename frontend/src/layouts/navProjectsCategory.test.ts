@@ -52,9 +52,9 @@ describe('the approved structure (NAV-HOME-PLANS-001)', () => {
     expect(at('ad-groups')).toBeLessThan(at('ads'))
   })
 
-  it.each(rails)('%s uses the Owner’s names: «المجموعات الإعلانية», «روابط التتبع», and no «إطلاق الحملات» or «الملخص»', (_name, groups) => {
+  it.each(rails)('%s uses the Owner’s names: «المجموعات», «روابط التتبع», and no «إطلاق الحملات» or «الملخص»', (_name, groups) => {
     const labels = groups.flatMap((g) => g.leaves.map((l) => l.ar))
-    expect(labels).toContain('المجموعات الإعلانية')
+    expect(labels).toContain('المجموعات')
     expect(labels).toContain('روابط التتبع')
     expect(labels).not.toContain('إطلاق الحملات')
     expect(labels).not.toContain('الملخص')

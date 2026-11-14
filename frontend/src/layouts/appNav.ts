@@ -1,4 +1,5 @@
 import { BarChart3, BellRing, Bot, ClipboardList, CreditCard, FolderKanban, FolderOpen, Images, Layers, LayoutDashboard, Lightbulb, Link2, ListChecks, Megaphone, PiggyBank, Plug, RectangleHorizontal, Rocket, Rows3, Settings, ShieldCheck, TrendingUp, Wallet, Workflow } from 'lucide-react'
+import { AD_GROUPS } from '../lib/adGroupTerms'
 import type { NavGroup, NavLeaf } from './SidebarNav'
 
 /**
@@ -30,7 +31,7 @@ import type { NavGroup, NavLeaf } from './SidebarNav'
  *
  * Regrouped and renamed, never removed: every address this rail offered before is still here (navGrouping.test.ts
  * proves it). «حملة جديدة» opened the internal campaign draft form until LAUNCH-001 gave it a page of its own
- * (/launch) that publishes on the platforms' APIs; «المجموعات» / «الإعلانات» opened the Analytics ad-set and ad tabs until
+ * (/launch) that publishes on the platforms' APIs; «المجموعات» / «الإعلانات» opened the Analytics ad-group and ad tabs until
  * ADV-CAMPAIGN-TABLES-001 gave each rung an operational table of its own (/ad-groups, /ads). Approvals, which had a
  * page and no entry, now has one.
  */
@@ -52,7 +53,7 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban, ent: 'projects' },
       { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, ent: 'campaigns' },
-      { to: '/app/ad-groups', ar: 'المجموعات الإعلانية', en: 'Ad groups', icon: Rows3, ent: 'analytics' },
+      { to: '/app/ad-groups', ...AD_GROUPS, icon: Rows3, ent: 'analytics' },
       { to: '/app/ads', ar: 'الإعلانات', en: 'Ads', icon: RectangleHorizontal, ent: 'analytics' },
       { to: '/app/content', ar: 'المحتويات', en: 'Content', icon: Images, ent: 'content' },
       { to: '/app/files', ar: 'الملفات', en: 'Files', icon: FolderOpen, ent: 'files' },

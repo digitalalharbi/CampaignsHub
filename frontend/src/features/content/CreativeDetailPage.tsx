@@ -75,7 +75,7 @@ const COPY = {
     aiMediaNotDeclared: 'غير مُعلَن',
     platform: 'المنصة',
     campaign: 'الحملة',
-    adSet: 'المجموعة الإعلانية',
+    adSet: 'المجموعة',
     ad: 'الإعلان',
     objective: 'الهدف',
     path: 'المسار التسويقي',

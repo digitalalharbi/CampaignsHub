@@ -182,7 +182,11 @@ final class LeadDedupVisibilityTest extends TestCase
          * whether they hold `projects.view.all` / `settings.manage`. It is memoised per request, so it is
          * a constant — the budget still does not grow with the page, which is what the guard defends.
          */
-        $this->assertLessThan(20, $queries, "listing 16 leads took {$queries} queries");
+        /*
+         * Raised from 20 to 21 by ACCESS-CENTER-001: the reader's per-member access overrides are read once per
+         * request (`MemberOverrideMemo`) inside `permissionKeys()`. One query, memoised — still a constant.
+         */
+        $this->assertLessThan(21, $queries, "listing 16 leads took {$queries} queries");
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
