@@ -10,6 +10,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportComposition;
@@ -106,6 +107,20 @@ final class ReportPlatformDrilldowns
                         'creative_ids' => $scope->creativeIds,
                     ], $form->form, liveMedia: true)
                 : null;
+
+            /*
+             * SHARE-COPY-LEAK-001 — a link's printed platform pages obey its copy switches, through the one rule (`ContentCopy`).
+             *
+             * These lists come straight from the ads builder, so the hero's words, the text card's `preview.text` and every carousel
+             * card's copy printed on paper while the link's page withheld them. Applied on the same terms as the link's own document:
+             * always for a live link (as `LiveReportService::adsFor`), and for a saved report's link once its operator configured the
+             * panel (as `ShareService::sanitize`) — a link made before the panel keeps what it has always printed.
+             */
+            if ($content !== null && $share !== null && ($share->isLive() || $share->creativeVisibility()->creatives)) {
+                foreach (['ads', 'worst'] as $list) {
+                    $content[$list] = ContentCopy::rows($content[$list] ?? [], $share->creativeVisibility());
+                }
+            }
 
             $blocks[] = $form->apply($this->builder->build(
                 provider: $provider,

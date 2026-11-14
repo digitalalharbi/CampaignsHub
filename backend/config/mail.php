@@ -117,6 +117,9 @@ return [
     */
     'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
 
+    // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — how many recipients OUTSIDE the platform one workspace may add (each is also charged to the daily allowance above).
+    'external_recipients_per_tenant' => 25,
+
     /*
     | DIGESTS-CADENCE-BUDGETS-001 — the part of that daily allowance digests may NOT spend, kept for alerts. Thirty projects ×
     | three rhythms × several readers is a morning of mail; an alert raised that afternoon must still be able to leave.

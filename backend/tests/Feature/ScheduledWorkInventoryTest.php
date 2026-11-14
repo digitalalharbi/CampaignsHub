@@ -86,6 +86,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — hourly from 08:00 Riyadh; ledger rows make it idempotent.
+        'notifications:send-spend-summaries',
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
@@ -171,6 +173,7 @@ final class ScheduledWorkInventoryTest extends TestCase
             'integrations:sync-structure',
             'integrations:refresh-tokens',
             'notifications:send-digests',
+            'notifications:send-spend-summaries',
             'notifications:send-alerts',
             'commerce:sync',
             /*

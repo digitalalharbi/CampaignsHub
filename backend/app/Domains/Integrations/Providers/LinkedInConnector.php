@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\OAuth\GrantedScopes;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
@@ -46,6 +47,9 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
      * than or equal to 92 days». Beyond it the field is not requested at all — see `fetchInsights`.
      */
     private const REACH_MAX_DAYS = 92;
+
+    /** LINKEDIN-SCOPES-001 — the grant the Posts API demands; without it every sponsored post is refused. */
+    private const POSTS_SCOPE = 'r_organization_social';
 
     protected function platform(): string
     {
@@ -226,7 +230,15 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             }
         }
 
-        [$posts, $postReason] = $this->batchGet($tokens, 'posts', array_values(array_unique($references)), 'linkedin_post_scope_missing');
+        /*
+         * LINKEDIN-SCOPES-001 — the grant is read BEFORE the Posts API is asked. A token that was never granted
+         * `r_organization_social` is refused for every post, and the remedy is the advertiser's reconnect, not a
+         * permission on the app — so it is named as that. An unrecorded grant is asked as before.
+         */
+        $granted = GrantedScopes::parse($tokens->scope);
+        [$posts, $postReason, $postMessage] = $granted !== [] && ! in_array(self::POSTS_SCOPE, $granted, true)
+            ? [[], 'linkedin_reconnect_for_posts', null]
+            : $this->batchGet($tokens, 'posts', array_values(array_unique($references)), 'linkedin_post_scope_missing');
 
         $mediaUrns = ['images' => [], 'videos' => []];
         foreach ($posts as $post) {
@@ -236,8 +248,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             }
         }
 
-        [$images, $imageReason] = $this->batchGet($tokens, 'images', array_values(array_unique($mediaUrns['images'])), 'linkedin_media_scope_missing');
-        [$videos, $videoReason] = $this->batchGet($tokens, 'videos', array_values(array_unique($mediaUrns['videos'])), 'linkedin_media_scope_missing');
+        [$images, $imageReason, $imageMessage] = $this->batchGet($tokens, 'images', array_values(array_unique($mediaUrns['images'])), 'linkedin_media_scope_missing');
+        [$videos, $videoReason, $videoMessage] = $this->batchGet($tokens, 'videos', array_values(array_unique($mediaUrns['videos'])), 'linkedin_media_scope_missing');
 
         $ads = [];
 
@@ -268,7 +280,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 // still CONTENT and gets its row — it was `null` before, so a sponsored post never
                 // reached the content library, the report or the live link at all.
                 'creative' => $this->creativeFace($id, $c)
-                    ?? $this->postFace($id, $c, $posts, $postReason, $images + $videos, ['images' => $imageReason, 'videos' => $videoReason]),
+                    ?? $this->postFace($id, $c, $posts, $postReason, $images + $videos, ['images' => $imageReason, 'videos' => $videoReason],
+                        ['posts' => $postMessage, 'images' => $imageMessage, 'videos' => $videoMessage]),
                 'raw' => (array) $c,
             ], static fn ($v) => $v !== null);
         }
@@ -280,7 +293,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
      * A Rest.li BATCH_GET (`?ids=List(…)`), refused or not.
      *
      * @param  list<string>  $urns
-     * @return array{0: array<string, array<string, mixed>>, 1: string|null} the results by URN, and the reason when refused
+     * @return array{0: array<string, array<string, mixed>>, 1: string|null, 2: string|null} the results by URN, the reason when
+     *                                                                                       refused, and LinkedIn's own sentence for a 403
      */
     private function batchGet(OAuthTokens $tokens, string $resource, array $urns, string $refusedReason): array
     {
@@ -300,7 +314,10 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
 
             // 403 is the grant; a 401 is an expired or revoked token, which is not a permission the Owner can add.
             if ($response->status() === 403) {
-                return [$out, $refusedReason]; // the grant, not the item: asking again will not change it
+                // LINKEDIN-SCOPES-001 — LinkedIn's sentence is kept: it names the API it refused, which a guess cannot.
+                $said = $response->json('message');
+
+                return [$out, $refusedReason, is_string($said) && trim($said) !== '' ? mb_substr(trim($said), 0, 200) : null];
             }
 
             try {
@@ -318,7 +335,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             }
         }
 
-        return [$out, $reason];
+        return [$out, $reason, null];
     }
 
     /** The image or video URN a post shows: `content.media.id`, or an article's `thumbnail`. */
@@ -339,9 +356,10 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
      * @param  array<string, array<string, mixed>>  $posts
      * @param  array<string, array<string, mixed>>  $media
      * @param  array{images: ?string, videos: ?string}  $mediaReasons
+     * @param  array{posts: ?string, images: ?string, videos: ?string}  $messages  LinkedIn's own words for a refusal
      * @return array<string, mixed>
      */
-    private function postFace(string $id, array $creative, array $posts, ?string $postReason, array $media, array $mediaReasons): array
+    private function postFace(string $id, array $creative, array $posts, ?string $postReason, array $media, array $mediaReasons, array $messages = ['posts' => null, 'images' => null, 'videos' => null]): array
     {
         $reference = is_string($creative['content']['reference'] ?? null) ? $creative['content']['reference'] : null;
         $post = $reference === null ? null : ($posts[$reference] ?? null);
@@ -367,6 +385,11 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
             $mediaUrn !== null && $still === null => $mediaReasons[$isVideo ? 'videos' : 'images'] ?? 'linkedin_media_unreadable',
             default => null,
         };
+        $message = match (true) {
+            $reason === null => null,
+            $post === null => $messages['posts'],
+            default => $messages[$isVideo ? 'videos' : 'images'],
+        };
 
         return array_filter([
             'external_id' => $id,
@@ -387,6 +410,7 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 'reference' => $reference,
                 'media_urn' => $mediaUrn,
                 'media_reason' => $reason,
+                'provider_message' => $message,
             ], static fn ($v) => $v !== null),
         ], static fn ($v) => $v !== null && $v !== []);
     }
