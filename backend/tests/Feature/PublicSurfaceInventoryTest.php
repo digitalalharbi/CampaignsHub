@@ -39,6 +39,7 @@ final class PublicSurfaceInventoryTest extends TestCase
         // SIGNUP-VERIFY-POLICY-001 — which proofs the sign-up form must ask for; two booleans, no application data.
         'GET api/v1/auth/registration-policy',
         'GET api/v1/brand',
+        'GET api/v1/client/approvals',
         'GET api/v1/client/audience',
         'GET api/v1/client/branding',
         'GET api/v1/client/branding/logo',
@@ -123,6 +124,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/auth/tokens',
         'POST api/v1/billing/webhook/{provider}',
         'POST api/v1/client/invoices/{invoice}/pay',
+        'POST api/v1/client/approvals/{approval}/approve',
+        'POST api/v1/client/approvals/{approval}/request-changes',
         'POST api/v1/client/login/start',
         'POST api/v1/client/login/verify',
         'POST api/v1/client/logout',
