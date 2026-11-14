@@ -258,13 +258,16 @@ final class ReportScopeEndpointTest extends TestCase
         $this->assertSame(['Awareness'], $names);
     }
 
-    public function test_the_objective_narrows_campaigns(): void
+    /** OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chooses KPIs; the builder still offers every campaign. */
+    public function test_the_objective_never_narrows_campaigns(): void
     {
         $this->structure();
 
+        [$all] = $this->optionNames([]);
         [$names] = $this->optionNames(['objectives' => ['awareness']]);
 
-        $this->assertSame(['Awareness'], $names);
+        $this->assertContains('Sales', $names);
+        $this->assertSame($all, $names);
     }
 
     public function test_the_destination_narrows_campaigns_and_is_offered_with_its_count(): void

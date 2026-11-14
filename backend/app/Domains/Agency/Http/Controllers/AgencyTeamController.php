@@ -14,10 +14,12 @@ use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -70,6 +72,7 @@ final class AgencyTeamController extends Controller
             'can_manage' => (bool) $user->hasPermission('users.update'),
             // The clients THIS operator may hand out. A scoped manager sees only their own.
             'assignable_clients' => $this->assignableClients($request),
+            'coverage' => $this->coverage($request, $memberships),
         ], 'Agency team.');
     }
 
@@ -247,6 +250,80 @@ final class AgencyTeamController extends Controller
             'is_self' => $own !== null && $own->is($membership),
             'has_unrestricted_permission' => (bool) $member?->hasPermission(ClientScopeResolver::ALL_CLIENTS),
         ];
+    }
+
+    /**
+     * TEAM-CLIENT-COVERAGE-001 — «في صفحة الفريق أرى من يتابع كل عميل، والعميل بلا مدير مشروع يظهر
+     * بعلامة» (Owner, MASTER_FINAL Appendix A task 7).
+     *
+     * One row per client the READER reaches — the same ceiling as `assignableClients`, so a scoped
+     * reader learns nothing about a client outside it. «Who follows» is two facts the product already
+     * keeps: the members whose client access names this client, and the manager written on the
+     * client's projects (`projects.account_manager_id`, chosen in «عميل جديد»). A client none of whose
+     * projects names a manager is flagged, because that is the client nobody is answerable for.
+     *
+     * Members with unrestricted access are not listed against every client: they reach all of them,
+     * and naming them on each row would bury the people actually assigned.
+     *
+     * @param  Collection<int, Membership>  $memberships
+     * @return list<array<string, mixed>>
+     */
+    private function coverage(Request $request, Collection $memberships): array
+    {
+        $query = ClientWorkspace::query()->whereNull('archived_at')->orderBy('name');
+        /*
+         * The NAMED list first: a membership that names clients outranks `clients.view_all`
+         * (`ClientScopeResolver`), so a confined reader whose role carries the key still sees only
+         * their own clients' people. An empty list falls back to the owner / roster grants.
+         */
+        $named = $this->scopes->reachableClientIds($request->user());
+        if ($named !== null && $named !== []) {
+            $query->whereIn('id', $named);
+        } else {
+            $this->access->restrictQuery($query, $request->user());
+        }
+        $clients = $query->get(['id', 'name']);
+
+        if ($clients->isEmpty()) {
+            return [];
+        }
+
+        $ids = $clients->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        $managers = DB::table('projects')
+            ->join('users', 'users.id', '=', 'projects.account_manager_id')
+            ->where('projects.tenant_id', $this->tenants->tenantId())
+            ->whereIn('projects.client_workspace_id', $ids)
+            ->whereNull('projects.deleted_at')
+            ->get(['projects.client_workspace_id as client_id', 'users.name as name'])
+            ->groupBy('client_id');
+
+        $followers = [];
+        foreach ($memberships as $m) {
+            if ($m->status !== 'active') {
+                continue;
+            }
+            $person = $m->user;
+            if (! $person instanceof User) {
+                continue;
+            }
+            foreach ($m->clientScopeIds() as $clientId) {
+                $followers[$clientId][] = (string) ($person->name ?? $person->email);
+            }
+        }
+
+        return $clients->map(function (ClientWorkspace $c) use ($managers, $followers): array {
+            $id = (string) $c->id;
+            $names = collect($managers->get($id, []))->pluck('name')->map(fn ($n) => (string) $n)->unique()->values()->all();
+
+            return [
+                'id' => $id,
+                'name' => (string) $c->name,
+                'managers' => $names,
+                'followers' => array_values(array_unique($followers[$id] ?? [])),
+                'has_manager' => $names !== [],
+            ];
+        })->all();
     }
 
     /** @return list<array{id: string, name: string}> */

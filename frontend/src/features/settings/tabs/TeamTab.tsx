@@ -12,6 +12,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { RolesPanel } from './RolesPanel'
 
 export function TeamTab() {
   const ar = useUi((u) => u.locale) === 'ar'
@@ -134,6 +135,9 @@ export function TeamTab() {
           </div>
         )}
       </div>
+
+      {/* TEAM-ROLE-PRESETS-001 — the ready-made roles and their boxes, under the people who hold them. */}
+      <RolesPanel />
     </div>
   )
 }

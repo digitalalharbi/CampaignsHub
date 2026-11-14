@@ -131,7 +131,15 @@ export interface ProrationQuote {
   effective_at: string | null
 }
 
+/** PLAN-LIMITS-METER-001 — what, if anything, the workspace already has that would not fit the plan it is moving to. */
+export interface PlanFit {
+  fits: boolean
+  exceeds: Array<{ metric: string; label: string; used: number; limit: number; over: number }>
+}
+
 export interface PlanChangeQuote {
+  /** Absent only from an older server; treated as «fits» because the server enforces it either way. */
+  fit?: PlanFit
   from: { plan: string | null; plan_name: string | null; interval: string | null; unit_amount: string | null }
   to: { plan: string; plan_name: string; interval: string }
   quote: ProrationQuote

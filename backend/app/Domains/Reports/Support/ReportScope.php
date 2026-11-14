@@ -108,14 +108,15 @@ final class ReportScope
         public readonly ?string $from = null,
         public readonly ?string $to = null,
         /**
-         * REPORT-OBJECTIVE-TEMPLATE-001 — whether `objectives` FILTERS campaigns.
+         * REPORT-OBJECTIVE-TEMPLATE-001 · OBJECTIVE-FILTERS-INCLUSIVE-001 — `objectives` NEVER filter campaigns.
          *
-         * A report's objective is a measurement template (which funnel and KPIs it presents), not a campaign filter: choosing «Sales» must
-         * not drop the platforms whose campaigns are stored as traffic or `other`. The list is kept as the template's hint; it narrows the
-         * data only when the operator explicitly asked to filter campaigns by objective (`objective_filter`). A scope built for a link
-         * (the ceiling an operator granted) keeps the strict meaning, so no existing link widens.
+         * A report's objective is a measurement template (which funnel and KPIs it presents), not a campaign filter. The Owner
+         * (2026-11-13): «لا يجيب تجاهل كل ريال ينصرف» — choosing an objective changes the KPIs and shows everything. The old
+         * «filter campaigns by objective» switch (`objective_filter`) and the strict meaning a link's ceiling gave its objectives are
+         * gone: a stored `objective_filter: true` is read as a template like any other, and links already shared now count every
+         * campaign (Owner-approved). Kept as a property only so stored and submitted input still parses; it is always false.
          */
-        public readonly bool $objectiveFilter = true,
+        public readonly bool $objectiveFilter = false,
     ) {}
 
     /** An unbounded scope — every axis open. Only ever a STARTING point, never the result of narrowing. */
@@ -175,7 +176,8 @@ final class ReportScope
             metrics: array_values(array_intersect($list('metrics'), array_merge(MetricsAggregator::readKeys(), self::derivedMetricKeys()))),
             from: $date('from'),
             to: $date('to'),
-            objectiveFilter: array_key_exists('objective_filter', $input) ? filter_var($input['objective_filter'], FILTER_VALIDATE_BOOL) : $objectivesFilterByDefault,
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — whatever was stored or sent, an objective never filters.
+            objectiveFilter: false,
         );
     }
 
@@ -320,7 +322,7 @@ final class ReportScope
             metrics: $narrow($this->metrics, $ceiling->metrics),
             from: $from,
             to: $to,
-            objectiveFilter: $this->objectiveFilter || $ceiling->objectiveFilter,
+            objectiveFilter: false,
         );
     }
 
@@ -347,10 +349,12 @@ final class ReportScope
         if ($this->accountIds !== []) {
             $engine = $engine->forAccounts($this->accountIds);
         }
-        if (($this->objectives !== [] && $this->objectiveFilter) || $this->paths !== []) {
-            $engine = $engine->forObjectives($this->objectivesIncludingPaths());
-        }
 
+        /*
+         * OBJECTIVE-FILTERS-INCLUSIVE-001 — neither the objective axis nor the marketing-path axis narrows the figures any more. Both
+         * name what the money was FOR, and the Owner's rule is that naming it chooses KPIs and never drops a riyal. The explicit
+         * account and campaign selections above are a deliberate scope and still bound the data.
+         */
         return $engine;
     }
 

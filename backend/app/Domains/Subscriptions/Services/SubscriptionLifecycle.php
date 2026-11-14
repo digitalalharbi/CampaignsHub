@@ -860,6 +860,19 @@ final class SubscriptionLifecycle
                 continue;
             }
 
+            /*
+             * PLAN-LIMITS-METER-001 — the fit is checked again where the change takes effect, not only where it was agreed.
+             * A month can pass between the two, and a workspace that added projects meanwhile must not be moved onto a plan
+             * it no longer fits: the booking is withdrawn (audited) and they stay on the plan they have paid for. Nothing is
+             * removed from them either way.
+             */
+            $tenant = Tenant::query()->find((string) $subscription->tenant_id);
+            if ($tenant !== null && (new PlanLimitFit($this->subscriptions))->exceeding($tenant, $plan) !== []) {
+                $this->cancelScheduledChange($subscription, 'The workspace now uses more than the scheduled plan allows, so the change was not applied.');
+
+                continue;
+            }
+
             $this->applyPlan(
                 $subscription,
                 $plan,

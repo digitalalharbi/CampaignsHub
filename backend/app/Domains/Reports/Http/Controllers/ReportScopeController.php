@@ -102,7 +102,6 @@ final class ReportScopeController extends Controller
         $fProviders = array_values(array_map('strtolower', array_filter((array) $request->input('providers', []), 'is_string')));
         $fAccounts = array_values(array_filter((array) $request->input('account_ids', []), 'is_string'));
         ReportScopeHierarchy::refuseForeignAccounts($project, $fAccounts);
-        $fObjectives = array_values(array_filter((array) $request->input('objectives', []), 'is_string'));
         $fDestinations = array_values(array_filter((array) $request->input('destinations', []), 'is_string'));
 
         $axis = $request->string('axis')->toString();
@@ -144,7 +143,7 @@ final class ReportScopeController extends Controller
                 ->where('project_id', $project)
                 // SECURITY CLUSTER 5 — a campaign of a deselected account is not the project's to name.
                 ->tap(fn ($q) => BoundAccountVisibility::unifiedCampaigns($q))
-                ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
+                // OBJECTIVE-FILTERS-INCLUSIVE-001 — the chosen objective picks KPIs; every campaign stays pickable.
                 ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->where(fn ($w) => $w->whereIn(
                     'id',
                     ExternalCampaign::query()
