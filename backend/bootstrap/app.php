@@ -14,6 +14,7 @@ use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
+use App\Domains\Campaigns\Console\ReclassifyObjectivesCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
@@ -188,6 +189,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileContentMetricsCommand::class,
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
+        // OBJECTIVE-RECLASSIFY-RUN-001 — the Owner-approved reclassification, dry run first.
+        ReclassifyObjectivesCommand::class,
         GoogleAdsAccessCommand::class,
         MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
