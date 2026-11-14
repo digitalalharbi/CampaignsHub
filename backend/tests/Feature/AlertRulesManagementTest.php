@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertRuleRecipients;
+use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
@@ -104,6 +105,23 @@ final class AlertRulesManagementTest extends TestCase
 
         $this->assertSame(['pct' => 20], $rule->fresh()->threshold);
         $this->assertSame('CPA watch', $rule->fresh()->name);
+    }
+
+    public function test_removing_a_rule_cancels_the_tasks_nobody_started_and_leaves_the_rest(): void
+    {
+        $rule = $this->rule((string) $this->projectA->id);
+        $owner = $this->owner();
+        $mk = fn (string $status): Task => Task::create(['tenant_id' => $this->agency->id, 'title' => 't', 'status' => $status, 'created_by' => $owner->id]);
+        $todo = $mk('todo');
+        $started = $mk('in_progress');
+        $this->event($rule)->forceFill(['task_id' => $todo->id])->save();
+        $this->event($rule)->forceFill(['task_id' => $started->id])->save();
+
+        $this->actingAs($owner, 'sanctum')->deleteJson("/api/v1/alerts/rules/{$rule->id}")->assertOk();
+        app(TenantContext::class)->setTenantId((string) $this->agency->id);
+
+        $this->assertSame('cancelled', $todo->fresh()->status);
+        $this->assertSame('in_progress', $started->fresh()->status, 'work under way stays with its owner');
     }
 
     public function test_removing_a_rule_keeps_its_history_and_closes_its_open_alerts_silently(): void

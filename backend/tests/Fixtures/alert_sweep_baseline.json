@@ -1144,7 +1144,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -1154,7 +1154,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -2263,7 +2263,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -7241,7 +7241,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -7251,7 +7251,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -8360,7 +8360,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -13437,7 +13437,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -13447,7 +13447,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -14556,7 +14556,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -20122,7 +20122,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 22:00:00+00",
@@ -20132,7 +20132,7 @@
                 "updated_at": "2026-10-21 22:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -21241,7 +21241,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -21793,7 +21793,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 22:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -29075,7 +29075,7 @@
                 "dedup_key": "503a518c600fcf3a2b37f3b24915fb68d603522282b84ae4ab74c1e48d645724",
                 "status": "open",
                 "severity": "info",
-                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
+                "context": "{\"to\": \"sales\", \"from\": \"measurement_first\", \"title\": \"meta-act-1 can move to a better launch stage\", \"message\": \"When «Spring» went out, meta-act-1 was at «measurement_first»; its synced results now support «sales» (optimise for Purchase). Nothing was changed — open the launch page to decide.\", \"plan_id\": \"00000000-0000-4000-8000-000000005341\", \"title_ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"account_id\": \"00000000-0000-4000-8000-000000000007\", \"message_ar\": \"عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.\"}",
                 "notification_id": "00000000-0000-4000-8000-000000005588",
                 "task_id": null,
                 "last_triggered_at": "2026-10-22 10:00:00+00",
@@ -29085,7 +29085,7 @@
                 "updated_at": "2026-10-22 10:00:00+00",
                 "priority": "P3",
                 "evidence": "{\"now\": null, \"before\": null, \"metric\": null, \"missing\": [\"evidence\"], \"threshold\": null, \"sufficient\": false, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
+                "anatomy": "{\"action\": null, \"impact\": null, \"numbers\": {\"ar\": \"⁦measurement_first → sales⁩\", \"en\": \"⁦measurement_first → sales⁩\"}, \"problem\": {\"ar\": \"نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى\", \"en\": \"An account earned a better launch stage\"}, \"insufficient_note\": {\"ar\": \"بيانات غير كافية — لا نوصي بإجراء قبل اكتمال الدليل.\", \"en\": \"Insufficient data — no action is recommended until the evidence is complete.\"}}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -30223,7 +30223,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -30775,7 +30775,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-21 22:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -31258,7 +31258,7 @@
                 "resolved_at": null,
                 "created_at": "2026-10-22 10:00:00+00",
                 "dedup_key": "02b56dd482ae2cbdc0535677a1a84037dc6daeff12462865a666618b8dae5810",
-                "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                 "message_ar": "⁦measurement_first → sales⁩"
             },
             {
@@ -42683,7 +42683,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -42711,7 +42711,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -46205,7 +46205,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -48679,7 +48679,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -48707,7 +48707,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -49869,7 +49869,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -51065,7 +51065,7 @@
                 },
                 {
                     "severity": "info",
-                    "title": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                    "title": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                     "detail": "ما تغيّر شيء لوحده.",
                     "context": "Project · P3",
                     "numbers": "⁦measurement_first → sales⁩",
@@ -51093,7 +51093,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {
@@ -52310,7 +52310,7 @@
                         "account_id": "00000000-0000-4000-8000-000000000007",
                         "from": "measurement_first",
                         "to": "sales",
-                        "title_ar": "حساب meta-act-1 صار مؤهلًا لمرحلة إطلاق أفضل",
+                        "title_ar": "نتائج حساب meta-act-1 صارت تدعم مرحلة أعلى",
                         "message_ar": "عند نشر «Spring» كان الحساب في مرحلة «measurement_first»، وتدعم نتائجه المزامنة الآن مرحلة «sales» (التحسين لحدث Purchase). لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر."
                     },
                     "chip": {

@@ -13,6 +13,7 @@ use App\Domains\Alerts\Services\AlertImpact;
 use App\Domains\Alerts\Services\AlertRuleRecipients;
 use App\Domains\Alerts\Services\AttentionBoard;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -380,7 +381,7 @@ final class AlertController extends Controller
      *
      * Soft: `alert_events.rule_id` cascades, so a hard delete would erase every alert the rule ever raised along with
      * the decisions and notes on them. The rule is switched off and soft-deleted, and its alerts that are still open or
-     * snoozed are closed without a message — the rule that raised them no longer watches anything, so nobody is going
+     * snoozed are closed without a message, and the tasks it opened that nobody has started are cancelled — the rule that raised them no longer watches anything, so nobody is going
      * to be told they recovered. The context records why they closed.
      */
     public function destroyRule(Request $request, AlertRule $alertRule): JsonResponse
@@ -390,13 +391,22 @@ final class AlertController extends Controller
 
         DB::transaction(function () use ($alertRule): void {
             $now = Carbon::now();
+            $taskIds = [];
             AlertEvent::query()->where('rule_id', $alertRule->id)->whereIn('status', ['open', 'snoozed'])->get()
-                ->each(function (AlertEvent $event) use ($now): void {
+                ->each(function (AlertEvent $event) use ($now, &$taskIds): void {
+                    if ($event->task_id !== null) {
+                        $taskIds[] = (string) $event->task_id;
+                    }
                     $event->forceFill([
                         'status' => 'resolved', 'resolved_at' => $now, 'snoozed_until' => null,
                         'context' => array_merge((array) $event->context, ['closed_reason' => 'rule_removed']),
                     ])->save();
                 });
+            // The task the rule opened for a now-closed alert: cancelled while nobody has started it. Work already
+            // under way (in progress, in review, blocked...) is left with its owner.
+            if ($taskIds !== []) {
+                Task::query()->whereIn('id', $taskIds)->whereIn('status', ['backlog', 'todo'])->update(['status' => 'cancelled']);
+            }
             $alertRule->forceFill(['active' => false])->save();
             $alertRule->delete();
         });
