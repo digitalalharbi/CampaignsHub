@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
-use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\CampaignOutcome;
-use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
@@ -265,10 +263,9 @@ final class MetricsController extends Controller
              * sentence off this, so nobody reads a whole-shop figure as one platform's share.
              */
             'filtered_view' => $this->providerFilter($request) !== []
-                || $this->objectiveFilter($request) !== []
                 || $this->campaignFilter($request) !== [],
-            'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الهدف، لأن جزءًا من الطلبات يصل بلا إسناد.',
-            'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or objective filter — some orders arrive with no attribution.',
+            'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الحملة، لأن جزءًا من الطلبات يصل بلا إسناد.',
+            'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or campaign filter — some orders arrive with no attribution.',
             'orders' => $funnel['totals']['orders'],
             'revenue' => $funnel['totals']['revenue'],
             // COMMERCE-FX-001 — the currency the money below is stated in, and how many orders are
@@ -533,12 +530,11 @@ final class MetricsController extends Controller
          * a bare uuid the moment they also filtered by platform.
          */
         $providers = $this->providerFilter($request);
-        $objectives = $this->objectiveFilter($request);
 
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — every campaign stays pickable whatever objective's KPIs are chosen.
         $rows = UnifiedCampaign::query()
             ->where('project_id', $projectId)
             ->when($q !== '', fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($q).'%']))
-            ->when($objectives !== [], fn ($b) => $b->whereIn('objective', $objectives))
             ->when($providers !== [], fn ($b) => $b->whereHas(
                 'externalCampaigns',
                 fn ($e) => $e->whereIn('provider', $providers),
@@ -1270,7 +1266,8 @@ final class MetricsController extends Controller
             $request->filled('attribution_window') ? $request->string('attribution_window')->toString() : null,
             new EntityScope(
                 providers: $this->providerFilter($request),
-                objectives: $this->objectiveFilter($request),
+                // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective never narrows the rows.
+                objectives: [],
                 campaigns: $this->campaignFilter($request),
             ),
         );
@@ -1403,41 +1400,6 @@ final class MetricsController extends Controller
         return array_values(array_filter(array_map('trim', $list)));
     }
 
-    /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
-    private function objectiveFilter(Request $request): array
-    {
-        $objectives = $this->listFilter($request, 'objective');
-
-        /*
-         * ANALYTICS-OBJECTIVE-FILTERS-001 — a FAMILY narrows the query, not just the KPI order.
-         *
-         * `?objective=` takes exact objective values, which is right for a precise filter and wrong
-         * for the control an operator actually wants: «show me the awareness work» means awareness
-         * AND reach, and «sales» means sales, conversions, purchases and add-to-cart. Making the
-         * user tick four boxes to mean one thing is how a filter stops being used.
-         *
-         * Expanded to member objectives HERE, so the narrowing happens in the aggregator's SQL. A
-         * family resolved in the frontend would filter rows already aggregated across every
-         * objective — the totals would still be the unfiltered ones, and the page would look
-         * filtered while telling the truth about nothing.
-         */
-        foreach ($this->listFilter($request, 'objective_family') as $family) {
-            $case = ObjectiveFamily::tryFrom($family);
-
-            if ($case === null) {
-                continue;
-            }
-
-            foreach (CampaignObjective::cases() as $objective) {
-                if ($objective->family() === $case) {
-                    $objectives[] = $objective->value;
-                }
-            }
-        }
-
-        return array_values(array_unique($objectives));
-    }
-
     /**
      * The campaign filter from the request (?campaign=<uuid>,<uuid>). Empty when absent.
      *
@@ -1504,9 +1466,7 @@ final class MetricsController extends Controller
             $requested[] = 'provider';
         }
 
-        if ($this->objectiveFilter($request) !== []) {
-            $requested[] = 'objective';
-        }
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chooses KPIs and narrows nothing, so it is never «applied» or «declined».
 
         if ($this->campaignFilter($request) !== []) {
             $requested[] = 'campaign';
@@ -1550,7 +1510,7 @@ final class MetricsController extends Controller
 
         $agg = $this->agg
             ->forProviders($this->providerFilter($request))
-            ->forObjectives($this->objectiveFilter($request))
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chip chooses the KPIs the page leads with; it never narrows the figures.
             /*
              * CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
              *

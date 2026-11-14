@@ -1649,8 +1649,8 @@ final class LiveReportService
             'campaign_ids' => $scope['campaign_ids'],
             'account_ids' => $share->scope['account_ids'] ?? [],
             'objectives' => $share->scope['objectives'] ?? [],
-            // A link's objectives are a ceiling the operator granted: they keep filtering (nothing widens).
-            'objective_filter' => true,
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — a link's objectives choose its KPIs; they never drop a campaign or a riyal
+            // (Owner-approved, 2026-11-13, for links already shared too). ReportScope reads them as a template.
             'paths' => $share->scope['paths'] ?? [],
             'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
             'ad_ids' => $share->scope['ad_ids'] ?? [],

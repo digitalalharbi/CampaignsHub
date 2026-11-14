@@ -87,8 +87,25 @@ export type EntityColumnPlan = {
  * family at all (nothing linked, or an empty table) is not the same as several, and only the second
  * one owes the reader a sentence explaining why the objective's own figures are absent.
  */
-export function entityColumnPlan(rows: ReadonlyArray<{ objective?: string | null }>): EntityColumnPlan {
+export function entityColumnPlan(rows: ReadonlyArray<{ objective?: string | null }>, chosen: string = 'all'): EntityColumnPlan {
   const families = familiesIn(rows)
+  /*
+   * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the objective the reader CHOSE picks the KPIs; it no longer narrows the
+   * rows, so the table still holds every campaign's ads. With an objective chosen, its own columns lead (a sales choice gets its
+   * return) and the table is not «mixed»: the reader asked for this objective's verdict over everything in scope.
+   */
+  if (chosen !== 'all') {
+    const layout = layoutFor(chosen)
+    const served = new Set(ENTITY_SERVED_METRICS)
+    const ordered = ['spend', ...[...layout.primary, ...layout.secondary].filter((k) => k !== 'spend')]
+
+    return {
+      keys: [...new Set(ordered)].filter((k) => served.has(k)).slice(0, MAX_METRIC_COLUMNS),
+      family: families.length === 1 ? families[0] : null,
+      mixed: false,
+    }
+  }
+
   const layout = layoutFor('all', families)
   const served = new Set(ENTITY_SERVED_METRICS)
 
