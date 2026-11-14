@@ -153,8 +153,9 @@ test.describe('the client portal leads with results, not paperwork', () => {
   test('campaigns and reports come before quotes and invoices', async ({ page }) => {
     await page.goto('/portal')
 
-    const nav = page.getByRole('navigation').first()
-    await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
+    // The section strip, then the performance section's own page row (campaigns, reports) under it.
+    const nav = page.locator('nav[aria-label], [data-testid="portal-section-pages"]')
+    await expect(page.getByTestId('portal-section-pages')).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
     // `/portal` resolves the client's space and redirects into it: wait for the rail's links to paint
     // before reading their labels, or a slower browser reads the gap and finds none.
     await expect(nav.locator('a').nth(3)).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
@@ -178,15 +179,18 @@ test.describe('the client portal leads with results, not paperwork', () => {
     }).toBe(true)
 
     const at = (re: RegExp) => labels.findIndex((l) => re.test(l))
-    const campaigns = at(/الحملات|Campaigns/)
-    const reports = at(/التقارير|Reports/)
-    const quotes = at(/عروض الأسعار|Quotes/)
-    const invoices = at(/الفواتير|Invoices/)
+    expect(at(/الحملات|Campaigns/), 'campaigns is missing from the client rail').toBeGreaterThan(-1)
+    expect(at(/التقارير|Reports/), 'reports is missing from the client rail').toBeGreaterThan(-1)
 
-    expect(campaigns, 'campaigns is missing from the client rail').toBeGreaterThan(-1)
-    expect(reports, 'reports is missing from the client rail').toBeGreaterThan(-1)
-    expect(campaigns, 'the client meets quotes before their campaigns').toBeLessThan(quotes)
-    expect(reports, 'the client meets invoices before their results').toBeLessThan(invoices)
+    /*
+     * CLIENT-PORTAL-THREE-SECTIONS-001 — results lead structurally now: the section strip opens on «الأداء»
+     * (whose own row holds campaigns and reports), quotes sit under «بانتظار اعتمادك» after it, invoices under
+     * «المزيد» last. Nothing was removed: each is still one tap below its section.
+     */
+    const strip = page.locator('a[data-testid^="portal-section-"]')
+    const sections = await strip.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))
+    expect(sections.slice(0, 2), 'performance does not lead the portal').toEqual(['portal-section-performance', 'portal-section-approvals'])
+    expect(sections.at(-1), '«More» is not last').toBe('portal-section-more')
   })
 
   /**

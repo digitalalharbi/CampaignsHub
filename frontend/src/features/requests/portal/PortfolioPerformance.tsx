@@ -80,7 +80,7 @@ export function PortfolioPerformance() {
 
   // The agency switched the dashboard off, or the contact must first choose a space: nothing to draw.
   if (overview.isError || overview.isPending) {
-    return overview.isPending ? <div data-testid="portfolio-loading" className="mb-6 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
+    return overview.isPending ? <div data-testid="portfolio-loading" className="mb-3 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
   }
 
   return <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
@@ -111,7 +111,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
   const hasAnything = Object.values(data.kpis).some((v) => v !== null && v !== 0)
 
   return (
-    <section data-testid="portfolio-performance" className={`mb-6 transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
+    <section data-testid="portfolio-performance" className={`mb-3 transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold text-text-primary">{t.title}</h2>
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'} data-testid="portfolio-range">
@@ -169,7 +169,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
 
       {data.trend !== undefined && data.trend.length > 1 && <PortalTrend trend={data.trend} days={data.period.days} />}
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         {data.platforms.length > 0 && (
           <div data-testid="portfolio-platforms" className="rounded-2xl border border-border bg-surface p-4">
             <h3 className="mb-2 text-sm font-bold text-text-primary">{t.platforms}</h3>
@@ -190,7 +190,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {data.campaigns && data.campaigns.total > 0 && (
             <div data-testid="portfolio-campaigns" className="rounded-2xl border border-border bg-surface p-4">
               <div className="mb-2 flex items-center justify-between">

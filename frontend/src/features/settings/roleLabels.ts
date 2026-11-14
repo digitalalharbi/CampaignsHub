@@ -15,9 +15,15 @@
  * wrong language.
  */
 export const SYSTEM_ROLE_LABELS: Record<string, { ar: string; en: string }> = {
-  'tenant-owner': { ar: 'مالك مساحة العمل', en: 'Tenant Owner' },
+  // TEAM-ROLE-PRESETS-001 — the Owner's names for the ready-made roles (MASTER_FINAL Appendix A task 7).
+  'tenant-owner': { ar: 'مدير المساحة', en: 'Workspace manager' },
   'member': { ar: 'عضو فريق', en: 'Team Member' },
-  'analyst': { ar: 'محلّل', en: 'Analyst' },
+  'analyst': { ar: 'محلل', en: 'Analyst' },
+  'project-manager': { ar: 'مدير مشروع', en: 'Project manager' },
+  'finance': { ar: 'المالية', en: 'Finance' },
+  'media-buyer': { ar: 'مشتري إعلانات', en: 'Media buyer' },
+  'reporter': { ar: 'معدّ تقارير', en: 'Report builder' },
+  'viewer': { ar: 'مطّلع', en: 'Viewer' },
   'account-manager': { ar: 'مدير حساب', en: 'Account Manager' },
   'client-viewer': { ar: 'مُطّلع (عميل)', en: 'Client Viewer' },
   'client-portal': { ar: 'بوابة العميل', en: 'Client Portal' },

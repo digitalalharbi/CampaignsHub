@@ -120,6 +120,35 @@ export const rejectPortalQuote = async (id: string): Promise<PortalQuote> =>
   (await postData<{ quote: PortalQuote }>(`/client/quotes/${encodeURIComponent(id)}/reject`)).quote
 
 // ---------------------------------------------------------------------------
+// Content approvals — «بانتظار اعتمادك» (CLIENT-CONTENT-APPROVAL-001)
+// ---------------------------------------------------------------------------
+
+export interface PortalContentApproval {
+  id: string
+  title: string
+  caption: string | null
+  status: 'pending' | 'approved' | 'changes_requested'
+  format: string | null
+  thumbnail_url: string | null
+  decision_note: string | null
+  decided_at: string | null
+  created_at: string | null
+  /** The server's answer: an approver, in a space whose agency allows content approval, on an open ask. */
+  can_decide: boolean
+}
+
+export const listPortalContentApprovals = async (): Promise<PortalList<PortalContentApproval>> => {
+  const d = await getData<{ approvals: PortalContentApproval[]; total?: number; withheld?: number }>('/client/approvals')
+  return { items: d.approvals, total: d.total, withheld: d.withheld }
+}
+
+export const approvePortalContent = async (id: string): Promise<PortalContentApproval> =>
+  (await postData<{ approval: PortalContentApproval }>(`/client/approvals/${encodeURIComponent(id)}/approve`)).approval
+
+export const requestPortalContentChanges = async (id: string, note: string): Promise<PortalContentApproval> =>
+  (await postData<{ approval: PortalContentApproval }>(`/client/approvals/${encodeURIComponent(id)}/request-changes`, { note })).approval
+
+// ---------------------------------------------------------------------------
 // Billing — invoices + payments
 // ---------------------------------------------------------------------------
 
