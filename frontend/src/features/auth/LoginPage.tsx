@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { fetchSignInOptions, login, phoneSignInStart, phoneSignInVerify, startOAuth } from './api'
+import { fetchSignInOptions, login, phoneSignInStart, phoneSignInVerify, startOAuth, TwoStepRequired, type TwoStepInfo } from './api'
+import { TwoStepChallenge } from './TwoStepChallenge'
 import { resolvePostAuthOutcome } from './postAuthDestination'
 import { safeRedirect } from './redirect'
 import { AuthShell } from './AuthShell'
@@ -186,6 +187,22 @@ export function LoginPage() {
     setParams(next, { replace: true })
   }, [params, setParams])
 
+  /*
+   * TWO-STEP-001 — `undefined`: no second step in play. `null`: held at it with nothing known yet (Google's return, a reload),
+   * so the challenge asks the server. Otherwise: what the sign-in answer said it accepts.
+   */
+  const [twoStep, setTwoStep] = useState<TwoStepInfo | null | undefined>(() => (params.get('two_step') === '1' ? null : undefined))
+  const [twoStepExpired, setTwoStepExpired] = useState(false)
+  const enterTwoStep = useCallback((info: TwoStepInfo | null) => {
+    setTwoStep(info)
+    setParams((prev) => { const next = new URLSearchParams(prev); next.set('two_step', '1'); next.delete('oauth'); return next }, { replace: true })
+  }, [setParams])
+  const leaveTwoStep = useCallback((expiredStep: boolean) => {
+    setTwoStep(undefined)
+    setTwoStepExpired(expiredStep)
+    setParams((prev) => { const next = new URLSearchParams(prev); next.delete('two_step'); return next }, { replace: true })
+  }, [setParams])
+
   const [registrationId] = useState(recallRegistration)
   const [step, setStep] = useState<Step>('credentials')
   const [emailCodeOpen, setEmailCodeOpen] = useState(false)
@@ -290,6 +307,7 @@ export function LoginPage() {
       const { destination } = await resolvePostAuthOutcome(params, null)
       navigate(destination, { replace: true })
     },
+    onError: (e) => { if (e instanceof TwoStepRequired) enterTwoStep(e.info) },
   })
 
   /** Check the code; the destination comes from memberships. */
@@ -311,12 +329,13 @@ export function LoginPage() {
       return destination
     },
     onSuccess: (destination) => navigate(destination, { replace: true }),
+    onError: (e) => { if (e instanceof TwoStepRequired) enterTwoStep(e.info) },
   })
 
-  const activeError = signIn.isError ? toApiError(signIn.error)
+  const activeError = signIn.isError && !(signIn.error instanceof TwoStepRequired) ? toApiError(signIn.error)
     : googleSignIn.isError ? toApiError(googleSignIn.error)
       : startCode.isError ? toApiError(startCode.error)
-        : verifyCode.isError ? toApiError(verifyCode.error)
+        : verifyCode.isError && !(verifyCode.error instanceof TwoStepRequired) ? toApiError(verifyCode.error)
           : null
 
   /** Back to the first step. Clears the secrets. */
@@ -347,6 +366,26 @@ export function LoginPage() {
     const value = (typed ?? code).trim()
     if (verificationId && value.length === 6 && !verifyCode.isPending && !expired) verifyCode.mutate(value)
   }, [verificationId, code, verifyCode, expired])
+
+  // TWO-STEP-001 — held at the second step: this screen and nothing else until the server opens the session.
+  if (twoStep !== undefined) {
+    return (
+      <AuthShell portal="default">
+        <div data-testid="login-column" className="mx-auto w-full max-w-[440px]">
+          <TwoStepChallenge
+            locale={locale}
+            initial={twoStep}
+            onSignedIn={({ user, destination }) => {
+              signedInHere.current = true
+              setUser(user)
+              navigate(destination, { replace: true })
+            }}
+            onLeave={(expiredStep) => { startOver(); leaveTwoStep(expiredStep) }}
+          />
+        </div>
+      </AuthShell>
+    )
+  }
 
   // LOGIN-SINGLE-DOOR-001 — only reachable when the server enabled it; the destination comes back from the server.
   if (emailCodeOpen && oauthProviders.data?.emailCode === true) {
@@ -382,6 +421,7 @@ export function LoginPage() {
               setUser(user)
               navigate(destination, { replace: true })
             }}
+            onTwoStep={enterTwoStep}
             onLeave={() => {
               const next = new URLSearchParams(params)
               next.delete('oauth')
@@ -403,6 +443,11 @@ export function LoginPage() {
       {params.get('reason') === 'session' && (
         <p data-testid="login-session-ended" role="status" className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">
           {locale === 'ar' ? 'انتهت جلستك. سجّل الدخول مرة أخرى وستعود إلى حيث كنت.' : 'Your session has ended. Sign in again and you will return to where you were.'}
+        </p>
+      )}
+      {twoStepExpired && (
+        <p data-testid="login-two-step-expired" role="status" className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-secondary">
+          {locale === 'ar' ? 'انتهت مهلة التحقق. سجّل الدخول مرة أخرى.' : 'The verification step expired. Sign in again.'}
         </p>
       )}
       {/* What Google's answer was. Fixed sentences only: nothing from the address is echoed onto the page. */}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Actions\OAuthOutcome;
 use App\Domains\Identity\Actions\ResolveOAuthIdentity;
 use App\Domains\Identity\Models\OAuthIdentity;
@@ -133,9 +134,12 @@ final class OAuthController extends Controller
     {
         $pending = null;
         $profile = null;
+        $intent = null;
 
         try {
             $pending = $this->flow->consume($request, $provider, (string) $request->input('state'));
+            // Read once, before any branch narrows `$pending`: the catch below asks which journey this was.
+            $intent = is_string($pending['intent'] ?? null) ? (string) $pending['intent'] : null;
 
             // Consume state even on refusal so it remains single-use and so linking returns to
             // account settings rather than dropping an authenticated person on the login page.
@@ -174,11 +178,15 @@ final class OAuthController extends Controller
                 ]);
             }
 
-            Auth::guard('web')->login($user, true);
-            $request->session()->regenerate();
+            $redirect = is_string($pending['redirect']) ? $pending['redirect'] : null;
+
+            // TWO-STEP-001 — through the one place a session opens: a person with a second step on is held at it.
+            if (app(EstablishSession::class)->open($request, $user, true, ['portal' => $requested?->value, 'redirect' => $redirect]) !== null) {
+                return redirect()->away(Frontend::url('/login?two_step=1'));
+            }
 
             // LOGIN-SINGLE-DOOR-001 — the same answer the password path gets, by the same method.
-            return redirect()->away(Frontend::url($this->portals->postAuthDestination($user, $requested, is_string($pending['redirect']) ? $pending['redirect'] : null)));
+            return redirect()->away(Frontend::url($this->portals->postAuthDestination($user, $requested, $redirect)));
         } catch (OAuthOutcome $outcome) {
             /*
              * LOGIN-004 — a VERIFIED address that matches an account is not a dead end.
@@ -190,7 +198,7 @@ final class OAuthController extends Controller
             if (
                 $outcome->reason === ResolveOAuthIdentity::LINK_REQUIRED
                 && $outcome->matchedUserId !== null
-                && ($pending['intent'] ?? null) === 'login'
+                && $intent === 'login'
             ) {
                 $this->pendingLinks->offer(
                     $request,
