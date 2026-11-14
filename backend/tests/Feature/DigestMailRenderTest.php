@@ -137,8 +137,9 @@ final class DigestMailRenderTest extends TestCase
             $this->assertStringContainsString('Quiet Project', $quiet);
             $this->assertStringContainsString($chip, $quiet, "[$locale] the row says it has no data");
             $this->assertStringContainsString($line, $quiet);
-            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR)\b/u', $quiet, "[$locale] a withheld figure is never «0 USD»");
+            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR|\$|ر\.س)(?!\w)/u', $quiet, "[$locale] a withheld figure is never «0 USD»");
             $this->assertStringNotContainsString('USD', $quiet, "[$locale] no currency is stated beside a figure nobody has");
+            $this->assertStringNotContainsString(' $', $quiet, "[$locale] no currency mark is stated beside a figure nobody has");
             $this->assertStringNotContainsString('within the range', $quiet, "[$locale] no verdict is offered on nothing");
             $this->assertStringContainsString('9,400', $html, "[$locale] the project with data keeps its spend");
         }
@@ -147,6 +148,7 @@ final class DigestMailRenderTest extends TestCase
         $restricted = (string) (new DailyDigestMail($digest, 'en', 'Mohammed', 'daily', null, 'restricted'))->render();
         $this->assertStringContainsString('No data', $restricted);
         $this->assertStringNotContainsString('0 USD', $restricted);
+        $this->assertStringNotContainsString('0 $', $restricted);
 
         // The presenter itself: a coalesced spend/revenue is no card; a measured zero still is one.
         $this->assertNull((new DigestPresenter('ar', 1, 'SAR'))->card('spend', ['spend' => 0.0], ['spend' => false], []));
@@ -236,9 +238,9 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->envelope()->subject;
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->envelope()->subject;
 
-        $this->assertStringContainsString('12,400 USD', $en);
+        $this->assertStringContainsString('12,400 $', $en);
         $this->assertStringContainsString('84 results', $en);
-        $this->assertStringContainsString('12,400 USD', $ar);
+        $this->assertStringContainsString('12,400 $', $ar);
         $this->assertStringContainsString('نتيجة', $ar);
     }
 

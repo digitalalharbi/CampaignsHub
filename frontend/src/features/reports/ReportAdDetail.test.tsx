@@ -94,8 +94,8 @@ describe('opening an ad from a report', () => {
       <ReportAdDetail ad={ad()} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' },
     )
 
-    expect(screen.getByTestId('report-ad-detail-figures')).toHaveTextContent('3,000 USD')
-    expect(screen.getByTestId('report-ad-detail-figures')).not.toHaveTextContent('SAR')
+    expect(screen.getByTestId('report-ad-detail-figures')).toHaveTextContent('3,000 $')
+    expect(screen.getByTestId('report-ad-detail-figures')).not.toHaveTextContent('ر.س')
 
     unmount()
 
@@ -256,7 +256,7 @@ describe('opening an ad from a report', () => {
 describe('the detail states a withheld spend the card already states', () => {
   /*
    * The card reads spend through the money contract; the dialog one click deeper read `cash(ad.spend)`,
-   * which is null for a figure withheld for want of a rate — so the card said «412 USD» and the
+   * which is null for a figure withheld for want of a rate — so the card said «412 $» and the
    * dialog the client opened from it dropped Spend altogether.
    */
   const withheld = ad({
@@ -272,7 +272,7 @@ describe('the detail states a withheld spend the card already states', () => {
 
     const figures = screen.getByTestId('report-ad-detail-figures')
     expect(figures).toHaveTextContent('Spend')
-    expect(figures).toHaveTextContent(/412(\.50?)?\s*USD/)
+    expect(figures).toHaveTextContent(/412(\.50?)?\s*\$/)
   })
 })
 

@@ -66,7 +66,7 @@ describe('the budget hierarchy drills from the project to a campaign', () => {
 
     const row = (await screen.findByText('Spring launch')).closest('tr') as HTMLElement
     expect(within(row.closest('table') as HTMLElement).getByText('Platform limit')).toBeInTheDocument()
-    expect(screen.getByTestId('provider-limit-c1')).toHaveTextContent('12K SAR')
+    expect(screen.getByTestId('provider-limit-c1')).toHaveTextContent('12K ر.س')
     expect(screen.getByTestId('provider-limit-c2')).toHaveTextContent('Not sent')
   })
 

@@ -173,7 +173,7 @@ describe('what the result cost', () => {
 
 /**
  * CAMPAIGNS-MONEY-CURRENCY-001 — a money reading names its currency when the window names one.
- * The table printed «17.4K» beside a budget that said «16.7K SAR».
+ * The table printed «17.4K» beside a budget that said «16.7K ر.س».
  */
 describe('money on a campaign row', () => {
   const row = { spend: 17448.75, revenue: 237825, conversions: 151, cpa: 115.55, roas: 13.63, spend_withheld_rows: 0, spend_original: 0, revenue_withheld_rows: 0, revenue_original: 0, money_original_currencies: 0, reported: { spend: true, revenue: true, conversions: true, purchases: true } }
@@ -181,10 +181,10 @@ describe('money on a campaign row', () => {
   it('carries the reporting currency into spend and cost per result', () => {
     const spend = campaignSpendReading(row, false, 'SAR')
     expect(spend).toMatchObject({ kind: 'value' })
-    expect((spend as { text: string }).text).toContain('SAR')
+    expect((spend as { text: string }).text).toContain('ر.س')
     const cost = campaignEfficiency('sales', row, false, 'SAR')
     expect(cost?.reading).toMatchObject({ kind: 'value' })
-    expect((cost?.reading as { text: string }).text).toContain('SAR')
+    expect((cost?.reading as { text: string }).text).toContain('ر.س')
   })
 
   it('stays bare — never a guessed unit — when no currency can be named', () => {

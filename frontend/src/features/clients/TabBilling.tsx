@@ -7,6 +7,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Num } from '@/components/ui/Num'
 import { TabClientInvoicing } from './billing/TabClientInvoicing'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * Client billing tab — this client's quotes + invoices, filtered from the tenant billing ledger
@@ -74,7 +75,7 @@ export function TabBilling({ clientId, canManage = false }: { clientId: string; 
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{q.number}</span>
                     <span className="flex items-center gap-2">
                       <TaxTreatmentChip treatment={q.tax_treatment} ar={ar} />
-                      <span className="tnum font-bold" dir="ltr">{Number(q.total).toLocaleString('en-US')} {q.currency}</span>
+                      <span className="tnum font-bold" dir="ltr">{withMark(Number(q.total).toLocaleString('en-US'), q.currency)}</span>
                     </span>
                   </Link>
                 </li>
@@ -91,7 +92,7 @@ export function TabBilling({ clientId, canManage = false }: { clientId: string; 
                     <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{i.number}</span>
                     <span className="flex items-center gap-2">
                       <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-semibold text-text-secondary">{i.status}</span>
-                      <span className="tnum font-bold" dir="ltr">{Number(i.total).toLocaleString('en-US')} {i.currency}</span>
+                      <span className="tnum font-bold" dir="ltr">{withMark(Number(i.total).toLocaleString('en-US'), i.currency)}</span>
                     </span>
                   </Link>
                 </li>

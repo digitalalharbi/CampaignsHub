@@ -69,7 +69,7 @@ describe('the lower budget rungs show the plan figures', () => {
     const table = capped.closest('table') as HTMLElement
     for (const h of ['Expected to date', 'Daily average', 'Over / under']) expect(within(table).getByText(h)).toBeInTheDocument()
 
-    expect(capped.textContent).toContain('+4K SAR')
+    expect(capped.textContent).toContain('+4K ر.س')
     const uncapped = within(table).getByText('No cap').closest('tr') as HTMLElement
     // No ceiling: expected and over / under refuse, the daily average is still a fact.
     expect(within(uncapped).getAllByText('—').length).toBeGreaterThanOrEqual(2)
@@ -80,8 +80,8 @@ describe('the lower budget rungs show the plan figures', () => {
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const row = (await screen.findByText('Spring launch')).closest('tr') as HTMLElement
-    expect(row.textContent).toContain('5K SAR500 SAR')
-    expect(row.textContent).toContain('+4K SAR')
+    expect(row.textContent).toContain('5K ر.س500 ر.س')
+    expect(row.textContent).toContain('+4K ر.س')
     const table = row.closest('table') as HTMLElement
     for (const h of ['Expected to date', 'Daily average', 'Over / under']) expect(within(table).getByText(h)).toBeInTheDocument()
   })

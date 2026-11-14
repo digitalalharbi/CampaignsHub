@@ -196,7 +196,7 @@ describe('CreativeDetailPage', () => {
    *
    * So on the owner's own account — a USD account with no USD→SAR rate, where FX-001 withholds by
    * design — the headline grid rendered «Not provided» over real, measured money, while the card the
-   * reader clicked to get here printed «412.50 USD» and the table further down the same page printed
+   * reader clicked to get here printed «412.50 $» and the table further down the same page printed
    * it too. One creative, three readings, two of them right.
    *
    * `reported.spend` is FALSE for a withheld row by construction — the backend sets it from the
@@ -217,8 +217,8 @@ describe('CreativeDetailPage', () => {
     const figures = await screen.findByText('Spend')
     const block = figures.closest('div') as HTMLElement
 
-    expect(within(block).queryByText(/USD/)).not.toBeInTheDocument()
-    expect(within(block).queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(within(block).queryByText(/(?:USD|\$)/)).not.toBeInTheDocument()
+    expect(within(block).queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
     expect(within(block).getByText(/1,000|1\.0K|1K/)).toBeInTheDocument()
   })
 
@@ -240,7 +240,7 @@ describe('CreativeDetailPage', () => {
     const figures = await screen.findByText('Spend')
     const block = figures.closest('div') as HTMLElement
 
-    expect(within(block).getByText(/412\.50 USD/)).toBeInTheDocument()
+    expect(within(block).getByText(/412\.50 \$/)).toBeInTheDocument()
     expect(within(block).queryByText(/Not provided/i)).not.toBeInTheDocument()
   })
 
@@ -263,7 +263,7 @@ describe('CreativeDetailPage', () => {
     const label = await screen.findByText('Revenue')
     const block = label.closest('div') as HTMLElement
 
-    expect(within(block).getByText(/1,980\.25 USD/)).toBeInTheDocument()
+    expect(within(block).getByText(/1,980\.25 \$/)).toBeInTheDocument()
   })
 
   /**

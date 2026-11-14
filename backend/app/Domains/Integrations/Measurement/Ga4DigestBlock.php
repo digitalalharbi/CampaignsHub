@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Measurement;
 
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Models\User;
@@ -78,7 +79,7 @@ final class Ga4DigestBlock
             $parts[] = ['value' => $n($b['purchases']), 'label' => $ar ? 'شراء' : 'orders'];
         }
         if ($b['revenue_usd'] !== null) {
-            $parts[] = ['value' => '$'.$n($b['revenue_usd']), 'label' => ''];
+            $parts[] = ['value' => FundingMoney::withMark($n($b['revenue_usd']), 'USD'), 'label' => ''];
         }
         if ($b['gap'] !== null && $b['claimed'] !== null) {
             $parts[] = ['value' => ($b['gap'] > 0 ? '+' : ($b['gap'] < 0 ? '-' : '')).$n(abs($b['gap'])), 'label' => $ar ? 'فرق المنصات' : 'platform gap'];

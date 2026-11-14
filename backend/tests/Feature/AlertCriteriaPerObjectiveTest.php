@@ -151,7 +151,7 @@ final class AlertCriteriaPerObjectiveTest extends TestCase
         $c2 = AlertEventText::compose(['rule_type' => 'no_results', 'severity' => 'warning', 'context' => $event->context, 'project_id' => (string) $this->project->id,
             'project_name' => 'كرم النخيل', 'entity_type' => UnifiedCampaign::class, 'entity_id' => (string) $c->id, 'event_id' => (string) $event->id, 'triggered_at' => ''], true);
         $this->assertStringContainsString('حساب كرم', $c2['context']);
-        $this->assertStringContainsString('SAR', $c2['numbers']);
+        $this->assertStringContainsString('ر.س', $c2['numbers']);
         $this->assertStringContainsString('طلب', $c2['numbers']);
         $this->assertStringContainsString('نوفمبر', $c2['numbers']);
         $this->assertStringContainsString('شغّالة من', $c2['numbers']);

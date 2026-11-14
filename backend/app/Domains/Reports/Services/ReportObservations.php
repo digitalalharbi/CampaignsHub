@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Support\AdPlatforms;
@@ -174,16 +175,15 @@ final class ReportObservations
                 'scope' => ['type' => 'period', 'name' => null],
                 'metric' => $key,
                 'reveals' => ['spend'],
-                'value' => number_format((float) $value, 2).' '.$currency,
+                'value' => FundingMoney::withMark(number_format((float) $value, 2), $currency),
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
                 'detail' => sprintf(
                     // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured fact only; a cause is never guessed (no data here proves one).
-                    'ارتفعت %s %s إلى %s %s.',
+                    'ارتفعت %s %s إلى %s.',
                     $label,
                     self::percent((float) $change),
-                    number_format((float) $value, 2),
-                    $currency,
+                    FundingMoney::withMark(number_format((float) $value, 2), $currency),
                 ),
             ];
         }
@@ -324,11 +324,9 @@ final class ReportObservations
                  * it for them keeps spending.
                  */
                 'detail' => sprintf(
-                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف كامبينز هب العرض؛ لإيقافه، أوقف الحملة على المنصة.',
-                    number_format((float) ($limit['consumed'] ?? 0), 2),
-                    $currency,
-                    number_format((float) ($limit['amount'] ?? 0), 2),
-                    $currency,
+                    'صُرف %s من حدّ داخلي قدره %s. لا يوقف كامبينز هب العرض؛ لإيقافه، أوقف الحملة على المنصة.',
+                    FundingMoney::withMark(number_format((float) ($limit['consumed'] ?? 0), 2), $currency),
+                    FundingMoney::withMark(number_format((float) ($limit['amount'] ?? 0), 2), $currency),
                 ),
             ];
         }
@@ -375,11 +373,9 @@ final class ReportObservations
                 'change' => null,
                 'title' => sprintf('الإنفاق على %s يستهلك الميزانية %s الخطة', $platform, $fast ? 'أسرع من' : 'أبطأ من'),
                 'detail' => sprintf(
-                    'صُرف %s %s من أصل %s %s، أي %s من الإنفاق المتوقع حتى الآن.',
-                    number_format((float) $row['spent'], 2),
-                    $currency,
-                    number_format((float) $row['budget'], 2),
-                    $currency,
+                    'صُرف %s من أصل %s، أي %s من الإنفاق المتوقع حتى الآن.',
+                    FundingMoney::withMark(number_format((float) $row['spent'], 2), $currency),
+                    FundingMoney::withMark(number_format((float) $row['budget'], 2), $currency),
                     self::percent((float) $pace),
                 ),
             ];

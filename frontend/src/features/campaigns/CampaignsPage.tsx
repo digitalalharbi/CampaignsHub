@@ -65,6 +65,7 @@ import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -886,6 +887,7 @@ export function CampaignsPage() {
           </>
         }
       />
+      <FinancialDisclaimer />
 
       {/*
         * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.

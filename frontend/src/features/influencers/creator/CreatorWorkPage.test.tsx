@@ -57,7 +57,7 @@ describe('CreatorWorkPage', () => {
 
     renderWithProviders(<CreatorWorkPage />)
 
-    await waitFor(() => expect(screen.getByText(/18,000 SAR/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/18,000 ر.س/)).toBeInTheDocument())
     expect(screen.queryByText(/25,000/)).not.toBeInTheDocument()
   })
 

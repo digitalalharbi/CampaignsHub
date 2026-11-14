@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Models\PlatformEvidence;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Projects\Models\Project;
@@ -296,7 +297,7 @@ final class DeliveryPackService
             $lines[] = ($ar ? '• مرات الظهور: ' : '• Impressions: ').$num($totals['impressions']);
         }
         if ($pack->includes('spend') && isset($totals['spend']) && ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0) {
-            $lines[] = ($ar ? '• الإنفاق: ' : '• Spend: ').number_format((float) $totals['spend'], 2, '.', ',').' '.($data['currency'] ?? ReportingCurrency::DEFAULT);
+            $lines[] = ($ar ? '• الإنفاق: ' : '• Spend: ').FundingMoney::withMark(number_format((float) $totals['spend'], 2, '.', ','), (string) ($data['currency'] ?? ReportingCurrency::DEFAULT));
         }
 
         $steps = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)
@@ -317,8 +318,8 @@ final class DeliveryPackService
         if ($invoice !== null && $pack->includes('amount_due') && in_array($invoice->status, Invoice::FROZEN_STATUSES, true)) {
             $due = max(0, (float) $invoice->total - (float) $invoice->amount_paid);
             $lines[] = $ar
-                ? "الفاتورة {$invoice->number}: المبلغ المستحق ".number_format($due, 2, '.', ',')." {$invoice->currency} — الاستحقاق {$invoice->due_date?->toDateString()}"
-                : "Invoice {$invoice->number}: amount due ".number_format($due, 2, '.', ',')." {$invoice->currency} — due {$invoice->due_date?->toDateString()}";
+                ? "الفاتورة {$invoice->number}: المبلغ المستحق ".FundingMoney::withMark(number_format($due, 2, '.', ','), $invoice->currency)." — الاستحقاق {$invoice->due_date?->toDateString()}"
+                : "Invoice {$invoice->number}: amount due ".FundingMoney::withMark(number_format($due, 2, '.', ','), $invoice->currency)." — due {$invoice->due_date?->toDateString()}";
         }
 
         return implode("\n", $lines);

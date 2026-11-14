@@ -58,7 +58,7 @@ describe('the formatters, under each system', () => {
     expect(num(96_122)).toBe('96,122')
     expect(percent(0.005, 1)).toBe('0.5%')
     expect(ratio(3.5, '×')).toBe('3.50×')
-    expect(money(900, 'SAR')).toBe('900 SAR')
+    expect(money(900, 'SAR')).toBe('900 ر.س')
   })
 
   it('writes Arabic-Indic digits when that is what was asked for', () => {
@@ -74,7 +74,7 @@ describe('the formatters, under each system', () => {
 
   it('keeps the currency code and the K/M suffix in Latin, because they are not numbers', () => {
     signInWithFormat('arabic')
-    expect(money(1_500, 'SAR')).toContain('SAR')
+    expect(money(1_500, 'SAR')).toContain('ر.س')
     expect(compact(1_500)).toContain('K')
     expect(compact(2_000_000)).toContain('M')
   })

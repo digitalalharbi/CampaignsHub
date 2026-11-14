@@ -40,7 +40,7 @@ describe('TenantSubscriptionPanel', () => {
     await open(overview(paid({ currency: 'USD', unit_amount: '50.00' })))
 
     expect(screen.getByTestId('tenant-subscription-state')).toHaveTextContent('50.00 USD')
-    expect(screen.getByTestId('tenant-subscription-state')).not.toHaveTextContent('SAR')
+    expect(screen.getByTestId('tenant-subscription-state')).not.toHaveTextContent(/SAR|ر\.س/)
   })
 
   it('offers no way to convert a paid subscription, and no extension of open-ended access', async () => {

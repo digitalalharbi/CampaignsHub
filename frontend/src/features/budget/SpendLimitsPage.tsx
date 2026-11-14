@@ -18,6 +18,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { proposeChange } from '@/features/agents/api'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * BUDGET-GOVERNANCE-001 — the workspace's own spend limits, and the sentence that keeps them honest.
@@ -419,8 +420,8 @@ function LimitActions({ limit, ar, locale, projectId }: { limit: SpendLimitReadi
     mutationFn: (a: LimitAction) => proposeChange(projectId!, {
       provider: a.provider, external_account_id: a.external_account_id, target_type: 'campaign', target_external_id: a.target_external_id, action: 'pause',
       reason: ar
-        ? `تجاوز حد الإنفاق: ${limit.consumed ?? '—'} من ${limit.amount} ${limit.currency} للفترة ${limit.period.from} → ${limit.period.to}.`
-        : `Spend limit ${limit.state === 'over' ? 'passed' : 'approaching'}: ${limit.consumed ?? '—'} of ${limit.amount} ${limit.currency} for ${limit.period.from} → ${limit.period.to}.`,
+        ? `تجاوز حد الإنفاق: ${limit.consumed ?? '—'} من ${withMark(String(limit.amount), limit.currency)} للفترة ${limit.period.from} → ${limit.period.to}.`
+        : `Spend limit ${limit.state === 'over' ? 'passed' : 'approaching'}: ${limit.consumed ?? '—'} of ${withMark(String(limit.amount), limit.currency)} for ${limit.period.from} → ${limit.period.to}.`,
     }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-proposals'] }),
   })

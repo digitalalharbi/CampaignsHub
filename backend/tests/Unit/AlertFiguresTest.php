@@ -14,15 +14,15 @@ final class AlertFiguresTest extends TestCase
     {
         $f = AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], false);
         $this->assertSame('167%', $f['lead']['value']);
-        $this->assertSame(['Spent' => '8,000.00 SAR', 'Budget' => '10,000.00 SAR'], array_column($f['strip'], 'value', 'label'));
+        $this->assertSame(['Spent' => '8,000.00 ر.س', 'Budget' => '10,000.00 ر.س'], array_column($f['strip'], 'value', 'label'));
         $this->assertNull(AlertFigures::from(['basis_class' => 'unmeasurable', 'pacing_basis' => 'currency_mismatch', 'budget' => 1.0], false), 'an unmeasurable plan has no share to state');
     }
 
     public function test_a_spend_limit_leads_with_what_was_consumed(): void
     {
         $f = AlertFigures::from(['consumed' => 4500.5, 'limit' => 5000.0, 'threshold' => 90, 'currency' => 'USD'], true);
-        $this->assertSame('4,500.50 USD', $f['lead']['value']);
-        $this->assertSame(['الحد' => '5,000.00 USD', 'حد التنبيه' => '90%'], array_column($f['strip'], 'value', 'label'));
+        $this->assertSame('4,500.50 $', $f['lead']['value']);
+        $this->assertSame(['الحد' => '5,000.00 $', 'حد التنبيه' => '90%'], array_column($f['strip'], 'value', 'label'));
     }
 
     public function test_a_rate_now_against_before_carries_the_change_and_the_window(): void

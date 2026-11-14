@@ -192,8 +192,8 @@ describe('the launch page', () => {
 
     fireEvent.click(screen.getByTestId('launch-publish'))
     const dialog = await screen.findByTestId('launch-confirm-dialog')
-    expect(within(dialog).getByTestId('launch-spend')).toHaveTextContent('200 SAR')
-    expect(within(dialog).getByTestId('launch-limit-exceeds')).toHaveTextContent('Exceeds the project spend limit by 1000 SAR until 2026-11-01')
+    expect(within(dialog).getByTestId('launch-spend')).toHaveTextContent('200 ر.س')
+    expect(within(dialog).getByTestId('launch-limit-exceeds')).toHaveTextContent('Exceeds the project spend limit by 1000 ر.س until 2026-11-01')
     expect(within(dialog).getByTestId('launch-limit-checks')).toHaveTextContent('the platform does not stop at them')
     expect(screen.getByTestId('launch-confirm')).toBeDisabled()
     expect(publishPlan).not.toHaveBeenCalled()
@@ -216,7 +216,7 @@ describe('the launch page', () => {
     fireEvent.change(screen.getByTestId('launch-budget-total'), { target: { value: '100' } })
     fireEvent.click(screen.getByTestId('launch-split-calc'))
 
-    expect(await screen.findByTestId('launch-split-acc1')).toHaveTextContent('100% · 100 SAR')
+    expect(await screen.findByTestId('launch-split-acc1')).toHaveTextContent('100% · 100 ر.س')
     expect(splitBudget).toHaveBeenCalledWith('p1', expect.objectContaining({ total: 100, currency: 'SAR', accounts: [{ external_account_id: 'acc1', share: null }] }))
     expect((screen.getByTestId('launch-budget-acc1') as HTMLInputElement).value).toBe('')
     fireEvent.click(screen.getByTestId('launch-split-apply'))

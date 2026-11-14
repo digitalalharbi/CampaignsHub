@@ -71,8 +71,8 @@ describe('CollaborationsPage', () => {
     renderWithProviders(<CollaborationsPage />, { route: '/influencers', locale: 'en' })
 
     await waitFor(() => expect(screen.getByText('Agency margin')).toBeInTheDocument())
-    expect(screen.getByText('18,000 SAR')).toBeInTheDocument()
-    expect(screen.getByText('7,000 SAR')).toBeInTheDocument()
+    expect(screen.getByText('18,000 ر.س')).toBeInTheDocument()
+    expect(screen.getByText('7,000 ر.س')).toBeInTheDocument()
   })
 
   /** A fee that was never agreed is "not set" — distinct from one being withheld. */

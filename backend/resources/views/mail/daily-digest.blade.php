@@ -260,4 +260,9 @@
             </div>
         </div>
     @endif
+
+    {{-- MONEY-MARKS-001 — the one financial disclaimer (BUDGET-DISCLAIMER-001), wherever a team member's mail carries money figures. --}}
+    @if (! $noMoney)
+        <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($dir === 'rtl' ? 'ar' : 'en') }}</div>
+    @endif
 </div>

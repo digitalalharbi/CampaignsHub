@@ -81,7 +81,7 @@ describe('the store panels', () => {
     }) as never)
     renderWithProviders(<OrderSourcesPanel projectId="p1" range={range} ar={false} />, { route: '/agency/analytics', locale: 'en' })
     fireEvent.click(await screen.findByTestId('order-sources-tab-orders'))
-    expect(await screen.findByText(/375/)).toHaveTextContent('SAR')
+    expect(await screen.findByText(/375/)).toHaveTextContent('ر.س')
     expect(document.querySelector('tbody')).toHaveTextContent('Platform click id')
     expect(screen.queryByRole('columnheader', { name: /customer|email|phone/i })).toBeNull()
   })

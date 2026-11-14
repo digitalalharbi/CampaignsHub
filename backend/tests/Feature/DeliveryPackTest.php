@@ -166,7 +166,7 @@ final class DeliveryPackTest extends TestCase
         $this->assertStringNotContainsString('Spend', $text, 'spend is off unless the Owner switches it on');
 
         $service->setComponents($pack->fresh(), ['spend' => true]);
-        $this->assertStringContainsString('Spend: 11,979.96 USD', $service->whatsappSummary($pack->fresh(), 'en'));
+        $this->assertStringContainsString('Spend: 11,979.96 $', $service->whatsappSummary($pack->fresh(), 'en'));
     }
 
     public function test_the_amount_due_is_stated_from_an_issued_invoice_and_sending_never_touches_it(): void
@@ -181,7 +181,7 @@ final class DeliveryPackTest extends TestCase
         $service->attachInvoice($pack, $invoice);
         $service->approve($pack->fresh(), $this->owner);
 
-        $this->assertStringContainsString('amount due 1,000.00 SAR', $service->whatsappSummary($pack->fresh(), 'en'));
+        $this->assertStringContainsString('amount due 1,000.00 ر.س', $service->whatsappSummary($pack->fresh(), 'en'));
 
         $service->markSent($pack->fresh());
         $this->assertSame('sent', $pack->fresh()->status);

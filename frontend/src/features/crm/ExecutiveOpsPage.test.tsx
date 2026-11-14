@@ -40,7 +40,7 @@ describe('ExecutiveOpsPage', () => {
     vi.mocked(fetchExecutiveOperations).mockResolvedValue(payload())
     renderWithProviders(<ExecutiveOpsPage />, { route: '/app/leads/executive', locale: 'en' })
 
-    expect(await screen.findByTestId('executive-spend')).toHaveTextContent('12K SAR')
+    expect(await screen.findByTestId('executive-spend')).toHaveTextContent('12K ر.س')
     expect(screen.getByTestId('executive-leads')).toHaveTextContent('240')
     expect(screen.getByTestId('executive-cpl')).toHaveTextContent('51')
     expect(screen.getByTestId('executive-funnel-won')).toHaveTextContent('12')
@@ -62,7 +62,7 @@ describe('ExecutiveOpsPage', () => {
     const spend = await screen.findByTestId('executive-spend')
     expect(spend).toHaveTextContent('—')
     expect(spend).toHaveTextContent('currencies that do not add up')
-    expect(screen.getByTestId('executive-cpl')).not.toHaveTextContent(/0\s?SAR/)
+    expect(screen.getByTestId('executive-cpl')).not.toHaveTextContent(/0\s?ر\.س/)
     expect(screen.getByTestId('executive-attention-spend_not_comparable')).toBeInTheDocument()
   })
 })

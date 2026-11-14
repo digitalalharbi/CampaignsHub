@@ -35,7 +35,7 @@ test('the daily series is drawn, and the money chart agrees with the money cards
     The agreement. A money KPI card and a withheld money chart on the same screen is a page arguing
     with itself, and it is the defect this spec exists for.
   */
-  const spendCard = page.getByText(/^Spend SAR$/).first()
+  const spendCard = page.getByText(/^Spend ر\.س$/).first()
   if (await spendCard.count() > 0) {
     await expect(money).toBeVisible()
     await expect(withheld).toHaveCount(0)

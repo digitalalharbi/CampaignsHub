@@ -60,13 +60,13 @@ describe('READY-4 — a family states the money it actually has', () => {
     ])
 
     expect(totals.money_original_currencies).toBe(1)
-    expect(rowMoney(totals, 'spend', 'SAR')).toContain('USD')
+    expect(rowMoney(totals, 'spend', 'SAR')).toContain('$')
   })
 
   it('states a fully-converted family in the project currency', () => {
     const totals = familySpend([row({ spend: 400, spend_withheld_rows: 0 }), row({ spend: 600, spend_withheld_rows: 0 })])
 
     expect(totals.money_original_currencies).toBe(0)
-    expect(rowMoney(totals, 'spend', 'SAR')).toContain('SAR')
+    expect(rowMoney(totals, 'spend', 'SAR')).toContain('ر.س')
   })
 })

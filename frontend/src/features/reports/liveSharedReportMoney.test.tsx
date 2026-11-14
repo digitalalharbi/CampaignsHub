@@ -71,9 +71,9 @@ describe('a live shared report over a partially-withheld spend', () => {
     const kpis = within(screen.getByTestId('live-kpis'))
 
     // Not the converted subset in the report currency, and not the withheld half on its own.
-    expect(kpis.queryByText(/SAR\s*1,?000/)).not.toBeInTheDocument()
+    expect(kpis.queryByText(/(?:SAR|ر\.س)\s*1,?000/)).not.toBeInTheDocument()
     expect(kpis.queryByText('1,000')).not.toBeInTheDocument()
-    expect(kpis.queryByText('500.00 USD')).not.toBeInTheDocument()
+    expect(kpis.queryByText(/^500\.00 (?:USD|\$)$/)).not.toBeInTheDocument()
   })
 
   it('keeps the platforms it can size, and says how many it left out', async () => {

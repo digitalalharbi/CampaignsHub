@@ -284,8 +284,8 @@ describe('what did not stick', () => {
     const block = await screen.findByTestId('funnel-refunds')
 
     /* The page's own money formatting, abbreviated exactly as every other figure on it. */
-    expect(block).toHaveTextContent('5.2K SAR')
-    expect(block).toHaveTextContent('200 SAR')
+    expect(block).toHaveTextContent('5.2K ر.س')
+    expect(block).toHaveTextContent('200 ر.س')
     expect(block).toHaveTextContent('Cancelled orders')
   })
 

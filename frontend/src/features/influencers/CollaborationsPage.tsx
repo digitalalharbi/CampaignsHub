@@ -5,6 +5,7 @@ import { fetchCollaborations, sendTerms, type Collaboration } from './api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * `/influencers` — the agreements this operator can reach (INFL-001).
@@ -28,7 +29,7 @@ const STATUS_LABELS: Record<string, { ar: string; en: string; tone: string }> = 
 }
 
 const money = (amount: string | null, currency: string) =>
-  amount === null ? null : `${Number(amount).toLocaleString('en-US')} ${currency}`
+  amount === null ? null : withMark(Number(amount).toLocaleString('en-US'), currency)
 
 export function CollaborationsPage() {
   const ar = useUi((s) => s.locale) === 'ar'

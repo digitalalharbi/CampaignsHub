@@ -593,7 +593,7 @@
                 "dedup_key": "1b2c20e5950df702e828c233d4e3c8c9c0f0e5c2307c0634dd922794bd186c6b",
                 "status": "open",
                 "severity": "warning",
-                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
+                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
                 "notification_id": "00000000-0000-4000-8000-000000005530",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -603,7 +603,7 @@
                 "updated_at": "2026-10-21 09:00:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 6879, \"limit\": 1000, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": 100, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)\", \"en\": \"Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)\", \"en\": \"Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -1620,7 +1620,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "b54ed868ba323a1dbc33de12d188b00071de5d0ea7bfdc613378d18709c0cfa8",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦120.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦120.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005463",
@@ -1643,7 +1643,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "5688d895f9abbc3f3204abea3836f56fb7a1623a77d57818174e41127a25b164",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005467",
@@ -1666,7 +1666,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "f35799c3e7f24a9df61499d15134bb5f01a5244a3076818c6d823f9c6a572863",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005471",
@@ -1689,7 +1689,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "d45c89ebd77ea8f021873b96b8c38fb0f9d939a79dfddbf7b05198b838f714ef",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005475",
@@ -1712,7 +1712,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "0692b5abb9461271e3f0903051edd5e048c4dfd05dab969e424c258b306691f2",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005479",
@@ -1735,7 +1735,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "68bac952c065460a47b124995abe333b472974dbe9df1d3d73d89c4c8c13b4c6",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005493",
@@ -1953,7 +1953,7 @@
                 "type": "budget_risk",
                 "severity": "warning",
                 "title": "Internal spend limit at 100%",
-                "message": "This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
+                "message": "This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Metrics\\Models\\SpendLimit",
                 "entity_id": "00000000-0000-4000-8000-000000005344",
@@ -1965,7 +1965,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "84f4ac3476732c4a1bbce0efeb42f14df4fd13ced6e0b8c1f952cbc3c6b2e230",
                 "title_ar": "قرّبت توصل للحد اللي حطيته",
-                "message_ar": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)"
+                "message_ar": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005534",
@@ -6690,7 +6690,7 @@
                 "dedup_key": "1b2c20e5950df702e828c233d4e3c8c9c0f0e5c2307c0634dd922794bd186c6b",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
+                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
                 "notification_id": "00000000-0000-4000-8000-000000005530",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -6700,7 +6700,7 @@
                 "updated_at": "2026-10-21 09:15:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 6879, \"limit\": 1000, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": 100, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)\", \"en\": \"Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)\", \"en\": \"Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -7717,7 +7717,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "b54ed868ba323a1dbc33de12d188b00071de5d0ea7bfdc613378d18709c0cfa8",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦120.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦120.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005463",
@@ -7740,7 +7740,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "5688d895f9abbc3f3204abea3836f56fb7a1623a77d57818174e41127a25b164",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005467",
@@ -7763,7 +7763,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "f35799c3e7f24a9df61499d15134bb5f01a5244a3076818c6d823f9c6a572863",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005471",
@@ -7786,7 +7786,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "d45c89ebd77ea8f021873b96b8c38fb0f9d939a79dfddbf7b05198b838f714ef",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005475",
@@ -7809,7 +7809,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "0692b5abb9461271e3f0903051edd5e048c4dfd05dab969e424c258b306691f2",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005479",
@@ -7832,7 +7832,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "68bac952c065460a47b124995abe333b472974dbe9df1d3d73d89c4c8c13b4c6",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005493",
@@ -8050,7 +8050,7 @@
                 "type": "budget_risk",
                 "severity": "warning",
                 "title": "Internal spend limit at 100%",
-                "message": "This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
+                "message": "This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Metrics\\Models\\SpendLimit",
                 "entity_id": "00000000-0000-4000-8000-000000005344",
@@ -8062,7 +8062,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "84f4ac3476732c4a1bbce0efeb42f14df4fd13ced6e0b8c1f952cbc3c6b2e230",
                 "title_ar": "قرّبت توصل للحد اللي حطيته",
-                "message_ar": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)"
+                "message_ar": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005534",
@@ -12886,7 +12886,7 @@
                 "dedup_key": "1b2c20e5950df702e828c233d4e3c8c9c0f0e5c2307c0634dd922794bd186c6b",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
+                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
                 "notification_id": "00000000-0000-4000-8000-000000005530",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -12896,7 +12896,7 @@
                 "updated_at": "2026-10-21 09:15:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 6879, \"limit\": 1000, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": 100, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)\", \"en\": \"Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)\", \"en\": \"Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -13913,7 +13913,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "b54ed868ba323a1dbc33de12d188b00071de5d0ea7bfdc613378d18709c0cfa8",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦120.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦120.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005463",
@@ -13936,7 +13936,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "5688d895f9abbc3f3204abea3836f56fb7a1623a77d57818174e41127a25b164",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005467",
@@ -13959,7 +13959,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "f35799c3e7f24a9df61499d15134bb5f01a5244a3076818c6d823f9c6a572863",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005471",
@@ -13982,7 +13982,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "d45c89ebd77ea8f021873b96b8c38fb0f9d939a79dfddbf7b05198b838f714ef",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005475",
@@ -14005,7 +14005,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "0692b5abb9461271e3f0903051edd5e048c4dfd05dab969e424c258b306691f2",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005479",
@@ -14028,7 +14028,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "68bac952c065460a47b124995abe333b472974dbe9df1d3d73d89c4c8c13b4c6",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005493",
@@ -14246,7 +14246,7 @@
                 "type": "budget_risk",
                 "severity": "warning",
                 "title": "Internal spend limit at 100%",
-                "message": "This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
+                "message": "This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Metrics\\Models\\SpendLimit",
                 "entity_id": "00000000-0000-4000-8000-000000005344",
@@ -14258,7 +14258,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "84f4ac3476732c4a1bbce0efeb42f14df4fd13ced6e0b8c1f952cbc3c6b2e230",
                 "title_ar": "قرّبت توصل للحد اللي حطيته",
-                "message_ar": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)"
+                "message_ar": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005534",
@@ -19571,7 +19571,7 @@
                 "dedup_key": "1b2c20e5950df702e828c233d4e3c8c9c0f0e5c2307c0634dd922794bd186c6b",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
+                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
                 "notification_id": "00000000-0000-4000-8000-000000005530",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -19581,7 +19581,7 @@
                 "updated_at": "2026-10-21 09:15:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 6879, \"limit\": 1000, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": 100, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)\", \"en\": \"Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)\", \"en\": \"Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -20598,7 +20598,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "b54ed868ba323a1dbc33de12d188b00071de5d0ea7bfdc613378d18709c0cfa8",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦120.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦120.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005463",
@@ -20621,7 +20621,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "5688d895f9abbc3f3204abea3836f56fb7a1623a77d57818174e41127a25b164",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005467",
@@ -20644,7 +20644,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "f35799c3e7f24a9df61499d15134bb5f01a5244a3076818c6d823f9c6a572863",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005471",
@@ -20667,7 +20667,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "d45c89ebd77ea8f021873b96b8c38fb0f9d939a79dfddbf7b05198b838f714ef",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005475",
@@ -20690,7 +20690,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "0692b5abb9461271e3f0903051edd5e048c4dfd05dab969e424c258b306691f2",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005479",
@@ -20713,7 +20713,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "68bac952c065460a47b124995abe333b472974dbe9df1d3d73d89c4c8c13b4c6",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005493",
@@ -20931,7 +20931,7 @@
                 "type": "budget_risk",
                 "severity": "warning",
                 "title": "Internal spend limit at 100%",
-                "message": "This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
+                "message": "This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Metrics\\Models\\SpendLimit",
                 "entity_id": "00000000-0000-4000-8000-000000005344",
@@ -20943,7 +20943,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "84f4ac3476732c4a1bbce0efeb42f14df4fd13ced6e0b8c1f952cbc3c6b2e230",
                 "title_ar": "قرّبت توصل للحد اللي حطيته",
-                "message_ar": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)"
+                "message_ar": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005534",
@@ -28524,7 +28524,7 @@
                 "dedup_key": "1b2c20e5950df702e828c233d4e3c8c9c0f0e5c2307c0634dd922794bd186c6b",
                 "status": "resolved",
                 "severity": "warning",
-                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
+                "context": "{\"limit\": 1000, \"scope\": \"project\", \"title\": \"Internal spend limit at 100%\", \"message\": \"This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.\", \"consumed\": 6879, \"currency\": \"SAR\", \"opened_at\": \"2026-10-21T09:00:00+00:00\", \"threshold\": 100, \"enforcement\": \"internal_monitoring\", \"recovered_at\": \"2026-10-21T09:15:00+00:00\", \"projected_exhaustion\": {\"date\": null, \"reason\": \"already_reached\"}}",
                 "notification_id": "00000000-0000-4000-8000-000000005530",
                 "task_id": null,
                 "last_triggered_at": "2026-10-21 09:00:00+00",
@@ -28534,7 +28534,7 @@
                 "updated_at": "2026-10-21 09:15:00+00",
                 "priority": "P2",
                 "evidence": "{\"now\": 6879, \"limit\": 1000, \"before\": null, \"metric\": \"budget_used\", \"missing\": [], \"threshold\": 100, \"sufficient\": true, \"window_days\": null, \"completeness\": \"unverified\", \"threshold_unit\": null}",
-                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)\", \"en\": \"Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
+                "anatomy": "{\"action\": {\"ar\": \"هذا الحد للمتابعة والتنبيه. للإيقاف التلقائي فعّل قاعدة من الأتمتة.\", \"en\": \"This limit is for follow-up and alerts. To pause automatically, turn on an automation rule.\"}, \"impact\": {\"ar\": \"وصل الإنفاق لحد التنبيه.\", \"en\": \"Spend passed an alert level of the spend limit.\"}, \"numbers\": {\"ar\": \"الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)\", \"en\": \"Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)\"}, \"problem\": {\"ar\": \"قرّبت توصل للحد اللي حطيته\", \"en\": \"Close to the limit you set\"}, \"insufficient_note\": null}",
                 "decision_status": null,
                 "decision_reason": null,
                 "action_tag": null,
@@ -29580,7 +29580,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "b54ed868ba323a1dbc33de12d188b00071de5d0ea7bfdc613378d18709c0cfa8",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦120.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦120.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005463",
@@ -29603,7 +29603,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "5688d895f9abbc3f3204abea3836f56fb7a1623a77d57818174e41127a25b164",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005467",
@@ -29626,7 +29626,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "f35799c3e7f24a9df61499d15134bb5f01a5244a3076818c6d823f9c6a572863",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
+                "message_ar": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005471",
@@ -29649,7 +29649,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "d45c89ebd77ea8f021873b96b8c38fb0f9d939a79dfddbf7b05198b838f714ef",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005475",
@@ -29672,7 +29672,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "0692b5abb9461271e3f0903051edd5e048c4dfd05dab969e424c258b306691f2",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005479",
@@ -29695,7 +29695,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "68bac952c065460a47b124995abe333b472974dbe9df1d3d73d89c4c8c13b4c6",
                 "title_ar": "ميتا بدون نتائج",
-                "message_ar": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
+                "message_ar": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005493",
@@ -29913,7 +29913,7 @@
                 "type": "budget_risk",
                 "severity": "warning",
                 "title": "Internal spend limit at 100%",
-                "message": "This workspace’s own project limit of 1000 SAR is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
+                "message": "This workspace’s own project limit of 1000 ر.س is 100% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.",
                 "source": "alerts",
                 "entity_type": "App\\Domains\\Metrics\\Models\\SpendLimit",
                 "entity_id": "00000000-0000-4000-8000-000000005344",
@@ -29925,7 +29925,7 @@
                 "created_at": "2026-10-21 09:00:00+00",
                 "dedup_key": "84f4ac3476732c4a1bbce0efeb42f14df4fd13ced6e0b8c1f952cbc3c6b2e230",
                 "title_ar": "قرّبت توصل للحد اللي حطيته",
-                "message_ar": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)"
+                "message_ar": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)"
             },
             {
                 "id": "00000000-0000-4000-8000-000000005534",
@@ -39348,7 +39348,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Other · ميتا · الحساب meta-act-elsewhere · المبيعات · P1",
-                    "numbers": "الصرف ⁦490.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦490.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -39545,7 +39545,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P1",
-                    "numbers": "الصرف ⁦700.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
+                    "numbers": "الصرف ⁦700.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -39654,7 +39654,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P1",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -39763,7 +39763,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P1",
-                    "numbers": "الصرف ⁦350.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦350.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -39872,7 +39872,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-elsewhere · المبيعات · P1",
-                    "numbers": "الصرف ⁦490.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦490.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -39981,16 +39981,16 @@
                     "title": "قرّبت توصل للحد اللي حطيته",
                     "detail": "وصل الإنفاق لحد التنبيه.",
                     "context": "Other · P2",
-                    "numbers": "الإنفاق 6,879.00 SAR / 1,000.00 SAR (الحد 100%)",
+                    "numbers": "الإنفاق 6,879.00 ر.س / 1,000.00 ر.س (الحد 100%)",
                     "figures": {
                         "lead": {
                             "label": "الإنفاق من الحد",
-                            "value": "6,879.00 SAR"
+                            "value": "6,879.00 ر.س"
                         },
                         "strip": [
                             {
                                 "label": "الحد",
-                                "value": "1,000.00 SAR"
+                                "value": "1,000.00 ر.س"
                             },
                             {
                                 "label": "حد التنبيه",
@@ -40126,7 +40126,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Other · ميتا · الحساب meta-act-elsewhere · المبيعات · P2",
-                    "numbers": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -40235,7 +40235,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Other · ميتا · الحساب meta-act-elsewhere · المبيعات · P2",
-                    "numbers": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -41552,7 +41552,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -41661,7 +41661,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -41770,7 +41770,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -41879,7 +41879,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 9 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -41988,7 +41988,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -42097,7 +42097,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P2",
-                    "numbers": "الصرف ⁦150.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦150.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -42206,7 +42206,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-elsewhere · المبيعات · P2",
-                    "numbers": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -42315,7 +42315,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-elsewhere · المبيعات · P2",
-                    "numbers": "الصرف ⁦210.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦210.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -42862,7 +42862,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Other · Meta · Account meta-act-elsewhere · Sales · P1",
-                    "numbers": "Spent ⁦490.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦490.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -42971,7 +42971,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P1",
-                    "numbers": "Spent ⁦700.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 9",
+                    "numbers": "Spent ⁦700.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 9",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -43080,7 +43080,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P1",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -43189,7 +43189,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P1",
-                    "numbers": "Spent ⁦350.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦350.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -43298,7 +43298,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-elsewhere · Sales · P1",
-                    "numbers": "Spent ⁦490.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦490.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -43597,7 +43597,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Other · Meta · Account meta-act-elsewhere · Sales · P2",
-                    "numbers": "Spent ⁦210.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦210.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -43706,7 +43706,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Other · Meta · Account meta-act-elsewhere · Sales · P2",
-                    "numbers": "Spent ⁦210.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦210.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44181,16 +44181,16 @@
                     "title": "Close to the limit you set",
                     "detail": "Spend passed an alert level of the spend limit.",
                     "context": "Other · P2",
-                    "numbers": "Spent 6,879.00 SAR / 1,000.00 SAR (limit 100%)",
+                    "numbers": "Spent 6,879.00 ر.س / 1,000.00 ر.س (limit 100%)",
                     "figures": {
                         "lead": {
                             "label": "Spent of the limit",
-                            "value": "6,879.00 SAR"
+                            "value": "6,879.00 ر.س"
                         },
                         "strip": [
                             {
                                 "label": "Limit",
-                                "value": "1,000.00 SAR"
+                                "value": "1,000.00 ر.س"
                             },
                             {
                                 "label": "Alert at",
@@ -44326,7 +44326,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 9",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 9",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44435,7 +44435,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44544,7 +44544,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦150.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦150.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44653,7 +44653,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 9",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 9",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44762,7 +44762,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44871,7 +44871,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P2",
-                    "numbers": "Spent ⁦150.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦150.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -44980,7 +44980,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-elsewhere · Sales · P2",
-                    "numbers": "Spent ⁦210.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦210.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -45089,7 +45089,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-elsewhere · Sales · P2",
-                    "numbers": "Spent ⁦210.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦210.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -46405,7 +46405,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Other · ميتا · الحساب meta-act-elsewhere · المبيعات · P1",
-                    "numbers": "الصرف ⁦490.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦490.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -46514,7 +46514,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P1",
-                    "numbers": "الصرف ⁦300.00 SAR⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
+                    "numbers": "الصرف ⁦300.00 ر.س⁩ · طلب ⁦0⁩ · ⁦18–20⁩ أكتوبر · شغّالة من 18 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -46623,7 +46623,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-1 · المبيعات · P1",
-                    "numbers": "الصرف ⁦350.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦350.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -46732,7 +46732,7 @@
                     "title": "ميتا بدون نتائج",
                     "detail": "انصرف مبلغ وما جات أي نتيجة.",
                     "context": "Project · ميتا · الحساب meta-act-elsewhere · المبيعات · P1",
-                    "numbers": "الصرف ⁦490.00 SAR⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
+                    "numbers": "الصرف ⁦490.00 ر.س⁩ · طلب ⁦0⁩ · ⁦14–20⁩ أكتوبر · شغّالة من 7 أكتوبر",
                     "figures": {
                         "lead": {
                             "label": "النتائج",
@@ -46986,7 +46986,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Other · Meta · Account meta-act-elsewhere · Sales · P1",
-                    "numbers": "Spent ⁦490.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦490.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -47095,7 +47095,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P1",
-                    "numbers": "Spent ⁦300.00 SAR⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
+                    "numbers": "Spent ⁦300.00 ر.س⁩ · ⁦0⁩ orders · Oct 18–20 · Running since Oct 18",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -47204,7 +47204,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-1 · Sales · P1",
-                    "numbers": "Spent ⁦350.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦350.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",
@@ -47313,7 +47313,7 @@
                     "title": "Spend on Meta with no results",
                     "detail": "Money was spent with no result in the last days.",
                     "context": "Project · Meta · Account meta-act-elsewhere · Sales · P1",
-                    "numbers": "Spent ⁦490.00 SAR⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
+                    "numbers": "Spent ⁦490.00 ر.س⁩ · ⁦0⁩ orders · Oct 14–20 · Running since Oct 7",
                     "figures": {
                         "lead": {
                             "label": "Results",

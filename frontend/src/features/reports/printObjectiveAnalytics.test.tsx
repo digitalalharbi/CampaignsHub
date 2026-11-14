@@ -53,8 +53,8 @@ describe('the printed objective section', () => {
 
     const awareness = screen.getByTestId('print-objective-family-awareness')
     expect(awareness).toHaveTextContent('Awareness')
-    expect(awareness).toHaveTextContent('5 SAR')
-    expect(awareness).toHaveTextContent('Strongest: meta — CPM 4 SAR')
+    expect(awareness).toHaveTextContent('5 ر.س')
+    expect(awareness).toHaveTextContent('Strongest: meta — CPM 4 ر.س')
     expect(awareness).toHaveTextContent('75.0%')
 
     const leads = screen.getByTestId('print-objective-family-leads')

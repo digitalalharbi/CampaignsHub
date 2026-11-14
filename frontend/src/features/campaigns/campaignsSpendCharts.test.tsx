@@ -48,7 +48,7 @@ const budgetRow = (over: Record<string, unknown>) => ({
   ...over,
 })
 
-/** A platform row whose spend the aggregator could not convert: 500 USD, reported, no rate. */
+/** A platform row whose spend the aggregator could not convert: 500 $, reported, no rate. */
 const withheldPlatform = (provider: string) => ({
   provider, spend: 0, revenue: 0, roas: null, conversions: 0, clicks: 0, impressions: 0,
   spend_withheld_rows: 1, spend_original: 500, money_original_currency: 'USD',
@@ -141,7 +141,7 @@ describe('the spend charts over withheld money', () => {
     route({
       budget: [
         budgetRow({ campaign_id: 'c1', spent: 1000 }),
-        // 500 USD with no rate: its BUDGET still counts toward the total, so spent ÷ total would
+        // 500 $ with no rate: its BUDGET still counts toward the total, so spent ÷ total would
         // divide two different populations and read as «barely consumed».
         budgetRow({ campaign_id: 'c2', spent: 500, spent_currency: 'USD', spend_withheld: true }),
       ],
@@ -172,12 +172,12 @@ describe('the spend charts over withheld money', () => {
      * decimal carrying no information.
      */
     await waitFor(() =>
-      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('1K SAR'),
+      expect(screen.getByTestId('campaigns-secondary-strip').textContent ?? '').toContain('1K ر.س'),
     )
     await openOverview()
 
     const strip = await screen.findByTestId('campaigns-secondary-strip')
-    expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('1K SAR')
+    expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('1K ر.س')
   })
 
   /** And a single campaign is told it is not a ranking, rather than shown something else. */
