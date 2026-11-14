@@ -43,7 +43,9 @@ and why it is not `@`-loaded, and nobody should add an `@` here without reading 
 | `docs/INTEGRATION_CREDENTIALS_CHECKLIST.md` | Every provider, its variables, its URLs, its state | 28 KB · ~7,100 tokens | When you touch a provider, a credential or an integration |
 | `HANDOFF_MANIFEST.md` | The map: architecture, portals, setup, integration readiness | 18 KB · ~4,400 tokens | When you need the shape of the system rather than its state |
 | `docs/PRODUCTION_HANDOFF.md` | What exists, what does not, and the money rules | 10 KB · ~2,600 tokens | Before touching money, billing or a payment path |
+| `docs/CampaignsHub_MASTER_EXECUTION_COMPLETE_v2.2_2026-11-13.md` | **The latest binding reference (Owner, v2.2, 2026-11-13).** It adds to the 2026-11-11 reference and the SaaS contract below and replaces only what it contradicts: AU-001, GEO-001, MEDIA-ALL-001, FIN-PLUS, GATE-ALL, MOBJ M01–M10, §1–§2 LinkedIn/X diagnosis, §6 gates, §7 batches B0–B9 | 163 KB · ~40,700 tokens | At the start of a batch: the header addendum, GATE-ALL and the section of the batch being worked. Never `@` it |
 | `docs/CampaignsHub_MASTER_FINAL_COMPLETE_2026-11-11.md` | **The Owner's unified, cumulative reference for every change from 2026-11-11.** Sections أ–ط are the binding corrections and the batch order (one small batch per order, then stop); Appendix A is the 16 tasks and the style guide that applies to every new string; Appendix B is the security contract in the next row | 82 KB · ~20,500 tokens | At the start of a batch: sections أ–ط whole, then only the task being worked. Never `@` it |
+| `docs/OWNER_NOTIFICATIONS_RULES_2026-11-12.md` | **Binding for every notification, alert and digest (mail and in-app).** The Owner's consolidated checklist of 2026-11-12: naming, the measured period (yesterday / last 7 complete days / last complete month, dates stated), performance before linking, measurement by each campaign's real objective, who may be notified, causes only with evidence, external recipients, visual identity | 5 KB · ~1,300 tokens | Before touching any notification, alert, digest or their wording |
 | `docs/CampaignsHub_SaaS_Structural_Security_And_Routing_Contract_2026-11-11.md` | The Owner's binding, cumulative structural and security contract (2026-11-11): layers, record types, «where does it go», P0 security 1–15, scenarios S01–S22, batches A–F. Its audit and per-scenario state: `docs/SAAS_STRUCTURE_AND_REQUEST_ROUTING_AUDIT.md` | 30 KB · ~7,500 tokens | Before touching a portal, a workspace boundary, a public intake, a registration, an invitation, the requests inbox or the influencer domain |
 | `docs/DEPLOYMENT_CHECKLIST.md` | The deploy, the smoke tests in §6, and the two migrations in §7 that rewrite existing rows | 11 KB · ~2,800 tokens | Before every deploy, and before writing a migration. `docs/CHANGE_MANAGEMENT.md` §8 sends you here and that is unchanged |
 
@@ -152,6 +154,21 @@ Everything else in this document remains binding: Git outranks the matrix, which
 LIVE_VERIFIED without real operational evidence; no change reaches `main` except through a branch, a
 pull request and green CI; and backend rows or green API tests are never completion on their own — a
 data feature is done when the chain reaches the rendered UI and, where possible, live evidence.
+
+## Fast and economical execution — owner decision, 2026-11-13
+
+Goal: the least time and tokens to a published, verified fix, without dropping a requirement or lowering quality or security. Nothing here weakens a gate, the matrix or the status vocabulary.
+
+- **Model:** Sonnet by default, Opus only for proven complexity. No automatic subagents, no open-ended sessions. A new agent only to fix a proven stall.
+- **Read less:** Git state and the files of the task only. Do not re-read long references or redo VERIFIED work without a reproduced defect.
+- **Batch:** 4–5 small independent changes may share one PR (`ch-scripts/train.sh`, one CI cycle). Security, finance, results, alerts and any high-risk change stay separate.
+- **Test:** targeted local tests for the touched files, then the full required CI. Never skip a gate; never re-run green tests without a reason; use safe parallelism and caches where supported, without weakening a test.
+- **CI failure:** diagnose the specific cause, fix it, do not re-run at random.
+- **Merge and deploy** through the Lander when conditions and permissions are met; never deploy twice, never wait for checks that are not required.
+- **Monitoring:** alert only on a stalled queue, a failed deploy or real risk. Successes go to the progress panel, not to messages.
+- **Docs:** matrix and `docs/RESUME_STATE.md` with the smallest necessary diff, evidence kept.
+- **After each batch:** a five-line report (done, tests, PR/merge, deploy and verification, remaining), then stop.
+- **Measure, never estimate as fact:** record wait time, CI time, run count and tokens per batch before and after any speed change. 2026-11-13 baseline: serial landing averaged 49 min per PR (7 landings: 81, 44, 78, 44, 10, 40, 47); 26 PRs were queued.
 
 ## How work reaches main
 

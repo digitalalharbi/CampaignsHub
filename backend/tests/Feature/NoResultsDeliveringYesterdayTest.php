@@ -336,7 +336,9 @@ final class NoResultsDeliveringYesterdayTest extends TestCase
         app(AlertEvaluator::class)->evaluateRule($rule);
         $this->assertSame('resolved', $event->fresh()->status);
         $this->assertSame('not_delivering', $event->fresh()->context['closed_reason']);
-        $this->assertSame(0, AppNotification::where('tenant_id', $this->tenant->id)->count());
+        // No «تعافى»; the one message is «ما تصرف» (ALERT-CRITERIA-001): running, its figures arrived, nothing spent.
+        $this->assertSame(0, AppNotification::where('tenant_id', $this->tenant->id)->where('title', 'like', 'Recovered:%')->count());
+        $this->assertSame(1, AlertEvent::where('rule_id', $rule->id)->where('type', 'not_spending')->where('status', 'open')->count());
     }
 
     /** Review (P3) — an anomaly alert on a campaign now paused closes silently too; it did not «recover». */

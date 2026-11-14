@@ -4,12 +4,18 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Sections;
 
+use App\Domains\Integrations\Measurement\Ga4Visibility;
+use App\Domains\Metrics\Services\ContentFormatComparison;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportReadMemo;
 
 /**
@@ -202,6 +208,12 @@ final class ReportSectionSurfaces
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the KPI list read BEFORE resolution: a hidden KPI section takes `metric_set` with it.
+        $tableKpis = $this->tableKpis($payload, $report);
+        // REPORT-FORMAT-COMPARE-COMPACT-001 — before resolving, so a comparison left with no family of the report's objective is no section.
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY] = ContentFormatComparison::forReportObjectives($payload[ContentFormatComparison::KEY], ReportObjectives::of($report));
+        }
         $resolved = $this->resolve($report, $share, $surface, $payload, $audience, $form);
         $payload = $resolved->apply($payload);
         /*
@@ -220,6 +232,23 @@ final class ReportSectionSurfaces
                 return $item;
             }, $payload['attention']);
         }
+        /*
+         * REPORT-SETTINGS-AUDIT-001 (Owner 2026-11-13: «تحقق من كل أيقونة في إعدادات التقارير أنها تعمل 100%») — content the
+         * operator switched off leaves EVERY key that names it, not only the section's own: the link's creative library rows
+         * (`creatives`, which a link's files carry), the live format mix (`content_formats`) and the objective analytics'
+         * best / weakest content. Only on the operator's choice: content absent for want of data takes nothing else with it.
+         */
+        if ($resolved->reasonFor('content_performance') === ReportSectionResolver::DISABLED_BY_OPERATOR) {
+            unset($payload['creatives'], $payload['creatives_hidden'], $payload['content_formats']);
+            if (is_array($payload['objective_analytics']['families'] ?? null)) {
+                foreach ($payload['objective_analytics']['families'] as $i => $family) {
+                    if (is_array($family) && array_key_exists('content_ranking', $family)) {
+                        $payload['objective_analytics']['families'][$i]['content_ranking'] = null;
+                    }
+                }
+            }
+        }
+        $payload = $this->withLinkWebsiteChoices($payload, $report, $share);
         // The tabs a reader is offered, named by the server like the sections are.
         $payload['report_views'] = ReportViews::visible($this->viewsFor($report, $share)) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
@@ -245,8 +274,76 @@ final class ReportSectionSurfaces
             $payload['metric_set'] = $picked;
         }
 
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the comparison's ONE table, rows = this report's KPI list (after the composer chose it).
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY]['table'] = ContentFormatComparison::table($payload[ContentFormatComparison::KEY], $picked ?? $tableKpis);
+        }
+
         // REPORT-GENERIC-LABELS-001 — last, on the one call every surface makes: a hidden name leaves every key and sentence.
         return GenericNames::for($report, $share)->apply($payload);
+    }
+
+    /**
+     * REPORT-FORMAT-COMPARE-TABLE-001 — the KPI rows of the comparison table: the report's own KPI cards (the document's `metric_set`,
+     * the objective's preset or the operator's choice), else the presets of the report's objectives, else those of the families the
+     * comparison keeps. One list, `ReportTemplateEngine::METRIC_SETS` — never a second mapping.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function tableKpis(array $payload, Report $report): array
+    {
+        foreach (['metric_set', 'metrics'] as $key) {
+            $list = $payload[$key] ?? null;
+            if (is_array($list) && $list !== [] && array_is_list($list) && array_filter($list, 'is_string') === $list) {
+                return $list;
+            }
+        }
+        $kpis = ReportObjectives::kpis($report);
+        if ($kpis !== []) {
+            return $kpis;
+        }
+        $templates = [];
+        foreach ((array) ($payload[ContentFormatComparison::KEY]['objectives'] ?? []) as $objective) {
+            $template = array_search($objective['family'] ?? null, ContentFormatComparison::TEMPLATE_FAMILY, true);
+            if (is_string($template)) {
+                $templates[] = $template;
+            }
+        }
+
+        return $templates === [] ? [] : app(ReportTemplateEngine::class)->metricSetForMany($templates);
+    }
+
+    /**
+     * REPORT-SETTINGS-AUDIT-001 — the website / store switches applied when the document is READ, not only when it was built.
+     *
+     * A saved report's GA4 parts were cut by its own «الموقع» list at generation, and its store block was built with revenue
+     * shown — so a link's own list (`settings.ga4_hidden`), a list changed after the report was saved, and a link hiding revenue
+     * published what they hid on the snapshot link, its PDF and its files. Both cuts are idempotent: the live payload, already
+     * built with them, passes through unchanged.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function withLinkWebsiteChoices(array $payload, Report $report, ?ReportShare $share): array
+    {
+        $hidden = Ga4Visibility::normalise([
+            ...$report->sectionSettings()->ga4Hidden(),
+            ...($share !== null ? Ga4Visibility::normalise(((array) ($share->settings ?? []))['ga4_hidden'] ?? null) : []),
+        ]);
+        $parts = array_intersect_key($payload, array_flip(Ga4ReportSections::KEYS));
+        if ($parts !== []) {
+            $parts = Ga4Visibility::applyToSections($parts, $hidden);
+            if ($share !== null && (bool) $share->hide_revenue) {
+                $parts = Ga4ReportSections::withoutMoney($parts);
+            }
+            $payload = array_replace($payload, $parts);
+        }
+        if ($share !== null && (bool) $share->hide_revenue && is_array($payload['store_analytics'] ?? null)) {
+            $payload['store_analytics'] = StoreAnalyticsSection::withoutMoney($payload['store_analytics']);
+        }
+
+        return $payload;
     }
 
     /**

@@ -35,10 +35,21 @@ final class AlertsEngineTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        /*
+         * A daytime clock. These tests seed «yesterday» as the UTC date, while an alert measures yesterday in Riyadh
+         * (DIGESTS-YESTERDAY-BY-OBJECTIVE-001): from 21:00 to 24:00 UTC the two days differ and the fixture is not yesterday.
+         */
+        Carbon::setTestNow(Carbon::parse('2026-11-12 09:00:00', 'UTC'));
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
         $this->project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $client->id, 'name' => 'P', 'status' => 'active']);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     private function rule(string $type, array $over = []): AlertRule
@@ -341,6 +352,21 @@ final class AlertsEngineTest extends TestCase
 
             $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
             $this->assertSame((string) $endsToday->id, (string) AlertEvent::where('rule_id', $rule->id)->value('entity_id'));
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /** The end date is read on the PROJECT's clock: a client on UTC whose campaign ends on the 12th is still running at 22:30 UTC. */
+    public function test_a_campaign_end_date_is_read_in_the_project_timezone_not_a_fixed_one(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-12 22:30:00', 'UTC'));
+        try {
+            ClientWorkspace::query()->withoutGlobalScopes()->whereKey($this->project->client_workspace_id)->update(['timezone' => 'UTC']);
+            $endsTodayInUtc = $this->campaign();
+            $endsTodayInUtc->forceFill(['ends_on' => '2026-11-12'])->save();
+
+            $this->assertTrue(AlertEvaluator::running($endsTodayInUtc->refresh(), Carbon::now()), 'still the 12th on the client\'s clock');
         } finally {
             Carbon::setTestNow();
         }

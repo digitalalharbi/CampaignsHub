@@ -173,6 +173,8 @@ trait BuildsAlertSweepWorld
         $this->alertCampaign('no-results', $a, $this->alertDays(1, 12, ['spend' => 100.0, 'conversions' => 0.0]));
         $this->alertCampaign('roas-drop', $a, $this->alertDays(8, 14, ['spend' => 100.0, 'revenue' => 1000.0, 'conversions' => 5.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'revenue' => 100.0, 'conversions' => 5.0]));
         $this->alertCampaign('cost-rise', $b, $this->alertDays(8, 14, ['spend' => 100.0, 'conversions' => 10.0, 'leads' => 10.0, 'clicks' => 20.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'conversions' => 2.0, 'leads' => 2.0, 'clicks' => 20.0]));
+        // ALERT-CRITERIA-001 — cost per lead is judged on a leads campaign only, so the world holds one.
+        $this->alertCampaign('lead-cost-rise', $b, $this->alertDays(8, 14, ['spend' => 100.0, 'leads' => 10.0, 'clicks' => 20.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'leads' => 2.0, 'clicks' => 20.0]), ['objective' => 'leads']);
         $this->alertCampaign('budget-risk', $a, $this->alertDays(1, 10, ['spend' => 95.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'SAR']);
         $this->alertCampaign('budget-under', $a, $this->alertDays(1, 10, ['spend' => 5.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'SAR']);
         $this->alertCampaign('budget-other-unit', $a, $this->alertDays(1, 10, ['spend' => 95.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'USD']);
