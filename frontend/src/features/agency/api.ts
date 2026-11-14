@@ -121,6 +121,11 @@ export interface ClientBudgetRow {
    * project holding no campaigns is absent rather than listed empty.
    */
   projects_breakdown: ProjectBudgetRow[]
+  /**
+   * NAV-HOME-PLANS-001 — the client's spend for the last seven days, today last; null when there is nothing to read or
+   * the roll-up mixes currencies (a sum across two units is not a trend).
+   */
+  daily_spend_7d?: number[] | null
 }
 
 export interface ProjectBudgetRow {

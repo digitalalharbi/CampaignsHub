@@ -4,6 +4,7 @@ import { StatCard, StatGrid, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
+import { ClientCards } from '@/features/overview/ClientCards'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { money, ratio } from '@/features/analytics/format'
 import { ChartCard, RankingBarChart, RatioBars, StatusMixBar } from '@/features/analytics/charts'
@@ -203,7 +204,11 @@ function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: b
   )
 }
 
-export function AgencyDashboardPage() {
+/**
+ * `onOpenClient` is given by `OverviewDashboard` (the home page's two levels). Without it the page is exactly what it was —
+ * the cards are the home's first level, not a property of this page.
+ */
+export function AgencyDashboardPage({ onOpenClient }: { onOpenClient?: (row: ClientBudgetRow) => void } = {}) {
   const ar = useUi((s) => s.locale) === 'ar'
   const query = useQuery({ queryKey: ['agency', 'dashboard'], queryFn: fetchAgencyDashboard })
   /*
@@ -300,6 +305,13 @@ export function AgencyDashboardPage() {
               : `The figures below cover the whole agency (${countedClients(d.scope.client_count, 'en')}).`}
         </span>
       </div>
+
+      {/* NAV-HOME-PLANS-001 — «كل العملاء»: four figures and a card per client, ahead of everything else on the home. */}
+      {onOpenClient !== undefined && (
+        <div className="mb-3">
+          <ClientCards ar={ar} onOpenClient={onOpenClient} />
+        </div>
+      )}
 
       {/* DASHBOARD-FIRST-SCREEN-001 — money, results, cost, movement, platforms, freshness and alerts come first. */}
       <div className="mb-4">

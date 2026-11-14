@@ -73,6 +73,44 @@ final class FundingMonth
     }
 
     /**
+     * BUDGET-MODES-001 — «المستحق للفوترة» of a credit budget: the spend of each month of its period, in SAR, oldest first,
+     * with each platform's part. A month is `closed` once it is over (the current one is still running). Spend with no dated
+     * rate is never read as zero: the month says how many days are `unconverted`, and its figure is then a floor.
+     * Nothing is invoiced here and nothing moves: these are the figures finance invoices from.
+     *
+     * @return list<array{month: string, from: string, to: string, closed: bool, spent: float, unconverted_days: int, last_spend_day: string|null, by_platform: list<array{provider: string, spent: float}>}>
+     */
+    public function invoiceMonths(ProjectFunding $funding, ?Carbon $today = null): array
+    {
+        $today = Carbon::parse(($today ?? Carbon::today('Asia/Riyadh'))->toDateString());
+        $rows = $this->refresher->spendRows($funding)
+            ->selectRaw("to_char(spend_date, 'YYYY-MM') AS m, provider, COALESCE(SUM(amount_sar), 0) AS spent")
+            ->selectRaw('SUM(CASE WHEN amount_sar IS NULL AND original_amount > 0 THEN 1 ELSE 0 END) AS unconverted')
+            ->selectRaw('MAX(spend_date) AS last_day')
+            ->groupByRaw("to_char(spend_date, 'YYYY-MM')")->groupBy('provider')->get();
+
+        $months = [];
+        foreach ($rows->groupBy('m') as $month => $group) {
+            $start = Carbon::createFromFormat('Y-m-d', $month.'-01')->startOfDay();
+            $platforms = $group->map(static fn ($r): array => ['provider' => (string) $r->provider, 'spent' => round((float) $r->spent, 2)])
+                ->sortByDesc('spent')->values()->all();
+            $months[(string) $month] = [
+                'month' => (string) $month,
+                'from' => $start->toDateString(),
+                'to' => $start->copy()->endOfMonth()->toDateString(),
+                'closed' => $start->copy()->endOfMonth()->startOfDay()->lt($today),
+                'spent' => round((float) $group->sum('spent'), 2),
+                'unconverted_days' => (int) $group->sum('unconverted'),
+                'last_spend_day' => Carbon::parse((string) $group->max('last_day'))->toDateString(),
+                'by_platform' => $platforms,
+            ];
+        }
+        ksort($months);
+
+        return array_values($months);
+    }
+
+    /**
      * Days after a month ends before it is fixed. Providers restate recent days (the sync re-reads 14),
      * and an account in a western timezone is still inside the last day when Riyadh is not; fixing on
      * the 1st would keep a figure the next month's live start no longer agrees with.

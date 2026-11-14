@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 import { usePortalPath } from '@/app/portalPath'
 import { proposeChange } from '@/features/agents/api'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
 
 /**
@@ -249,6 +250,8 @@ export function SpendLimitsPage() {
           <LimitPace limits={limits} ar={ar} locale={locale} />
         </div>
       )}
+      {/* BUDGET-DISCLAIMER-001 — ad-spend money is shown here, so the one financial disclaimer is too. */}
+      <FinancialDisclaimer className="mt-3" />
     </div>
   )
 }

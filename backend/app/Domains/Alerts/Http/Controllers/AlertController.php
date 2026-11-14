@@ -10,8 +10,10 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertDecisions;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Alerts\Services\AlertImpact;
+use App\Domains\Alerts\Services\AlertRuleRecipients;
 use App\Domains\Alerts\Services\AttentionBoard;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -23,6 +25,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -183,6 +186,125 @@ final class AlertController extends Controller
         }
     }
 
+    /**
+     * The fields a rule is written with — one list for create and edit, so the two can never drift apart.
+     *
+     * On edit (`partial`) every field is optional and `type` is refused outright: a rule's type decides what its
+     * threshold MEANS (`pct` for a cost rule, `days` for a token rule), so changing it in place would leave a stored
+     * threshold that silently means something else. A different type is a new rule.
+     *
+     * @return array<string, mixed>
+     */
+    private function ruleValidation(bool $partial): array
+    {
+        $rules = [
+            'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
+            'name' => ['required', 'string', 'min:2', 'max:120'],
+            // A project of THIS workspace — an id from elsewhere is refused, never stored (TENANCY-UNIFY-001).
+            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())->whereNull('deleted_at')],
+            /*
+         * EMAIL-SETTINGS-DEPTH-001 — a threshold that would SILENCE the alert is refused.
+         *
+         * This was `['nullable', 'array']` and nothing more, so any shape was stored and handed
+         * to an evaluator that reads `(int) $threshold['days']` and `(float) $threshold['pct']`.
+         * The failure that matters is not a crash: `days: 0` gives a window with no days in it
+         * and `pct: -5` a threshold every window clears, so the rule looks configured on the
+         * screen, reports nothing, and is indistinguishable from an account with nothing wrong.
+         * An alert that cannot fire is worse than no alert, because somebody is relying on it.
+         *
+         * `(int) 'soon'` is 0 in PHP, which is why `numeric` matters as much as the ranges.
+         */
+            'threshold' => ['nullable', 'array'],
+            'threshold.days' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:365'],
+            'threshold.pct' => ['sometimes', 'numeric', 'min:1', 'max:1000'],
+            // A budget ratio at or above 1 is «tell me after I have overspent», which is not a risk
+            // warning; at or below 0 it fires on every campaign the moment it exists.
+            'threshold.ratio' => ['sometimes', 'numeric', 'gt:0', 'lt:1.5'],
+            /*
+         * LEAD-SLA-NOTIFICATION-001 — a follow-up SLA is counted in MINUTES.
+         *
+         * Days is the wrong unit for the thing being promised: «we call within the hour» is the
+         * commitment a lead-generation client sells, and expressing it as a fraction of a day is
+         * how it stops being checkable. The ceiling is a week, past which the rule is not an SLA.
+         */
+            'threshold.minutes' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:10080'],
+            'threshold.hours' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:720'],
+            'cooldown_minutes' => ['nullable', 'integer', 'min:5', 'max:20160'],
+            'channels' => ['nullable', 'array'],
+            'channels.*' => ['string', 'in:in_app,email,whatsapp'],
+            'create_task' => ['nullable', 'boolean'],
+            'severity' => ['nullable', 'string', 'in:info,warning,critical'],
+            'active' => ['nullable', 'boolean'],
+            // ALERT-RULES-MANAGE-001 — who hears the rule; checked against this workspace in validatedRecipients().
+            'recipients' => ['nullable', 'array:project_manager,user_ids'],
+            'recipients.project_manager' => ['sometimes', 'boolean'],
+            'recipients.user_ids' => ['sometimes', 'array', 'max:'.AlertRuleRecipients::MAX_NAMED],
+            'recipients.user_ids.*' => ['integer', 'distinct'],
+        ];
+
+        if ($partial) {
+            $rules['type'] = ['prohibited'];
+            $rules['name'] = ['sometimes', 'string', 'min:2', 'max:120'];
+            $rules['project_id'] = ['sometimes', ...$rules['project_id']];
+            // Columns that are NOT NULL: on edit they are optional, never null (create fills them with defaults).
+            foreach (['cooldown_minutes', 'create_task', 'severity', 'active'] as $key) {
+                $rules[$key] = ['sometimes', ...array_values(array_filter($rules[$key], static fn ($r): bool => $r !== 'nullable'))];
+            }
+            // An edit that sends channels sends at least one; an empty list would silence the rule.
+            $rules['channels'] = ['sometimes', 'array', 'min:1'];
+        }
+
+        return $rules;
+    }
+
+    /**
+     * The rule's recipients, normalised — or a 422 naming anybody this rule may not name.
+     *
+     * @return array{project_manager:bool,user_ids:list<int>}|null
+     */
+    private function validatedRecipients(mixed $input, ?string $projectId): ?array
+    {
+        $recipients = AlertRuleRecipients::normalise($input);
+        if ($recipients === null) {
+            return null;
+        }
+
+        $refused = app(AlertRuleRecipients::class)->refused(app(TenantContext::class)->tenantId(), $projectId, $recipients['user_ids']);
+        if ($refused !== []) {
+            throw ValidationException::withMessages([
+                'recipients.user_ids' => 'هذا الشخص ما يقدر يستلم تنبيهات هذا المشروع.',
+            ]);
+        }
+
+        return $recipients;
+    }
+
+    /**
+     * A rule files alerts into the ledger under its project: it has to be one the author reaches, and a capped author
+     * cannot make (or move a rule to) a workspace-wide rule.
+     */
+    private function assertAuthorReachesProject(Request $request, ?string $projectId): void
+    {
+        $reach = $this->reach($request->user());
+        if ($reach === null) {
+            return;
+        }
+        if ($projectId === null) {
+            abort(403, 'A rule must name one of your projects.');
+        }
+        if (! in_array($projectId, $reach, true)) {
+            throw ValidationException::withMessages(['project_id' => 'The selected project id is invalid.']);
+        }
+    }
+
+    /** A rule outside the reader's reach does not exist for them — the same 404 an event outside it gets. */
+    private function assertReachesRule(Request $request, AlertRule $rule): void
+    {
+        $reach = $this->reach($request->user());
+
+        abort_unless($reach === null || ($rule->project_id !== null && in_array((string) $rule->project_id, $reach, true)), 404);
+    }
+
     public function storeRule(Request $request): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
@@ -194,57 +316,9 @@ final class AlertController extends Controller
          */
         $this->rejectUnknownThresholdKeys($request);
 
-        $data = $request->validate([
-            'type' => ['required', 'string', 'in:'.implode(',', self::TYPES)],
-            'name' => ['required', 'string', 'min:2', 'max:120'],
-            // A project of THIS workspace — an id from elsewhere is refused, never stored (TENANCY-UNIFY-001).
-            'project_id' => ['nullable', 'uuid', Rule::exists('projects', 'id')->where('tenant_id', app(TenantContext::class)->tenantId())->whereNull('deleted_at')],
-            /*
-             * EMAIL-SETTINGS-DEPTH-001 — a threshold that would SILENCE the alert is refused.
-             *
-             * This was `['nullable', 'array']` and nothing more, so any shape was stored and handed
-             * to an evaluator that reads `(int) $threshold['days']` and `(float) $threshold['pct']`.
-             * The failure that matters is not a crash: `days: 0` gives a window with no days in it
-             * and `pct: -5` a threshold every window clears, so the rule looks configured on the
-             * screen, reports nothing, and is indistinguishable from an account with nothing wrong.
-             * An alert that cannot fire is worse than no alert, because somebody is relying on it.
-             *
-             * `(int) 'soon'` is 0 in PHP, which is why `numeric` matters as much as the ranges.
-             */
-            'threshold' => ['nullable', 'array'],
-            'threshold.days' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:365'],
-            'threshold.pct' => ['sometimes', 'numeric', 'min:1', 'max:1000'],
-            // A budget ratio at or above 1 is «tell me after I have overspent», which is not a risk
-            // warning; at or below 0 it fires on every campaign the moment it exists.
-            'threshold.ratio' => ['sometimes', 'numeric', 'gt:0', 'lt:1.5'],
-            /*
-             * LEAD-SLA-NOTIFICATION-001 — a follow-up SLA is counted in MINUTES.
-             *
-             * Days is the wrong unit for the thing being promised: «we call within the hour» is the
-             * commitment a lead-generation client sells, and expressing it as a fraction of a day is
-             * how it stops being checkable. The ceiling is a week, past which the rule is not an SLA.
-             */
-            'threshold.minutes' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:10080'],
-            'threshold.hours' => ['sometimes', 'numeric', 'integer', 'min:1', 'max:720'],
-            'cooldown_minutes' => ['nullable', 'integer', 'min:5', 'max:20160'],
-            'channels' => ['nullable', 'array'],
-            'channels.*' => ['string', 'in:in_app,email,whatsapp'],
-            'create_task' => ['nullable', 'boolean'],
-            'severity' => ['nullable', 'string', 'in:info,warning,critical'],
-            'active' => ['nullable', 'boolean'],
-        ]);
-
-        // A rule files alerts into the ledger under its project: it has to be one the author reaches, and a
-        // capped author cannot make a workspace-wide rule.
-        $reach = $this->reach($request->user());
-        if ($reach !== null) {
-            if (($data['project_id'] ?? null) === null) {
-                abort(403, 'A rule must name one of your projects.');
-            }
-            if (! in_array((string) $data['project_id'], $reach, true)) {
-                throw ValidationException::withMessages(['project_id' => 'The selected project id is invalid.']);
-            }
-        }
+        $data = $request->validate($this->ruleValidation(partial: false));
+        $this->assertAuthorReachesProject($request, $data['project_id'] ?? null);
+        $recipients = $this->validatedRecipients($request->input('recipients'), $data['project_id'] ?? null);
 
         $rule = AlertRule::create([
             'tenant_id' => app(TenantContext::class)->tenantId(),
@@ -257,10 +331,105 @@ final class AlertController extends Controller
             'create_task' => $data['create_task'] ?? false,
             'severity' => $data['severity'] ?? 'warning',
             'active' => $data['active'] ?? true,
+            'recipients' => $recipients,
             'created_by' => $request->user()->id, // guaranteed by the alerts.manage guard above
         ]);
 
         return ApiResponse::success($rule, 'Alert rule created.', status: 201);
+    }
+
+    /**
+     * ALERT-RULES-MANAGE-001 — edit a rule in place: its name, threshold, severity, the time between alerts, channels,
+     * recipients, project, and whether it is on.
+     *
+     * Only what is sent changes; a threshold that is sent replaces the stored one whole (the same validation as create,
+     * so a threshold that would silence the rule is refused here too). Pausing (`active: false`) stops the evaluator
+     * from sweeping it and leaves the alerts it already raised exactly as they are — they are still somebody's decision.
+     */
+    public function updateRule(Request $request, AlertRule $alertRule): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReachesRule($request, $alertRule);
+        $this->rejectUnknownThresholdKeys($request);
+
+        $data = $request->validate($this->ruleValidation(partial: true));
+
+        $projectId = array_key_exists('project_id', $data) ? $data['project_id'] : ($alertRule->project_id === null ? null : (string) $alertRule->project_id);
+        if (array_key_exists('project_id', $data)) {
+            $this->assertAuthorReachesProject($request, $projectId);
+        }
+
+        // Recipients are re-checked against the rule's project whenever either changes: moving a rule to another
+        // project must not carry a person who cannot see that project along with it.
+        if (array_key_exists('recipients', $data) || array_key_exists('project_id', $data)) {
+            $data['recipients'] = $this->validatedRecipients(
+                array_key_exists('recipients', $data) ? $request->input('recipients') : $alertRule->recipients,
+                $projectId,
+            );
+        }
+
+        $alertRule->fill(array_intersect_key($data, array_flip([
+            'name', 'project_id', 'threshold', 'cooldown_minutes', 'channels', 'create_task', 'severity', 'active', 'recipients',
+        ])));
+        $alertRule->save();
+
+        return ApiResponse::success($alertRule->fresh(), 'Alert rule updated.');
+    }
+
+    /**
+     * ALERT-RULES-MANAGE-001 — remove a rule.
+     *
+     * Soft: `alert_events.rule_id` cascades, so a hard delete would erase every alert the rule ever raised along with
+     * the decisions and notes on them. The rule is switched off and soft-deleted, and its alerts that are still open or
+     * snoozed are closed without a message, and the tasks it opened that nobody has started are cancelled — the rule that raised them no longer watches anything, so nobody is going
+     * to be told they recovered. The context records why they closed.
+     */
+    public function destroyRule(Request $request, AlertRule $alertRule): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $this->assertReachesRule($request, $alertRule);
+
+        DB::transaction(function () use ($alertRule): void {
+            $now = Carbon::now();
+            $taskIds = [];
+            AlertEvent::query()->where('rule_id', $alertRule->id)->whereIn('status', ['open', 'snoozed'])->get()
+                ->each(function (AlertEvent $event) use ($now, &$taskIds): void {
+                    if ($event->task_id !== null) {
+                        $taskIds[] = (string) $event->task_id;
+                    }
+                    $event->forceFill([
+                        'status' => 'resolved', 'resolved_at' => $now, 'snoozed_until' => null,
+                        'context' => array_merge((array) $event->context, ['closed_reason' => 'rule_removed']),
+                    ])->save();
+                });
+            // The task the rule opened for a now-closed alert: cancelled while nobody has started it. Work already
+            // under way (in progress, in review, blocked...) is left with its owner.
+            if ($taskIds !== []) {
+                Task::query()->whereIn('id', $taskIds)->whereIn('status', ['backlog', 'todo'])->update(['status' => 'cancelled']);
+            }
+            $alertRule->forceFill(['active' => false])->save();
+            $alertRule->delete();
+        });
+
+        return ApiResponse::success(null, 'Alert rule removed.');
+    }
+
+    /**
+     * ALERT-RULES-MANAGE-001 — the people a rule on this project (or workspace-wide) may name as recipients.
+     *
+     * Members of this workspace on an internal portal whose membership reaches the project; see AlertRuleRecipients.
+     */
+    public function recipientOptions(Request $request, AlertRuleRecipients $recipients): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('alerts.manage'), 403);
+        $project = $request->string('project')->toString();
+        $projectId = $project === '' ? null : $project;
+        if ($projectId !== null) {
+            $reach = $this->reach($request->user());
+            abort_unless($reach === null || in_array($projectId, $reach, true), 404);
+        }
+
+        return ApiResponse::success($recipients->options(app(TenantContext::class)->tenantId(), $projectId), 'Alert rule recipients.');
     }
 
     /** How many events one response carries. The order below is what decides WHICH ones. */

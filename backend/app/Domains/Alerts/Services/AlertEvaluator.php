@@ -711,6 +711,8 @@ final class AlertEvaluator
     {
         $this->outbox[] = [
             'event_id' => (string) $event->id,
+            // ALERT-RULES-MANAGE-001 — the mailer reads the rule's channels and recipients from it.
+            'rule_id' => (string) $rule->id,
             'notification_type' => self::NOTIFICATION_TYPE[($b['type'] ?? $rule->type)] ?? 'performance',
             // EMAIL-DIGESTS-OPERATIONAL-001 — what the finding is ABOUT, so the mail can say it plainly and link to the exact page.
             'rule_type' => (string) ($b['type'] ?? $rule->type),
@@ -1363,17 +1365,24 @@ final class AlertEvaluator
                 }
 
                 if ((float) $consumed >= $ratio) {
+                    /*
+                     * Master task 2 — a budget the platform's spend has REACHED is a fact, not a risk: «خلصت ميزانية
+                     * الحملة», with renewal as the next step. Said only when the measured spend reached the budget
+                     * (OWNER_NOTIFICATIONS_RULES §7); below it the alert stays «قربت تخلص».
+                     */
+                    $exhausted = (float) $consumed >= 1.0;
                     $out[] = [
                         'entity_type' => UnifiedCampaign::class,
                         'entity_id' => (string) $c->id,
                         'project_id' => (string) $c->project_id,
-                        'title' => 'Budget at risk',
+                        'title' => $exhausted ? 'Campaign budget ran out' : 'Budget at risk',
                         'message' => $c->name.' has spent '.round((float) $consumed * 100).'% of its budget.',
                         'context' => [
                             'basis_class' => 'measured',
                             'spend' => $row['spent'],
                             'budget' => $row['budget'],
                             'ratio' => round((float) $consumed, 4),
+                            'budget_exhausted' => $exhausted,
                         ],
                     ];
                 }
@@ -2208,9 +2217,9 @@ final class AlertEvaluator
                     'severity' => 'info',
                     'title' => "{$name} can move to a better launch stage",
                     'message' => "When «{$plan->name}» went out, {$name} was at «{$before}»; its synced results now support «{$now['stage']}»".($event === null ? '' : " (optimise for {$event})").'. Nothing was changed — open the launch page to decide.',
-                    'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل",
+                    'title_ar' => "نتائج حساب {$name} صارت تدعم مرحلة أعلى",
                     'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.',
-                    'context' => ['plan_id' => (string) $plan->getKey(), 'account_id' => (string) $account->id, 'from' => $before, 'to' => $now['stage'], 'title_ar' => "حساب {$name} صار مؤهلًا لمرحلة إطلاق أفضل", 'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.'],
+                    'context' => ['plan_id' => (string) $plan->getKey(), 'account_id' => (string) $account->id, 'from' => $before, 'to' => $now['stage'], 'title_ar' => "نتائج حساب {$name} صارت تدعم مرحلة أعلى", 'message_ar' => "عند نشر «{$plan->name}» كان الحساب في مرحلة «{$before}»، وتدعم نتائجه المزامنة الآن مرحلة «{$now['stage']}»".($event === null ? '' : " (التحسين لحدث {$event})").'. لم يتغيّر شيء — افتح صفحة الإطلاق لتقرّر.'],
                 ];
             }
         }

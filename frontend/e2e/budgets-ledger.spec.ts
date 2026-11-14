@@ -67,6 +67,76 @@ test('add → edit → delete → undo → export', async ({ page }) => {
   }
 })
 
+/**
+ * BUDGET-MODES-001 — add credit → add planned → reallocate → undo → export, through the board a person uses.
+ * Names are unique per run; the period stays the default (from the first spend, open end), so nothing is typed that is not needed.
+ */
+test('add credit → add planned → reallocate → undo → export', async ({ page }) => {
+  test.setTimeout(120_000)
+  const stamp = Date.now().toString(36)
+
+  await page.goto('/agency/budgets')
+  await expect(page.getByTestId('budgets-page')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('financial-disclaimer')).toBeVisible()
+
+  // CREDIT — no amount at all: the mode chip and the names are enough.
+  await page.getByTestId('budgets-add').click()
+  await page.locator('#budget-client').fill(`عميل أجل ${stamp}`)
+  await page.locator('#budget-project').fill(`مشروع أجل ${stamp}`)
+  await page.getByTestId('mode-credit').click()
+  await expect(page.locator('#budget-amount')).toHaveCount(0)
+  await page.getByTestId('budget-submit').click()
+  await expect(page.getByTestId('undo-toast')).toContainText('أُضيفت الميزانية')
+  const credit = page.getByTestId('budget-drawer')
+  await expect(credit.getByTestId('credit-figures')).toContainText('هذا الشهر (للفوترة)')
+  await expect(credit.getByTestId('mode-chip-credit')).toBeVisible()
+  await page.getByTestId('slideover-close').click()
+
+  // PLANNED — a direct budget with a 60 / 40 split of two platforms.
+  await page.getByTestId('budgets-add').click()
+  await page.locator('#budget-client').fill(`عميل خطة ${stamp}`)
+  await page.locator('#budget-project').fill(`مشروع خطة ${stamp}`)
+  await page.getByRole('button', { name: '20,000', exact: true }).click()
+  await page.getByTestId('mode-planned').click()
+  const rows = page.getByTestId('plan-row')
+  await rows.nth(0).locator('input').fill('60')
+  await rows.nth(1).locator('input').fill('40')
+  await expect(page.getByTestId('plan-sum')).toHaveAttribute('data-ok', 'true')
+  await page.getByTestId('budget-submit').click()
+  const planned = page.getByTestId('budget-drawer')
+  await expect(planned.getByTestId('budget-plan')).toBeVisible()
+  await expect(planned.getByTestId('plan-bar-snapchat')).toBeVisible()
+  await expect(planned.getByTestId('mode-chip-planned')).toBeVisible()
+
+  // REALLOCATE — one click. With nothing spent the plan is already as it should be, so the server answers that nothing changed:
+  // the click is made, and the drawer stays whole (the entry and its undo are covered by the backend and unit tests with spend).
+  const realloc = page.waitForResponse((r) => r.url().includes('/reallocate'))
+  await planned.getByTestId('budget-reallocate').click()
+  expect([200, 422]).toContain((await realloc).status())
+  await expect(planned.getByTestId('budget-plan')).toBeVisible()
+
+  // EDIT the split by hand → a reallocation-style change is one entry, and UNDO puts the old split back.
+  await planned.getByTestId('budget-edit').click()
+  const edit = page.getByTestId('plan-editor')
+  await edit.getByTestId('plan-row').nth(0).locator('input').fill('50')
+  await edit.getByTestId('plan-row').nth(1).locator('input').fill('50')
+  await page.getByTestId('budget-edit-submit').click()
+  await expect(page.getByTestId('undo-toast')).toContainText('تم التعديل')
+  await expect(planned.getByTestId('plan-bar-snapchat')).toBeVisible()
+  await page.getByTestId('undo-toast-undo').click()
+  await expect(page.getByTestId('undo-toast')).toContainText('تم التراجع')
+
+  // EXPORT — the statement downloads in every format (the drawer is closed first: it covers the page).
+  await page.getByTestId('slideover-close').click()
+  for (const format of ['xlsx', 'csv', 'pdf'] as const) {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      (async () => { await page.getByTestId('budgets-export').click(); await page.getByTestId(`budgets-export-${format}`).click() })(),
+    ])
+    expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${format}$`))
+  }
+})
+
 test('eight projects fit one screen at 1280×720 and 1440×900: no page scroll, no sideways scroll, one compact line each', async ({ page, request }) => {
   const stamp = Date.now().toString(36)
   const today = new Date().toISOString().slice(0, 10)
