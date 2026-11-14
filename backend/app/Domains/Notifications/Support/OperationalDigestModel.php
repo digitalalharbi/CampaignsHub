@@ -244,6 +244,7 @@ final class OperationalDigestModel
             // Unlike objectives are never averaged: a mixed project's own tile row is the money alone; each group has its own row.
             'mixed' => $mixed,
             'groups' => $groups,
+            'objective_paths' => self::objectivePaths(is_array($block['objective_paths'] ?? null) ? $block['objective_paths'] : null, $p, $ar),
             'headline' => self::figures([$mixed ? 'spend' : $headlineKey], $totals, $previous, $reported, $p, $ar)[0],
             // The project's TOTAL across all its objectives: spend and the delivery counts every objective shares — never a result summed across objectives.
             'kpis' => self::figures($mixed ? ['spend', 'impressions', 'clicks'] : ['spend', ...$keys], $totals, $previous, $reported, $p, $ar),
@@ -592,6 +593,35 @@ final class OperationalDigestModel
         $bars = self::bars(array_map(static fn (array $b): ?float => $b['spend'] ?? null, array_values($buckets)), [], $ar);
 
         return array_values(array_map(static fn (array $bar, array $b): array => array_merge($bar, ['label' => $b['from'].'–'.$b['to']]), $bars, array_values($buckets)));
+    }
+
+    /**
+     * OBJECTIVE-PATHS-001 — the one total, and each objective's share of it with its own result.
+     *
+     * Only where ad sets bought more than one thing; a single objective is already the tile row.
+     *
+     * @param  array<string, mixed>|null  $block
+     * @return array{total: string, paths: list<array{family: string, label: string, share: int, spend: string, result: string, roas: string|null}>}|null
+     */
+    private static function objectivePaths(?array $block, DigestPresenter $p, bool $ar): ?array
+    {
+        if ($block === null || ($block['mixed'] ?? false) !== true) {
+            return null;
+        }
+
+        return [
+            'total' => $p->money(isset($block['total_spend']) ? (float) $block['total_spend'] : null),
+            'paths' => array_values(array_map(static fn (array $path): array => [
+                'family' => (string) $path['family'],
+                'label' => (string) ($path['label'][$ar ? 'ar' : 'en'] ?? $path['family']),
+                'share' => (int) round(((float) ($path['spend_share'] ?? 0)) * 100),
+                'spend' => $p->money((float) $path['spend']),
+                'result' => $path['result'] === null
+                    ? '—'
+                    : ($path['result_label'][$ar ? 'ar' : 'en'] ?? '').' '.number_format((float) $path['result']),
+                'roas' => $path['family'] === 'sales' && $path['roas'] !== null ? $p->ratio((float) $path['roas']) : null,
+            ], (array) ($block['paths'] ?? []))),
+        ];
     }
 
     /**

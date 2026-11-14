@@ -36,7 +36,8 @@ final class ReportTemplateEngine
         // REPORT-KPI-CONTRACT-001 — the Owner's defaults per report objective. They are a PRESENTATION template only: they never filter data,
         // and a manually chosen metric list always overrides them. Optional metrics (cpl, ctr…) are switched on by hand.
         'awareness' => ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
-        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
+        // KPI-SET-PER-OBJECTIVE-001 (Owner 2026-11-13, permanent) — visits: spend, impressions, clicks, CTR, CPM, frequency (CPC kept).
+        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'frequency', 'cpc'],
         // Leads on a website (the default destination): form fills on the advertiser's own page.
         'leads' => ['spend', 'impressions', 'clicks', 'leads'],
         'app_installs' => ['spend', 'impressions', 'clicks', 'installs', 'cpi'],
@@ -381,6 +382,8 @@ final class ReportTemplateEngine
         ['installs', 'cpi', 'registrations', 'spend', 'ctr'],
         ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
         ['spend', 'impressions', 'leads', 'cpl'],
+        // KPI-SET-PER-OBJECTIVE-001 — the traffic preset before the Owner's 2026-11-13 set: a stored copy of it upgrades.
+        ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
     ];
 
     /** The two objectives that bought no click → arrival → result path. See the note where the deck's funnel slide is added. */

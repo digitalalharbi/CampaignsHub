@@ -26,7 +26,7 @@ final class SupportTicket extends Model
         'user_id', 'tenant_id', 'ip', 'user_agent', 'locale',
     ];
 
-    protected $casts = ['resolved_at' => 'datetime'];
+    protected $casts = ['resolved_at' => 'datetime', 'read_at' => 'datetime'];
 
     public const STATUSES = ['open', 'in_progress', 'waiting_on_customer', 'resolved', 'closed'];
 

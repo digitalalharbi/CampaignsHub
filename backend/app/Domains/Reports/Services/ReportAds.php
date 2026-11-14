@@ -79,6 +79,17 @@ final class ReportAds
      */
     private const GROUP_ADS = 3;
 
+    /** What each family's result is called in the fallback sentence: [Arabic, English]. */
+    private const RESULT_WORDS = [
+        'sales' => ['طلبات', 'orders'],
+        'leads' => ['عملاء محتملين', 'leads'],
+        'app' => ['تثبيتات', 'installs'],
+        'engagement' => ['تفاعل', 'engagement'],
+        'video' => ['مشاهدات', 'views'],
+        'awareness' => ['ظهور', 'reach'],
+        'traffic' => ['نقرات', 'clicks'],
+    ];
+
     public function __construct(
         private readonly CreativeRows $creatives,
         private readonly CreativeRankingService $ranking,
@@ -372,7 +383,11 @@ final class ReportAds
          * `ads_basis` so the page can say what the order means. No family rankable on a performance
          * metric means no headline lists: an empty section is honest, a spend order never is.
          */
-        $basis = $this->basis(null, $ranked === [] ? null : $this->ranking->metricFor($objective, $rankable));
+        $basis = $this->basis(
+            null,
+            $ranked === [] ? null : $this->ranking->metricFor($objective, $rankable),
+            $ranked === [] ? null : $this->ranking->fallbackFamily($objective, $rankable),
+        );
         if ($basis['metric'] === 'spend') {
             [$ranked, $weakest, $basis] = $this->headlineFromGroups($rankable, $groups, $ranked, $weakest, $basis);
         }
@@ -440,7 +455,7 @@ final class ReportAds
         return [
             $this->ranking->rank($family, $rows),
             $this->ranking->worst($family, $rows),
-            $this->basis($family, (string) $leading['metric']),
+            $this->basis($family, (string) $leading['metric'], $this->ranking->fallbackFamily($family, $rows)),
         ];
     }
 
@@ -450,18 +465,49 @@ final class ReportAds
      *
      * @return array{family: ?string, metric: ?string, label_ar: ?string, label_en: ?string, family_label_ar: ?string, family_label_en: ?string}
      */
-    private function basis(?string $family, ?string $metric): array
+    private function basis(?string $family, ?string $metric, ?string $fallbackFamily = null): array
     {
         $spec = $metric === null ? null : RankingMetric::of($metric);
         $fam = $family === null ? null : (ObjectiveFamily::tryFrom($family) ?? ObjectiveFamily::Unknown);
 
-        return [
+        return $this->fallbackNote($fallbackFamily, $metric) + [
             'family' => $family,
             'metric' => $metric,
             'label_ar' => $spec?->labelAr,
             'label_en' => $spec?->labelEn,
             'family_label_ar' => $fam === null ? null : ($fam->label()['ar'] ?? $fam->value),
             'family_label_en' => $fam === null ? null : ($fam->label()['en'] ?? $fam->value),
+        ];
+    }
+
+    /**
+     * CHATGPT-ADS-CONTENT-RANKABLE-001 — the plain sentence for an order that rests on the fallback ladder.
+     *
+     * The platform reported none of the objective's result, so the ads are ordered on the volume it DID report. The
+     * sentence says both halves — what the objective is and that its result was not reported — so a reader never
+     * mistakes a clicks order for a sales verdict. No money figure is named: the client link carries this as is.
+     *
+     * @return array{fallback?: bool, note_ar?: string, note_en?: string} empty unless the order is a fallback, so payloads that never fall back stay byte-identical
+     */
+    private function fallbackNote(?string $family, ?string $metric): array
+    {
+        $none = [];
+        if ($family === null || $metric === null) {
+            return $none;
+        }
+        $fam = ObjectiveFamily::tryFrom($family);
+        $result = $fam === null ? null : (self::RESULT_WORDS[$fam->value] ?? null);
+        if ($result === null) {
+            return $none;
+        }
+        $spec = RankingMetric::of($metric);
+        $famAr = $fam->label()['ar'] ?? $fam->value;
+        $famEn = strtolower((string) ($fam->label()['en'] ?? $fam->value));
+
+        return [
+            'fallback' => true,
+            'note_ar' => sprintf('الهدف %s، والمنصة ما تبلّغ عن %s — رتّبنا حسب %s', $famAr, $result[0], $spec->labelAr),
+            'note_en' => sprintf('The goal is %s and the platform does not report %s — ranked by %s', $famEn, $result[1], strtolower($spec->labelEn)),
         ];
     }
 
@@ -523,7 +569,7 @@ final class ReportAds
         $metric = $ranked === [] ? null : $this->ranking->metricFor($familyKey, $rows);
         $ads = $ranked === [] ? array_slice($rows, 0, self::GROUP_ADS) : $ranked;
 
-        return [
+        return $this->fallbackNote($ranked === [] ? null : $this->ranking->fallbackFamily($familyKey, $rows), $metric) + [
             'family' => $family->value,
             'label_ar' => $family->label()['ar'] ?? $family->value,
             'label_en' => $family->label()['en'] ?? $family->value,

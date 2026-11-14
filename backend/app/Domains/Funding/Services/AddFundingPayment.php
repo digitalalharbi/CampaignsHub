@@ -44,10 +44,11 @@ final class AddFundingPayment
         private readonly FundingReach $reach,
         private readonly FundingAccountGuard $accounts,
         private readonly FundingNotifier $notifier,
+        private readonly FundingPlan $plans,
     ) {}
 
     /**
-     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount: float|int|string, currency?: string|null, paid_on: string, reference?: string|null, note?: string|null, idempotency_key: string}  $input
+     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount?: float|int|string|null, payment_mode?: string|null, platform_plan?: array<int, mixed>|null, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, reference?: string|null, note?: string|null, idempotency_key: string}  $input
      * @return array{payment: FundingPayment, created: bool}
      */
     public function __invoke(User $actor, array $input, bool $retried = false): array
@@ -55,7 +56,12 @@ final class AddFundingPayment
         $tenantId = $this->tenant->tenantId();
         $currency = strtoupper((string) ($input['currency'] ?? 'SAR'));
         $paidOn = Carbon::parse($input['paid_on']);
-        $amount = round((float) $input['amount'], 2);
+        // BUDGET-MODES-001 — a credit budget may have no amount at all (no ceiling); a direct one is a prepaid balance and needs one.
+        $mode = (string) ($input['payment_mode'] ?? 'direct');
+        $amount = round((float) ($input['amount'] ?? 0), 2);
+        if (! in_array($mode, ProjectFunding::MODES, true) || ($mode === 'direct' && $amount <= 0)) {
+            throw ValidationException::withMessages([$mode === 'direct' ? 'amount' : 'payment_mode' => [__('funding.direct_needs_amount')]]);
+        }
 
         $rate = $this->fx->resolve($currency, 'SAR', $paidOn);
         if ($rate === null) {
@@ -63,7 +69,7 @@ final class AddFundingPayment
         }
 
         try {
-            return DB::transaction(function () use ($actor, $input, $tenantId, $currency, $paidOn, $amount, $rate): array {
+            return DB::transaction(function () use ($actor, $input, $tenantId, $currency, $paidOn, $amount, $rate, $mode): array {
                 $client = $this->client($actor, $input, $tenantId);
                 $project = $this->project($actor, $input, $client, $tenantId);
                 $ceilings = $this->access->projectCeilings($actor);
@@ -82,7 +88,9 @@ final class AddFundingPayment
                     return ['payment' => $existing, 'created' => false];
                 }
 
-                $isFirst = ! FundingPayment::query()->where('project_id', $project->id)->exists();
+                // A budget that was deleted starts over: its old entries stay in the ledger, and the new amount is a first one.
+                $wasVoid = $funding->voided_at !== null;
+                $isFirst = $wasVoid || ! FundingPayment::query()->where('project_id', $project->id)->exists();
 
                 // One account feeds one budget: a project whose selected accounts already feed another budget
                 // cannot START one. A renewal is never blocked — the budget it adds to already exists.
@@ -92,11 +100,23 @@ final class AddFundingPayment
                         throw ValidationException::withMessages(['project_id' => [__('funding.account_taken', ['project' => $taken['project']])]]);
                     }
                 }
-                if (! $isFirst) {
+                $amountSar = round($amount * $rate['rate'], 2);
+                $planned = ! empty($input['platform_plan']) ? $this->plans->normalise($input['platform_plan'], $amountSar) : null;
+                if (! $isFirst && (! empty($input['platform_plan']) || ($input['payment_mode'] ?? $funding->payment_mode) !== $funding->payment_mode)) {
+                    // The mode and the plan are set when a budget STARTS; later they are changed by an edit, which is an entry with its own history.
+                    throw ValidationException::withMessages(['payment_mode' => [__('funding.mode_via_edit')]]);
+                }
+                if ($isFirst) {
+                    // The period the budget starts with: as stated, else the first day of real spend and open-ended.
+                    $funding->forceFill([
+                        'starts_on' => $input['period_start'] ?? null, 'ends_on' => $input['period_end'] ?? null,
+                        'payment_mode' => $mode, 'platform_plan' => $planned,
+                        'voided_at' => null, 'void_reason' => null, 'voided_by' => null,
+                    ])->save();
+                } else {
                     $this->refresher->refresh($funding);
                 }
                 $before = $isFirst ? null : $this->balance->of($funding)['remaining'];
-                $amountSar = round($amount * $rate['rate'], 2);
 
                 $payment = FundingPayment::query()->create([
                     'tenant_id' => $tenantId,
@@ -116,6 +136,7 @@ final class AddFundingPayment
                     'remaining_after' => null,
                     'idempotency_key' => $input['idempotency_key'],
                     'created_by' => $actor->id,
+                    'meta' => $isFirst ? ['payment_mode' => $mode, 'platform_plan' => $planned] : null,
                 ]);
 
                 // The amount may move the first counted day (the first one, or one dated earlier), so spend is
@@ -134,7 +155,7 @@ final class AddFundingPayment
                     after: [
                         'project_id' => $project->id, 'kind' => $payment->kind, 'amount' => $amount, 'currency' => $currency,
                         'amount_sar' => $amountSar, 'paid_on' => $paidOn->toDateString(), 'reference' => $payment->reference,
-                        'remaining' => $after,
+                        'remaining' => $after, 'payment_mode' => $funding->payment_mode, 'platform_plan' => $funding->platform_plan,
                     ],
                     userId: $actor->id,
                     tenantId: $tenantId,

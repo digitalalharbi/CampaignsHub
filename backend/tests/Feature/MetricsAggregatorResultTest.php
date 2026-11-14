@@ -172,6 +172,35 @@ final class MetricsAggregatorResultTest extends TestCase
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * OBJECTIVE-GAPS-001 (ROAS leak) — a return on spend belongs to the sales family only.
+     *
+     * Production: four Snapchat traffic campaigns carried revenue in the last seven days, and the
+     * campaign table printed a ROAS for each — a figure a traffic buy was never asked to produce.
+     * Null, not 0: «not applicable» is not «returned nothing».
+     */
+    public function test_a_traffic_campaign_with_revenue_has_no_roas_and_a_sales_one_keeps_it(): void
+    {
+        $traffic = $this->campaign('Traffic with revenue', 'traffic');
+        $this->sync($traffic, ['spend' => 500, 'clicks' => 900, 'landing_page_views' => 300, 'conversions' => 4, 'revenue' => 1200]);
+        $unclassified = $this->campaign('Unclassified with revenue', 'other');
+        $this->sync($unclassified, ['spend' => 500, 'clicks' => 900, 'conversions' => 4, 'revenue' => 1200]);
+        $sales = $this->campaign('Sales', 'conversions');
+        $this->sync($sales, ['spend' => 500, 'clicks' => 900, 'conversions' => 4, 'revenue' => 1200]);
+
+        $rows = $this->byCampaign();
+
+        $this->assertNull($rows[(string) $traffic->id]['roas'], 'a traffic campaign carried a ROAS');
+        $this->assertNull($rows[(string) $unclassified->id]['roas'], 'an unclassified campaign carried a ROAS');
+        $this->assertSame(2.4, (float) $rows[(string) $sales->id]['roas']);
+        // Revenue itself is still the platform's figure; only the ratio is withheld.
+        $this->assertSame(1200.0, (float) $rows[(string) $traffic->id]['revenue']);
+
+        $figures = $this->figures([(string) $traffic->id, (string) $sales->id]);
+        $this->assertNull($figures[(string) $traffic->id]['roas'], 'the alert read carried a traffic ROAS');
+        $this->assertSame(2.4, (float) $figures[(string) $sales->id]['roas']);
+    }
+
     /** @return array<string, array<string,mixed>> */
     private function byCampaign(): array
     {

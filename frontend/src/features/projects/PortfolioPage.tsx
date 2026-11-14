@@ -75,7 +75,7 @@ const COPY = {
     contributionTitle: 'مصدر الإنفاق',
     contributionQuestion: 'من أين جاء؟ المشاريع مرتّبة بالأكبر إنفاقًا.',
     healthTitle: 'حالة المشاريع',
-    healthQuestion: 'ما الذي يحتاج انتباهًا، وكم عددها؟',
+    healthQuestion: 'كم تنبيه عندك؟',
     platformsTitle: 'المنصات المربوطة',
     platformsQuestion: 'أي منصة تغذّي أي مشروع؟',
     platformsEmpty: 'لا منصة مربوطة بأي مشروع بعد.',

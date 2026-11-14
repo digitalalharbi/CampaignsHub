@@ -83,7 +83,7 @@ describe('NASEL native lead cards — one resolver for the summary', () => {
     expect(figure('snapchat')).toBe('44')
     expect(figure('all')).toBe('94')
     expect(Number(figure('meta')) + Number(figure('tiktok')) + Number(figure('snapchat'))).toBe(Number(figure('all')))
-    expect(cards).toHaveTextContent('العملاء المحتملون الأصليون')
+    expect(cards).toHaveTextContent('المهتمين')
   })
 
   it('never puts landing completions or the pixel Lead into a platform card', async () => {

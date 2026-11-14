@@ -38,8 +38,8 @@ export function PortalAttention() {
   if (items.length === 0) return null
 
   return (
-    <section data-testid="portal-attention" aria-label={ar ? 'يحتاج انتباهك' : 'Needs your attention'} className="mb-5 grid gap-2">
-      <h2 className="text-sm font-bold text-text-primary">{ar ? 'يحتاج انتباهك' : 'Needs your attention'}</h2>
+    <section data-testid="portal-attention" aria-label={ar ? 'تنبيهات' : 'Needs your attention'} className="mb-5 grid gap-2">
+      <h2 className="text-sm font-bold text-text-primary">{ar ? 'تنبيهات' : 'Needs your attention'}</h2>
       {items.map((i) => (
         <Link
           key={i.key}

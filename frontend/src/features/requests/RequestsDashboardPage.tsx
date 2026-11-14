@@ -99,7 +99,7 @@ export function RequestsDashboardPage() {
                 className="text-start"
               >
                 <ReqSummaryCard
-                  label={ar ? 'يحتاج انتباهك' : 'Needs your attention'}
+                  label={ar ? 'تنبيهات' : 'Needs your attention'}
                   value={summary.needs_attention}
                   tone={summary.needs_attention > 0 ? 'warning' : 'muted'}
                 />

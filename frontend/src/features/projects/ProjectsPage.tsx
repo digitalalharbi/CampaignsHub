@@ -556,24 +556,24 @@ export function ProjectsPage() {
                   <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Pencil size={13} /> {t('edit')}
                   </button>
-                  <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'clone' })} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
+                  <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'clone' })} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Copy size={13} /> {t('clone')}
                   </button>
                   {archived ? (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <RotateCcw size={13} /> {t('restore')}
                     </button>
                   ) : paused ? (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'resume' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'resume' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <Play size={13} /> {t('resume')}
                     </button>
                   ) : (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'pause' })} className="inline-flex items-center gap-1 text-warning hover:opacity-80">
+                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'pause' })} className="inline-flex items-center gap-1 text-warning hover:opacity-80">
                       <Pause size={13} /> {t('pause')}
                     </button>
                   )}
                   {!archived && (
-                    <button type="button" onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
+                    <button type="button" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
                       {t('archive')}
                     </button>
                   )}

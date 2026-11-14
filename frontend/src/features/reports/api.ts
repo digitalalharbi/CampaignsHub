@@ -475,6 +475,13 @@ export interface AdsBasis {
   label_en: string | null
   family_label_ar: string | null
   family_label_en: string | null
+  /**
+   * CHATGPT-ADS-CONTENT-RANKABLE-001 — the objective's own result is not reported by the platform, so the ads are
+   * ordered on the volume it did report; `note_*` is the plain sentence that says so.
+   */
+  fallback?: boolean
+  note_ar?: string | null
+  note_en?: string | null
 }
 
 export interface ShareWindow { from: string; to: string; views: number; devices: number; downloads: number }

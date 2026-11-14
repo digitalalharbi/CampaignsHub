@@ -61,6 +61,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     // Alerting: rules + firing ledger (resolve / snooze).
     Route::get('alerts/rules', [AlertController::class, 'rules'])->name('alerts.rules.index');
     Route::post('alerts/rules', [AlertController::class, 'storeRule'])->name('alerts.rules.store');
+    // ALERT-RULES-MANAGE-001 — edit, pause (active: false) and remove a rule; the people a rule may name.
+    Route::get('alerts/rules/recipients', [AlertController::class, 'recipientOptions'])->name('alerts.rules.recipients');
+    Route::patch('alerts/rules/{alertRule}', [AlertController::class, 'updateRule'])->name('alerts.rules.update');
+    Route::delete('alerts/rules/{alertRule}', [AlertController::class, 'destroyRule'])->name('alerts.rules.destroy');
     Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
     Route::get('alerts/attention', [AlertController::class, 'attention'])->name('alerts.attention');
     Route::get('alerts/events/{alertEvent}', [AlertController::class, 'show'])->name('alerts.events.show');

@@ -991,10 +991,20 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
             return null;
         }
 
+        /*
+         * CONTENT-TEXT-CTA-001 — the ad's text is the creative's copy. TikTok's `GET /ad/get/` states it in `ad_text`
+         * (and, for an automated creative, `ad_texts`), and the call to action in `call_to_action`. Production
+         * 2026-11-13: `raw.ad_text` on 129 of 284 active creatives and `body` on none — it was kept, never written.
+         */
+        $text = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? trim($v) : null;
+        $body = $text($ad['ad_text'] ?? null) ?? $text(((array) ($ad['ad_texts'] ?? []))[0] ?? null);
+
         return array_filter([
             'external_id' => $id,
             'name' => (string) ($ad['ad_name'] ?? $id),
             'format' => $media === 'image' ? 'image' : 'video',
+            'body' => $body,
+            'cta' => $text($ad['call_to_action'] ?? null),
             'destination_url' => isset($ad['landing_page_url']) && is_string($ad['landing_page_url']) ? $ad['landing_page_url'] : null,
             'raw' => array_filter([
                 'media' => $media,

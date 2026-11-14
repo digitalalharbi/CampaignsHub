@@ -112,7 +112,7 @@ function budgetRisk(
   if (result !== null && result.key !== null && result.value === 0) {
     return { text: ar ? `${resultLabel(result, true)}: 0 في الفترة` : `${resultLabel(result, false)}: 0 in the period`, tone: 'warning' }
   }
-  if (util === null) return { text: ar ? 'غير متاح — لا رقم مصروف يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
+  if (util === null) return { text: ar ? 'غير متاح — لا رقم إنفاق يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
 
   return { text: ar ? 'ضمن الحدود' : 'Within limits' }
 }
@@ -218,7 +218,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const resultDeltaKey = result.key as Sparkable | null
   const costDelta = result.key === 'conversions' ? d.cpa : result.key === 'clicks' ? d.cpc : null
 
-  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
+  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان الإنفاق بالميزانية، فيلزمهما رقم إنفاق
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
   const spendVsBudget = budgetComparableSpend(k, cur, summary.data?.currency ?? null)
@@ -226,18 +226,18 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   /* CAMPAIGN-BUDGET-TRUTH-001 — a «—» beside a stated budget says why, and an overrun says so. */
   const remainingSub = remaining !== null && remaining < 0 && utilization !== null
-    ? `تجاوزت الميزانية · استهلاك ${percent(utilization, 0)}`
+    ? `تجاوزت الميزانية · نسبة الإنفاق ${percent(utilization, 0)}`
     : utilization != null
-      ? `استهلاك ${percent(utilization, 0)}`
+      ? `نسبة الإنفاق ${percent(utilization, 0)}`
       : budget != null
-        ? 'بلا رقم مصروف يُقارن بالميزانية'
+        ? 'بلا رقم إنفاق يُقارن بالميزانية'
         : undefined
 
   /*
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
    *
    * `k` is `MetricsAggregator::totals()`, which coalesces a withheld sum to 0. Read raw, this card
-   * showed «المصروف 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
+   * showed «الإنفاق 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
    *
    * BUDGET and المتبقي are deliberately NOT read through this: a campaign budget is set by the
    * advertiser in the campaign's own currency and is never withheld. Routing it through a
@@ -261,7 +261,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
     )}
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-      <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
+      <KpiCard label="الإنفاق" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
       <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
       <KpiCard
         label={resultLabel(result, ar)}
@@ -534,7 +534,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
+        <ChartCard title="الإنفاق من الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
           <div className="flex h-[190px] items-center justify-center">
             <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
           </div>
@@ -548,7 +548,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Fact label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-        <Fact label="المصروف" value={spendRead.text} />
+        <Fact label="الإنفاق" value={spendRead.text} />
         <Fact label="المتبقي" value={remainingText(remaining, cur)} tone={remaining !== null && remaining < 0 ? 'danger' : undefined} />
         <Fact label="أيام منقضية" value={pacing ? String(pacing.elapsed) : '—'} />
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />
@@ -937,10 +937,10 @@ export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }:
       {a.proposed_action && <p className="mt-1 text-[11px] text-brand-700">الإجراء: {a.proposed_action}</p>}
       {canApprove && a.status !== 'approved' && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
         </div>
       )}
     </div>

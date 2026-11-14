@@ -104,6 +104,43 @@ final class PreviousComparison
             $payload['content_format_comparison'] = $block;
         }
 
+        /*
+         * REPORT-SETTINGS-AUDIT-001 — the website and the store compare with the window before as well: GA4's tiles carry the
+         * previous value and the change beside the current one, the attribution part a previous block, and the store's sales
+         * their previous figure and change. With the comparison switched off, what this period measured stays and the rest goes.
+         */
+        foreach (['ga4_overview', 'ga4_pulse'] as $part) {
+            if (is_array($payload[$part] ?? null)) {
+                unset($payload[$part]['previous_period']);
+                $payload[$part]['kpis'] = array_map(static function ($kpi) {
+                    if (is_array($kpi)) {
+                        foreach (['previous', 'previous_usd', 'change', 'change_pct'] as $k) {
+                            if (array_key_exists($k, $kpi)) {
+                                $kpi[$k] = null;
+                            }
+                        }
+                    }
+
+                    return $kpi;
+                }, (array) ($payload[$part]['kpis'] ?? []));
+            }
+        }
+        if (is_array($payload['ga4_attribution'] ?? null)) {
+            unset($payload['ga4_attribution']['previous'], $payload['ga4_attribution']['previous_period']);
+        }
+        if (is_array($payload['store_analytics']['store'] ?? null)) {
+            $store = $payload['store_analytics']['store'];
+            $store['sales'] = array_map(static function ($m) {
+                if (is_array($m)) {
+                    $m['previous'] = null;
+                    $m['change_pct'] = null;
+                }
+
+                return $m;
+            }, (array) ($store['sales'] ?? []));
+            $payload['store_analytics']['store'] = $store;
+        }
+
         // The deck's «this period against the last» slide has nothing left to draw.
         if (is_array($payload['slides'] ?? null)) {
             $payload['slides'] = array_values(array_filter(

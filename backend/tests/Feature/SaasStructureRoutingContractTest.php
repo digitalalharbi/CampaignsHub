@@ -320,14 +320,8 @@ final class SaasStructureRoutingContractTest extends TestCase
             ->getJson('/api/v1/admin/overview', ['Origin' => 'http://localhost:5173'])
             ->assertOk()->json('data.attention'))->keyBy('key');
 
-        if ((int) $attention['registrations_pending']['count'] === 0) {
-            $this->markTestIncomplete(
-                'PROVEN DEFECT: `PlatformOverviewController::attention()` counts the states `pending_review` and '
-                .'`info_requested`, neither of which `AccountState` has; an application in `pending_approval` is '
-                .'counted as 0. Ledger #169, closed by PLATFORM-INBOX-ATTENTION-001.'
-            );
-        }
-
+        // Ledger #169, closed by PLATFORM-INBOX-ATTENTION-001: this read `pending_review` and `info_requested`, which
+        // `AccountState` does not have, and was 0 whatever was waiting.
         $this->assertSame(1, (int) $attention['registrations_pending']['count']);
     }
 
@@ -345,17 +339,9 @@ final class SaasStructureRoutingContractTest extends TestCase
         $told = AppNotification::query()->withoutGlobalScopes()->where('user_id', $admin->id)->count()
             + DB::table('mail_deliveries')->where('user_id', $admin->id)->count();
 
-        if ($told === 0) {
-            // It is stored and it is not handed to a tenant — the two halves that already hold.
-            $this->asAgency($this->agencyOwner, $this->agency)
-                ->getJson('/api/v1/admin/legal/contact-messages')->assertForbidden();
-
-            $this->markTestIncomplete(
-                'PROVEN GAP (S22): a contact message is stored and readable only through the platform API, but no '
-                .'platform administrator is notified and no console screen lists it. Ledger #169, closed by '
-                .'PLATFORM-INBOX-ATTENTION-001.'
-            );
-        }
+        // It is stored, it is not handed to a tenant, and (ledger #169, PLATFORM-INBOX-ATTENTION-001) an administrator is told.
+        $this->asAgency($this->agencyOwner, $this->agency)
+            ->getJson('/api/v1/admin/legal/contact-messages')->assertForbidden();
 
         $this->assertGreaterThanOrEqual(1, $told);
     }

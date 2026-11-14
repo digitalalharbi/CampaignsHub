@@ -364,7 +364,8 @@ final class ShareService
          * own switches withheld on the live link of the same share.
          */
         // Only once the operator configured the panel: a snapshot link made before it keeps the words it has always shown.
-        foreach ($share->creativeVisibility()->creatives ? [...self::CREATIVE_SECTIONS, 'ads_groups', 'ads_platform_groups'] : [] as $section) {
+        // REPORT-SETTINGS-AUDIT-001 — «configured» is a saved panel, master on or off (see ReportShare::creativePanelConfigured()).
+        foreach ($share->creativePanelConfigured() ? [...self::CREATIVE_SECTIONS, 'ads_groups', 'ads_platform_groups'] : [] as $section) {
             if (! empty($data[$section]) && is_array($data[$section])) {
                 $data[$section] = ContentCopy::rows($data[$section], $share->creativeVisibility());
             }

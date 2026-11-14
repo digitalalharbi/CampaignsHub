@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { RegistrationsPage } from './RegistrationsPage'
 import type { AdminRegistration } from './api'
 import { renderWithProviders, signOut } from '@/test/utils'
+import { DialogHost } from '@/components/ui/DialogHost'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -15,12 +16,13 @@ vi.mock('./api', async (orig) => {
     requestRegistrationInfo: vi.fn(),
     updateRegistrationTerms: vi.fn(),
     reevaluateRegistrationVerification: vi.fn(),
+    resendRegistrationVerification: vi.fn(),
   }
 })
 
 import {
   approveRegistration, fetchRegistration, fetchRegistrations, reevaluateRegistrationVerification, rejectRegistration,
-  updateRegistrationTerms,
+  resendRegistrationVerification, updateRegistrationTerms,
 } from './api'
 
 const application = (over: Partial<AdminRegistration> = {}): AdminRegistration => ({
@@ -138,15 +140,19 @@ describe('RegistrationsPage', () => {
 
   /** A waived gate without a justification is a hole in the record, so the change is abandoned. */
   it('abandons a gate change when the reviewer gives no reason', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('')
+    const prompt = vi.spyOn(window, 'prompt')
 
-    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+    renderWithProviders(<><RegistrationsPage /><DialogHost /></>, { route: '/admin/registrations', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('registration-row'))
     fireEvent.click(await screen.findByTestId('registration-gate-requires_approval'))
 
-    await waitFor(() => expect(prompt).toHaveBeenCalled())
+    // DIALOG-001 — the in-app dialog refuses an empty reason; cancelling abandons the change.
+    expect(await screen.findByTestId('dialog-confirm')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('dialog-cancel'))
+    await waitFor(() => expect(screen.queryByTestId('dialog-body')).toBeNull())
     expect(updateRegistrationTerms).not.toHaveBeenCalled()
+    expect(prompt).not.toHaveBeenCalled()
 
     prompt.mockRestore()
   })
@@ -162,23 +168,23 @@ describe('RegistrationsPage', () => {
   })
 
   it('carries a reason with a gate change that does go through', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Paid off-platform under an annual contract.')
     vi.mocked(updateRegistrationTerms).mockResolvedValue({
       registration: application(),
       policy: { requires_mobile: false, requires_approval: false, requires_payment: false },
     })
 
-    renderWithProviders(<RegistrationsPage />, { route: '/admin/registrations', locale: 'en' })
+    renderWithProviders(<><RegistrationsPage /><DialogHost /></>, { route: '/admin/registrations', locale: 'en' })
 
     fireEvent.click(await screen.findByTestId('registration-row'))
     fireEvent.click(await screen.findByTestId('registration-gate-requires_approval'))
+
+    fireEvent.change(await screen.findByTestId('dialog-input'), { target: { value: 'Paid off-platform under an annual contract.' } })
+    fireEvent.click(screen.getByTestId('dialog-confirm'))
 
     await waitFor(() => expect(updateRegistrationTerms).toHaveBeenCalledWith('reg-1', {
       requires_approval: false,
       reason: 'Paid off-platform under an annual contract.',
     }))
-
-    prompt.mockRestore()
   })
 
   /** A decided application offers no actions — the decision has already been made. */
@@ -228,5 +234,33 @@ describe('RegistrationsPage', () => {
     fireEvent.change(screen.getByLabelText(/Why|سبب/), { target: { value: 'Mail provider outage' } })
     fireEvent.click(screen.getByTestId('registration-reevaluate-confirm'))
     await waitFor(() => expect(reevaluateRegistrationVerification).toHaveBeenCalledWith('reg-1', 'Mail provider outage'))
+  })
+
+  /* PLATFORM-INBOX-ATTENTION-001 — held at a verification step: the step, its history, and a resend that confirms nothing. */
+  it('shows where an application is held and resends the challenge without verifying it', async () => {
+    const held = {
+      state: 'mobile_verification_required', label: 'Awaiting mobile verification', mobile_verified: false,
+      verification: { email: 'verified', mobile: 'required' } as const,
+      verification_stage: { channel: 'mobile' as const, since: '2026-08-14T10:00:00+00:00', sends: 2, last_sent_at: '2026-08-14T10:01:00+00:00', last_outcome: 'awaiting_provider_credentials' },
+    }
+    vi.mocked(fetchRegistration).mockResolvedValue(detail(held))
+    vi.mocked(resendRegistrationVerification).mockResolvedValue({
+      registration: application(held),
+      verification: { channel: 'mobile', delivery_status: 'awaiting_provider_credentials', expires_at: null },
+    })
+
+    renderWithProviders(<RegistrationsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('registration-row'))
+
+    const stage = await screen.findByTestId('registration-stage')
+    expect(stage).toHaveAttribute('data-channel', 'mobile')
+    expect(stage).toHaveTextContent('Mobile confirmation')
+    expect(screen.getByTestId('registration-stage-outcome')).toHaveTextContent('Provider not set up')
+    expect(screen.getByTestId('registration-stage-outcome')).toHaveAttribute('data-outcome', 'awaiting_provider_credentials')
+    // Required and not done reads as not done — never «confirmed».
+    expect(screen.getByTestId('registration-standing-mobile')).toHaveTextContent('Mobile not confirmed yet')
+
+    fireEvent.click(screen.getByTestId('registration-resend'))
+    await waitFor(() => expect(resendRegistrationVerification).toHaveBeenCalledWith('reg-1'))
   })
 })

@@ -99,7 +99,7 @@ describe('the notification preferences centre', () => {
   it('offers a rhythm for a finding the digest carries, and none for an event', () => {
     open()
 
-    expect(screen.getByLabelText('سرعة استهلاك الميزانية — التوقيت')).toBeInTheDocument()
+    expect(screen.getByLabelText('سرعة صرف الميزانية — التوقيت')).toBeInTheDocument()
     expect(screen.queryByLabelText('الاشتراك والفواتير — التوقيت')).not.toBeInTheDocument()
   })
 
@@ -177,7 +177,7 @@ describe('the notification preferences centre', () => {
   it('disables the per-message email boxes when email is switched off entirely', () => {
     open(prefs({ channels: { in_app: true, email: false } }))
 
-    expect(screen.getByLabelText('سرعة استهلاك الميزانية — بريد')).toBeDisabled()
+    expect(screen.getByLabelText('سرعة صرف الميزانية — بريد')).toBeDisabled()
     expect(screen.getByText(/البريد مغلق كليًا/)).toBeInTheDocument()
   })
 

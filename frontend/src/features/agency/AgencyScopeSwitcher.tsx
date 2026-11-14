@@ -64,6 +64,21 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
       return
     }
 
+    /*
+     * CLIENT-UNIT-001 — the client is the visible unit; its project is not.
+     *
+     * A client with exactly ONE project has nothing to choose between, so that project is the working scope the moment
+     * the client is picked. The client was chosen by the person, never guessed: only the project step is skipped, and
+     * only when it has one possible answer. Two or more projects bring the project step back (see below).
+     */
+    if (clientIsReachable) {
+      const owned = authorisedProjects.filter((p) => p.client_workspace_id === currentClientId)
+      if (owned.length === 1 && currentProjectId !== owned[0].id) {
+        setCurrentProjectId(owned[0].id)
+        return
+      }
+    }
+
     if (currentProjectId === null) return
 
     const project = authorisedProjects.find((p) => p.id === currentProjectId)
@@ -137,13 +152,15 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
           setCurrentProjectId(null)
         }}
         options={authorisedClients.map((c) => ({ id: c.id, name: c.name }))}
+        alwaysFilter
       />
       )}
 
-      <Field
+      {/* CLIENT-UNIT-001 — the «المشاريع» switch exists only for a client that has a second project. */}
+      {(scopedToProjectsOnly || projectsForClient.length > 1) && <Field
         testId="agency-scope-project"
         icon={<FolderKanban size={14} />}
-        label={ar ? 'المشروع' : 'Project'}
+        label={ar ? 'المشاريع' : 'Project'}
         value={currentProjectId ?? ''}
         placeholder={
           !scopedToProjectsOnly && currentClientId === null
@@ -155,7 +172,7 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
         disabled={(!scopedToProjectsOnly && currentClientId === null) || projectsForClient.length === 0}
         onChange={(id) => setCurrentProjectId(id === '' ? null : id)}
         options={projectsForClient.map((p) => ({ id: p.id, name: p.name }))}
-      />
+      />}
     </div>
   )
 }
@@ -182,7 +199,7 @@ const FILTER_ABOVE = 12
  * Dropping it would make the select fall back to the placeholder and read as "nothing is selected"
  * while the rest of the portal is still showing that client's data.
  */
-function Field({ testId, icon, label, value, placeholder, options, onChange, disabled }: {
+function Field({ testId, icon, label, value, placeholder, options, onChange, disabled, alwaysFilter }: {
   testId: string
   icon: React.ReactNode
   label: string
@@ -191,10 +208,12 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
   options: { id: string; name: string }[]
   onChange: (id: string) => void
   disabled?: boolean
+  /** The client list is always searchable: it is the one entry point, and an agency's list only grows. */
+  alwaysFilter?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [term, setTerm] = useState('')
-  const filterable = options.length > FILTER_ABOVE && !disabled
+  const filterable = (alwaysFilter ? options.length > 1 : options.length > FILTER_ABOVE) && !disabled
 
   const needle = term.trim().toLowerCase()
   const shown = !filterable || needle === ''

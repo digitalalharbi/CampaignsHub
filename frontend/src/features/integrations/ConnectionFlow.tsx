@@ -466,7 +466,7 @@ function Login({ ar, label, providerKey, destination, onDestination, reauthorise
   // The isolated SaaS test workspace connects through the new app only, and says so when that app is not ready yet.
   const testWorkspace = metaApps.data?.test_workspace === true
 
-  const start = useMutation({
+  const start = useMutation({ meta: { feedback: 'none' },
     /*
      * INTEGRATION-OWN-LOGIN-001 — a connection started FROM a client's project is that client's own.
      *

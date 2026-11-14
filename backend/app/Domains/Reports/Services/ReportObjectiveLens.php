@@ -124,10 +124,18 @@ final class ReportObjectiveLens
             if ((float) ($c['spend'] ?? 0) <= 0) {
                 continue;
             }
-            if (($c['objective_source'] ?? 'unset') === 'unset') {
+            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
+            /*
+             * OBJECTIVE-GAPS-001 — the column DEFAULT is the placeholder, not `unset` itself.
+             *
+             * `objective_source = unset` also covers a real objective the importer seeded (17 TikTok
+             * WEB_CONVERSIONS campaigns on Production carry `conversions` that way), and skipping
+             * those let a traffic or sales month fall back to the outcome heuristic. Only `other` —
+             * what the column defaults to — under an `unset` source is «nobody classified it».
+             */
+            if (($c['objective_source'] ?? 'unset') === 'unset' && ($objective === null || $objective === CampaignObjective::Other)) {
                 continue;
             }
-            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
             if ($objective !== null) {
                 $declared[] = $objective;
             }

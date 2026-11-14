@@ -14,12 +14,12 @@ export function SecurityPage() {
   const sessions = useQuery({ queryKey: ['me', 'sessions'], queryFn: getSessions })
   const identities = useQuery({ queryKey: ['me', 'oauth-identities'], queryFn: getOAuthIdentities })
   const google = identities.data?.find((provider) => provider.provider === 'google')
-  const linkGoogle = useMutation({
+  const linkGoogle = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => startOAuthLink('google'),
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
   })
 
-  const revoke = useMutation({
+  const revoke = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => logoutOtherSessions(password),
     onSuccess: () => setPassword(''),
   })

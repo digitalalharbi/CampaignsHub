@@ -41,8 +41,8 @@ export function AttentionBlocks({
   if (!items || items.length === 0) return null
 
   return (
-    <section className="flex flex-col gap-3" data-testid="report-attention" aria-label={ar ? 'ما يحتاج انتباهًا' : 'What needs attention'}>
-      <h3 className="text-base font-bold tracking-tight text-text-primary">{ar ? 'ما يحتاج انتباهًا' : 'What needs attention'}</h3>
+    <section className="flex flex-col gap-3" data-testid="report-attention" aria-label={ar ? 'تنبيهات' : 'What needs attention'}>
+      <h3 className="text-base font-bold tracking-tight text-text-primary">{ar ? 'تنبيهات' : 'What needs attention'}</h3>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {items.map((item) => (
           <AttentionBlock key={item.key} item={item} ar={ar} onOpenContent={onOpenContent} onDecide={onDecide} busy={busyKey === item.key} />

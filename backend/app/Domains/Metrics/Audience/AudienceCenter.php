@@ -185,6 +185,9 @@ final class AudienceCenter
             ];
         }
 
+        // Row order out of the database is not defined: a stable order (platform, then dimension) keeps every reading and snapshot reproducible.
+        usort($groups, static fn (array $a, array $b): int => [$a['provider'], $a['dimension']] <=> [$b['provider'], $b['dimension']]);
+
         $missing = [];
         foreach ($providers as $p) {
             foreach (AudienceCapabilities::for($p)['dimensions'] ?? [] as $dim => $facts) {

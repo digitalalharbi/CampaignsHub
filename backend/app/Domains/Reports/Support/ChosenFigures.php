@@ -8,6 +8,7 @@ use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
 use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportAutoComposer;
@@ -49,7 +50,7 @@ final class ChosenFigures
     private const SPEND = [
         'spend', 'spend_original', 'spend_withheld_rows', 'spend_withheld', 'spend_share', 'spend_coverage', 'spend_not_reported', 'funnel_spend', 'cost_per',
         'spent', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under', 'excluded_spend', 'includes_non_sales_spend',
-        'spend_by_kind', 'spend_mix',
+        'spend_by_kind', 'spend_mix', 'total_spend',
     ];
 
     /** The amount earned and everything that states it. */
@@ -476,6 +477,10 @@ final class ChosenFigures
         }
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
+            // REPORT-SETTINGS-AUDIT-001 — the store block's money leaves with the revenue KPI too, as it does for a link hiding revenue.
+            if (is_array($payload['store_analytics'] ?? null)) {
+                $payload['store_analytics'] = StoreAnalyticsSection::withoutMoney($payload['store_analytics']);
+            }
         }
         if ($hideSpend) {
             $payload = AudienceReportSections::withoutMoney($payload);

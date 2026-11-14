@@ -75,7 +75,7 @@ export function WorkspaceSwitcherPage() {
 
   const queryClient = useQueryClient()
 
-  const pick = useMutation({
+  const pick = useMutation({ meta: { feedback: 'none' },
     mutationFn: switchMembership,
     /*
      * SECURITY CLUSTER 5 — nothing the previous workspace left in the browser may be shown under the new one.

@@ -244,19 +244,30 @@ final class CoverCache
              */
             $video = self::videoSourceOf($creative);
             if ($video !== null && $creative->cover_source !== self::SOURCE_VIDEO_FRAME) {
-                if (self::lapsed($video) && ! $renewed) {
-                    $this->renew($creative);
+                $tiktok = strtolower((string) $creative->provider) === 'tiktok';
+                if (self::videoLapsed($creative, $video) && ! $renewed) {
+                    /*
+                     * CONTENT-TEXT-CTA-001 (B7) — the renewal answers the platform's own still with the film, and that
+                     * still is the better cover: copy it first (TikTok), and take a frame only when it cannot be had.
+                     */
+                    $still = $this->renew($creative);
                     $renewed = true;
+                    // TikTok only: every other platform keeps exactly the frame path it had.
+                    if ($still !== null && $tiktok) {
+                        [$body, $ext, $reason] = $this->fetch($still);
+                    }
                     $video = self::videoSourceOf($creative);
                 }
-                if ($video !== null && ! self::lapsed($video)) {
+                $copied = $body !== null && $ext !== null;
+                if (! $copied && $video !== null && ! self::videoLapsed($creative, $video)) {
                     [$frame, $frameReason] = app(VideoFrameExtractor::class)->extract($video);
                     if ($frame !== null) {
                         [$body, $ext, $origin, $reason] = [$frame, 'jpg', self::SOURCE_VIDEO_FRAME, null];
                     } else {
                         $reason = $frameReason;
                     }
-                } else {
+                } elseif (! $copied) {
+                    // A dead film is not an ffmpeg failure: say what it is, and never hand ffmpeg a link that cannot answer.
                     $reason = 'video_expired';
                 }
             }
@@ -297,6 +308,28 @@ final class CoverCache
     private static function lapsed(string $url): bool
     {
         return AssetExpiry::fromUrl($url)?->isPast() ?? false;
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 (B7) — whether the FILM's link has lapsed, which its URL alone may not say.
+     *
+     * TikTok's Asset Library answers a video's `preview_url` with `preview_url_expire_time` beside it, and the
+     * link itself (`v16-tt4b` / `v19-tt4b.tiktokcdn.com`) carries no `x-expires` in its query — so `lapsed()` read
+     * every such film as live. Production 2026-11-13: all 152 `frame_ffmpeg_failed` covers were TikTok films whose
+     * stored `asset_expires_at` had passed; ffmpeg was handed a dead link, and the failure was named as ffmpeg's.
+     * For TikTok the stored expiry is that video's (or, for a Spark post, the earliest of its links), so it is read
+     * too. Other platforms are unchanged: their expiry is in the link, and their stored one may be the still's.
+     */
+    private static function videoLapsed(ExternalCreative $creative, string $url): bool
+    {
+        // The link's own expiry, when it states one, decides — a Spark post's stored expiry may be its poster's.
+        $own = AssetExpiry::fromUrl($url);
+        if ($own !== null) {
+            return $own->isPast();
+        }
+
+        return strtolower((string) $creative->provider) === 'tiktok'
+            && $creative->asset_expires_at !== null && $creative->asset_expires_at->isPast();
     }
 
     /** A fresh source from the platform, or null. The row's links are updated by the refresher itself. */

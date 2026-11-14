@@ -23,7 +23,7 @@ import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, u
 import { localStill } from '@/features/content/providerMedia'
 
 /**
- * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
+ * LAUNCH-001 — «حملة جديدة»: a real launch on the platforms' own APIs, not an internal draft.
  *
  * Project → accounts → objective and budget → ad group → ad → tracking → review → publish. Every step the
  * builder offers is one the server's write services perform; every refusal the review shows is the one the
@@ -78,7 +78,7 @@ export function LaunchPage() {
   const [spendOk, setSpendOk] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
 
-  const title = ar ? 'إطلاق الحملات' : 'Launch'
+  const title = ar ? 'حملة جديدة' : 'Launch'
   const purpose = ar
     ? 'أنشئ حملة على منصة أو أكثر من مكان واحد عبر واجهات المنصات الرسمية — تُنشأ موقوفة، ولا يُرسل شيء قبل تأكيدك.'
     : 'Create a campaign on one or more platforms from one place, through the platforms’ official APIs — created paused, and nothing is sent before you confirm.'

@@ -478,7 +478,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'name' => (string) ($a['name'] ?? $a['id']),
                 'status' => strtolower((string) ($a['status'] ?? 'unknown')),
                 'review_status' => $this->reviewStatus($a['review_status'] ?? null),
-                'destination_url' => null,
+                // CONTENT-TEXT-CTA-001 — Snapchat states the destination on the creative, never on the ad; read from there.
+                'destination_url' => is_string($destination = $creatives[$creativeId ?? '']['destination_url'] ?? null) ? $destination : null,
                 'creative' => $creativeId === null ? null : ($creatives[$creativeId] ?? ['external_id' => $creativeId]),
                 'raw' => $a,
             ], static fn ($v) => $v !== null);
@@ -724,6 +725,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'zone_id' => isset($c['collection_properties']['interaction_zone_id'])
                     ? (string) $c['collection_properties']['interaction_zone_id']
                     : null,
+                ...$this->creativeCopy($c),
             ], static fn ($v) => $v !== null);
 
             /* Kept for the composite pass below, which needs the children the body names. */
@@ -1000,6 +1002,52 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
 
         return null;
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 — what a Snap ad says and where it sends the reader, from the creative itself.
+     *
+     * Production 2026-11-13: 0 of 6,201 Snapchat creatives carried a headline or a destination, and every ad's
+     * destination was hard-coded null — the copy was read only for a collection's tiles. Snap's Marketing API
+     * («Creatives») states them on the creative object:
+     *
+     *   * `headline` (≤ 34 characters) — the ad's headline. Snapchat has no separate body text field.
+     *   * `brand_name` (≤ 25) — the advertiser name drawn above the snap. Kept in `raw`, never passed off as copy.
+     *   * `call_to_action` — the attachment's button, a Snapchat token such as `SHOP_NOW` or `INSTALL_NOW`.
+     *   * the attachment: `web_view_properties.url` (WEB_VIEW), a deep link's `web_view_fallback_url` (the landing
+     *     page a reader can open), the same two under `collection_properties`, and only then the app's own
+     *     `deep_link_uri` — an app scheme is where the ad sends a phone, not a page a report reader can open.
+     *
+     * Every value is Snapchat's own; a creative without an attachment keeps no destination.
+     *
+     * @param  array<string,mixed>  $c
+     * @return array{headline?: string, cta?: string, destination_url?: string, raw?: array{brand_name: string}}
+     */
+    private function creativeCopy(array $c): array
+    {
+        $text = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? trim($v) : null;
+        $collection = (array) ($c['collection_properties'] ?? []);
+        $destination = null;
+        foreach ([
+            $c['web_view_properties']['url'] ?? null,
+            $c['deep_link_properties']['web_view_fallback_url'] ?? null,
+            $collection['web_view_properties']['url'] ?? null,
+            $collection['deep_link_properties']['web_view_fallback_url'] ?? null,
+            $c['deep_link_properties']['deep_link_uri'] ?? null,
+            $collection['deep_link_properties']['deep_link_uri'] ?? null,
+        ] as $candidate) {
+            if (($destination = $text($candidate)) !== null) {
+                break;
+            }
+        }
+        $brand = $text($c['brand_name'] ?? null);
+
+        return array_filter([
+            'headline' => $text($c['headline'] ?? null),
+            'cta' => $text($c['call_to_action'] ?? null),
+            'destination_url' => $destination,
+            'raw' => $brand === null ? null : ['brand_name' => $brand],
+        ], static fn ($v) => $v !== null);
     }
 
     /** @param array<string,mixed> $element */

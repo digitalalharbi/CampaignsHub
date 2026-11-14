@@ -172,7 +172,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
               <Field label={ar ? 'المنطقة الزمنية' : 'Time zone'}>
                 <input className={input} dir="ltr" value={f.schedule.timezone ?? 'Asia/Riyadh'} onChange={(e) => set('schedule', { ...f.schedule, timezone: e.target.value })} />
               </Field>
-              <Field label={ar ? 'فترة التهدئة (ساعات)' : 'Cooldown (hours)'}>
+              <Field label={ar ? 'المدة بين التنبيهات (ساعات)' : 'Cooldown (hours)'}>
                 <input className={input} type="number" min={1} max={720} dir="ltr" value={f.cooldown_hours} onChange={(e) => set('cooldown_hours', Number(e.target.value))} data-testid="rule-cooldown" />
               </Field>
             </div>

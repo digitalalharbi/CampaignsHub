@@ -29,7 +29,7 @@ final class FundingRefreshCommand extends Command
         $failed = 0;
         $rows = 0;
 
-        ProjectFunding::withoutGlobalScopes()->where('payment_method', '!=', 'unset')
+        ProjectFunding::withoutGlobalScopes()->where('payment_method', '!=', 'unset')->whereNull('voided_at')
             ->lazyById(200)->each(function (ProjectFunding $funding) use ($refresher, $notifier, $context, &$failed, &$rows): void {
                 $context->setTenantId($funding->tenant_id);
                 try {

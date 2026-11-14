@@ -22,6 +22,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { confirmDialog } from '@/stores/dialogs'
 
 type Tab = 'rules' | 'history' | 'changes'
 
@@ -52,8 +53,8 @@ export function AutomationPage() {
   const refresh = () => void qc.invalidateQueries({ queryKey: ['automation'] })
   const toggle = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => toggleRule(p!, id, on), onSuccess: refresh })
   const remove = useMutation({ mutationFn: (id: string) => deleteRule(p!, id), onSuccess: refresh })
-  const run = useMutation({ mutationFn: (id: string) => runRuleNow(p!, id), onSuccess: refresh })
-  const dryRun = useMutation({ mutationFn: (r: AutomationRule) => dryRunRule(p!, r.id).then((d) => ({ rule: r, results: d.results })), onSuccess: setDry })
+  const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runRuleNow(p!, id), onSuccess: refresh })
+  const dryRun = useMutation({ meta: { feedback: 'none' }, mutationFn: (r: AutomationRule) => dryRunRule(p!, r.id).then((d) => ({ rule: r, results: d.results })), onSuccess: setDry })
 
   const title = ar ? 'القواعد الآلية' : 'Automated rules'
   const purpose = ar
@@ -157,7 +158,7 @@ export function AutomationPage() {
                           <IconButton label={ar ? 'تجربة دون تنفيذ' : 'Dry run'} onClick={() => dryRun.mutate(r)} testid={`automation-dry-${r.id}`}><FlaskConical size={15} /></IconButton>
                           <IconButton label={ar ? 'تشغيل الآن' : 'Run now'} onClick={() => run.mutate(r.id)} testid={`automation-run-${r.id}`}><Play size={15} /></IconButton>
                           <IconButton label={ar ? 'تعديل' : 'Edit'} onClick={() => setEditing(r)} testid={`automation-edit-${r.id}`}><Pencil size={15} /></IconButton>
-                          <IconButton label={ar ? 'حذف' : 'Delete'} onClick={() => { if (window.confirm(ar ? 'حذف القاعدة؟' : 'Delete this rule?')) remove.mutate(r.id) }} testid={`automation-delete-${r.id}`}><Trash2 size={15} /></IconButton>
+                          <IconButton label={ar ? 'حذف' : 'Delete'} onClick={async () => { if (await confirmDialog({ title: ar ? 'احذف القاعدة؟' : 'Delete this rule?', confirmLabel: ar ? 'احذف' : 'Delete', danger: true })) remove.mutate(r.id) }} testid={`automation-delete-${r.id}`}><Trash2 size={15} /></IconButton>
                         </div>
                       </td>
                     </tr>
