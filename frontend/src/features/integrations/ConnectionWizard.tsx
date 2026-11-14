@@ -356,7 +356,7 @@ export function ConnectionWizard({
   })
 
   /* RUNTIME-100 §5 — fix the names with the token we already hold, no second consent. */
-  const refresh = useMutation({
+  const refresh = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => refreshDiscoveredAccounts(connectionId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['connection-hierarchy', connectionId] })

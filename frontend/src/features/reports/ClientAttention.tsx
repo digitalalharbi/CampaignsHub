@@ -155,9 +155,9 @@ export function ClientAttention({
           columns={[
             { key: 'platform', label: ar ? 'المنصة' : 'Platform', kind: 'text' },
             { key: 'budget', label: ar ? 'الميزانية' : 'Budget', kind: 'money', currency: unit },
-            { key: 'spent', label: ar ? 'المصروف' : 'Spent', kind: 'money', currency: unit },
+            { key: 'spent', label: ar ? 'الإنفاق' : 'Spent', kind: 'money', currency: unit },
             { key: 'remaining', label: ar ? 'المتبقي' : 'Remaining', kind: 'money', currency: unit },
-            { key: 'consumed', label: ar ? 'الاستهلاك' : 'Consumed', kind: 'percent', digits: 0 },
+            { key: 'consumed', label: ar ? 'نسبة الإنفاق' : 'Consumed', kind: 'percent', digits: 0 },
             /*
               PACE belongs in the table, not only in the sentences below it.
               

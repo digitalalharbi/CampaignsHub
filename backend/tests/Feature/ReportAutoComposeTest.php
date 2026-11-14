@@ -349,7 +349,8 @@ final class ReportAutoComposeTest extends TestCase
         $proposal = $this->getJson($this->base($report))->assertOk()->json('data');
 
         $this->assertFalse($proposal['availability_judged']);
-        $this->assertSame(['impressions', 'clicks', 'ctr'], $proposal['metrics'], 'with no figures to read, a client report still gains no money figure');
+        // KPI-SET-PER-OBJECTIVE-001 — the traffic set gained CPM and frequency; frequency is not money, so a client keeps it.
+        $this->assertSame(['impressions', 'clicks', 'ctr', 'frequency'], $proposal['metrics'], 'with no figures to read, a client report still gains no money figure');
         $this->assertFalse($proposal['metrics_apply'], 'a live report\'s cards belong to its links');
     }
 }

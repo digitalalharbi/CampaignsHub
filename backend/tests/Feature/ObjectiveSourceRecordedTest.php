@@ -81,9 +81,16 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $this->assertSame(CampaignObjective::Awareness, $map->resolveFromBidding('google_ads', $raw('TARGET_CPM')));
         $this->assertSame(CampaignObjective::VideoViews, $map->resolveFromBidding('google', $raw('TARGET_CPV')));
 
-        // A Google «conversion» can be a purchase, a lead or a call; a manual bid states no goal.
-        // Owner decision: MAXIMIZE_CONVERSION_VALUE and TARGET_IMPRESSION_SHARE are ambiguous too.
-        foreach (['MAXIMIZE_CONVERSIONS', 'TARGET_CPA', 'MANUAL_CPC', 'ENHANCED_CPC', 'MAXIMIZE_CONVERSION_VALUE', 'TARGET_IMPRESSION_SHARE'] as $strategy) {
+        // GOOGLE-CONVERSION-BIDDING-SALES-001 (Owner decision, 2026-11-13): maximising conversions or
+        // conversion value is a sales buy, on Performance Max, Search and Display alike.
+        $this->assertSame(CampaignObjective::Sales, $map->resolveFromBidding('google', $raw('MAXIMIZE_CONVERSION_VALUE')));
+        $this->assertSame(CampaignObjective::Sales, $map->resolveFromBidding('google', $raw('MAXIMIZE_CONVERSIONS')));
+        foreach (['PERFORMANCE_MAX', 'DISPLAY'] as $channel) {
+            $this->assertSame(CampaignObjective::Sales, $map->resolveFromBidding('google', ['raw' => ['campaign' => ['advertisingChannelType' => $channel, 'biddingStrategyType' => 'MAXIMIZE_CONVERSION_VALUE']]]), $channel);
+        }
+
+        // A manual bid states no goal; TARGET_CPA and TARGET_IMPRESSION_SHARE stay ambiguous (not decided).
+        foreach (['TARGET_CPA', 'MANUAL_CPC', 'ENHANCED_CPC', 'TARGET_IMPRESSION_SHARE'] as $strategy) {
             $this->assertNull($map->resolveFromBidding('google', $raw($strategy)), $strategy);
         }
         // Only Google is read this way.
@@ -116,7 +123,8 @@ final class ObjectiveSourceRecordedTest extends TestCase
         $this->assertSame('SEARCH (TARGET_ROAS)', $unified->objective_platform_value);
     }
 
-    public function test_a_google_campaign_bid_on_conversions_stays_unclassified_with_its_word(): void
+    /** GOOGLE-CONVERSION-BIDDING-SALES-001 — a campaign bid on conversions is sales, and says what it was read from. */
+    public function test_a_google_campaign_bid_on_conversions_is_sales_and_says_so(): void
     {
         $unified = $this->unified('Search — conversions');
         $this->external($unified, 'google', 'SEARCH', ['raw' => ['campaign' => ['biddingStrategyType' => 'MAXIMIZE_CONVERSIONS']]]);
@@ -124,9 +132,23 @@ final class ObjectiveSourceRecordedTest extends TestCase
         app(CampaignObjectiveResolver::class)->sync($unified);
         $unified->refresh();
 
-        $this->assertSame('other', $unified->objective);
-        $this->assertNotSame('platform', $unified->objective_source);
-        $this->assertSame('SEARCH', $unified->objective_platform_value);
+        $this->assertSame('sales', $unified->objective);
+        $this->assertSame('platform', $unified->objective_source);
+        $this->assertSame('SEARCH (MAXIMIZE_CONVERSIONS)', $unified->objective_platform_value);
+    }
+
+    /** A manual objective is never replaced by the bidding answer. */
+    public function test_a_manual_objective_survives_conversion_bidding(): void
+    {
+        $unified = $this->unified('PMax — leads by hand');
+        $unified->forceFill(['objective' => 'leads', 'objective_source' => 'manual'])->save();
+        $this->external($unified, 'google', 'PERFORMANCE_MAX', ['raw' => ['campaign' => ['biddingStrategyType' => 'MAXIMIZE_CONVERSION_VALUE']]]);
+
+        app(CampaignObjectiveResolver::class)->sync($unified);
+        $unified->refresh();
+
+        $this->assertSame('leads', $unified->objective);
+        $this->assertSame('manual', $unified->objective_source);
     }
 
     /**

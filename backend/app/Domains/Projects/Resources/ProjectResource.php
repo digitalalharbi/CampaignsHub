@@ -23,6 +23,8 @@ final class ProjectResource extends JsonResource
             'status' => ProjectLifecycle::status((string) $this->status, $this->list_summary ?? $this->lifecycle_facts),
             'setup_completion' => ProjectLifecycle::setupCompletion((int) $this->setup_completion, $this->list_summary ?? $this->lifecycle_facts),
             'account_manager_id' => $this->account_manager_id,
+            // CLIENT-UNIT-001 — the project made with the client; the interface hides it until a second one exists.
+            'internal' => (bool) (($this->meta ?? [])['internal'] ?? false),
             'created_at' => optional($this->created_at)->toIso8601String(),
             /*
              * PROJECT-LIST-SURFACE-001 — present on the LISTING, absent everywhere else.

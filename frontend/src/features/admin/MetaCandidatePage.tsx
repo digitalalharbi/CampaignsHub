@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { confirmDialog } from '@/stores/dialogs'
 
 /**
  * META-CANDIDATE-001 — the ONE isolated Candidate Meta app.
@@ -159,7 +160,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
     onSuccess: (data) => qc.setQueryData(key, data),
   })
 
-  const start = useMutation({
+  const start = useMutation({ meta: { feedback: 'none' },
     mutationFn: saas ? startMetaSaasTest : startMetaCandidateTest,
     onSuccess: (data) => { window.location.assign(data.authorization_url) },
   })
@@ -213,7 +214,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
               <span className="flex items-center gap-2 text-xs text-text-muted">
                 {v.present ? <span>{v.source === 'environment' ? c.environment : c.stored} · <bdi dir="ltr">••••{v.hint ?? ''}</bdi></span> : c.notSet}
                 {v.source === 'stored' && (
-                  <button type="button" className="inline-flex items-center gap-1 text-danger" onClick={() => forget.mutate(v.key)}>
+                  <button type="button" className="inline-flex items-center gap-1 text-danger" disabled={forget.isPending} onClick={() => forget.mutate(v.key)}>
                     <Trash2 size={12} aria-hidden /> {c.clear}
                   </button>
                 )}
@@ -327,7 +328,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           variant="danger"
           disabled={!canPromote || !acknowledged || (narrows && !narrowConfirmed)}
           loading={promote.isPending}
-          onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
+          onClick={async () => { if (await confirmDialog({ title: c.confirmPromote, danger: true })) promote.mutate() }}
         >
           {c.promote}
         </Button>
@@ -336,7 +337,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           variant="secondary"
           disabled={!canRollback || !acknowledged}
           loading={rollback.isPending}
-          onClick={() => { if (window.confirm(c.confirmRollback)) rollback.mutate() }}
+          onClick={async () => { if (await confirmDialog({ title: c.confirmRollback, danger: true })) rollback.mutate() }}
         >
           {c.rollback}
         </Button>

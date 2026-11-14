@@ -60,6 +60,57 @@ final class StoreAnalyticsSection
         ];
     }
 
+    /**
+     * REPORT-SETTINGS-AUDIT-001 — a built block with every money figure taken out, as `build(hideRevenue: true)` would have
+     * written it: a saved report is built with revenue shown, and a link hiding revenue reads it through this.
+     *
+     * @param  array<string, mixed>  $block
+     * @return array<string, mixed>
+     */
+    public static function withoutMoney(array $block): array
+    {
+        if (is_array($block['store'] ?? null)) {
+            $s = $block['store'];
+            $s['currency'] = null;
+            $s['sales'] = array_map(static fn ($m): array => ['current' => null, 'previous' => null, 'change_pct' => null], (array) ($s['sales'] ?? []));
+            if (is_array($s['averages'] ?? null)) {
+                $s['averages']['aov'] = null;
+            }
+            $s['top_products'] = array_map(static function ($p) {
+                if (is_array($p)) {
+                    $p['revenue'] = null;
+                }
+
+                return $p;
+            }, (array) ($s['top_products'] ?? []));
+            $s['trend'] = array_map(static function ($d) {
+                if (is_array($d)) {
+                    $d['net'] = null;
+                }
+
+                return $d;
+            }, (array) ($s['trend'] ?? []));
+            if (is_array($s['evidence'] ?? null)) {
+                $s['evidence'] = array_map(static function ($r) {
+                    if (is_array($r)) {
+                        $r['net_revenue'] = null;
+                    }
+
+                    return $r;
+                }, $s['evidence']);
+            }
+            $block['store'] = $s;
+        }
+        if (is_array($block['site'] ?? null)) {
+            $block['site']['currency'] = null;
+            if (is_array($block['site']['totals'] ?? null)) {
+                $block['site']['totals']['revenue'] = null;
+            }
+        }
+
+        return $block;
+    }
+
     /** @return array<string, mixed>|null */
     private function store(string $tenantId, string $projectId, Carbon $from, Carbon $to, bool $hideRevenue, bool $withEvidence): ?array
     {
