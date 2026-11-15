@@ -6,6 +6,7 @@ use App\Console\Commands\MailDiagnoseCommand;
 use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Console\Commands\SallaReviewCommand;
+use App\Domains\Access\Middleware\EnforceSectionAccess;
 use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\PurgeAgentChat;
@@ -334,6 +335,8 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureAccountActive::class,
             // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
             WithholdMoneyForMember::class,
+            // ACCESS-SECTIONS-001 — a section switched off for this member answers 403 on every one of its routes.
+            EnforceSectionAccess::class,
         ]);
 
         /*
@@ -391,6 +394,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveProject::class,
             // The capability check needs the project context `ResolveProject` sets, so it follows it.
             RequireProjectCapability::class,
+            // After the tenant is bound, before any model is bound: a closed section reveals nothing about a record.
+            EnforceSectionAccess::class,
             SubstituteBindings::class,
             Authorize::class,
         ]);

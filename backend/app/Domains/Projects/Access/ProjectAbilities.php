@@ -84,6 +84,25 @@ final class ProjectAbilities
     ];
 
     /**
+     * ACCESS-SECTIONS-001 — every tenant key that this class turns into at least one of these capabilities for a
+     * non-member. Read by `AccessSections::opens()` so «held by role» is exactly what the routes already accept.
+     *
+     * @param  list<string>  $capabilities
+     * @return list<string>
+     */
+    public static function tenantKeysGranting(array $capabilities): array
+    {
+        $out = [];
+        foreach (self::FROM_TENANT as $key => $caps) {
+            if (array_intersect($caps, $capabilities) !== []) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The capabilities this user holds in this project. Empty when they hold none.
      *
      * ## The membership decides, when there is one

@@ -8,12 +8,16 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Access\Services\AccessCenter;
 use App\Domains\Access\Support\AccessCatalogue;
+use App\Domains\Access\Support\AccessSections;
 use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
 use App\Domains\Identity\Services\InvitationService;
+use App\Domains\Notifications\Services\MemberNotices;
+use App\Domains\Tenancy\Actions\ManageMembershipScopes;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -61,6 +65,8 @@ final class AccessCenterController extends Controller
 
         return ApiResponse::success([
             'areas' => array_map(fn (array $a) => ['key' => $a['key'], 'ar' => $a['ar'], 'en' => $a['en']], AccessCatalogue::areas()),
+            // ACCESS-SECTIONS-001 — the seven sections the owner switches per member (layer three).
+            'sections' => array_map(fn (array $x) => ['key' => $x['key'], 'ar' => $x['ar'], 'en' => $x['en']], AccessSections::all()),
             'categories' => $categories,
             'members' => $this->members($tenantId, $actor, $names->all(), $clientNames->all()),
             'invitations' => $this->invitations($tenantId, $names->all(), $clientNames->all()),
@@ -167,10 +173,13 @@ final class AccessCenterController extends Controller
             'areas.*' => ['string', Rule::in(AccessCatalogue::LEVELS)],
             'client_ids' => ['sometimes', 'array', 'max:200'],
             'client_ids.*' => ['string', 'distinct'],
+            'sections' => ['sometimes', 'array'],
+            'sections.*' => ['boolean'],
             'reason' => ['sometimes', 'nullable', 'string', 'max:200'],
         ]);
+        $this->assertKnownSections($data['sections'] ?? []);
 
-        [$role, $overrides] = $this->decide($actor, $tenantId, $data['category'], $data['areas'] ?? []);
+        [$role, $overrides] = $this->decide($actor, $tenantId, $data['category'], $data['areas'] ?? [], $data['sections'] ?? []);
         $clientIds = $this->clientsWithinReach($actor, $tenantId, $data['client_ids'] ?? [], $scopes);
 
         $result = $invitations->invite(
@@ -205,13 +214,18 @@ final class AccessCenterController extends Controller
             'areas.*' => ['string', Rule::in(AccessCatalogue::LEVELS)],
             'client_ids' => ['sometimes', 'array', 'max:200'],
             'client_ids.*' => ['string', 'distinct'],
+            'sections' => ['sometimes', 'array'],
+            'sections.*' => ['boolean'],
             'reason' => ['sometimes', 'nullable', 'string', 'max:200'],
         ]);
+        $this->assertKnownSections($data['sections'] ?? []);
 
         // The invitation as it stands must itself be within the actor's hands, or they could rewrite an owner's.
         $this->assertMayTouch($actor, $tenantId, (string) $row->role_slug, $this->storedOverrides($row));
 
-        [$role, $overrides] = $this->decide($actor, $tenantId, $data['category'] ?? (string) $row->role_slug, $data['areas'] ?? []);
+        // Sections not named keep what the invitation already said.
+        $sections = ($data['sections'] ?? []) + array_fill_keys(AccessSections::offIn($this->storedOverrides($row)['deny']), false);
+        [$role, $overrides] = $this->decide($actor, $tenantId, $data['category'] ?? (string) $row->role_slug, $data['areas'] ?? [], $sections);
         $clientIds = array_key_exists('client_ids', $data)
             ? $this->clientsWithinReach($actor, $tenantId, $data['client_ids'], $scopes)
             : ($row->client_ids ? json_decode($row->client_ids, true) : null);
@@ -288,6 +302,209 @@ final class AccessCenterController extends Controller
         return ApiResponse::success(['areas' => AccessCatalogue::levelsFor($overrides['effective'])], 'Access saved.');
     }
 
+    /**
+     * PUT /api/v1/settings/access/members/{user} — ACCESS-SECTIONS-001: edit a member AFTER the invitation, all three
+     * layers in one save from the same screen: { category?, areas?: {area: level}, sections?: {section: bool},
+     * client_ids?: [...], reason? }. Takes effect on the member's very next request (no re-login: nothing about
+     * access lives in the session or the token). One audit row with the before and the after.
+     */
+    public function updateMember(Request $request, string $user, AuditLogger $audit, ClientScopeResolver $scopes, ManageMembershipScopes $scopeManager, MemberNotices $notices): JsonResponse
+    {
+        $actor = $this->manager($request);
+        $tenantId = $this->tenantId();
+        $data = $request->validate([
+            'category' => ['sometimes', 'string', 'max:80'],
+            'areas' => ['sometimes', 'array'],
+            'areas.*' => ['string', Rule::in(AccessCatalogue::LEVELS)],
+            'sections' => ['sometimes', 'array'],
+            'sections.*' => ['boolean'],
+            'client_ids' => ['sometimes', 'array', 'max:200'],
+            'client_ids.*' => ['string', 'distinct'],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:200'],
+        ]);
+        $this->assertKnownSections($data['sections'] ?? []);
+
+        $target = User::query()->whereHas('memberships', fn ($q) => $q->where('tenant_id', $tenantId)->where('status', 'active'))->where('uuid', $user)->first();
+        abort_if($target === null, 404);
+        abort_if($target->id === $actor->id, 403, 'You cannot change your own access.');
+        abort_if($target->hasRole(WorkspaceRolePresets::OWNER), 422, 'The workspace owner holds everything and cannot be narrowed.');
+
+        $membership = Membership::query()->where('tenant_id', $tenantId)->where('user_id', $target->id)->where('status', 'active')
+            ->where('portal', '!=', Portal::ClientPortal->value)->first();
+        abort_if($membership === null, 422, 'A client-portal member is changed from the client\'s page.');
+
+        $currentRole = Role::query()->where('tenant_id', $tenantId)
+            ->whereIn('id', DB::table('role_user')->where('user_id', $target->id)->pluck('role_id'))
+            ->orderBy('id')->first();
+        $currentKeys = $target->permissionKeys()->map(fn ($k) => (string) $k)->all();
+        abort_if(AccessCatalogue::isAdminSet($currentKeys) && ! $this->access->isOwner($actor), 403, 'Only the workspace owner can change an administrator\'s access.');
+
+        $before = $this->memberSnapshot($tenantId, $target, $membership, $currentRole);
+
+        $slug = $data['category'] ?? ($currentRole !== null ? (string) $currentRole->slug : null);
+        abort_if($slug === null, 422, 'Choose a category for this person.');
+        $changedCategory = $currentRole === null || $slug !== (string) $currentRole->slug;
+        $role = $changedCategory ? $this->access->assignableRole($actor, $tenantId, $slug) : $currentRole;
+        $categoryKeys = $role->permissions()->pluck('key')->map(fn ($k) => (string) $k)->all();
+        if ($changedCategory) {
+            $categoryKeys = $this->access->categoryKeys($tenantId, $slug) ?? [];
+        }
+
+        // Areas: named → recomputed against the category; not named → kept, unless the category changed (a new
+        // category starts clean, as on the roles screen). Section switches belong to the person and are kept.
+        $stored = $this->access->memberOverrides($tenantId, (int) $target->id);
+        $markers = array_values(array_filter($stored['deny'], fn ($k) => str_starts_with((string) $k, AccessSections::PREFIX)));
+        if (array_key_exists('areas', $data)) {
+            $o = $this->access->overridesFor($categoryKeys, $data['areas']);
+            $overrides = ['allow' => $o['allow'], 'deny' => [...$o['deny'], ...$markers]];
+        } elseif ($changedCategory) {
+            $overrides = ['allow' => [], 'deny' => $markers];
+        } else {
+            $overrides = $stored;
+        }
+        $final = AccessSections::apply($categoryKeys, $overrides, $data['sections'] ?? []);
+
+        // Grant only what you hold; only the owner hands out the team.
+        $this->access->assertMayGrant($actor, array_values(array_diff($final['effective'], $currentKeys)), $final['effective']);
+
+        $clientIds = null;
+        if (array_key_exists('client_ids', $data)) {
+            $clientIds = $this->clientsWithinReach($actor, $tenantId, $data['client_ids'], $scopes) ?? [];
+            // Never silently drop a client the actor cannot see themselves.
+            $held = DB::table('membership_scopes')->where('membership_id', $membership->id)->where('scope_type', MembershipScope::TYPE_CLIENT)->pluck('scope_id')->map(fn ($i) => (string) $i)->all();
+            foreach (array_diff($held, $clientIds) as $dropped) {
+                abort_unless($scopes->canReach($actor, (string) $dropped), 403, 'This member holds a client outside your own access. Ask someone with wider access to change it.');
+            }
+        }
+
+        DB::transaction(function () use ($target, $tenantId, $role, $changedCategory, $final, $actor, $clientIds, $membership, $scopeManager): void {
+            if ($changedCategory) {
+                $target->roles()->detach(Role::query()->where('tenant_id', $tenantId)->pluck('id')->all());
+                $target->roles()->syncWithoutDetaching([$role->id]);
+            }
+            $this->access->writeOverrides($tenantId, (int) $target->id, $final['allow'], $final['deny'], (int) $actor->id);
+            if ($clientIds !== null) {
+                $scopeManager->replace($membership, MembershipScope::TYPE_CLIENT, $clientIds);
+            }
+        });
+
+        $after = $this->memberSnapshot($tenantId, $target->fresh() ?? $target, $membership, $role);
+        $audit->log('access.member_updated', 'user', (string) $target->uuid, $before, $after, $data['reason'] ?? null);
+
+        if ($changedCategory) {
+            $notices->roleChanged($target, Tenant::query()->findOrFail($tenantId), $currentRole !== null ? (string) $currentRole->name : '—', (string) $role->name, $actor);
+        }
+
+        return ApiResponse::success([
+            'category' => (string) $role->slug,
+            'areas' => AccessCatalogue::levelsFor($final['effective']),
+            'sections' => AccessSections::statesFor($final['effective'], AccessSections::offIn($final['deny'])),
+        ], 'Access saved.');
+    }
+
+    /**
+     * GET /api/v1/settings/access/audit — ACCESS-SECTIONS-001: the workspace's recent permission changes, compact:
+     * who, whom, when, and what changed (each field's before → after, lists as added / removed).
+     */
+    public function audit(Request $request): JsonResponse
+    {
+        $this->manager($request);
+        $tenantId = $this->tenantId();
+        $limit = min(100, max(1, (int) $request->query('limit', 30)));
+
+        $rows = DB::table('audit_logs')->where('tenant_id', $tenantId)->whereIn('action', self::AUDITED)
+            ->orderByDesc('created_at')->limit($limit)->get(['action', 'user_id', 'entity_type', 'entity_id', 'before', 'after', 'reason', 'created_at']);
+        $who = User::query()->whereIn('id', $rows->pluck('user_id')->filter()->unique()->all())->pluck('name', 'id');
+        $targets = User::query()->whereIn('uuid', $rows->where('entity_type', 'user')->pluck('entity_id')->unique()->all())->get(['uuid', 'name', 'email'])->keyBy('uuid');
+        $invites = DB::table('workspace_invitations')->where('tenant_id', $tenantId)->whereIn('id', $rows->where('entity_type', 'workspace_invitation')->pluck('entity_id')->unique()->all())->pluck('email', 'id');
+
+        return ApiResponse::success(['entries' => $rows->map(function ($r) use ($who, $targets, $invites): array {
+            $before = $r->before ? (array) json_decode((string) $r->before, true) : [];
+            $after = $r->after ? (array) json_decode((string) $r->after, true) : [];
+            $target = match ($r->entity_type) {
+                'user' => isset($targets[$r->entity_id]) ? (string) ($targets[$r->entity_id]->name ?: $targets[$r->entity_id]->email) : null,
+                'workspace_invitation' => (string) ($invites[$r->entity_id] ?? ($after['email'] ?? $before['email'] ?? '')),
+                default => (string) ($after['name'] ?? $before['name'] ?? $after['slug'] ?? $before['slug'] ?? ''),
+            };
+
+            return [
+                'action' => (string) $r->action,
+                'by' => $r->user_id !== null ? (string) ($who[$r->user_id] ?? '') : null,
+                'target' => $target,
+                'at' => Carbon::parse($r->created_at)->toIso8601String(),
+                'reason' => $r->reason,
+                'changes' => self::diff($before, $after),
+            ];
+        })->values()], 'Access log retrieved.');
+    }
+
+    /** The actions the access log lists: every change to who may do what. */
+    private const AUDITED = [
+        'access.member_updated', 'access.member_overrides_changed', 'settings.team.role_changed', 'settings.team.invited',
+        'access.invitation_updated', 'settings.team.invitation_revoked', 'access.category_created', 'access.category_updated',
+        'access.category_deleted', 'settings.team.removed', 'settings.team.disabled', 'settings.team.enabled', 'settings.roles.updated',
+    ];
+
+    /**
+     * Field by field: scalars as from → to, lists as added / removed. Unchanged fields are left out.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     * @return list<array<string, mixed>>
+     */
+    private static function diff(array $before, array $after): array
+    {
+        $out = [];
+        foreach (array_values(array_unique([...array_keys($before), ...array_keys($after)])) as $field) {
+            $b = $before[$field] ?? null;
+            $a = $after[$field] ?? null;
+            if ($b === $a) {
+                continue;
+            }
+            if ((is_array($b) || $b === null) && (is_array($a) || $a === null) && array_is_list($b ?? []) && array_is_list($a ?? [])) {
+                $added = array_values(array_diff(array_map('strval', $a ?? []), array_map('strval', $b ?? [])));
+                $removed = array_values(array_diff(array_map('strval', $b ?? []), array_map('strval', $a ?? [])));
+                if ($added !== [] || $removed !== []) {
+                    $out[] = ['field' => (string) $field, 'added' => $added, 'removed' => $removed];
+                }
+
+                continue;
+            }
+            $out[] = ['field' => (string) $field, 'from' => is_scalar($b) ? $b : ($b === null ? null : json_encode($b)), 'to' => is_scalar($a) ? $a : ($a === null ? null : json_encode($a))];
+        }
+
+        return $out;
+    }
+
+    /**
+     * A member's three layers as one comparable record — what the audit row stores before and after.
+     *
+     * @return array<string, mixed>
+     */
+    private function memberSnapshot(string $tenantId, User $target, Membership $membership, ?Role $role): array
+    {
+        $o = $this->access->memberOverrides($tenantId, (int) $target->id);
+        $keys = $role !== null ? $role->permissions()->pluck('key')->map(fn ($k) => (string) $k)->all() : [];
+        $effective = array_values(array_diff(array_unique([...$keys, ...$o['allow']]), $o['deny']));
+        $states = AccessSections::statesFor($effective, AccessSections::offIn($o['deny']));
+
+        return [
+            'category' => $role?->slug,
+            'sections' => array_keys(array_filter($states)),
+            'client_ids' => DB::table('membership_scopes')->where('membership_id', $membership->id)->where('scope_type', MembershipScope::TYPE_CLIENT)
+                ->orderBy('scope_id')->pluck('scope_id')->map(fn ($i) => (string) $i)->all(),
+            'allow' => $o['allow'],
+            'deny' => array_values(array_filter($o['deny'], fn ($k) => ! str_starts_with((string) $k, AccessSections::PREFIX))),
+        ];
+    }
+
+    /** @param array<string, mixed> $sections */
+    private function assertKnownSections(array $sections): void
+    {
+        $unknown = array_diff(array_keys($sections), AccessSections::keys());
+        abort_if($unknown !== [], 422, 'Unknown section.');
+    }
+
     /** GET /api/v1/settings/access/history?type=member|invitation|category&id=… — who changed what, when and why. */
     public function history(Request $request): JsonResponse
     {
@@ -322,14 +539,17 @@ final class AccessCenterController extends Controller
      * out the team.
      *
      * @param  array<string, string>  $areas
+     * @param  array<string, bool>  $sections
      * @return array{0: Role, 1: array{allow: list<string>, deny: list<string>, effective: list<string>}}
      */
-    private function decide(User $actor, string $tenantId, string $category, array $areas): array
+    private function decide(User $actor, string $tenantId, string $category, array $areas, array $sections = []): array
     {
         $categoryKeys = $this->access->categoryKeys($tenantId, $category);
         abort_if($categoryKeys === null, 422, 'Unknown category for this workspace.');
 
         $overrides = $this->access->overridesFor($categoryKeys, $areas);
+        // ACCESS-SECTIONS-001 — sections off become `section:<key>` deny rows; on where the category lacks it, its reading key.
+        $overrides = AccessSections::apply($categoryKeys, $overrides, $sections);
         // Every key the person will hold must be the actor's to give — the category's and the switched-on ones.
         $this->access->assertMayGrant($actor, $overrides['effective'], $overrides['effective']);
 
@@ -432,7 +652,8 @@ final class AccessCenterController extends Controller
                 'is_owner' => $audience === 'team' && collect($held->get($u->id, []))->contains(fn ($r) => $roles->get($r->role_id)?->slug === WorkspaceRolePresets::OWNER),
                 'is_self' => $u->id === $actor->id,
                 'areas' => $audience === 'team' ? AccessCatalogue::levelsFor($effective) : null,
-                'overrides' => ['allow' => count($allow), 'deny' => count($deny)],
+                'sections' => $audience === 'team' ? AccessSections::statesFor($effective, AccessSections::offIn($deny)) : null,
+                'overrides' => ['allow' => count($allow), 'deny' => count($deny) - count(AccessSections::offIn($deny))],
                 'override_areas' => array_values(array_unique(array_filter(array_map(fn ($k) => AccessCatalogue::areaOf((string) $k), [...$allow, ...$deny])))),
                 'scope' => [
                     'all' => $audience === 'team' && $clientIds === [] && in_array('clients.view_all', $effective, true),
@@ -469,7 +690,8 @@ final class AccessCenterController extends Controller
                     'category_name_ar' => $cat['name_ar'] ?? null,
                     'category_name_en' => $cat['name_en'] ?? null,
                     'areas' => $client ? null : AccessCatalogue::levelsFor($effective),
-                    'overrides' => ['allow' => count($o['allow']), 'deny' => count($o['deny'])],
+                    'sections' => $client ? null : AccessSections::statesFor($effective, AccessSections::offIn($o['deny'])),
+                    'overrides' => ['allow' => count($o['allow']), 'deny' => count($o['deny']) - count(AccessSections::offIn($o['deny']))],
                     'override_areas' => array_values(array_unique(array_filter(array_map(fn ($k) => AccessCatalogue::areaOf((string) $k), [...$o['allow'], ...$o['deny']])))),
                     'scope' => ['all' => false, 'clients' => array_values(array_map(fn ($id) => ['id' => $id, 'name' => $clientNames[$id] ?? '—'], $ids))],
                     'status' => Carbon::parse($i->expires_at)->isPast() ? 'expired' : 'pending',

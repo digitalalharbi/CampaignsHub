@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Access\Models\Concerns;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Support\AccessSections;
 use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -122,6 +123,23 @@ trait HasRoles
         $allow = $overrides->where('effect', 'allow')->pluck('permission_key')->map(fn ($k) => (string) $k)->all();
 
         return $keys->merge($allow)->unique()->reject(fn ($k) => in_array((string) $k, $deny, true))->values();
+    }
+
+    /**
+     * ACCESS-SECTIONS-001 — the sections this person may open in the bound tenant (role ∧ not switched off), from the
+     * same keys and the same override rows as `permissionKeys()`. Never cached beyond the request.
+     *
+     * @return list<string>
+     */
+    public function accessSections(): array
+    {
+        return AccessSections::effective($this);
+    }
+
+    /** ACCESS-SECTIONS-001 — whether a section is switched off for this person in the bound tenant. */
+    public function sectionSwitchedOff(string $section): bool
+    {
+        return ! $this->is_platform_admin && in_array($section, AccessSections::switchedOff($this), true);
     }
 
     public function hasPermission(string $key): bool

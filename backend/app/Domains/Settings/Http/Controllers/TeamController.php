@@ -6,6 +6,7 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
 use App\Domains\Access\Services\AccessCenter;
+use App\Domains\Access\Support\AccessSections;
 use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Audit\AuditLogger;
@@ -214,9 +215,12 @@ final class TeamController extends Controller
         $target->roles()->syncWithoutDetaching([$role->id]);
 
         // ACCESS-CENTER-001 — a new category starts clean: overrides were decided against the old one.
+        // ACCESS-SECTIONS-001 — except the sections switched off for this person: they belong to the person, not the
+        // category, and a role change must never quietly reopen a section the owner closed.
         $overrides = app(AccessCenter::class)->memberOverrides($this->tenantId(), (int) $target->id);
         if ($overrides['allow'] !== [] || $overrides['deny'] !== []) {
-            app(AccessCenter::class)->writeOverrides($this->tenantId(), (int) $target->id, [], [], $request->user()->id);
+            $keepOff = array_map(fn (string $s) => AccessSections::PREFIX.$s, AccessSections::offIn($overrides['deny']));
+            app(AccessCenter::class)->writeOverrides($this->tenantId(), (int) $target->id, [], $keepOff, $request->user()->id);
         }
 
         $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before, 'overrides' => $overrides], after: ['roles' => [$role->slug]], reason: $request->input('reason'));
