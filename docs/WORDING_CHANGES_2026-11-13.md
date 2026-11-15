@@ -35,3 +35,5 @@ Arabic interface strings in `frontend/src`. The guard `frontend/src/lib/noForbid
 Not changed here (other batches own the files; listed in the PR): the alert rules page and taxonomy
 (`فترة التهدئة`, `انقطاع القياس`, `سلامة التتبع`, `إنفاق بلا نتائج`, `مرحلة إطلاق أفضل متاحة`), registrations, payments, the
 digest and notification mails, `SubscriptionNotificationTemplates` (`الاستهلاك`), and the English side.
+
+**Superseded 2026-11-15 (AD-GROUP-TERM-001):** the Owner restored the short name. The level between a campaign and its ads is «المجموعات» / «المجموعة» (English «Ad groups» / «Ad group») everywhere; the long form is now itself a retired word in `noForbiddenTerms.test.ts`, and `frontend/src/lib/adGroupTerms.ts` holds the term.

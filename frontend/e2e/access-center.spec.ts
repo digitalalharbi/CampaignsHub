@@ -9,7 +9,6 @@ import { AUTH, E2E_ORIGIN } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 test('owner invites with a category and «المالية» switched off → invitee accepts → no finance', async ({ page, browser }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'one browser is enough for a flow the API tests already pin')
   const email = `access.${Date.now()}@example.com`
 
   await page.goto('/agency/settings/permissions')
@@ -54,7 +53,6 @@ test('owner invites with a category and «المالية» switched off → invi
 })
 
 test('the rail names the ad-group level «المجموعات»', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'a label check')
   await page.goto('/agency/dashboard')
   const rail = page.locator('aside').first()
   await expect(rail.getByRole('link', { name: /^المجموعات$|^Ad groups$/ }).first()).toBeAttached({ timeout: 30_000 })
@@ -62,7 +60,6 @@ test('the rail names the ad-group level «المجموعات»', async ({ page }
 })
 
 test('the access center fits a phone: no sideways scroll, the invite button in reach', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'a layout check')
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/agency/settings/permissions')
   await expect(page.getByTestId('access-center')).toBeVisible({ timeout: 30_000 })

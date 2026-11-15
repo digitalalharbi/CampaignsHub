@@ -43,8 +43,15 @@ test.describe('the campaign picker asks the server', () => {
     if (await picker.count() === 0) test.skip(true, 'this project offers no campaign filter')
 
     /* `click()` waits for the button to be enabled, i.e. for its first options page to land. */
-    await picker.click()
-    await expect(picker).toHaveAttribute('aria-expanded', 'true')
+    /*
+      Firefox can take the first click before the button's handler is attached (run 43668600833: the
+      click landed, `aria-expanded` stayed «false»). Click again only while it is still closed, so a
+      click that did open it is never undone; the assertion is the same — the picker opens.
+    */
+    await expect(async () => {
+      if ((await picker.getAttribute('aria-expanded')) !== 'true') await picker.click()
+      await expect(picker).toHaveAttribute('aria-expanded', 'true', { timeout: 2_000 })
+    }).toPass({ timeout: 20_000 })
 
     /*
       In server mode the search box is always drawn (FilterBar), so its absence is a regression of
