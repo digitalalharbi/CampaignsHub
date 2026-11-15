@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domains\Alerts\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Support\AlertMailItem;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;

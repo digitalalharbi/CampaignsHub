@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;

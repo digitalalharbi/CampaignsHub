@@ -79,7 +79,6 @@ final class AgencyOverviewTest extends TestCase
         ]);
     }
 
-
     /** @param array<string, float> $figures metric key => value for one day */
     private function figures(UnifiedCampaign $campaign, string $provider, string $date, array $figures): void
     {

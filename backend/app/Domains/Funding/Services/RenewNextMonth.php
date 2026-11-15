@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Notifications\Engine\Migration\LegacyNotificationImporter;
 use App\Domains\Notifications\Mail\SpendSummaryMail;

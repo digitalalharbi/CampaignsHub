@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;

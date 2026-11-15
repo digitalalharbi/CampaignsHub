@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\CanonicalObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
@@ -18,6 +17,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;

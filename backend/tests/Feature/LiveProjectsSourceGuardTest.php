@@ -34,8 +34,8 @@ final class LiveProjectsSourceGuardTest extends TestCase
                 $aboutProjects = preg_match("/Project::|table\\('projects'\\)|from\\('projects'\\)|join\\('projects'|\\\$\\w*project\\w*->/i", $stmt) === 1;
                 $hit = str_contains($stmt, "'projects.status'")
                     || ($aboutProjects && preg_match("/(Project::|table\\('projects'\\)|from\\('projects'\\))(?:(?!DB::table|=>|::query|::withoutGlobalScopes).)*->(where|whereIn|whereNotIn|orWhere)\\(\\s*'status'/s", $stmt))
-                    || preg_match("/\\\$\\w*project\\w*->status\\s*(===|!==|==|!=)/i", $stmt)
-                    || preg_match("/in_array\\(\\s*\\\$\\w*project\\w*->status/i", $stmt)
+                    || preg_match('/\\$\\w*project\\w*->status\\s*(===|!==|==|!=)/i', $stmt)
+                    || preg_match('/in_array\\(\\s*\\$\\w*project\\w*->status/i', $stmt)
                     || preg_match('/PROJECT_STATUSES|ACTIVE_PROJECT\b/', $stmt);
                 if ($hit) {
                     $offenders[] = $rel.': '.trim(preg_replace('/\s+/', ' ', substr($stmt, 0, 200)) ?? '');
@@ -58,7 +58,7 @@ final class LiveProjectsSourceGuardTest extends TestCase
             $stmt = $this->stripComments($sample);
             $hit = str_contains($stmt, "'projects.status'")
                 || preg_match("/(Project::|table\\('projects'\\)|from\\('projects'\\))(?:(?!DB::table|=>|::query|::withoutGlobalScopes).)*->(where|whereIn|whereNotIn|orWhere)\\(\\s*'status'/s", $stmt)
-                || preg_match("/\\\$\\w*project\\w*->status\\s*(===|!==|==|!=)/i", $stmt);
+                || preg_match('/\\$\\w*project\\w*->status\\s*(===|!==|==|!=)/i', $stmt);
             $this->assertTrue((bool) $hit, "guard misses: {$sample}");
         }
     }

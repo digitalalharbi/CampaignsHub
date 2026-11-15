@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Agents\Engine\ModelClientFactory;
 use App\Domains\Agents\Jobs\RunAgentTurnJob;
 use App\Domains\Agents\Models\AgentMessage;
@@ -12,6 +11,7 @@ use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use RuntimeException;

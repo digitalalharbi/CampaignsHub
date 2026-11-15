@@ -79,6 +79,9 @@ use App\Domains\Ops\Console\ProfileLiveReportCommand;
 use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
+use App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand;
+use App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand;
+use App\Domains\Projects\Lifecycle\Console\PurgeExpiredProjectsCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
@@ -137,10 +140,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withCommands([
         // PROJECT-LIFECYCLE-001 — ops: id-scoped, dry-run by default, never delete.
-        \App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand::class,
-        \App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand::class,
+        ApplyArchiveEffectsCommand::class,
+        ProjectSnapshotCommand::class,
         // N2 — the trash's retention job (dry run by default; the scheduler passes --apply).
-        \App\Domains\Projects\Lifecycle\Console\PurgeExpiredProjectsCommand::class,
+        PurgeExpiredProjectsCommand::class,
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,
