@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Metrics\Support\SiblingRounding;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
@@ -335,58 +337,29 @@ final class PortfolioOverview
     }
 
     /**
-     * Spend per currency, and whether a single total would mean anything.
+     * The portfolio's spend for the window — PROJECT-LIFECYCLE-001 §7, rule 9: THE one aggregation (`SpendLedger`), every
+     * account-day converted from its original currency by FxEngine into the reporting currency, live projects only, selected
+     * accounts only. It is the same figure the clients list, the budgets page and the campaigns page read for the same days.
+     *
+     * The shape keeps `by_currency` (one entry, the reporting currency: after FxEngine there is one unit, so `comparable`) and
+     * adds `reading`: what could not be converted, named and excluded («سعر صرف غير متوفر»), and every old rate used.
      *
      * @param  list<string>  $projectIds
      * @return array<string,mixed>
      */
     private function spendByCurrency(array $projectIds, string $tenantId, Carbon $from, Carbon $to): array
     {
-        $query = DB::table('daily_metrics')
-            ->where('tenant_id', $tenantId)
-            ->whereIn('project_id', $projectIds)
-            ->where('metric_key', 'spend')
-            ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()]);
-
-        /*
-         * ACCOUNT-SCOPE-ISOLATION-001 — a portfolio total obeys the same rule every figure obeys.
-         *
-         * `BoundAccountVisibilitySourceGuardTest` caught this on the first CI run, and it was a real
-         * defect rather than a formality: without it an agency's spend would include accounts that
-         * were deselected from their projects, so the one number an owner uses to judge the whole
-         * estate would be the one number quietly counting money that no longer belongs to it.
-         *
-         * Applied through the shared rule rather than re-expressed here, so a portfolio and a
-         * project card cannot come to differ about which accounts are in scope.
-         */
-        BoundAccountVisibility::apply($query, 'daily_metrics');
-
-        $rows = $query
-            ->groupBy('project_currency')
-            ->selectRaw('project_currency, sum(converted_amount) as spend, count(distinct project_id) as projects')
-            ->get();
-
-        $byCurrency = $rows
-            ->filter(static fn (object $r): bool => is_string($r->project_currency) && $r->project_currency !== '')
-            ->map(static fn (object $r): array => [
-                'currency' => (string) $r->project_currency,
-                'spend' => round((float) $r->spend, 2),
-                'projects' => (int) $r->projects,
-            ])
-            ->sortBy('currency')
-            ->values()
-            ->all();
+        $reading = app(SpendLedger::class)->read(array_map('strval', $projectIds), $from, $to, ReportingCurrency::DEFAULT);
+        $reporting = count($reading['by_project']);
 
         return [
-            'by_currency' => $byCurrency,
-            /*
-             * `comparable` is a fact about the estate, not a suggestion.
-             *
-             * One currency across every reporting project means a reader may add these figures up
-             * themselves and be right. Two means they may not, and no exchange rate was supplied to
-             * make them wrong quietly.
-             */
-            'comparable' => count($byCurrency) <= 1,
+            'by_currency' => $reporting === 0 ? [] : [[
+                'currency' => (string) $reading['currency'],
+                'spend' => (float) $reading['amount'],
+                'projects' => $reporting,
+            ]],
+            'comparable' => true,
+            'reading' => $reading,
         ];
     }
 }

@@ -51,6 +51,12 @@ return [
          * told the feed has stopped arriving.
          */
         'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 7),
+
+        /*
+         * PROJECT-LIFECYCLE-001 §7 — the internal admin alert («fx_rate_expiring») is raised this many days before a rate's
+         * `effective_to`. An expired rate is still used (flagged «سعر قديم»), so this is a reminder, not a cliff.
+         */
+        'expiry_warning_days' => (int) env('FX_RATE_EXPIRY_WARNING_DAYS', 3),
     ],
 
     /*

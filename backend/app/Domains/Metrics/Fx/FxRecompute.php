@@ -24,6 +24,11 @@ use InvalidArgumentException;
  *
  * Dry run by default: the summary of differences is returned and nothing is written. The period is capped so a click
  * cannot become heavy server work; the writes are chunked.
+ *
+ * PROJECT-LIFECYCLE-001 §7 (N4) — `onlyWithheld` is the RELEASE {@see RateLedger} runs after every recorded rate: it fills the
+ * figures that were withheld for want of a rate (value NULL) and are convertible now, and touches nothing else. Re-pricing a
+ * figure already converted stays the admin's explicit «إعادة حساب» (FX-ENGINE-001); leaving a convertible day NULL is what
+ * made the campaigns page and the clients list miss spend the budgets page counted.
  */
 final class FxRecompute
 {
@@ -40,7 +45,7 @@ final class FxRecompute
      *   entity: array{examined: int, changed: int}, budgets_refreshed: int
      * }
      */
-    public function run(Carbon $from, Carbon $to, bool $apply): array
+    public function run(Carbon $from, Carbon $to, bool $apply, bool $onlyWithheld = false): array
     {
         if ($to->lt($from)) {
             throw new InvalidArgumentException('The period ends before it starts.');
@@ -56,6 +61,7 @@ final class FxRecompute
         DB::table('daily_metrics')
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->whereNotNull('original_amount')->whereNotNull('original_currency')
+            ->when($onlyWithheld, static fn ($q) => $q->whereNull('value'))
             ->orderBy('id')
             ->select(['id', 'project_id', 'metric_date', 'value', 'original_amount', 'original_currency', 'project_currency'])
             ->chunkById(500, function ($rows) use ($apply, &$sum, &$byCurrency, &$projects): void {
@@ -106,7 +112,7 @@ final class FxRecompute
                 }
             });
 
-        $entity = $this->entities($from, $to, $apply);
+        $entity = $this->entities($from, $to, $apply, $onlyWithheld);
 
         $budgets = 0;
         if ($apply) {
@@ -141,7 +147,7 @@ final class FxRecompute
     }
 
     /** @return array{examined: int, changed: int} */
-    private function entities(Carbon $from, Carbon $to, bool $apply): array
+    private function entities(Carbon $from, Carbon $to, bool $apply, bool $onlyWithheld = false): array
     {
         if (! Schema::hasTable('entity_daily_metrics')) {
             return ['examined' => 0, 'changed' => 0];
@@ -169,6 +175,9 @@ final class FxRecompute
                         }
                         $new = $r === null ? null : (float) $original * $r['rate'];
                         $old = $row->{$key} === null ? null : (float) $row->{$key};
+                        if ($onlyWithheld && $old !== null) {
+                            continue; // a release fills what was withheld; it never re-prices a converted figure
+                        }
                         if (! (($old === null && $new === null) || ($old !== null && $new !== null && abs($old - $new) < self::EPSILON))) {
                             $update[$key] = $new;
                         }

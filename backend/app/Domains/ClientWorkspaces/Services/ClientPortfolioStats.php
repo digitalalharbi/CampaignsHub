@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
-use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Fx\FxConversion;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Spend\SpendLedger;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -73,29 +74,16 @@ final class ClientPortfolioStats
             ->groupBy('client_workspace_id')->select('client_workspace_id', DB::raw('count(*) as c'))
             ->pluck('c', 'client_workspace_id');
 
-        // Spend + freshness + data sources: group daily_metrics by project, fold up to client.
-        $spendByProject = $projectIds === [] ? collect() : DB::table('daily_metrics')
-            ->where('tenant_id', $tenantId)->whereIn('project_id', $projectIds)
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->where('metric_key', 'spend')->where('metric_date', '>=', $from)
-            ->groupBy('project_id')->select('project_id', DB::raw('sum(value) as v'))
-            ->pluck('v', 'project_id');
-
         /*
-         * FX-APPLY-001 — `sum(value)` skips a row with no rate for its date (value NULL), so a EUR account with an unconverted day
-         * read as a SMALLER spend, not as a withheld one. The same window says, per project, how many rows were withheld and which
-         * currencies the converted figure came from, so a total with a withheld part is «—» and a mixed one says «يشمل عملات محوّلة».
+         * PROJECT-LIFECYCLE-001 §7, rule 9 — the 30-day spend is THE one aggregation (`SpendLedger`): every account-day converted
+         * from its original currency by FxEngine, live projects only. `sum(value)` read the figure converted once at ingest, so a
+         * EUR day stored before its rate existed was silently missing here while the budgets page counted it. A part with no
+         * rate is excluded and NAMED (currency, account, amount) — it never makes the client's spend smaller in silence, and
+         * never zero.
          */
-        $fxByProject = $projectIds === [] ? collect() : DB::table('daily_metrics')
-            ->where('tenant_id', $tenantId)->whereIn('project_id', $projectIds)
-            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
-            ->where('metric_key', 'spend')->where('metric_date', '>=', $from)->whereNotNull('original_amount')
-            ->groupBy('project_id')
-            ->select('project_id')
-            ->selectRaw('COUNT(*) FILTER (WHERE value IS NULL) AS withheld')
-            ->selectRaw("STRING_AGG(DISTINCT UPPER(COALESCE(original_currency, '?')), ',') FILTER (WHERE value IS NULL) AS withheld_currencies")
-            ->selectRaw('STRING_AGG(DISTINCT UPPER(original_currency), \',\') FILTER (WHERE value IS NOT NULL) AS currencies')
-            ->get()->keyBy('project_id');
+        $reading = $projectIds === [] ? null : app(SpendLedger::class)->read(
+            array_map('strval', $projectIds), Carbon::parse($from), null, ReportingCurrency::DEFAULT,
+        );
 
         /*
          * «آخر مزامنة» comes from the one freshness service (UNIFIED-001), in ONE bulk call for the
@@ -139,24 +127,11 @@ final class ClientPortfolioStats
             }
         }
 
-        // Fold spend + freshness from project → client.
-        $spendByClient = [];
+        // Fold freshness from project → client; spend is the ledger's, sliced to each client's projects.
         $syncByClient = [];
-        $fxByClient = [];
+        $projectsOfClient = [];
         foreach ($projectMap as $pid => $cid) {
-            if (isset($spendByProject[$pid])) {
-                $spendByClient[$cid] = ($spendByClient[$cid] ?? 0) + (float) $spendByProject[$pid];
-            }
-            $fxRow = $fxByProject->get($pid);
-            if ($fxRow !== null) {
-                $fxByClient[$cid]['withheld'] = ($fxByClient[$cid]['withheld'] ?? 0) + (int) $fxRow->withheld;
-                foreach (array_filter(explode(',', (string) $fxRow->withheld_currencies)) as $c) {
-                    $fxByClient[$cid]['withheld_currencies'][$c] = true;
-                }
-                foreach (array_filter(explode(',', (string) $fxRow->currencies)) as $c) {
-                    $fxByClient[$cid]['currencies'][$c] = true;
-                }
-            }
+            $projectsOfClient[$cid][] = (string) $pid;
             if (isset($freshByProject[$pid]) && $freshByProject[$pid]) {
                 $syncByClient[$cid] = max($syncByClient[$cid] ?? '', (string) $freshByProject[$pid]);
             }
@@ -165,13 +140,15 @@ final class ClientPortfolioStats
         $out = [];
         foreach ($clientIds as $cid) {
             $currencies = array_keys($currenciesByClient[$cid] ?? []);
+            $mine = $reading === null || ! isset($projectsOfClient[$cid]) ? null : SpendLedger::slice($reading, $projectsOfClient[$cid]);
+            $hasSpend = $mine !== null && ($mine['by_project'] !== [] || $mine['excluded'] !== []);
             $out[$cid] = [
                 'projects' => (int) ($projectsPerClient[$cid] ?? 0),
                 'active_campaigns' => (int) ($activeCampaigns[$cid] ?? 0),
                 'open_requests' => (int) ($openRequests[$cid] ?? 0),
                 'alerts' => (int) ($alerts[$cid] ?? 0),
-                'spend' => isset($spendByClient[$cid]) ? round($spendByClient[$cid], 2) : null,
-                'spend_fx' => $this->spendFx($tenantId, $spendByClient[$cid] ?? null, $currencies, $fxByClient[$cid] ?? []),
+                'spend' => $hasSpend ? $mine['amount'] : null,
+                'spend_fx' => $hasSpend ? $this->spendFx($tenantId, $mine) : null,
                 'spend_currency_mode' => count($currencies) > 1 ? 'mixed' : (count($currencies) === 1 ? 'single' : 'none'),
                 'currency' => count($currencies) === 1 ? $currencies[0] : null,
                 'data_sources' => array_keys($providersByClient[$cid] ?? []),
@@ -186,39 +163,40 @@ final class ClientPortfolioStats
     }
 
     /**
-     * FX-APPLY-001 — the client's 30-day spend as the reader's display currency, through FxEngine.
+     * The client's 30-day spend in the reader's display currency, from the ledger reading (USD basis) through FxEngine.
      *
-     * `spend` (above, untouched) is the reporting-basis sum. A withheld part withholds the figure (`converted_amount: null`) —
-     * never the smaller sum of what did convert, never zero.
+     * PROJECT-LIFECYCLE-001 §7 supersedes FX-APPLY-001's «a withheld part withholds the whole figure»: the converted part IS the
+     * total and the excluded part is named beside it («سعر صرف غير متوفر» + currency + account + amount, «مستبعد من الإجمالي»).
+     * `converted_amount` is null only when nothing at all could be converted.
      *
-     * @param  list<string>  $basis  the reporting currencies the stored rows were normalised into
-     * @param  array{withheld?: int, withheld_currencies?: array<string, true>, currencies?: array<string, true>}  $fx
-     * @return array<string, mixed>|null
+     * @param  array<string, mixed>  $reading  {@see SpendLedger::read()} narrowed to the client
+     * @return array<string, mixed>
      */
-    private function spendFx(string $tenantId, ?float $spend, array $basis, array $fx): ?array
+    private function spendFx(string $tenantId, array $reading): array
     {
-        if ($spend === null && ($fx['withheld'] ?? 0) === 0) {
-            return null;
-        }
         $display = FxDisplay::forRequest();
         $to = $display->currencyFor($tenantId);
-        $withheld = array_keys($fx['withheld_currencies'] ?? []);
-        // One reporting basis → one part converted to the display currency; two bases (legacy SAR beside USD rows) cannot be
-        // added without knowing which row is which, so the part has no unit and the total is withheld.
-        $parts = $spend === null || $basis === [] ? [] : [['amount' => $spend, 'currency' => count($basis) === 1 ? $basis[0] : null]];
-        $total = $display->total($parts, $to);
-        $originals = array_keys($fx['currencies'] ?? []);
-        sort($originals);
-        if (($fx['withheld'] ?? 0) > 0) {
-            $named = array_values(array_filter($withheld, static fn (string $c): bool => $c !== '?'));
-            $total = array_merge($total, [
-                'converted_amount' => null, 'withheld' => true, 'withheld_parts' => (int) $fx['withheld'], 'withheld_currencies' => $named,
-                'pending_label' => $named === [] ? 'بانتظار سعر صرف' : 'بانتظار سعر صرف ('.implode('، ', $named).')',
-                'rates_page' => FxConversion::RATES_PAGE,
-            ]);
-        }
+        $total = $display->total($reading['amount'] === null ? [] : [['amount' => $reading['amount'], 'currency' => (string) $reading['currency']]], $to);
+        $excluded = (array) $reading['excluded'];
+        $named = array_values(array_unique(array_filter(array_map(static fn (array $e): ?string => $e['currency'] ?? null, $excluded))));
+        $originals = (array) $reading['currencies'];
 
         return array_merge($total, [
+            'converted_amount' => $reading['amount'] === null ? null : $total['converted_amount'],
+            // Withheld only when NOTHING converted; a partial total is shown, with its exclusions stated.
+            'withheld' => $reading['amount'] === null,
+            'partial' => (bool) $reading['partial'],
+            'withheld_parts' => count($excluded),
+            'withheld_currencies' => $named,
+            'excluded' => $excluded,
+            'excluded_label' => $reading['excluded_label'],
+            'statement' => $reading['statement'],
+            'statement_en' => $reading['statement_en'],
+            'stale' => $total['stale'] || $reading['stale'] !== [],
+            'stale_parts' => $reading['stale'],
+            'stale_label' => $reading['stale_label'],
+            'pending_label' => $excluded === [] ? null : SpendLedger::EXCLUDED_AR.($named === [] ? '' : ' ('.implode('، ', $named).')'),
+            'rates_page' => $excluded === [] ? null : FxConversion::RATES_PAGE,
             'currencies' => $originals,
             'includes_converted' => array_diff($originals, [$to]) !== [],
         ]);
