@@ -42,6 +42,8 @@ RUN apk add --no-cache \
 RUN apk add --no-cache ffmpeg
 
 # `playwright-core` resolved from a location that EXISTS on a server.
+# NOTIF-V2-EXTERNAL-001 — `@resvg/resvg-js` beside it: the external emails' chart images (SVG → PNG 2x, prebuilt musl
+# binary, no browser). `scripts/chart-render.mjs` resolves it through REPORTS_REQUIRE_BASE like the report renderer.
 #
 # The default `require_base` points at `../frontend/package.json` — a developer's
 # checkout. A production backend image has no frontend tree, so the require would
@@ -50,7 +52,7 @@ RUN apk add --no-cache ffmpeg
 RUN mkdir -p /opt/print \
     && cd /opt/print \
     && npm init -y >/dev/null \
-    && npm install --omit=dev --no-audit --no-fund playwright-core@1.61.1
+    && npm install --omit=dev --no-audit --no-fund playwright-core@1.61.1 @resvg/resvg-js@2.6.2
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

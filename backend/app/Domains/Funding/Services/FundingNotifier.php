@@ -383,6 +383,10 @@ final class FundingNotifier
                     'client_workspace_id' => $funding->client_workspace_id,
                     'project_id' => $funding->project_id,
                     'type' => 'project_budget',
+                    // NOTIF-BELL-001 — «تجاوز حدود الميزانية» only when the spend is actually past the budget or its ceiling.
+                    'kind' => match ($state) {
+                        'over', 'ceiling_over' => 'budget_over', 'low', 'ceiling_near' => 'budget_low', default => null
+                    },
                     'severity' => $severity,
                     'title' => $titleEn, 'message' => $messageEn,
                     'title_ar' => $titleAr, 'message_ar' => $messageAr,

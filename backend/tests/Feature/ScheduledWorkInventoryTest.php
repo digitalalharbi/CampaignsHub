@@ -55,6 +55,20 @@ final class ScheduledWorkInventoryTest extends TestCase
         'forms:purge-evidence',
         // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
         'notifications:retry-failed',
+        // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person; every ten minutes, a few rows.
+        'notifications:flush-deferred-push',
+        // NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox (5 min), the outbox drained in spread batches
+        // (1 min), the 7-day unconfirmed notice and the grace-period heads-up (daily).
+        'notifications:v2-digests',
+        'notifications:v2-send',
+        'notifications:v2-internal-scan',
+        'notifications:v2-morning-brief',
+        'notifications:v2-consent-sweep',
+        'notifications:v2-grace-heads-up',
+        // NOTIF-V2-EXTERNAL-001 — the review window of held external messages (15 min).
+        'notifications:v2-review-sweep',
+        // NOTIF-V2-EXTERNAL-001 — the default external events, daily 07:30 Riyadh.
+        'notifications:v2-external-events',
         'fx:rates',
         // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
         'fx:monitor',
@@ -179,6 +193,13 @@ final class ScheduledWorkInventoryTest extends TestCase
             'notifications:send-digests',
             'notifications:send-spend-summaries',
             'notifications:send-alerts',
+            // NOTIF-PUSH-001 — two overlapping flushes could each send a person's summary.
+            'notifications:flush-deferred-push',
+            // NOTIF-V2-ENGINE-001 — the claim makes a double send impossible; overlap would still be wasted work.
+            'notifications:v2-send',
+            'notifications:v2-digests',
+            'notifications:v2-internal-scan',
+            'notifications:v2-morning-brief',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on

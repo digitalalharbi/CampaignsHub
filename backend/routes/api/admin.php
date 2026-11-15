@@ -7,6 +7,7 @@ use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
+use App\Domains\Notifications\Engine\Http\Controllers\AdminNotificationsController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
 use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
@@ -61,6 +62,14 @@ Route::middleware(['auth:sanctum', 'platform'])
     ->prefix('admin')->name('admin.')
     ->group(function (): void {
         Route::get('/overview', PlatformOverviewController::class)->name('overview');
+
+        // NOTIF-V2-SETTINGS-UI-001 — the notifications console: event catalog, plan features, platform texts, statistics (counts only).
+        Route::get('/notifications-v2', [AdminNotificationsController::class, 'show'])->name('notifications-v2.show');
+        Route::get('/notifications-v2/stats', [AdminNotificationsController::class, 'stats'])->name('notifications-v2.stats');
+        Route::put('/notifications-v2/events/{eventKey}', [AdminNotificationsController::class, 'updateEvent'])->middleware('throttle:60,1')->name('notifications-v2.events.update');
+        Route::put('/notifications-v2/plan-features', [AdminNotificationsController::class, 'upsertPlanFeature'])->middleware('throttle:60,1')->name('notifications-v2.plan-features.upsert');
+        Route::delete('/notifications-v2/plan-features/{id}', [AdminNotificationsController::class, 'deletePlanFeature'])->whereUuid('id')->middleware('throttle:60,1')->name('notifications-v2.plan-features.delete');
+        Route::put('/notifications-v2/texts/{key}', [AdminNotificationsController::class, 'updateText'])->where('key', '[a-z_.]+')->middleware('throttle:60,1')->name('notifications-v2.texts.update');
 
         /*
          * PLATFORM-SERVICE-INBOX-001 — «الطلبات»: services ordered from the official CampaignsHub site.
