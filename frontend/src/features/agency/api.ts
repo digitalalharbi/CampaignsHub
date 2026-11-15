@@ -1,4 +1,5 @@
 import { deleteData, getData, postData, putData } from '@/lib/api/client'
+import type { ApprovedBudget, ApprovedBudgetTotal } from '@/features/funding/fundingApi'
 
 /**
  * The agency portal's data layer (ADR 0002).
@@ -139,6 +140,14 @@ export interface ClientBudgetRow {
    * the roll-up mixes currencies (a sum across two units is not a trend).
    */
   daily_spend_7d?: number[] | null
+  /**
+   * ONE-BUDGET-001 — the client's APPROVED project budgets (/agency/budgets), added up in SAR over each budget's own
+   * period. This is «the budget» on the home cards; the dashboard window never changes it.
+   */
+  project_budget?: ApprovedBudgetTotal
+  project_budgets?: { project_id: string; project_name: string; budget: ApprovedBudget }[]
+  /** «ميزانيات الحملات في المنصات» — the campaign budgets set inside the platforms. Informational only, never «the budget». */
+  platform_campaign_budgets?: { budget: number | null; spent: number | null; currency: string | null; campaigns: number }
 }
 
 export interface ProjectBudgetRow {

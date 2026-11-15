@@ -1,4 +1,5 @@
 import { api, getData } from '@/lib/api/client'
+import type { ApprovedBudget, ApprovedBudgetTotal } from '@/features/funding/fundingApi'
 
 export interface ClientCard {
   id: string
@@ -69,6 +70,12 @@ export interface ClientDetail {
   overview: { projects: number; active_campaigns: number; draft_campaigns: number; open_requests: number }
   projects: { id: string; name: string; status: string; created_at: string | null }[]
   campaigns: { id: string; project_id: string; name: string; objective: string; status: string; budget: string | null; currency: string }[]
+  /** ONE-BUDGET-001 — the client's approved project budgets (/agency/budgets). Null without a budget permission. */
+  budget?: {
+    total: ApprovedBudgetTotal
+    projects: { project_id: string; project_name: string; budget: ApprovedBudget }[]
+    can_add: boolean
+  } | null
   requests: {
     id: string
     reference: string

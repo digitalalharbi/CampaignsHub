@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import type { MoneyTotals } from '@/lib/money/contract'
 
@@ -24,14 +25,41 @@ const budget = {
 const totals = (over: Partial<MoneyTotals> = {}): MoneyTotals => ({ spend: 1000, revenue: 4000, conversions: 50, ...over } as MoneyTotals)
 
 describe('the campaigns secondary strip', () => {
-  it('states the budget, what is left and where the period is heading', () => {
-    render(<CampaignSecondaryStrip totals={totals()} budget={budget} currency="SAR" paused={0} ar={false} />)
+  /*
+   * ONE-BUDGET-001 — «الميزانية / المتبقي / المتوقع» are the APPROVED project budget's; the campaign budgets set inside
+   * the platforms are one informational cell, and their remaining and forecast are never stated as the budget's.
+   */
+  it('states the approved budget, what is left and where its period is heading', () => {
+    render(
+      <CampaignSecondaryStrip
+        totals={totals()}
+        budget={budget}
+        currency="SAR"
+        paused={0}
+        ar={false}
+        approved={{
+          has_budget: true, project_id: 'p', currency: 'SAR', payment_mode: 'direct', payment_method: 'prepaid', status: 'ok',
+          approved: 5069, deposits: 5069, settlements: 0, spent: 4404, remaining: 665, used_ratio: 0.8688, pace_per_day: 100,
+          cover_days: 6, run_out_date: null, projected: 4904, period_start: null, period_end: null, thresholds: [50, 75, 90, 100],
+          crossed_threshold: 75, complete: true, last_spend_day: null,
+        }}
+      />,
+    )
 
-    const text = screen.getByTestId('campaigns-secondary-strip').textContent ?? ''
+    expect(screen.getByTestId('campaigns-project-budget').textContent).toContain('5,069')
+    expect(screen.getByTestId('campaigns-project-remaining').textContent).toContain('665')
+    expect(screen.getByTestId('campaigns-project-forecast').textContent).toContain('4,904')
+    expect(screen.getByTestId('campaigns-spent-against-budget').textContent).toContain('4,404')
+    // The platforms' campaign budgets: their own labelled cell, and their remaining (4K) is not stated anywhere.
+    expect(screen.getByTestId('campaigns-budget-total').textContent).toContain('Campaign budgets in the platforms')
+    expect(screen.getByTestId('campaigns-secondary-strip').textContent).not.toContain('4K ر.س')
+  })
 
-    expect(text).toContain('5K ر.س')
-    expect(text).toContain('4K ر.س')
-    expect(text).toContain('1.2K ر.س')
+  it('says «no budget» rather than show a platform figure in its place', () => {
+    render(<MemoryRouter><CampaignSecondaryStrip totals={totals()} budget={budget} currency="SAR" paused={0} ar approved={{ has_budget: false }} /></MemoryRouter>)
+
+    expect(screen.getByTestId('campaigns-project-budget').textContent).toContain('بدون ميزانية')
+    expect(screen.queryByTestId('campaigns-spent-against-budget')).toBeNull()
   })
 
   /**

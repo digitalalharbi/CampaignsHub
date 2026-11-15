@@ -10,6 +10,9 @@ use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Funding\Models\FundingPayment;
+use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Enums\Portal;
@@ -74,8 +77,20 @@ final class RoleDashboardTest extends TestCase
         foreach ([1, 2, 3] as $d) {
             $this->spend($project, $campaign, $d, $daily);
         }
+        // ONE-BUDGET-001 — the dashboard's budget is the project's APPROVED budget; the fixture approves the same amount.
+        $this->approve($project, $budget);
 
         return $campaign;
+    }
+
+    private function approve(Project $project, float $amount): void
+    {
+        $funding = ProjectFunding::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $project->client_workspace_id, 'project_id' => $project->id,
+            'payment_method' => 'prepaid', 'starts_on' => now('Asia/Riyadh')->subDays(20)->toDateString()]);
+        FundingPayment::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $project->client_workspace_id, 'project_id' => $project->id,
+            'kind' => 'initial', 'amount' => $amount, 'currency' => 'SAR', 'amount_sar' => $amount, 'rate' => 1, 'rate_date' => now()->toDateString(),
+            'rate_source' => 'identity', 'paid_on' => now('Asia/Riyadh')->subDays(20)->toDateString(), 'idempotency_key' => (string) Str::uuid()]);
+        app(FundingSpendRefresher::class)->refresh($funding);
     }
 
     private function spend(Project $project, UnifiedCampaign $campaign, int $daysAgo, float $value): void

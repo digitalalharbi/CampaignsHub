@@ -159,7 +159,7 @@ describe('the spend charts over withheld money', () => {
      */
     const strip = await screen.findByTestId('campaigns-secondary-strip')
     await waitFor(() =>
-      expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('—'),
+      expect(within(strip).getByTestId('campaigns-platform-spent').textContent ?? '').toContain('—'),
     )
   })
 
@@ -177,7 +177,7 @@ describe('the spend charts over withheld money', () => {
     await openOverview()
 
     const strip = await screen.findByTestId('campaigns-secondary-strip')
-    expect(within(strip).getByTestId('campaigns-spent-against-budget').textContent ?? '').toContain('1K ر.س')
+    expect(within(strip).getByTestId('campaigns-platform-spent').textContent ?? '').toContain('1K ر.س')
   })
 
   /** And a single campaign is told it is not a ranking, rather than shown something else. */

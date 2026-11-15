@@ -13,6 +13,7 @@ use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\PaymentProviderRegistry;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\Billing\Support\WebhookPayloadRedactor;
+use App\Domains\Funding\Services\WalletTopUp;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Scopes\TenantScope;
@@ -390,6 +391,19 @@ final class BillingService
                         'error' => null,
                     ])->save();
                     $this->settleInvoice($payment);
+                    // FIN-WALLET-001 — a verified payment of a top-up invoice adds to the project's budget, once
+                    // (idempotent on the payment id), after the payment is committed; a failure is reported, never
+                    // allowed to undo a confirmed payment.
+                    DB::afterCommit(function () use ($payment): void {
+                        try {
+                            $invoice = $this->invoiceOf($payment);
+                            if ($invoice !== null) {
+                                app(WalletTopUp::class)->fromInvoicePayment($invoice, (float) $payment->amount, 'gateway:'.$payment->getKey(), null, (string) $payment->getKey());
+                            }
+                        } catch (\Throwable $e) {
+                            report($e);
+                        }
+                    });
                     break;
 
                 case 'refunded':
