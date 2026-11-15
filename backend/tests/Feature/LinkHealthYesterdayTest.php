@@ -85,9 +85,13 @@ final class LinkHealthYesterdayTest extends TestCase
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
             'provider' => $provider, 'purpose' => 'ads', 'is_active' => true,
         ]);
+        $this->accounts[(string) $c->getKey()] = (string) $account->id;
 
         return $c;
     }
+
+    /** @var array<string, string> connection id → its bound ad account id (LIFECYCLE-6 judges the account's runs) */
+    private array $accounts = [];
 
     /** A sync run finished at `$finishedUtc`, its window ending that (Riyadh) day. */
     private function syncRun(ProviderConnection $c, string $finishedUtc, string $status = 'success'): void
@@ -96,7 +100,7 @@ final class LinkHealthYesterdayTest extends TestCase
         $local = $at->copy()->setTimezone('Asia/Riyadh');
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'connection_id' => $c->id, 'provider' => $c->provider, 'status' => $status,
+            'connection_id' => $c->id, 'external_account_id' => $this->accounts[(string) $c->id] ?? null, 'provider' => $c->provider, 'status' => $status,
             'window_start' => $local->copy()->subDays(3)->toDateString(), 'window_end' => $local->toDateString(),
             'error' => $status === 'failed' ? 'timeout' : null, 'started_at' => $at->copy()->subMinute(), 'finished_at' => $at,
             'created_at' => $at, 'updated_at' => $at,
@@ -155,7 +159,8 @@ final class LinkHealthYesterdayTest extends TestCase
         $this->assertSame([], $this->openForProject(), 'no tracking/data item at all');
         $this->assertSame($notices, DB::table('app_notifications')->count(), 'closed without a «recovered» notice');
         $this->assertSame(0, AlertEvent::withoutGlobalScopes()->whereIn('status', ['open', 'snoozed'])->count());
-        $this->assertEqualsCanonicalizing(['renews_itself', 'yesterday_arrived'],
+        // LIFECYCLE-6 — the data-arrival card closes on the account-day rule's proof (`day_covered`).
+        $this->assertEqualsCanonicalizing(['renews_itself', 'day_covered'],
             AlertEvent::withoutGlobalScopes()->get()->map(fn (AlertEvent $e): string => (string) $e->context['closed_reason'])->unique()->values()->all());
     }
 
@@ -172,8 +177,9 @@ final class LinkHealthYesterdayTest extends TestCase
         $this->sweep($rules);   // a second sweep repeats nothing
 
         $link = array_values(array_filter($this->openForProject(), static fn (array $e): bool => $e['type'] !== 'sync_outage'));
-        $this->assertCount(2, $link, 'one item per connection');
-        $this->assertEqualsCanonicalizing([(string) $google->id, (string) $snap->id], array_column($link, 'entity_id'));
+        // LIFECYCLE-6 — one item per live (project, ad account); here each connection carries one account.
+        $this->assertCount(2, $link, 'one item per account');
+        $this->assertEqualsCanonicalizing([$this->accounts[(string) $google->id], $this->accounts[(string) $snap->id]], array_column($link, 'entity_id'));
         foreach ($link as $e) {
             $this->assertSame('sync_failure', $e['type'], 'never «expiring» for an auto-renewing token');
             $this->assertSame('not_synced', $e['context']['link_state']);
@@ -281,7 +287,7 @@ final class LinkHealthYesterdayTest extends TestCase
         $this->syncRun($google, '2026-11-30 04:00:00');
         $this->sweep([$rule]);
         $this->assertSame('resolved', $event->refresh()->status);
-        $this->assertSame('yesterday_arrived', $event->context['closed_reason']);
+        $this->assertSame('day_covered', $event->context['closed_reason']);
     }
 
     /** An outage open under the old per-rule key is adopted on the first sweep after deploy: no second event, no second notice. */
@@ -299,6 +305,8 @@ final class LinkHealthYesterdayTest extends TestCase
 
         $this->assertSame(1, AlertEvent::withoutGlobalScopes()->whereIn('status', ['open', 'snoozed'])->count());
         $this->assertSame('open', $old->refresh()->status, 'the same event, rekeyed');
+        // LIFECYCLE-6 — and moved from the connection onto its (project, account).
+        $this->assertSame([ExternalAccount::class, $this->accounts[(string) $google->id], (string) $this->project->id], [$old->entity_type, (string) $old->entity_id, (string) $old->project_id]);
         $this->assertSame($notices, DB::table('app_notifications')->count(), 'not announced a second time');
     }
 

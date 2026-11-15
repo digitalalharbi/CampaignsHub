@@ -26,8 +26,9 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Integrations\Status\LinkHealth;
-use App\Domains\Metrics\Models\MetricSyncRun;
+use App\Domains\Integrations\Status\LiveProjectsAdapter;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
@@ -381,14 +382,12 @@ final class AlertEvaluator
 
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
             $closable = $events->filter(fn (AlertEvent $e): bool => ! isset($still[$e->dedup_key]));
+            // LIFECYCLE-6 — which of their projects are live, in one read, and the settle window of the rule sweeping them.
+            $this->linkClose = [
+                'live' => array_flip(LiveProjectsAdapter::liveIds($closable->pluck('project_id')->filter()->map(static fn ($id): string => (string) $id)->values()->all())),
+                'settle' => AccountDayCoverage::settleHours((array) ($rule->threshold ?? [])),
+            ];
             $this->linkHealth->prime($closable->where('entity_type', ProviderConnection::class)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->values()->all(), $now);
-            $pairs = [];
-            foreach ($closable->where('entity_type', Project::class) as $e) {
-                foreach ((array) (((array) $e->context)['sources'] ?? []) as $source) {
-                    $pairs[] = [(string) $e->entity_id, (string) ($source['provider'] ?? '')];
-                }
-            }
-            $this->linkHealth->primeProjects($pairs, $now);
         }
 
         $events->each(function (AlertEvent $event) use ($still, $rule, $now, $live): void {
@@ -598,7 +597,10 @@ final class AlertEvaluator
          * (one per project) produced three identical cards. Every other type stays keyed by its rule.
          */
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
-            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '']));
+            // LIFECYCLE-6 — an account shared by two projects is two findings (one per project).
+            $scope = $b['entity_type'] === ExternalAccount::class ? [(string) ($b['project_id'] ?? '')] : [];
+
+            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '', ...$scope]));
         }
 
         // A notice raised under a rule of another type (ALERT-CRITERIA-001: «توقفت أمس», «ما تصرف» under «صرف بدون نتائج») is its own
@@ -898,41 +900,23 @@ final class AlertEvaluator
     }
 
     /**
-     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last month is a CANDIDATE, one per connection; the
-     * one rule ({@see onlyWhereYesterdayMissing()}) keeps those whose yesterday did not arrive. A failed run that a later run
-     * made good is therefore nothing, and a connection that simply stopped syncing (no failed run at all) is
-     * still found. A connection the platform refused is the `token_expiry` card, never a second one here.
+     * LIFECYCLE-6 (Owner spec 2026-11-15 §6) — «بيانات أمس ما وصلت من المنصة», one candidate per live (project, ad account),
+     * judged by {@see DataArrivalJudge} from the sync record in the account's own time zone plus the settle window.
+     *
+     * Replaces the per-connection reading (every connection with a run in the last month, judged in Riyadh time), which kept
+     * judging a connection whose account had been unlinked, or whose project was archived, on its last runs — the false
+     * critical alerts of 2026-11-15. A refused link is the `token_expiry` card when the tenant watches tokens.
+     *
+     * @return list<array<string,mixed>>
      */
     private function syncFailures(AlertRule $rule, ?Carbon $now = null): array
     {
-        $now ??= Carbon::now();
-        // The latest run per connection, for THIS rule's project when it has one (filtered inside, so another project's newer
-        // run never hides this project's connection).
-        $latest = MetricSyncRun::query()
-            ->whereIn('id', function ($q) use ($rule, $now) {
-                $q->selectRaw('DISTINCT ON (connection_id) id')
-                    ->from('metric_sync_runs')
-                    ->whereNotNull('connection_id')
-                    ->where('created_at', '>=', $now->copy()->subDays(30))
-                    ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
-                    ->orderByRaw('connection_id, started_at DESC NULLS LAST, created_at DESC');
-            })
-            ->get();
-        // A removed link says nothing; a refused one is the `token_expiry` card — when the tenant watches tokens at all.
-        $watchesTokens = in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true);
-        $skip = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
-            ->whereIn('status', $watchesTokens ? ['error', 'disconnected', 'disabled', 'revoked'] : ['disconnected', 'disabled', 'revoked'])
-            ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
-        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $skip, true))->values();
+        return $this->arrival()->breaches($rule, $now ?? Carbon::now(), in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true));
+    }
 
-        return $latest->map(fn (MetricSyncRun $r) => [
-            'entity_type' => ProviderConnection::class,
-            'entity_id' => (string) $r->connection_id,
-            'project_id' => $r->project_id ? (string) $r->project_id : null,
-            'title' => 'Data sync failed',
-            'message' => $r->status === 'failed' ? 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.') : 'Syncs for '.$r->provider.' have not delivered the day.',
-            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->status === 'failed' ? $r->error : null],
-        ])->all();
+    private function arrival(): DataArrivalJudge
+    {
+        return app(DataArrivalJudge::class);
     }
 
     /** @return list<array<string,mixed>> */
@@ -946,12 +930,14 @@ final class AlertEvaluator
     private function syncOutages(AlertRule $rule, Carbon $now): array
     {
         $tenantId = (string) $rule->tenant_id;
-        $projectIds = DB::table('project_integration_bindings')
-            ->where('tenant_id', $tenantId)
-            ->where('is_active', true)
-            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
+        // LIFECYCLE-6 — live projects only: an archived or deleted project is never an outage.
+        $projectIds = LiveProjectsAdapter::constrain(DB::table('project_integration_bindings')
+            ->join('projects', 'projects.id', '=', 'project_integration_bindings.project_id')
+            ->where('project_integration_bindings.tenant_id', $tenantId)
+            ->where('project_integration_bindings.is_active', true)
+            ->when($rule->project_id !== null, fn ($q) => $q->where('project_integration_bindings.project_id', $rule->project_id)))
             ->distinct()
-            ->pluck('project_id')
+            ->pluck('project_integration_bindings.project_id')
             ->map(static fn (mixed $id): string => (string) $id)
             ->all();
 
@@ -1130,37 +1116,44 @@ final class AlertEvaluator
     {
         $this->linkHealth->prime(array_values(array_map(static fn (array $b): string => (string) $b['entity_id'],
             array_filter($breaches, static fn (array $b): bool => $b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null))), $now);
-        $pairs = [];
-        foreach ($breaches as $b) {
-            if ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
-                foreach ((array) ($b['context']['sources'] ?? []) as $source) {
-                    $pairs[] = [(string) $b['entity_id'], (string) ($source['provider'] ?? '')];
-                }
-            }
-        }
-        $this->linkHealth->primeProjects($pairs, $now);
+        // (A project-level outage is judged by the account-day rule below; it no longer reads the per-project LinkHealth memo.)
         $out = [];
+        /*
+         * LIFECYCLE-6 — no link alert of any type about an archived or deleted project (one read for the whole list). The data-arrival
+         * types already read live projects only (`sync_failure` from live bindings, `sync_outage` from live projects).
+         */
+        $judged = in_array($rule->type, DataArrivalJudge::TYPES, true);
+        $live = $judged ? [] : array_flip(LiveProjectsAdapter::liveIds(array_values(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches)))));
         foreach ($breaches as $b) {
             $context = (array) ($b['context'] ?? []);
+            if (! $judged && ($b['project_id'] ?? null) !== null && ! isset($live[(string) $b['project_id']])) {
+                continue;
+            }
+            // LIFECYCLE-6 — a (project, account) breach was already judged by the account-day rule.
+            if ($b['entity_type'] === ExternalAccount::class) {
+                $out[] = $b;
+
+                continue;
+            }
             if ($b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null) {
                 $reading = $this->linkHealth->forConnection((string) $b['entity_id'], $now);
                 if ($reading['arrived']) {
                     continue;
                 }
             } elseif ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
-                $missing = [];
-                $reading = null;
-                foreach ((array) ($context['sources'] ?? []) as $source) {
-                    $r = $this->linkHealth->forProjectProvider((string) $b['entity_id'], (string) ($source['provider'] ?? ''), $now);
-                    if (! $r['arrived']) {
-                        $missing[] = $source;
-                        $reading ??= $r;
-                    }
-                }
+                // LIFECYCLE-6 — the project's platforms are judged per live account, in each account's time zone.
+                $sources = $this->arrival()->projectSources((string) $rule->tenant_id, (string) $b['entity_id'], (array) ($context['sources'] ?? []), $now,
+                    AccountDayCoverage::settleHours((array) ($rule->threshold ?? [])));
+                $missing = $sources['missing'];
+                $reading = $sources['reading'];
                 if ($missing === [] || $reading === null) {
                     continue;
                 }
                 $context['sources'] = $missing;
+                $context['verdict'] = $reading['verdict'];
+                $context['reason_ar'] = $reading['reason_ar'];
+                $context['reason_en'] = $reading['reason_en'];
+                $context['project_name'] = $reading['project_name'];
             } else {
                 continue;
             }
@@ -1220,6 +1213,19 @@ final class AlertEvaluator
         }
         foreach ($breaches as $b) {
             $key = $this->dedupKey($rule, $b);
+            /*
+             * LIFECYCLE-6 — an open connection-level «data did not arrive» event is the same fact as the first (project, account)
+             * finding on that connection: it is moved onto the account (no second notice on deploy), not announced again.
+             */
+            $connection = (string) ($b['context']['connection_id'] ?? '');
+            if ($b['entity_type'] === ExternalAccount::class && $connection !== '' && ! $open->contains(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
+                $legacy = $open->first(fn (AlertEvent $e): bool => $e->entity_type === ProviderConnection::class && (string) $e->entity_id === $connection);
+                if ($legacy !== null) {
+                    $legacy->forceFill(['dedup_key' => $key, 'entity_type' => ExternalAccount::class, 'entity_id' => $b['entity_id'], 'project_id' => $b['project_id'] ?? $legacy->project_id])->save();
+
+                    continue;
+                }
+            }
             $same = $open->filter(fn (AlertEvent $e): bool => $e->entity_type === $b['entity_type'] && (string) $e->entity_id === (string) ($b['entity_id'] ?? ''))->values();
             if ($same->isEmpty() || $same->every(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
                 continue;
@@ -1239,12 +1245,20 @@ final class AlertEvaluator
         $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'same_link', 'closed_at' => $now->toIso8601String()]])->save();
     }
 
+    /** @var array{live?: array<string,int>, settle?: int} LIFECYCLE-6 — read once per rule for the events {@see linkCloseReason()} decides */
+    private array $linkClose = [];
+
     /**
      * LINK-HEALTH-YESTERDAY-001 — why an open link event may close, on PROOF only: its yesterday arrived (`yesterday_arrived`), or
      * the link is gone (`link_removed`). Null keeps it open.
      */
     private function linkCloseReason(AlertEvent $event, Carbon $now): ?string
     {
+        // LIFECYCLE-6 — a data-arrival event (and any link event of an archived/deleted project) is decided by the account-day rule.
+        $live = $event->project_id === null || ! isset($this->linkClose['live']) ? null : isset($this->linkClose['live'][(string) $event->project_id]);
+        if ($this->arrival()->handles($event, $live)) {
+            return $this->arrival()->closeReason($event, $now, $this->linkClose['settle'] ?? null, $live);
+        }
         $ctx = (array) $event->context;
         if ($event->entity_type === ProviderConnection::class && $event->entity_id !== null) {
             if ($this->linkHealth->forConnection((string) $event->entity_id, $now)['arrived']) {

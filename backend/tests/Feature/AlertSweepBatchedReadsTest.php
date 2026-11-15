@@ -258,6 +258,8 @@ final class AlertSweepBatchedReadsTest extends TestCase
          * All of it is per rule set, not per campaign — the growth bound below is unchanged and still holds (+34 for 18 campaigns).
          * LINK-HEALTH-YESTERDAY-001 — 509 → 552 measured once both landed: the link rule's reads (yesterday's runs for the tenant's
          * connections, the one open-links read, the project readings) are per tenant and per sweep, not per campaign.
+         * LIFECYCLE-6 — 552 → 558: the data-arrival rule reads live bindings and their runs per rule (two statements however many
+         * accounts), judges a project outage per project, and looks up each per-account finding it raises. Per rule, not per campaign.
          */
         $this->assertLessThan(560, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
         $this->assertLessThan($before + 18 * 2, $after, 'cost per campaign is back');

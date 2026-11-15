@@ -63,7 +63,7 @@ final class AlertRecoveryAndOutageTest extends TestCase
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'connection_id' => $connId, 'external_account_id' => $accountId, 'provider' => 'meta', 'status' => $status,
-            'window_start' => $at->copy()->subDay()->toDateString(), 'window_end' => $at->toDateString(),
+            'window_start' => $at->copy()->subDays(3)->toDateString(), 'window_end' => $at->toDateString(),
             'error' => $status === 'failed' ? 'token expired' : null, 'started_at' => $at, 'finished_at' => $at->copy()->addMinute(),
             'created_at' => $at, 'updated_at' => $at,
         ]);
@@ -108,8 +108,11 @@ final class AlertRecoveryAndOutageTest extends TestCase
     public function test_a_cleared_sync_failure_is_resolved_by_the_next_sweep_without_a_word(): void
     {
         $rule = $this->rule('sync_failure');
-        $connId = (string) Str::uuid();
-        $this->syncRun($connId, 'failed', now()->subMinutes(30));
+        // LIFECYCLE-6 — the data-arrival rule judges a live project's bound ad account, by that account's runs.
+        $connection = $this->connection('meta');
+        $connId = (string) $connection->id;
+        $accountId = (string) $this->boundAccount('meta', $connection)->id;
+        $this->syncRun($connId, 'failed', now()->subMinutes(30), $accountId);
 
         $evaluator = app(AlertEvaluator::class);
         $this->assertSame(1, $evaluator->evaluateRule($rule));
@@ -117,28 +120,30 @@ final class AlertRecoveryAndOutageTest extends TestCase
         $this->assertSame('open', $event->status);
 
         // The next run succeeds — the condition is gone.
-        $this->syncRun($connId, 'success', now()->subMinutes(5));
+        $this->syncRun($connId, 'success', now()->subMinutes(5), $accountId);
         $this->assertSame(0, $evaluator->evaluateRule($rule));
 
         $event->refresh();
         $this->assertSame('resolved', $event->status);
         $this->assertNotNull($event->resolved_at);
-        // LINK-HEALTH-YESTERDAY-001 (§7أ) — yesterday arrived: the link card closes silently, no «Recovered» notice.
-        $this->assertSame('yesterday_arrived', $event->context['closed_reason']);
+        // LINK-HEALTH-YESTERDAY-001 (§7أ) — the day arrived: the link card closes silently, no «Recovered» notice.
+        $this->assertSame('day_covered', $event->context['closed_reason']);
         $this->assertNull(AppNotification::query()->where('title', 'like', 'Recovered:%')->first());
     }
 
     public function test_a_snoozed_alert_whose_condition_cleared_is_resolved_too(): void
     {
         $rule = $this->rule('sync_failure');
-        $connId = (string) Str::uuid();
-        $this->syncRun($connId, 'failed', now()->subHours(2));
+        $connection = $this->connection('meta');
+        $connId = (string) $connection->id;
+        $accountId = (string) $this->boundAccount('meta', $connection)->id;
+        $this->syncRun($connId, 'failed', now()->subHours(2), $accountId);
         $evaluator = app(AlertEvaluator::class);
         $evaluator->evaluateRule($rule);
         $event = AlertEvent::query()->where('rule_id', $rule->id)->firstOrFail();
         $evaluator->snooze($event, now()->addDay());
 
-        $this->syncRun($connId, 'success', now()->subMinutes(10));
+        $this->syncRun($connId, 'success', now()->subMinutes(10), $accountId);
         $evaluator->evaluateRule($rule);
 
         $this->assertSame('resolved', $event->refresh()->status);

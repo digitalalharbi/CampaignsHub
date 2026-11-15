@@ -10,6 +10,10 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Support\MailDeliveryState;
@@ -69,12 +73,34 @@ final class AlertEventEmailTest extends TestCase
         ]);
     }
 
+    /** @var array<string, string> connection id → its bound ad account (LIFECYCLE-6 judges a live project's bound account) */
+    private array $accounts = [];
+
+    private function accountFor(string $connId): string
+    {
+        if (! isset($this->accounts[$connId])) {
+            $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+            $credential->setPayload('token');
+            $credential->save();
+            $connection = new ProviderConnection;
+            $connection->forceFill(['id' => $connId, 'tenant_id' => $this->tenant->id, 'credential_id' => $credential->id, 'provider' => 'meta',
+                'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected'])->save();
+            $account = ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connId, 'provider' => 'meta',
+                'account_type' => 'ad_account', 'external_id' => 'act-'.uniqid(), 'name' => 'A', 'status' => 'active']);
+            ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
+                'provider' => 'meta', 'purpose' => 'ads', 'is_active' => true]);
+            $this->accounts[$connId] = (string) $account->id;
+        }
+
+        return $this->accounts[$connId];
+    }
+
     private function syncRun(string $connId, string $status, Carbon $at): void
     {
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'connection_id' => $connId, 'provider' => 'meta', 'status' => $status,
-            'window_start' => $at->copy()->subDay()->toDateString(), 'window_end' => $at->toDateString(),
+            'connection_id' => $connId, 'external_account_id' => $this->accountFor($connId), 'provider' => 'meta', 'status' => $status,
+            'window_start' => $at->copy()->subDays(3)->toDateString(), 'window_end' => $at->toDateString(),
             'error' => $status === 'failed' ? 'token expired' : null, 'started_at' => $at, 'finished_at' => $at->copy()->addMinute(),
             'created_at' => $at, 'updated_at' => $at,
         ]);
