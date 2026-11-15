@@ -8,6 +8,8 @@ use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Notifications\Push\SendPushNotification;
 use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\NotificationChannelPolicy;
@@ -34,6 +36,7 @@ final class NotificationDispatcher
         private readonly NotificationChoices $choices,
         private readonly SpendAudience $audience,
         private readonly WhatsAppChannel $whatsapp,
+        private readonly PushDispatcher $push,
     ) {}
 
     /**
@@ -169,7 +172,22 @@ final class NotificationDispatcher
             $this->logDelivery($tenantId, (string) $notification->id, 'whatsapp', $this->whatsappState($notification, $userId, $switchKey, $inQuietHours, $p), $dedupKey);
         }
 
+        // NOTIF-PUSH-001 — a phone is rung only for the few things that warrant it, off this call, and never at the bell's expense.
+        $this->ring($notification);
+
         return $notification;
+    }
+
+    /** Queue the pushes for this notification when it is one that may ring a phone. */
+    private function ring(AppNotification $notification): void
+    {
+        try {
+            if ($this->push->wants($notification)) {
+                SendPushNotification::dispatch((string) $notification->id);
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -299,6 +317,10 @@ final class NotificationDispatcher
             DB::table('notification_reads')->where('notification_id', $n->id)->delete();
         }
         $n->forceFill($fields)->save();
+        // A finding that got worse (a warning that became critical) is news; a plain repeat is not.
+        if ($worse) {
+            $this->ring($n);
+        }
 
         return $n;
     }

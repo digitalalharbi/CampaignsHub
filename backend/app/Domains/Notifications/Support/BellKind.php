@@ -150,6 +150,26 @@ final class BellKind
         return 'budget_watch';
     }
 
+    /**
+     * The page of the object a notification is about, relative to the reader's portal — the bell's «افتح» button and a push's click.
+     *
+     * Null when the kind says nothing better than the notification's own `action_url`.
+     */
+    public static function openPath(?string $kind, ?string $projectId): ?string
+    {
+        $q = $projectId === null ? '' : '?project='.$projectId;
+
+        return match (self::group($kind)) {
+            'budget' => '/budgets'.$q,
+            'sync' => '/integrations'.$q,
+            'performance' => '/alerts',
+            default => match ($kind) {
+                'report_ready', 'report_failed' => '/reports',
+                default => null,
+            },
+        };
+    }
+
     public static function has(?string $kind): bool
     {
         return $kind !== null && isset(self::KINDS[$kind]);

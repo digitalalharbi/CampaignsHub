@@ -12,6 +12,7 @@ use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
 use App\Domains\Notifications\Http\Controllers\AlertSettingsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\Notifications\Http\Controllers\PushController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -48,6 +49,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers,port
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('notifications/alert-settings', [AlertSettingsController::class, 'show'])->name('notifications.alert-settings.show');
     Route::match(['put', 'patch'], 'notifications/alert-settings', [AlertSettingsController::class, 'update'])->name('notifications.alert-settings.update');
+    // NOTIF-PUSH-001 — a person's own mobile devices. The browser's permission prompt is never triggered by these; only by a button.
+    Route::get('push', [PushController::class, 'show'])->name('push.show');
+    Route::post('push/subscriptions', [PushController::class, 'store'])->name('push.store');
+    Route::post('push/forget', [PushController::class, 'forget'])->name('push.forget');
+    Route::delete('push/subscriptions/{id}', [PushController::class, 'destroy'])->name('push.destroy');
+    Route::post('push/subscriptions/{id}/test', [PushController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
     Route::get('notifications/summary', [NotificationController::class, 'summary'])->name('notifications.summary');
     Route::get('notifications/deliveries', [NotificationController::class, 'deliveries'])->name('notifications.deliveries');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');

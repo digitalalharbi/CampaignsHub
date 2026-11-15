@@ -43,6 +43,8 @@ final class NotificationResource extends JsonResource
             'project_id' => $this->project_id,
             'client_workspace_id' => $this->client_workspace_id,
             'action_url' => $this->action_url,
+            // NOTIF-BELL-001 — the object the row is about; the panel's «افتح» button goes here.
+            'open_url' => BellKind::openPath($kind, $this->project_id === null ? null : (string) $this->project_id) ?? $this->action_url,
             // A team-wide row is read PER PERSON (notification_reads); the row's own status is for its addressee.
             'status' => $this->status === 'unread' && $this->getAttribute('read_by_me') === true ? 'read' : $this->status,
             'read_at' => optional($this->read_at)->toIso8601String(),

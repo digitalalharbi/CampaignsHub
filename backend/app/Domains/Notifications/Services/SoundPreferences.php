@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Push\PushTypes;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +40,34 @@ final class SoundPreferences
         return $this->stored($user) + [
             'quiet' => $tenantId !== null && $this->quiet->isQuiet((int) $user->id, (string) $tenantId),
         ];
+    }
+
+    /**
+     * Which of the five push types this person wants (all, until they choose).
+     *
+     * @return array<string, bool>
+     */
+    public function pushTypes(User $user): array
+    {
+        $raw = DB::table('notification_alert_settings')->where('user_id', $user->id)->value('push_types');
+        $decoded = $raw === null ? null : json_decode((string) $raw, true);
+
+        return PushTypes::chosen(is_array($decoded) ? $decoded : null);
+    }
+
+    /**
+     * @param  array<string, bool>  $types  only the keys that arrived are changed
+     * @return array<string, bool>
+     */
+    public function savePushTypes(User $user, array $types): array
+    {
+        $next = array_replace($this->pushTypes($user), array_intersect_key($types, array_flip(PushTypes::ALL)));
+        $now = now();
+        DB::table('notification_alert_settings')->upsert([[
+            'user_id' => $user->id, 'push_types' => json_encode($next), 'created_at' => $now, 'updated_at' => $now,
+        ]], ['user_id'], ['push_types', 'updated_at']);
+
+        return $next;
     }
 
     /** @return array{enabled: bool, volume: int} */
