@@ -81,3 +81,28 @@ Round 2 local evidence: chromium — ga4-print-fit, analytics-normalization, liv
 notifications-bell, period-picker, entity-workspace, campaigns, report-pdf/tabular-download, owner-acceptance-content,
 first-viewport-detail, settings-ia, notification-depth: **92/92**. Webkit, same set: **92/92**. Vitest 775 files /
 5363 tests; `tsc -b`, oxlint (touched) clean; pint, phpstan clean (no PHP changed).
+
+## Round 3 — CI run 43760924865 (HEAD `769ca152d`; ran across Riyadh midnight, backend at 21:08 UTC = 00:08 Riyadh)
+
+| # | Failure | Root cause | Class | Fix | Commit |
+|---|---|---|---|---|---|
+| 15 | backend `NovSpendLimitAlertsTest` run-out (66.67 vs 100), `RoleDashboardTest` manager (4 vs 3 days) | **Product mixed two «todays».** The run-out rate («last three complete days») is counted on Riyadh days (`FundingBalance`, `ProjectBudgetReader`, the platforms' daily rows), but `RoleDashboardBuilder` added the days to a UTC `Carbon::today()`, and the limits page, the launch check and the alert sweep read limits on the UTC day. From 00:00 to 03:00 Riyadh every night the dashboard's run-out date was a day early and the limits page measured the wrong three days. The tests also built fixtures on one clock and read on the other | a (product) + i (fixtures) | `PeriodResolver::today()` in `RoleDashboardBuilder`, `SpendLimitController` (×3), `LaunchSpendCheck`, `AlertEvaluator::internalSpendLimits` (limit dates and reading on one day). Fixtures on the same Riyadh day. New data-provider tests at 00:08 / 23:57 / midday Riyadh for both (the 00:08 cases fail on the old code). `LaunchSafetyTest`'s limit window follows the same day | `5bcb5ac0b` |
+| 16 | (found by the sweep) vitest `agencyHeadline` «asks the server for exactly that window», only 00:00–03:00 Riyadh | the test froze the clock but read `calls[0]` of a mock earlier real-clock tests had called | i | `mockClear()` first; assertions unchanged | `eccedb72a` |
+| 17 | firefox `notifications-bell` «the ping» still 0 | round 2 rang only when `resume()` settled; Firefox without an audio device (CI's headless runner) never settles it, so no tone was ever started | a | after a real gesture the tone is scheduled on the context at once (sounds when the browser lets it run); before a gesture nothing. Tests: a context that never runs; the Firefox-order test now expects one scheduled ping, not repeated on start | `60bf32497` |
+| 18 | firefox `campaign-write-control` (ar) — no `campaign-card` | **Not proven.** Passed on Firefox in round 2; its English sibling (same steps) passed in round 3; passes on chromium and webkit here after Riyadh midnight. A real defect found while looking, in my own round-2 helper: a pending address write could be replayed over a navigation that superseded it (for 1.5 s), dropping that navigation's params — candidate cause on `/app/campaigns` (view click vs the period write) | a (helper) | the pending write is tied to the location key it was written from; any committed navigation ends it. Vitest case fails on `721952a52` | `25baf37ed` |
+| 19 | firefox `project-lifecycle` direct business @390 — the restored project not listed under «active» after trash → restore | **Root cause not found.** Passed on Firefox in round 2; the three sibling variants passed in round 3; the step uses component state and React Query (no URL writes, no helper); passes on chromium and webkit here. No product or spec change made for it | — | none | — |
+
+**Midnight sweep.** Backend suites Funding|SpendLimit|Budget|RoleDashboard|Period|Coverage|Digest|Alert|Launch|Pacing|Fx|
+Currency|Lifecycle|Notification (1601 tests) run with `Carbon::setTestNow` at 09:00, 20:57 and 21:08 UTC through a
+temporary, uncommitted `TestCase` hook: after the fixes the only failures are `AlertRecoveryAndOutageTest` (fails at every
+frozen instant including midday — it needs the clock to move, not a midnight defect) and an intermittent
+`ProjectLifecycleContractTest` dataset (also at midday). Real clock: 1266 targeted tests pass. The full vitest suite run
+at 00:4x Riyadh found #16 only.
+
+**Firefox, still unverifiable here** (does not launch on this Mac): #17 rests on the modelled AudioContext; #18 and #19
+need CI's Firefox shards — their error-context snapshots (CI artifacts) would show the page state; I did not download them.
+
+Round 3 local evidence (run at 00:4x–01:xx Riyadh, i.e. the same clock window as the CI run): chromium **63/63** and
+webkit **63/63** on notifications-bell, campaign-write-control, project-lifecycle, analytics-normalization,
+live-link-builder, live-link-creation, period-picker, campaigns, entity-workspace, role-dashboard, budgets-ledger,
+spend-limits-drawn, ga4-print-fit. Vitest 775 files / 5365 tests; `tsc -b`, oxlint clean; pint, phpstan clean.
