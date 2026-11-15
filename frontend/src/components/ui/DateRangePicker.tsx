@@ -91,7 +91,8 @@ function useIsPhone(): boolean {
   return phone
 }
 
-function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply }: {
+export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply, allowCompare = true }: {
+  allowCompare?: boolean
   ar: boolean
   anchor: React.RefObject<HTMLButtonElement | null>
   initial: Selection
@@ -323,7 +324,7 @@ function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApp
           ar={ar} label={target === 'main' ? (ar ? 'الفترة' : 'Period') : (ar ? 'فترة المقارنة' : 'Comparison period')} span={targetSpan} today={ctx.today} testId={testId}
           onCommit={(f, t) => { setTargetSpan(f, t); showView(t) }}
         />
-        <div>
+        {allowCompare ? <div>
           <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-text-primary sm:min-h-9">
             <input type="checkbox" className="h-5 w-5 accent-[var(--brand-600)]" checked={draft.compare !== 'none'} data-testid={`${testId}-compare-toggle`}
               onChange={(e) => setMode(e.target.checked ? 'previous' : 'none')} />
@@ -349,7 +350,7 @@ function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApp
               <Legend ar={ar} />
             </div>
           )}
-        </div>
+        </div> : <div />}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
