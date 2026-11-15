@@ -30,7 +30,7 @@ final class LifecycleNotices
         $date = optional($project->purge_after)->format('Y-m-d') ?? '—';
         $by = $actor === null ? null : (string) $actor->name;
 
-        return $this->toOwners($project, self::DELETED, 'warning',
+        return $this->toOwners($project, ['type' => 'project.deleted', 'severity' => 'warning'],
             title: "Project «{$project->name}» moved to the trash",
             titleAr: "نُقل المشروع «{$project->name}» إلى المحذوفات",
             message: 'Deleted by '.($by ?? 'the system').". It can be restored until {$date}; after that it is deleted permanently. The ad platforms are not affected.",
@@ -42,7 +42,7 @@ final class LifecycleNotices
     {
         $date = optional($project->purge_after)->format('Y-m-d') ?? '—';
 
-        return $this->toOwners($project, self::PURGE_SOON, 'warning',
+        return $this->toOwners($project, ['type' => 'project.purge_soon', 'severity' => 'warning'],
             title: "Project «{$project->name}» will be deleted permanently on {$date}",
             titleAr: "سيُحذف المشروع «{$project->name}» نهائيًا في {$date}",
             message: 'Restore it from the trash before then to keep it. The ad platforms are not affected.',
@@ -69,8 +69,12 @@ final class LifecycleNotices
             ->all();
     }
 
-    private function toOwners(Project $project, string $type, string $severity, string $title, string $titleAr, string $message, string $messageAr): int
+    /**
+     * @param  array{type: string, severity: string}  $kind  written as literals by the callers, so NotificationChannelPolicyTest reads the types
+     */
+    private function toOwners(Project $project, array $kind, string $title, string $titleAr, string $message, string $messageAr): int
     {
+        ['type' => $type, 'severity' => $severity] = $kind;
         $sent = 0;
         foreach ($this->ownerIds((string) $project->tenant_id) as $userId) {
             $n = $this->dispatcher->dispatch([
