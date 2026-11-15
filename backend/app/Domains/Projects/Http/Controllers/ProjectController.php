@@ -10,6 +10,9 @@ use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Actions\DeleteProject;
+use App\Domains\Projects\Lifecycle\InvalidLifecycleTransition;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Resources\ProjectResource;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
@@ -30,7 +33,11 @@ use Illuminate\Validation\ValidationException;
 
 final class ProjectController extends Controller
 {
-    private const STATUSES = ['draft', 'onboarding', 'active', 'paused', 'completed', 'archived'];
+    /**
+     * What a create may start in, and what PATCH `status` may ask for (legacy values are read as their canonical state).
+     * `archived`/`deleted` are reached only through their own endpoints (archive effects, confirmation).
+     */
+    private const STATUSES = ['draft', 'active', 'paused', 'onboarding', 'completed'];
 
     public function index(Request $request, ProjectListSummary $summary): JsonResponse
     {
@@ -45,10 +52,17 @@ final class ProjectController extends Controller
         if ($workspace = $request->string('client_workspace_id')->toString()) {
             $query->where('client_workspace_id', $workspace);
         }
+        /*
+         * PROJECT-LIFECYCLE-001 — the management list: draft + active + paused by default (LiveProjects::LISTED);
+         * `include_archived` adds the archived ones («المؤرشفة»); `status=archived` lists only those. Deleted projects
+         * are soft-deleted and never listed here (the trash is its own list).
+         */
         if ($status = $request->string('status')->toString()) {
-            $query->where('status', $status);
-        } elseif (! $request->boolean('include_archived')) {
-            $query->where('status', '!=', 'archived');
+            $query->inLifecycle(ProjectStatus::normalise($status));
+        } elseif ($request->boolean('include_archived')) {
+            $query->inLifecycle(ProjectStatus::Draft, ProjectStatus::Active, ProjectStatus::Paused, ProjectStatus::Archived);
+        } else {
+            $query->listed();
         }
         if ($search = $request->string('search')->toString()) {
             $query->where('name', 'ilike', "%{$search}%");
@@ -156,7 +170,7 @@ final class ProjectController extends Controller
             'client_workspace_id' => $workspaceId,
             'name' => $validated['name'],
             'account_manager_id' => $validated['account_manager_id'] ?? null,
-            'status' => $validated['status'] ?? 'draft',
+            'status' => ProjectStatus::normalise($validated['status'] ?? 'draft')->value,
             'setup_completion' => 0,
         ]);
 
@@ -179,6 +193,15 @@ final class ProjectController extends Controller
         ]);
 
         $before = $model->only(['name', 'status', 'setup_completion']);
+
+        // PROJECT-LIFECYCLE-001 — a status change is a transition (allowed table, actor, log), never a column write.
+        if (array_key_exists('status', $validated)) {
+            $to = ProjectStatus::normalise((string) $validated['status']);
+            if ($to !== $model->lifecycleStatus()) {
+                $this->guarded(fn () => $this->lifecycle()->transition($model, $to, $request->user(), 'update'));
+            }
+            unset($validated['status']);
+        }
         $model->update($validated);
         $audit->log(action: 'project.updated', entityType: Project::class, entityId: (string) $model->id, before: $before, after: $model->only(['name', 'status', 'setup_completion']));
 
@@ -206,24 +229,87 @@ final class ProjectController extends Controller
         return ApiResponse::success(new ProjectResource($copy), 'Project cloned.', status: 201);
     }
 
-    public function archive(Request $request, string $project, AuditLogger $audit): JsonResponse
+    /**
+     * POST projects/{project}/archive — PROJECT-LIFECYCLE-001 §3. `projects.archive` (workspace owner by default).
+     * Body: `{unlink_accounts?: bool, reason?: string}`. Applies the archive effects and answers with what was
+     * stopped and which accounts are shared with another project (only THIS project's link stopped).
+     */
+    public function archive(Request $request, string $project): JsonResponse
     {
-        return $this->transition($request, $project, 'archived', 'projects.update', 'project.archived', $audit);
+        abort_unless($request->user()->hasPermission('projects.archive'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+        $data = $request->validate(['unlink_accounts' => ['sometimes', 'boolean'], 'reason' => ['sometimes', 'nullable', 'string', 'max:500']]);
+
+        $result = $this->guarded(fn () => $this->lifecycle()->archive($model, $request->user(), (bool) ($data['unlink_accounts'] ?? false), $data['reason'] ?? null));
+
+        return ApiResponse::success(
+            (new ProjectResource($model->refresh()))->resolve($request) + ['lifecycle' => [
+                'transition' => $result['transition']->toArray(),
+                'effects' => $result['effects'],
+                'shared_accounts' => $result['shared_accounts'],
+            ]],
+            'Project archived.',
+        );
     }
 
-    public function restore(Request $request, string $project, AuditLogger $audit): JsonResponse
+    /**
+     * POST projects/{project}/restore — un-archive, after confirmation (`{confirm: true}`). `projects.restore`.
+     * Returns the project to the state it had before the archive and reverses every recorded archive effect.
+     */
+    public function restore(Request $request, string $project): JsonResponse
     {
-        return $this->transition($request, $project, 'active', 'projects.update', 'project.restored', $audit);
+        abort_unless($request->user()->hasPermission('projects.restore'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+        $request->validate(['confirm' => ['required', 'accepted']]);
+
+        $result = $this->guarded(fn () => $this->lifecycle()->unarchive($model, $request->user(), true));
+
+        return ApiResponse::success(
+            (new ProjectResource($model->refresh()))->resolve($request) + ['lifecycle' => [
+                'transition' => $result['transition']->toArray(),
+                'restored' => $result['restored'],
+                'skipped' => $result['skipped'],
+            ]],
+            'Project restored.',
+        );
     }
 
-    public function pause(Request $request, string $project, AuditLogger $audit): JsonResponse
+    public function pause(Request $request, string $project): JsonResponse
     {
-        return $this->transition($request, $project, 'paused', 'projects.update', 'project.paused', $audit);
+        return $this->transitionTo($request, $project, ProjectStatus::Paused, 'pause');
     }
 
-    public function resume(Request $request, string $project, AuditLogger $audit): JsonResponse
+    public function resume(Request $request, string $project): JsonResponse
     {
-        return $this->transition($request, $project, 'active', 'projects.update', 'project.resumed', $audit);
+        return $this->transitionTo($request, $project, ProjectStatus::Active, 'resume');
+    }
+
+    /** GET projects/{project}/archive-impact — what archiving would stop + the shared-account warning. Read-only. */
+    public function archiveImpact(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.archive'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+
+        return ApiResponse::success($this->lifecycle()->archiveImpact($model), 'Archive impact.');
+    }
+
+    /** GET projects/{project}/lifecycle — the state, its stamps and the transition log (name snapshots). */
+    public function lifecycleHistory(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.view'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+
+        return ApiResponse::success([
+            'status' => $model->lifecycleStatus()->value,
+            'archived_at' => optional($model->archived_at)->toIso8601String(),
+            'previous_status' => $model->previous_status,
+            'purge_after' => optional($model->purge_after)->toIso8601String(),
+            'transitions' => $this->lifecycle()->history($model),
+        ], 'Project lifecycle.');
     }
 
     /**
@@ -283,15 +369,35 @@ final class ProjectController extends Controller
         return ApiResponse::success($impact, 'Project deleted.');
     }
 
-    private function transition(Request $request, string $project, string $status, string $permission, string $action, AuditLogger $audit): JsonResponse
+    /** Pause / resume — `projects.update`, through the one transition function (which logs and audits). */
+    private function transitionTo(Request $request, string $project, ProjectStatus $to, string $reason): JsonResponse
     {
-        abort_unless($request->user()->hasPermission($permission), 403);
+        abort_unless($request->user()->hasPermission('projects.update'), 403);
         $model = $this->find($project);
         $this->authorizeReach($request->user(), $model);
-        $model->update(['status' => $status]);
-        $audit->log(action: $action, entityType: Project::class, entityId: (string) $model->id, after: ['status' => $status]);
+        $this->guarded(fn () => $this->lifecycle()->transition($model, $to, $request->user(), $reason));
 
-        return ApiResponse::success(new ProjectResource($model), 'Project status updated.');
+        return ApiResponse::success(new ProjectResource($model->refresh()), 'Project status updated.');
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $fn
+     * @return T
+     */
+    private function guarded(callable $fn): mixed
+    {
+        try {
+            return $fn();
+        } catch (InvalidLifecycleTransition $e) {
+            throw ValidationException::withMessages(['status' => [$e->getMessage()]]);
+        }
+    }
+
+    private function lifecycle(): ProjectLifecycle
+    {
+        return app(ProjectLifecycle::class);
     }
 
     /**

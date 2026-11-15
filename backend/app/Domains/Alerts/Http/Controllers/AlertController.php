@@ -128,7 +128,7 @@ final class AlertController extends Controller
 
         // The resolver is the one place that turns a membership into reachable clients (a named list outranks any permission).
         $clients = $this->scopes->reachableClientIds($user) ?? $clientScope;
-        $ofClients = Project::query()->whereIn('client_workspace_id', $clients)->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $ofClients = Project::query()->live()->whereIn('client_workspace_id', $clients)->pluck('id')->map(static fn ($id): string => (string) $id)->all();
 
         return $projectScope === [] ? $ofClients : array_values(array_intersect($ofClients, $projectScope));
     }

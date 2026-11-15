@@ -61,6 +61,9 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         'api.v1.projects.clone',
         'api.v1.projects.pause',
         'api.v1.projects.resume',
+        // PROJECT-LIFECYCLE-001 — same layer: tenant permission projects.archive / projects.view + reach (ProjectLifecycleContractTest).
+        'api.v1.projects.archive-impact',
+        'api.v1.projects.lifecycle',
 
         /*
          * PROJECT-DELETE-001 — destroying a client, and the read that tells you what that costs.

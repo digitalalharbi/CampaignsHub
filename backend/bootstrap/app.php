@@ -131,6 +131,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        // PROJECT-LIFECYCLE-001 — ops: id-scoped, dry-run by default, never delete.
+        \App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand::class,
+        \App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand::class,
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,

@@ -74,6 +74,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
     Route::post('{project}/clone', [ProjectController::class, 'clone'])->name('clone')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/archive', [ProjectController::class, 'archive'])->name('archive');
+    // PROJECT-LIFECYCLE-001 — what archiving would stop (read-only) and the transition log.
+    Route::get('{project}/archive-impact', [ProjectController::class, 'archiveImpact'])->name('archive-impact');
+    Route::get('{project}/lifecycle', [ProjectController::class, 'lifecycleHistory'])->name('lifecycle');
     Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');

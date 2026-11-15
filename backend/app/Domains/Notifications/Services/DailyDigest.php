@@ -169,6 +169,7 @@ final class DailyDigest
         }
 
         $projects = Project::query()
+            ->live() // PROJECT-LIFECYCLE-001
             ->where('tenant_id', $tenantId)
             ->whereIn('id', $projectIds)
             ->get(['id', 'name', 'client_workspace_id']);

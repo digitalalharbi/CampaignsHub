@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Models\FundingPayment;
@@ -154,12 +155,14 @@ final class RenewNextMonth
     /** @return Collection<int, ProjectFunding> */
     private function fundings(User $user): Collection
     {
-        $clients = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 — live projects only; client state does not decide (rule 4).
+        $clients = ClientWorkspace::query();
         $this->access->restrictQuery($clients, $user);
         $names = $clients->pluck('name', 'id');
         $ceilings = $this->access->projectCeilings($user);
 
         return ProjectFunding::query()->with('project:id,name,client_workspace_id')->whereIn('client_workspace_id', $names->keys()->all())
+            ->whereIn('project_id', LiveProjects::idsQuery())
             ->whereNull('voided_at')->get()
             ->filter(fn (ProjectFunding $f): bool => $this->access->projectAllowed($ceilings, $f->client_workspace_id, $f->project_id)
                 && ! $this->reach->moneyWithheld($user, $f->project_id))

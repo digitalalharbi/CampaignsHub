@@ -35,6 +35,7 @@ final class ClientWorkspace extends Model
         'tags' => 'array',
         'enabled_services' => 'array',
         'archived_at' => 'datetime',
+        'purge_after' => 'datetime',
     ];
 
     /**

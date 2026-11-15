@@ -27,6 +27,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
      * @var array<string, string>
      */
     private const SEES_EVERY_ROW = [
+        // PROJECT-LIFECYCLE-001 — the read-only before/after protection snapshot counts every stored row of ONE project; serves no reader.
+        'Domains/Projects/Lifecycle/ProjectSnapshot.php' => 'ops before/after snapshot of every stored row of one project; read-only, serves no reader',
         // The cleanup acts on the rows the rule HIDES, so it must see them all; it refuses a selected account itself.
         'Domains/Integrations/Console/ScopeCleanupCommand.php' => 'the cleanup, which acts on hidden rows and refuses selected ones',
         'Domains/Integrations/Console/AccountOwnershipAuditCommand.php' => 'audit and quarantine of every stored row, including hidden ones; serves no reader',

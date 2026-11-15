@@ -38,6 +38,8 @@ use App\Domains\Platform\Alerts\SettlementSource;
 use App\Domains\Platform\Alerts\UnavailableSettlementSource;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStateMachine;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Subscriptions\Models\Subscription;
@@ -69,6 +71,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // PROJECT-LIFECYCLE-001 — the one lifecycle contract (docs/rules/project-lifecycle.md).
+        $this->app->bind(ProjectLifecycle::class, ProjectStateMachine::class);
+
         /*
          * One demo-policy answer per REQUEST — CONTENT-SPEND-ALWAYS-001.
          *

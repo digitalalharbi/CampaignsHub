@@ -71,7 +71,8 @@ final class AgencyOverviewController extends Controller
             }
         }
 
-        $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 rule 4 — the client's own state never hides its live projects' figures (project state decides).
+        $clientQuery = ClientWorkspace::query();
         $this->access->restrictQuery($clientQuery, $user);
         $clientIds = $clientQuery->pluck('id')->map(fn ($id) => (string) $id)->all();
 
@@ -79,7 +80,7 @@ final class AgencyOverviewController extends Controller
         $ceilings = $this->access->projectCeilings($user);
         $projects = $clientIds === []
             ? collect()
-            : Project::query()->whereIn('client_workspace_id', $clientIds)->get()
+            : Project::query()->live()->whereIn('client_workspace_id', $clientIds)->get() // PROJECT-LIFECYCLE-001
                 ->filter(fn (Project $p): bool => $this->access->projectAllowed($ceilings, (string) $p->client_workspace_id, (string) $p->getKey()))
                 ->values();
         $projectIds = $projects->map(fn (Project $p) => (string) $p->getKey())->all();

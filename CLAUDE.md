@@ -219,6 +219,14 @@ about completeness.
 - Development-only affordances (dev OTP codes, portal dev tokens, `/dev/status`) stay hard-gated off
   in production.
 
+## Project lifecycle — permanent rules (Owner, 2026-11-15)
+
+Read `docs/rules/project-lifecycle.md` (10 rules, binding) before touching projects, clients, aggregation, alerts,
+notifications, digests, syncs or pickers. In short: project status changes only through
+`ProjectLifecycle::transition()`; everything that selects projects uses the one «live projects» source
+(`LiveProjects` / `Project::live()` / `live_projects` view = active + paused); client state never affects spend;
+data-changing ops are id-scoped, dry-run first, reversible, with before/after snapshots.
+
 ## Stack, in one line
 
 Laravel 12 · PHP 8.4 · PostgreSQL 16 · Redis · Sanctum SPA cookie auth · DDD under `app/Domains/*`

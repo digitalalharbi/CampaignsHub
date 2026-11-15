@@ -1,6 +1,7 @@
 import { patchData, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
+import type { ProjectLifecycleStatus } from '@/lib/projectLifecycle'
 
 /**
  * PROJECT-LIST-SURFACE-001 §10 — the facts a card needs to be worth reading.
@@ -39,6 +40,11 @@ export interface Project {
   client_workspace_id: string
   name: string
   status: string
+  /** PROJECT-LIFECYCLE-001 — the stored lifecycle state; `status` is the display one (may derive «onboarding»). */
+  lifecycle_status?: ProjectLifecycleStatus
+  archived_at?: string | null
+  previous_status?: ProjectLifecycleStatus | null
+  purge_after?: string | null
   setup_completion: number
   account_manager_id: number | null
   created_at: string | null
@@ -133,7 +139,8 @@ export async function projectAction(
   action: 'archive' | 'restore' | 'pause' | 'resume' | 'clone',
 ): Promise<Project> {
   await ensureCsrfCookie()
-  return postData<Project>(`/projects/${projectId}/${action}`)
+  // PROJECT-LIFECYCLE-001 — un-archiving needs the explicit confirmation server-side (the restore window is N2's).
+  return postData<Project>(`/projects/${projectId}/${action}`, action === 'restore' ? { confirm: true } : undefined)
 }
 
 export async function archiveProject(projectId: string): Promise<Project> {

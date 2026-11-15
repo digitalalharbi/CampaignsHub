@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\ClientWorkspaces\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -34,30 +35,21 @@ final class ClientPortfolioStats
         $tenantId = (string) $this->tenant->tenantId();
         $from = Carbon::now()->subDays($windowDays)->toDateString();
 
-        // Map project_id => client_id for this tenant's clients (basis for every metric join).
-        $projectMap = DB::table('projects')
+        /*
+         * PROJECT-LIFECYCLE-001 rule 5 — every metric below folds in LIVE projects only (active + paused, one scope):
+         * an archived or deleted project's spend no longer reaches the clients list. Client state is never read (rule 4).
+         */
+        $projectMap = LiveProjects::constrain(DB::table('projects')
             ->where('tenant_id', $tenantId)
-            ->whereIn('client_workspace_id', $clientIds)
-            ->whereNull('deleted_at')
+            ->whereIn('client_workspace_id', $clientIds))
             ->pluck('client_workspace_id', 'id'); // [project_id => client_id]
         $projectIds = $projectMap->keys()->all();
 
-        /*
-         * A-8 — «المشاريع» counts the projects the Projects list shows. That list hides `archived` ones by default
-         * (ProjectController::index) and the integrations hub only names projects holding an active link, so a client
-         * with one live and one archived project read «2» here and one there. Spend and freshness below still fold in
-         * archived projects: their history is real and is not deleted or hidden by this count.
-         */
-        $archivedIds = DB::table('projects')
+        // A-8 — «المشاريع» counts what the Projects list shows (LISTED: draft + active + paused).
+        $projectsPerClient = LiveProjects::constrainListed(DB::table('projects')
             ->where('tenant_id', $tenantId)
-            ->whereIn('client_workspace_id', $clientIds)
-            ->whereNull('deleted_at')
-            ->where('status', 'archived')
-            ->pluck('id')
-            ->map(strval(...))
-            ->all();
-        $projectsPerClient = $projectMap
-            ->reject(fn ($clientId, $projectId) => in_array((string) $projectId, $archivedIds, true))
+            ->whereIn('client_workspace_id', $clientIds))
+            ->pluck('client_workspace_id', 'id')
             ->groupBy(fn ($clientId) => $clientId)->map->count();
 
         $activeCampaigns = DB::table('unified_campaigns')

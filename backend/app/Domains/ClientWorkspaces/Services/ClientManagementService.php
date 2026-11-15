@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Enums\ClientStatus;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Notifications\Services\NotificationDispatcher;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 
 /**
  * Applies classification / settings / archive changes to a client and records an immutable audit entry for
@@ -20,6 +21,7 @@ final class ClientManagementService
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly NotificationDispatcher $notifications,
+        private readonly ProjectLifecycle $lifecycle,
     ) {}
 
     /** Editable classification fields (whitelist — nothing else is mass-assignable here). */
@@ -32,9 +34,21 @@ final class ClientManagementService
     public function updateClassification(ClientWorkspace $client, array $data, User $actor): ClientWorkspace
     {
         $before = $client->only(self::CLASSIFICATION);
+
+        // PROJECT-LIFECYCLE-001 — the client state moves only through the one transition function (logged there).
+        $statusChanged = false;
+        if (array_key_exists('client_status', $data) && (string) $data['client_status'] !== (string) $client->client_status) {
+            $this->lifecycle->transitionClient($client, ClientStatus::from((string) $data['client_status']), $actor, 'classification');
+            $statusChanged = true;
+        }
+        unset($data['client_status']);
+
         $client->fill(array_intersect_key($data, array_flip(self::CLASSIFICATION)));
         $changed = $client->getDirty();
         $client->save();
+        if ($statusChanged) {
+            $changed['client_status'] = $client->client_status;
+        }
 
         if ($changed !== []) {
             $this->audit->log(
@@ -108,12 +122,9 @@ final class ClientManagementService
             return $client;
         }
         $before = ['client_status' => $client->client_status, 'archived_at' => null];
-        $client->forceFill([
-            'archived_at' => Carbon::now(),
-            'archived_by' => $actor->id,
-            'client_status' => 'archived',
-            'settings' => array_replace($client->settings ?? [], ['status_before_archive' => $client->client_status]),
-        ])->save();
+        // Kept for rows archived before the lifecycle columns existed; the machine records `previous_status`.
+        $client->forceFill(['settings' => array_replace($client->settings ?? [], ['status_before_archive' => $client->client_status])])->save();
+        $this->lifecycle->transitionClient($client, ClientStatus::Archived, $actor, $reason);
 
         $this->audit->log('client.archived', 'client_workspace', (string) $client->id, $before,
             ['client_status' => 'archived', 'archived_at' => optional($client->archived_at)->toIso8601String()], $reason);
@@ -128,12 +139,12 @@ final class ClientManagementService
             return $client;
         }
         $before = ['client_status' => $client->client_status, 'archived_at' => optional($client->archived_at)->toIso8601String()];
-        $restoreTo = $client->settings['status_before_archive'] ?? 'active';
-        $client->forceFill([
-            'archived_at' => null,
-            'archived_by' => null,
-            'client_status' => $restoreTo === 'archived' ? 'active' : $restoreTo,
-        ])->save();
+        $restoreTo = (string) ($client->previous_status ?? $client->settings['status_before_archive'] ?? 'active');
+        $target = ClientStatus::tryFrom($restoreTo);
+        if ($target === null || in_array($target, [ClientStatus::Archived, ClientStatus::Deleted], true)) {
+            $target = ClientStatus::Active;
+        }
+        $this->lifecycle->transitionClient($client, $target, $actor, 'restore');
 
         $this->audit->log('client.restored', 'client_workspace', (string) $client->id, $before,
             ['client_status' => $client->client_status, 'archived_at' => null]);

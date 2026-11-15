@@ -308,7 +308,7 @@ final class PortfolioOverview
      */
     private function reachableProjects(User $user, string $tenantId)
     {
-        $query = Project::query()->where('tenant_id', $tenantId);
+        $query = Project::query()->live()->where('tenant_id', $tenantId); // PROJECT-LIFECYCLE-001
 
         /*
          * Unrestricted access is a POSITIVE grant. Inferring it from the absence of memberships is

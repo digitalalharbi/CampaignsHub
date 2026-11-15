@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
@@ -65,6 +66,9 @@ final class FundingNotifier
     public function added(FundingPayment $payment, ?int $actorId, int $cycle): int
     {
         try {
+            if (! LiveProjects::isLive((string) $payment->project_id)) {
+                return 0; // PROJECT-LIFECYCLE-001
+            }
             $funding = ProjectFunding::query()->where('project_id', $payment->project_id)->firstOrFail();
             $this->closeOpen($funding);
 
@@ -91,7 +95,8 @@ final class FundingNotifier
      */
     public function evaluate(ProjectFunding $funding): int
     {
-        if ($funding->payment_method !== 'prepaid') {
+        // PROJECT-LIFECYCLE-001 — no budget notice for an archived or deleted project.
+        if ($funding->payment_method !== 'prepaid' || ! LiveProjects::isLive((string) $funding->project_id)) {
             return 0;
         }
 

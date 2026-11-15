@@ -40,8 +40,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class SendDailyDigests extends Command
 {
-    /** The project status that is reported on daily: a project in setup, paused, completed, closed or archived is not running. */
-    private const ACTIVE_PROJECT = 'active';
 
     protected $signature = 'notifications:send-digests
         {--user= : Send for one user id only — for verifying a change without mailing an account}
@@ -191,7 +189,7 @@ final class SendDailyDigests extends Command
             $tenants->forget();
         }
         // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — one mail per ACTIVE project: a paused, completed, closed or archived project is not reported on.
-        $active = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->where('status', self::ACTIVE_PROJECT)->pluck('id')->map(fn ($id): string => (string) $id)->all();
+        $active = Project::withoutGlobalScopes()->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->running()->pluck('id')->map(fn ($id): string => (string) $id)->all();
         foreach ($projectIds as $projectId) {
             if (! in_array((string) $projectId, $active, true)) {
                 continue;

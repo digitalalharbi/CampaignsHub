@@ -218,6 +218,9 @@ export function ProjectsPage() {
   const notices = PROJ_NOTICES[locale]
   const surface = PROJ_SURFACE[locale]
   const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
+  // PROJECT-LIFECYCLE-001 — archive / un-archive are their own permissions (workspace owner by default); the server enforces them.
+  const mayArchive = useAuth((s) => s.hasPermission('projects.archive'))
+  const mayRestore = useAuth((s) => s.hasPermission('projects.restore'))
 
   const projects = useQuery({
     queryKey: ['projects', { showArchived }],
@@ -560,7 +563,7 @@ export function ProjectsPage() {
                     <Copy size={13} /> {t('clone')}
                   </button>
                   {archived ? (
-                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    mayRestore && <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <RotateCcw size={13} /> {t('restore')}
                     </button>
                   ) : paused ? (
@@ -572,7 +575,7 @@ export function ProjectsPage() {
                       <Pause size={13} /> {t('pause')}
                     </button>
                   )}
-                  {!archived && (
+                  {!archived && mayArchive && (
                     <button type="button" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
                       {t('archive')}
                     </button>
