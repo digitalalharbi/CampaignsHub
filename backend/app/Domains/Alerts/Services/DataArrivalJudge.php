@@ -10,7 +10,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Integrations\Status\LinkHealth;
-use App\Domains\Integrations\Status\LiveProjectsAdapter;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -85,7 +85,7 @@ final class DataArrivalJudge
         }
 
         return $event->project_id !== null && in_array((string) $event->type, LinkHealth::TYPES, true)
-            && ! ($projectLive ?? LiveProjectsAdapter::isLive((string) $event->project_id));
+            && ! ($projectLive ?? LiveProjects::isLive((string) $event->project_id));
     }
 
     /**
@@ -99,7 +99,7 @@ final class DataArrivalJudge
     public function closeReason(AlertEvent $event, Carbon $now, ?int $settleHours = null, ?bool $projectLive = null): ?string
     {
         $tenantId = (string) $event->tenant_id;
-        if ($event->project_id !== null && ! ($projectLive ?? LiveProjectsAdapter::isLive((string) $event->project_id))) {
+        if ($event->project_id !== null && ! ($projectLive ?? LiveProjects::isLive((string) $event->project_id))) {
             return 'project_not_live';
         }
         $settle = $settleHours ?? $this->settleFor($event);

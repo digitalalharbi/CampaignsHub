@@ -28,7 +28,6 @@ use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Integrations\Status\LinkHealth;
-use App\Domains\Integrations\Status\LiveProjectsAdapter;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
@@ -39,6 +38,7 @@ use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -222,6 +222,7 @@ final class AlertEvaluator
         $previous = $this->tenants->tenantId();
 
         $this->inSweep = true;
+        $this->liveIds = [];
         try {
             foreach ($tenantIds as $tenantId) {
                 $this->tenants->setTenantId((string) $tenantId);
@@ -315,6 +316,9 @@ final class AlertEvaluator
             default => $this->unevaluated($rule),
         };
 
+        // PROJECT-LIFECYCLE-001 rule 5 (N4) — every rule type, tenant-wide or project-scoped, speaks only about LIVE projects.
+        $breaches = $this->onlyLiveProjects($rule, $breaches);
+
         // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
         $openLinks = null;
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
@@ -336,6 +340,39 @@ final class AlertEvaluator
 
         return $raised;
     }
+
+    /**
+     * PROJECT-LIFECYCLE-001 rule 5 (N4, finishing N1/N3) — the ONE place the alerts engine applies the shared live-projects
+     * scope ({@see LiveProjects}) to every rule type. A rule scoped to a project that is not live finds nothing; a TENANT-WIDE
+     * rule keeps only the findings about live projects (and the findings about no project at all — a connection's token, a
+     * lead with no project). The live ids are read once per tenant per sweep, never per rule.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @return list<array<string,mixed>>
+     */
+    private function onlyLiveProjects(AlertRule $rule, array $breaches): array
+    {
+        $live = $this->liveProjectIds((string) $rule->tenant_id);
+        if ($rule->project_id !== null && ! isset($live[(string) $rule->project_id])) {
+            return [];
+        }
+
+        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+            || isset($live[(string) $b['project_id']])));
+    }
+
+    /** @return array<string, true> the tenant's live project ids — memoised for one sweep (a single rule reads afresh) */
+    private function liveProjectIds(string $tenantId): array
+    {
+        if ($this->inSweep && isset($this->liveIds[$tenantId])) {
+            return $this->liveIds[$tenantId];
+        }
+
+        return $this->liveIds[$tenantId] = array_fill_keys(LiveProjects::ids($tenantId), true);
+    }
+
+    /** @var array<string, array<string, true>> */
+    private array $liveIds = [];
 
     /**
      * EMAIL-ALERT-RECOVERY-001 — an alert whose condition is no longer present is resolved by the sweep
@@ -384,7 +421,7 @@ final class AlertEvaluator
             $closable = $events->filter(fn (AlertEvent $e): bool => ! isset($still[$e->dedup_key]));
             // LIFECYCLE-6 — which of their projects are live, in one read, and the settle window of the rule sweeping them.
             $this->linkClose = [
-                'live' => array_flip(LiveProjectsAdapter::liveIds($closable->pluck('project_id')->filter()->map(static fn ($id): string => (string) $id)->values()->all())),
+                'live' => array_flip(LiveProjects::filter($closable->pluck('project_id')->filter()->map(static fn ($id): string => (string) $id)->values()->all())),
                 'settle' => AccountDayCoverage::settleHours((array) ($rule->threshold ?? [])),
             ];
             $this->linkHealth->prime($closable->where('entity_type', ProviderConnection::class)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->values()->all(), $now);
@@ -418,6 +455,13 @@ final class AlertEvaluator
                     $this->resolve($event, $now);
                     $event->forceFill(['context' => (array) $event->context + ['closed_reason' => $why, 'closed_at' => $now->toIso8601String()]])->save();
                 }
+
+                return;
+            }
+            // PROJECT-LIFECYCLE-001 rule 5 (N4) — an open alert of a project that is no longer live did not recover: it closes
+            // silently with the reason, never with a «رجعت الأمور طبيعية» about an archived or deleted project.
+            if ($event->project_id !== null && ! isset($this->liveProjectIds((string) $rule->tenant_id)[(string) $event->project_id])) {
+                $this->closeQuietly($event, 'project_not_live', $now);
 
                 return;
             }
@@ -930,8 +974,8 @@ final class AlertEvaluator
     private function syncOutages(AlertRule $rule, Carbon $now): array
     {
         $tenantId = (string) $rule->tenant_id;
-        // LIFECYCLE-6 — live projects only: an archived or deleted project is never an outage.
-        $projectIds = LiveProjectsAdapter::constrain(DB::table('project_integration_bindings')
+        // LIFECYCLE-6 — live projects only (N1's one scope): an archived, deleted or draft project is never an outage.
+        $projectIds = LiveProjects::constrain(DB::table('project_integration_bindings')
             ->join('projects', 'projects.id', '=', 'project_integration_bindings.project_id')
             ->where('project_integration_bindings.tenant_id', $tenantId)
             ->where('project_integration_bindings.is_active', true)
@@ -1123,7 +1167,7 @@ final class AlertEvaluator
          * types already read live projects only (`sync_failure` from live bindings, `sync_outage` from live projects).
          */
         $judged = in_array($rule->type, DataArrivalJudge::TYPES, true);
-        $live = $judged ? [] : array_flip(LiveProjectsAdapter::liveIds(array_values(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches)))));
+        $live = $judged ? [] : array_flip(LiveProjects::filter(array_values(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches)))));
         foreach ($breaches as $b) {
             $context = (array) ($b['context'] ?? []);
             if (! $judged && ($b['project_id'] ?? null) !== null && ! isset($live[(string) $b['project_id']])) {
