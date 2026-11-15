@@ -115,6 +115,17 @@ export interface DeliveryOverviewRow {
   client_id: string
   client: string
   pack: { id: string; period: { from: string; to: string }; status: 'draft' | 'approved' | 'sent'; sent_at: string | null } | null
+  /**
+   * CONS-DELIVERY-SCHEDULED — the client's ACTUAL report schedules. Optional so an older API answer still renders.
+   * `deliveries` are the ledger states of the last scheduled report, exactly as recorded.
+   */
+  scheduled?: {
+    active: number
+    next_run_at: string | null
+    last_run_at: string | null
+    last_report: { id: string; project_id: string; status: string; generated_at: string | null; period: { from: string | null; to: string | null } } | null
+    deliveries: Record<string, number>
+  }
   report: { status: string; undecided_recommendations: number } | null
   evidence: number | null
   last_viewed_at: string | null
