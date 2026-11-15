@@ -101,7 +101,8 @@ final class ConfirmationRequests
     /** The recipient pressed «confirm». @return string|null the tenant, or null for an unknown / used token */
     public function confirm(string $token): ?string
     {
-        $row = DB::table('notification_external_recipients')->where('confirmation_token_hash', hash('sha256', $token))->where('status', 'pending')->first();
+        // Pending (first confirmation) or active with new projects awaiting a fresh confirmation (subscriptions added later).
+        $row = DB::table('notification_external_recipients')->where('confirmation_token_hash', hash('sha256', $token))->whereIn('status', ['pending', 'active'])->first();
         if ($row === null) {
             return null;
         }
@@ -169,11 +170,17 @@ final class ConfirmationRequests
         return $notices;
     }
 
-    /** Pending recipients that never had a request, with at least one live project on a pending subscription. @return Collection<int, object> */
+    /**
+     * Pending recipients that never had a request — or confirmed-by-email recipients with a NEW pending subscription and no
+     * open request (projects added after their confirmation) — with at least one live project on a pending subscription.
+     *
+     * @return Collection<int, \stdClass>
+     */
     private function eligible(string $tenantId): Collection
     {
-        return DB::table('notification_external_recipients as r')->where('r.tenant_id', $tenantId)->where('r.status', 'pending')
-            ->whereNull('r.confirmation_sent_at')
+        return DB::table('notification_external_recipients as r')->where('r.tenant_id', $tenantId)
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('r.status', 'pending')->whereNull('r.confirmation_sent_at'))
+                ->orWhere(fn ($q) => $q->where('r.status', 'active')->where('r.consent', 'double_opt_in')->whereNull('r.confirmation_token_hash')))
             ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('notification_subscriptions as s')
                 ->join('notification_subscription_projects as p', 'p.subscription_id', '=', 's.id')
                 ->join('projects', 'projects.id', '=', 'p.project_id')
