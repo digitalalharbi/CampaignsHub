@@ -11,7 +11,7 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\PendingProjectLink;
 use App\Domains\Integrations\Services\AccountHealth;
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
@@ -40,7 +40,7 @@ use Illuminate\Support\Carbon;
  *
  * The rule lives where it always did (row currency → account currency → ask the provider once → else
  * withhold; reporting currency USD). This endpoint only says which case an account is in, by asking the same
- * {@see CurrencyConverter} the metrics pipeline asks:
+ * {@see FxEngine} the metrics pipeline asks:
  *
  *   `reporting`        the account already bills in the reporting currency
  *   `converted`        another currency with a stored rate — figures are converted, the original is kept
@@ -59,7 +59,7 @@ final class ProjectLinkController extends Controller
         private readonly ProjectContext $project,
         private readonly AccountHealth $health,
         private readonly ReportingCurrency $reporting,
-        private readonly CurrencyConverter $rates,
+        private readonly FxEngine $rates,
     ) {}
 
     public function __invoke(Request $request, string $project, string $connection): JsonResponse
@@ -140,7 +140,7 @@ final class ProjectLinkController extends Controller
             return ['state' => 'reporting', 'rate' => 1.0, 'rate_date' => null];
         }
 
-        $rate = $this->rates->resolve($currency, $reporting, Carbon::now());
+        $rate = $this->rates->rate($currency, $reporting, Carbon::now());
 
         return $rate === null
             ? ['state' => 'withheld_no_rate', 'rate' => null, 'rate_date' => null]

@@ -50,6 +50,8 @@ final class RuleInput
             'schedule.timezone' => ['nullable', 'timezone'],
             'cooldown_hours' => ['required', 'integer', 'min:1', 'max:720'],
             'min_spend' => ['nullable', 'numeric', 'min:0'],
+            // FX-APPLY-001 — the currency the rule's money limits are stated in; null = the workspace's display currency.
+            'currency' => ['nullable', 'string', 'regex:/^[A-Za-z]{3}$/'],
         ])->validate();
         foreach ($data['conditions'] as $i => $c) {
             $isStatus = RuleCatalog::METRICS[$c['metric']][2] === 'status';
@@ -58,6 +60,10 @@ final class RuleInput
         if (in_array($data['action']['type'], ['budget_increase', 'budget_decrease'], true)) {
             abort_if(! isset($data['action']['percent']), 422, 'A budget change needs a percentage.');
             abort_if($data['level'] === 'ad', 422, 'An ad has no budget of its own.');
+        }
+
+        if (isset($data['currency'])) {
+            $data['currency'] = strtoupper((string) $data['currency']);
         }
 
         return $data;

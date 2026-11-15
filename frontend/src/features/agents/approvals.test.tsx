@@ -43,13 +43,16 @@ describe('the approvals queue', () => {
     expect(row).toHaveTextContent('ميزانية يومية 39.6 $ (36 €)')
   })
 
-  it('shows the platform figure alone, and says so, when no rate exists to convert it', async () => {
+  // FX-APPLY-001 — a withheld figure is «—» + ⚠ + «بانتظار سعر صرف (EUR)», never the raw «36 €» standing as the budget.
+  it('shows the figure as withheld, never the raw platform number, when no rate exists to convert it', async () => {
     const eur = proposal({ payload: { daily_budget: 36 }, currency: 'EUR', display: { currency: 'USD', daily_budget: null, current_daily_budget: null, converted: false, source_currency: 'EUR', reason: 'no_rate' } })
     vi.mocked(listProposals).mockResolvedValue({ proposals: [eur], limits: LIMITS })
 
     renderWithProviders(<ApprovalsPage />, { locale: 'ar' })
 
-    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('ميزانية يومية 36 € — بدون تحويل: ما فيه سعر صرف')
+    const row = await screen.findByTestId('proposal-p1')
+    expect(row).toHaveTextContent('ميزانية يومية — ⚠ بانتظار سعر صرف (EUR)')
+    expect(row).not.toHaveTextContent('36 €')
   })
 
   it('shows the request, its reason and the standing limits, and asks the server to approve', async () => {

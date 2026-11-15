@@ -9,11 +9,11 @@ use App\Domains\Billing\Models\ClientBillingProfile;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Support\IncompleteFeeBasis;
 use App\Domains\Billing\Support\TaxTreatment;
-use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Funding\Services\WalletTopUp;
+use App\Domains\Metrics\Fx\FxEngine;
+use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\OfficialPegs;
-use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
@@ -45,7 +45,7 @@ final class ClientInvoiceService
 {
     public function __construct(
         private readonly MetricsAggregator $metrics,
-        private readonly CurrencyConverter $rates,
+        private readonly FxEngine $rates,
         private readonly BillingService $billing,
         private readonly AuditLogger $audit,
     ) {}
@@ -155,7 +155,7 @@ final class ClientInvoiceService
             return $amount;
         }
 
-        $resolved = $this->rates->resolve($from, $to, $date);
+        $resolved = $this->rates->rate($from, $to, $date);
 
         if ($resolved === null && ($peg = OfficialPegs::rate($from, $to)) !== null) {
             // A legal peg needs no feed; it is recorded once, attributed, exactly as `fx:rates` records it.

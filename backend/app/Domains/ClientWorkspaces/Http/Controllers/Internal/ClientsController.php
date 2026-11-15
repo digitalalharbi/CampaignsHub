@@ -234,6 +234,8 @@ final class ClientsController
             'open_requests' => $stats['open_requests'] ?? 0,
             'alerts' => $stats['alerts'] ?? 0,
             'spend' => $stats['spend'] ?? null,
+            // FX-APPLY-001 — the 30-day spend in the display currency through FxEngine; withheld when any part has no rate.
+            'spend_fx' => $stats['spend_fx'] ?? null,
             'spend_currency_mode' => $stats['spend_currency_mode'] ?? 'none',
             'currency' => $stats['currency'] ?? null,
             'data_sources' => $stats['data_sources'] ?? [],

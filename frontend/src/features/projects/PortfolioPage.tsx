@@ -15,7 +15,7 @@ import { CoverageMatrix, RankedBars, Sparkline, StateDistribution } from '@/comp
 import { platformColor } from '@/features/analytics/components'
 import { usePortalBase, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
-import { currencyMark, withMark } from '@/lib/money/mark'
+import { withMark } from '@/lib/money/mark'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /**
@@ -372,8 +372,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-3" data-testid="portfolio-spend-breakdown">
                   {data.spend.by_currency.map((row) => (
                     <span key={row.currency} data-testid={`portfolio-spend-${row.currency}`} className="tnum text-xs">
-                      <span className="font-extrabold text-text-primary">{row.spend.toLocaleString('en-US')}</span>{' '}
-                      <span className="text-text-secondary">{currencyMark(row.currency)}</span>
+                      <span className="font-extrabold text-text-primary">{withMark(row.spend.toLocaleString('en-US'), row.currency)}</span>
                       <span className="ms-1.5 text-text-muted">· {row.projects.toLocaleString('en-US')} {t.inCurrency}</span>
                     </span>
                   ))}

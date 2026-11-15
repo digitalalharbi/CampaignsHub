@@ -100,7 +100,8 @@ function metricValue(metric: string, value: number | null, currency: string | nu
   if (metric === 'ctr') return percent(value, 2)
   if (metric === 'roas') return ratio(value)
   if (metric === 'cpm' || metric === 'cpa' || metric === 'spend' || metric === 'revenue') {
-    return money(value, currency ?? 'SAR')
+    // FX-APPLY-001 — the path's own reporting currency or none; never a guessed «SAR» on a USD figure.
+    return money(value, currency)
   }
   return compact(value)
 }

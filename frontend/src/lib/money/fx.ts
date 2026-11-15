@@ -92,3 +92,79 @@ export function formatConversion(c: FxConversion, ar: boolean, digits = 2): Conv
 
   return { text: withMark(fixed(c.converted_amount, digits), c.currency), withheld: false, stale: c.stale, link: null, basis }
 }
+
+/**
+ * FX-APPLY-001 (builder G) — the audit line the Owner specified for a converted figure's tooltip:
+ * «253.00 EUR × 1.12 (2026-11-09، يدوي: a@x) = 283.36 USD». ISO codes on purpose: it states the arithmetic, not a price.
+ * Null for a withheld figure (there is no arithmetic to state) and for a same-currency one (nothing was converted).
+ */
+export function conversionTooltip(c: FxConversion, ar: boolean, digits = 2): string | null {
+  if (c.withheld || c.converted_amount === null || c.rate === null) return null
+  if (c.original_currency === c.currency) return null
+  const rate = c.rate.toPrecision(6).replace(/\.?0+$/, '')
+  const who = c.kind === 'manual' && c.recorded_by ? `: ${c.recorded_by}` : ''
+  const how = [c.rate_date, c.kind ? `${rateKindLabel(c.kind, ar)}${who}` : null].filter(Boolean).join(ar ? '، ' : ', ')
+  const from = [fixed(c.original_amount, digits), c.original_currency].join(' ')
+  const to = [fixed(c.converted_amount, digits), c.currency].join(' ')
+  const staleNote = c.stale ? (ar ? ' — ⚠ سعر أقدم من 7 أيام' : ' — ⚠ rate older than 7 days') : ''
+  return `${from} × ${rate}${how ? ` (${how})` : ''} = ${to}${staleNote}`
+}
+
+/** True when this figure was converted from another currency (the «محوّل» icon). */
+export const isConverted = (c: FxConversion | null | undefined): boolean =>
+  !!c && !c.withheld && c.converted_amount !== null && c.original_currency !== c.currency
+
+/** The original figure in its own currency, through the one mark module («253.00 €»). */
+export function formatOriginal(c: FxConversion, digits = 2): string {
+  return withMark(fixed(c.original_amount, digits), c.original_currency)
+}
+
+/**
+ * FX-APPLY-001 — a TOTAL of several amounts, each converted by the backend (`FxDisplay::total`). Withheld when any part had no
+ * rate (`converted_amount: null`): never the smaller sum of what did convert, never zero.
+ */
+export type FxTotal = {
+  currency: string
+  converted_amount: number | null
+  withheld: boolean
+  withheld_parts?: number
+  withheld_currencies?: string[]
+  /** a part was in another currency than `currency` — «يشمل عملات محوّلة» */
+  includes_converted: boolean
+  currencies: string[]
+  stale: boolean
+  pending_label: string | null
+  rates_page: string | null
+  via: 'fx.convert' | 'fx.guard'
+}
+
+/** The words for a total that adds converted currencies. */
+export const INCLUDES_CONVERTED = { ar: 'يشمل عملات محوّلة', en: 'Includes converted currencies' } as const
+
+/** The ONE renderer of a converted total. */
+export function formatFxTotal(t: FxTotal, ar: boolean, digits = 2): ConversionText & { includesConverted: boolean } {
+  if (t.withheld || t.converted_amount === null) {
+    return { text: t.pending_label ?? pendingRateLabel(t.withheld_currencies?.[0] ?? null, ar), withheld: true, stale: false, link: t.rates_page ?? RATES_PAGE, basis: null, includesConverted: t.includes_converted }
+  }
+  return {
+    text: withMark(fixed(t.converted_amount, digits), t.currency),
+    withheld: false,
+    stale: t.stale,
+    link: null,
+    basis: t.includes_converted ? [ar ? INCLUDES_CONVERTED.ar : INCLUDES_CONVERTED.en, t.currencies.join(' · ')].join(': ') : null,
+    includesConverted: t.includes_converted,
+  }
+}
+
+/**
+ * FX-APPLY-001 — what the backend says the money in a metrics scope was converted FROM (`MetricsAggregator::fxCoverage`).
+ */
+export type FxCoverage = {
+  reporting_currency: string
+  includes_converted: boolean
+  currencies: string[]
+  stale: boolean
+  withheld_rows: number
+  withheld_currencies: string[]
+  rates_page: string
+}

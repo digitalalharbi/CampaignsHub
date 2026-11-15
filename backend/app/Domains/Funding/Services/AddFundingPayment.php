@@ -9,7 +9,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
@@ -36,7 +36,7 @@ final class AddFundingPayment
 {
     public function __construct(
         private readonly ClientAccess $access,
-        private readonly CurrencyConverter $fx,
+        private readonly FxEngine $fx,
         private readonly FundingBalance $balance,
         private readonly FundingSpendRefresher $refresher,
         private readonly AuditLogger $audit,
@@ -70,7 +70,7 @@ final class AddFundingPayment
             throw ValidationException::withMessages(['project_id' => [__('validation.exists', ['attribute' => 'project'])]]);
         }
 
-        $rate = $this->fx->resolve($currency, 'SAR', $paidOn);
+        $rate = $this->fx->rate($currency, 'SAR', $paidOn);
         if ($rate === null) {
             throw ValidationException::withMessages(['currency' => [__('funding.no_rate', ['currency' => $currency])]]);
         }

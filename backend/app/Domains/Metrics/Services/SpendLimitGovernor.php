@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Services;
 
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Funding\Services\SourceFreshness;
+use App\Domains\Funding\Support\BudgetFx;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Enums\SpendLimitScope;
@@ -54,7 +55,7 @@ final class SpendLimitGovernor
 
     public function __construct(
         private readonly MetricsAggregator $metrics,
-        private readonly CurrencyConverter $fx,
+        private readonly BudgetFx $fx,
         private readonly SourceFreshness $freshness,
     ) {}
 
@@ -98,7 +99,7 @@ final class SpendLimitGovernor
          */
         $conversion = null;
         if ($consumed !== null && is_string($currency) && strtoupper($currency) !== strtoupper((string) $limit->currency)) {
-            $r = $this->fx->resolveForWorkspace((string) $limit->tenant_id, $currency, (string) $limit->currency, $today);
+            $r = $this->fx->rate($currency, (string) $limit->currency, $today);
             if ($r !== null) {
                 $conversion = ['from' => strtoupper($currency), 'to' => strtoupper((string) $limit->currency), 'rate' => round($r['rate'], 6), 'source' => $r['source'], 'kind' => $r['kind'], 'rate_date' => $r['rate_date'], 'stale' => $r['stale']];
                 $consumed *= $r['rate'];

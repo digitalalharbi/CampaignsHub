@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Funding\Support\BudgetFx;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
-use App\Domains\Metrics\Services\CurrencyConverter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  */
 final class FundingSpendRefresher
 {
-    public function __construct(private readonly CurrencyConverter $fx) {}
+    public function __construct(private readonly BudgetFx $fx) {}
 
     public function refresh(ProjectFunding $funding): int
     {
@@ -72,7 +72,7 @@ final class FundingSpendRefresher
 
             foreach ($group as $part) {
                 $cur = $part->currency !== null ? strtoupper((string) $part->currency) : null;
-                $rate = $cur === null ? null : $this->fx->resolveForWorkspace((string) $funding->tenant_id, $cur, 'SAR', $date);
+                $rate = $cur === null ? null : $this->fx->rate($cur, 'SAR', $date);
                 if ($rate === null) {
                     $missing = true;
 

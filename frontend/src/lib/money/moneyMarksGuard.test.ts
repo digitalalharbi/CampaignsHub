@@ -74,6 +74,33 @@ describe('money marks', () => {
 const FX_MARK = /\$\{[^}]+\}\s?(?:ر\.س|€|\$(?![{\w]))|(?:^|[^\\\w$])\$\$\{|(?:€|ر\.س)\s?\$\{|\}\s*(?:ر\.س|€)(?=\s*<)/
 const FX_GUESS = /\b(?:money|moneyExact|withMark|formatConversion)\((?:[^()]|\([^()]*\))*?,\s*[^,()]*\?\?\s*'(?:USD|SAR|EUR)'\s*\)|\bcurrency=\{[^}]*\?\?\s*'(?:USD|SAR|EUR)'\}/
 const FX_LIT = /\b(?:money|moneyExact|withMark)\(\s*((?:[^,()]|\([^()]*\))+?)\s*,\s*'(USD|SAR|EUR)'\s*\)/g
+/*
+ * FX-APPLY-001 (builder G) — two more shapes, so the guard catches the defect one step before the formatter:
+ *  - MARKFN   — `currencyMark()` outside `lib/money/` (and the funding formatter that re-exports it): gluing a mark by hand next
+ *               to a figure is how «253» met «€». A figure goes through `withMark` / `formatConversion`; a LABEL unit through
+ *               `labelUnit()`.
+ *  - FALLBACK — a currency variable given a GUESSED default (`const cur = x.budget_currency || 'SAR'`, `currency ?? 'USD'`): the
+ *               «253 $» shape before it reaches a formatter. Input defaults (a form pre-filled with SAR) are not display and are
+ *               named one by one in FORM_DEFAULTS below — visible in review, never a pattern.
+ */
+const FX_MARKFN = /\bcurrencyMark\(/
+const FX_FALLBACK = /\b\w*(?:[cC]urrency|\bcur)\w*\s*[:=]\s*[^;\n]*?(?:\?\?|\|\|)\s*'(?:USD|SAR|EUR)'/
+
+/** The ONE file outside lib/money that may call currencyMark: the funding formatter (`Money`, `formatMoney`) re-exports it. */
+const MARKFN_HOME = ['/src/features/funding/money.tsx']
+
+/**
+ * Visible, reviewed exceptions — each is NOT a figure on screen:
+ *  - MARKFN: a unit label beside an INPUT the person types into (there is no figure yet to format);
+ *  - FALLBACK: a FORM pre-filled with a currency the person can change (an input default, not a reading of money).
+ */
+const NOT_A_FIGURE: Array<{ file: string; text: string; rule: 'MARKFN' | 'FALLBACK'; why: string }> = [
+  { file: '/src/features/funding/RenewAllDialog.tsx', text: '{currencyMark(currency)}</span>', rule: 'MARKFN', why: 'unit label beside the amount input' },
+  { file: '/src/features/clients/billing/TabClientInvoicing.tsx', text: "currency: String(f.currency ?? 'SAR')", rule: 'FALLBACK', why: 'billing-profile form default (CampaignsHub own invoicing)' },
+  { file: '/src/features/campaigns/CampaignFormModal.tsx', text: "budget_currency: campaign?.budget_currency ?? 'SAR'", rule: 'FALLBACK', why: 'campaign form default' },
+  { file: '/src/features/budget/spendLimitsApi.ts', text: "project_currency: meta?.project_currency ?? 'SAR'", rule: 'FALLBACK', why: 'suggested currency for a NEW limit form' },
+  { file: '/src/features/budget/SpendLimitsPage.tsx', text: "const suggestedCurrency = q.data?.project_currency ?? limits[0]?.currency ?? 'SAR'", rule: 'FALLBACK', why: 'new-limit form default' },
+]
 
 /** What the rules find on one line. */
 function fxFindings(line: string): string[] {
@@ -87,33 +114,30 @@ function fxFindings(line: string): string[] {
     // `(x) => money(x, 'USD')` in a column whose value is `revenue_usd`: the unit is stated by the field the backend converted.
     if (!new RegExp(`(^|_)${unit}(_|\\b)`, 'i').test(m[1]) && !new RegExp(`_${unit}\\b`, 'i').test(line)) out.push('LIT')
   }
+  if (FX_MARKFN.test(line) && !/^\s*(?:import|export)\b/.test(line)) out.push('MARKFN')
+  if (FX_FALLBACK.test(line) && !out.includes('GUESS')) out.push('FALLBACK')
   return out
 }
 
 /**
- * KNOWN BYPASSES — every one is a real defect of the «253 $» kind, listed so the build stays green while builder G moves each
- * path onto the conversion contract (docs/currency-engine/F-notes.md). Nothing is allowlisted silently: each entry names its
- * file, the exact text and the rule, and the ratchet test below FAILS when an entry no longer matches (fixed → delete it).
- * Adding an entry is a visible decision in review.
+ * KNOWN BYPASSES — emptied by builder G (FX-APPLY-001): the nine «253 $»-shaped defects F listed are fixed on the conversion
+ * contract (docs/currency-engine/G-notes.md). The list stays so a NEW bypass has to be added here in review, visibly; the ratchet
+ * below fails when an entry no longer matches. It is meant to stay empty.
  */
-const KNOWN_BYPASSES: Array<{ file: string; text: string; rule: 'MARK' | 'GUESS' | 'LIT'; owner: 'G' }> = [
-  { file: '/src/features/analytics/AnalyticsPage.tsx', text: "currency={currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/analytics/OverviewCompositions.tsx', text: "currency={d.reportingCurrency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/analytics/PathAnalysis.tsx', text: "money(value, currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/campaigns/CampaignComparison.tsx', text: "money(costs[i], r.budget_currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/campaigns/CampaignComparison.tsx', text: "money(r.total_budget, r.budget_currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/campaigns/CampaignStructureTab.tsx', text: "money(s.daily_budget, s.currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/clients/TabAnalytics.tsx', text: "currency={a.currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/content/CreativesPage.tsx', text: "currency={data?.currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
-  { file: '/src/features/funding/labels.ts', text: '`أضف ${n} ر.س`', rule: 'MARK', owner: 'G' },
-]
+const KNOWN_BYPASSES: Array<{ file: string; text: string; rule: 'MARK' | 'GUESS' | 'LIT' | 'MARKFN' | 'FALLBACK'; owner: string }> = []
 
 describe('FX-ENGINE-001 — no currency mark on a number outside the central formatter', () => {
   const findings = (): Array<{ file: string; line: string; rule: string }> => {
     const out: Array<{ file: string; line: string; rule: string }> = []
     for (const [path, src] of Object.entries(sources)) {
       if (/\.test\.tsx?$/.test(path) || path.startsWith('/src/lib/money/')) continue
-      for (const line of src.split('\n')) for (const rule of fxFindings(line)) out.push({ file: path, line: line.trim(), rule })
+      for (const line of src.split('\n')) {
+        for (const rule of fxFindings(line)) {
+          if (rule === 'MARKFN' && MARKFN_HOME.includes(path)) continue
+          if (NOT_A_FIGURE.some((n) => n.file === path && n.rule === rule && line.includes(n.text))) continue
+          out.push({ file: path, line: line.trim(), rule })
+        }
+      }
     }
     return out
   }
@@ -129,6 +153,17 @@ describe('FX-ENGINE-001 — no currency mark on a number outside the central for
     expect(fxFindings("render: (r) => c(r.revenue_usd, (x) => money(x, 'USD'))")).toEqual([])
     expect(fxFindings('money(row.spend, row.currency)')).toEqual([])
     expect(fxFindings('withMark(fixed(c.converted_amount, 2), c.currency)')).toEqual([])
+    // FX-APPLY-001 — a hand-glued mark and a guessed default currency
+    expect(fxFindings('const own = `${raw} ${currencyMark(p.currency)}`')).toContain('MARKFN')
+    expect(fxFindings("const cur = campaign.budget_currency || 'SAR'")).toContain('FALLBACK')
+    expect(fxFindings("const currency = vm.currency ?? 'USD'")).toContain('FALLBACK')
+    expect(fxFindings("import { currencyMark } from '@/lib/money/mark'")).toEqual([])
+    expect(fxFindings('const cur = campaign.budget_currency || null')).toEqual([])
+  })
+
+  it('every NOT_A_FIGURE exception still exists — a removed one must leave the list (ratchet)', () => {
+    const stale = NOT_A_FIGURE.filter((n) => !(sources[n.file] ?? '').split('\n').some((l) => l.includes(n.text) && fxFindings(l).includes(n.rule)))
+    expect(stale.map((n) => `${n.file} [${n.rule}] ${n.text}`)).toEqual([])
   })
 
   it('no screen bypasses the central formatter beyond the listed, owned defects', () => {

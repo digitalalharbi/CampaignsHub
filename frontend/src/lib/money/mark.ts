@@ -18,3 +18,10 @@ export const NO_RATE_LABEL = { ar: 'بدون سعر صرف', en: 'No FX rate' } 
 export function withMark(figure: string, currency: string | null | undefined): string {
   return currency ? `${figure} ${currencyMark(currency)}` : figure
 }
+
+/**
+ * FX-APPLY-001 — the unit beside a LABEL («الإنفاق $»), for a header whose figures below carry no mark of their own. Never glue
+ * it to a figure: a figure goes through `withMark()` / `formatConversion()`. Outside `lib/money/` `currencyMark()` is refused by
+ * `moneyMarksGuard.test.ts`, so a label unit comes from here.
+ */
+export const labelUnit = (currency: string | null | undefined): string => (currency ? ` ${currencyMark(currency)}` : '')

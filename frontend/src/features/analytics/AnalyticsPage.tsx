@@ -3128,7 +3128,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
                     creativeId={openCreative.id}
                     window={{ from: range.from, to: range.to }}
                     locale={ar ? 'ar' : 'en'}
-                    currency={currency ?? 'SAR'}
+                    currency={currency ?? ''}
                     height={180}
                   />
                 </>

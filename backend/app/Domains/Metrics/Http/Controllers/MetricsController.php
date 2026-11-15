@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
@@ -103,6 +104,8 @@ final class MetricsController extends Controller
             'current' => $current,
             'previous' => $previous,
             'delta' => $deltas,
+            // FX-APPLY-001 — what these totals were converted from: «يشمل عملات محوّلة», ⚠ stale, withheld rows and their currency.
+            'fx' => $this->scoped($request)->fxCoverage($from, $to),
             /*
              * UX-METRICS-001 — which of those figures are measurements and which are absences.
              *
@@ -396,8 +399,17 @@ final class MetricsController extends Controller
         $rows = $this->scoped($request)->compare($ids, $from, $to);
         $objectives = array_values(array_unique(array_filter(array_column($rows, 'objective'))));
 
+        // FX-APPLY-001 — each plan (budget) in the reader's display currency through FxEngine; the costs are in `currency`.
+        $fx = FxDisplay::forRequest();
+        $display = $fx->currencyFor((string) app(TenantContext::class)->tenantId());
+        $rows = array_map(static fn (array $r): array => $r + [
+            'budget_fx' => $r['total_budget'] === null ? null : $fx->one((float) $r['total_budget'], $r['budget_currency'] ?? null, Carbon::today(), $display, 'metrics.compare.budget'),
+        ], $rows);
+
         return ApiResponse::success([
             'campaigns' => $rows,
+            'currency' => $this->rangeCurrency($from, $to),
+            'fx' => $this->scoped($request)->fxCoverage($from, $to),
             // The UI shows a warning instead of a blended total when this is true.
             'mixed_objectives' => count($objectives) > 1,
             'objectives' => $objectives,

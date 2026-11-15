@@ -293,7 +293,7 @@ final class AutomationRulesController extends Controller
         return [
             'id' => (string) $r->getKey(), 'name' => $r->name, 'enabled' => $r->enabled, 'mode' => $r->mode, 'level' => $r->level,
             'scope' => $r->scope ?? (object) [], 'logic' => $r->logic, 'conditions' => $r->conditions, 'action' => $r->action, 'schedule' => $r->schedule,
-            'cooldown_hours' => $r->cooldown_hours, 'min_spend' => $r->min_spend, 'last_run_at' => $r->last_run_at?->toIso8601String(),
+            'cooldown_hours' => $r->cooldown_hours, 'min_spend' => $r->min_spend, 'currency' => $r->currency, 'last_run_at' => $r->last_run_at?->toIso8601String(),
             'next_run_at' => $r->next_run_at?->toIso8601String(), 'last_result' => $r->last_result,
             // AUTO-RULES-AGENTS-009 — an agent's draft says so until a person deletes it.
             'origin' => $r->origin ?? 'person', 'drafted_by_agent' => $r->drafted_by_agent,
@@ -303,7 +303,7 @@ final class AutomationRulesController extends Controller
     /** @return array<string, mixed> */
     private function auditShape(AutomationRule $r): array
     {
-        return array_intersect_key($this->shape($r), array_flip(['name', 'enabled', 'mode', 'level', 'scope', 'logic', 'conditions', 'action', 'schedule', 'cooldown_hours', 'min_spend']));
+        return array_intersect_key($this->shape($r), array_flip(['name', 'enabled', 'mode', 'level', 'scope', 'logic', 'conditions', 'action', 'schedule', 'cooldown_hours', 'min_spend', 'currency']));
     }
 
     /** @return array<string, mixed> */

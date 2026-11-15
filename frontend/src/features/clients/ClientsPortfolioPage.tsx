@@ -1,3 +1,4 @@
+import { FxTotalAmount } from '@/components/money/FxAmount'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -37,6 +38,13 @@ function spendCell(c: ClientCard, mixedLabel: string): string {
   if (c.spend_currency_mode === 'mixed') return mixedLabel
   if (c.spend === null) return '—'
   return withMark(c.spend.toLocaleString('en-US'), c.currency)
+}
+
+/** Spend cell: the engine's converted total when the server sent one, else the legacy per-currency text. */
+function SpendValue({ c, t }: { c: ClientCard; t: ReturnType<typeof useT> }) {
+  const lang = useUi((s) => s.locale)
+  if (c.spend_fx) return <FxTotalAmount t={c.spend_fx} ar={lang === 'ar'} testId="client-spend-fx" />
+  return <>{spendCell(c, t('cc_currency_mixed'))}</>
 }
 
 /** A card in the grid is this tall (px) and the grid's gap is 10 — read by `useFitRows`, so the count cannot drift from the CSS. */
@@ -196,7 +204,7 @@ export function ClientsPortfolioPage() {
     { key: 'projects', header: t('col_projects'), width: '9%', align: 'center', cell: (c) => <span className="tnum">{c.projects}</span> },
     { key: 'campaigns', header: t('col_active_campaigns'), width: '11%', align: 'center', cell: (c) => <span className="tnum">{c.active_campaigns}</span> },
     { key: 'requests', header: t('col_open_requests'), width: '11%', align: 'center', cell: (c) => <span className="tnum">{c.open_requests}</span> },
-    { key: 'spend', header: t('cc_col_spend'), width: '17%', align: 'end', cell: (c) => <span className="tnum" dir="ltr">{spendCell(c, t('cc_currency_mixed'))}</span> },
+    { key: 'spend', header: t('cc_col_spend'), width: '17%', align: 'end', cell: (c) => <span className="tnum" dir="ltr"><SpendValue c={c} t={t} /></span> },
     {
       key: 'more',
       header: '',
@@ -370,7 +378,7 @@ function ClientDetail({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT
     [t('col_active_campaigns'), <span key="c" className="tnum">{c.active_campaigns}</span>],
     [t('col_open_requests'), <span key="r" className="tnum">{c.open_requests}</span>],
     [t('cc_col_alerts'), <span key="a" className="tnum">{c.alerts > 0 ? c.alerts : '—'}</span>],
-    [t('cc_col_spend'), <span key="sp" className="tnum" dir="ltr">{spendCell(c, t('cc_currency_mixed'))}</span>],
+    [t('cc_col_spend'), <span key="sp" className="tnum" dir="ltr"><SpendValue c={c} t={t} /></span>],
     [t('cc_col_last_sync'), <span key="l" className="tnum" dir="ltr">{fmtDate(c.last_sync_at)}</span>],
   ]
 
@@ -431,7 +439,7 @@ function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof us
           <Stat icon={Inbox} value={c.open_requests} label={t('col_open_requests')} />
         </div>
         <span title={t('cc_col_spend')} className="tnum truncate text-sm font-semibold text-text-secondary" dir="ltr">
-          {spendCell(c, t('cc_currency_mixed'))}
+          <SpendValue c={c} t={t} />
         </span>
       </div>
       <div className="flex items-center justify-between gap-2 text-xs text-text-muted">

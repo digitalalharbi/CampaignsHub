@@ -238,7 +238,8 @@ export function UnifiedCampaignOverview({
   lang?: 'ar' | 'en'
 }) {
   const w = OVERVIEW_COPY[lang]
-  const currency = vm.currency ?? 'SAR'
+  // FX-APPLY-001 — never a guessed currency: no currency → bare figure.
+  const currency = vm.currency ?? null
   const c = palette(variant)
   const isMarketing = variant === 'marketing'
   const lg = !compact // dashboard = larger, more readable typography; marketing preview stays compact
