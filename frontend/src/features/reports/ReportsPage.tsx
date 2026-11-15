@@ -48,7 +48,9 @@ import type { CreatedShare, GenericNameKind, ReportDetail, ReportEditorState, Re
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
+import { DateRangeField } from '@/components/ui/DateRangeField'
 import { DateField } from '@/components/ui/DateField'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Skeleton } from '@/components/ui/States'
 import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
 import { exportFailureCopy, exportStaleCopy } from './exportFailureCopy'
@@ -92,12 +94,6 @@ const STATUS_LABEL: Record<string, { ar: string; en: string }> = {
   draft: { ar: 'مسودة', en: 'Draft' },
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const daysAgo = (n: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
 
 /**
  * The reader's language (APP-100).
@@ -1257,8 +1253,10 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
    * operator who skips this step gets exactly what they used to.
    */
   const [scope, setScope] = useState<ReportScopeShape>(start?.scope ?? {})
-  const [from, setFrom] = useState(start?.period_start ?? daysAgo(29))
-  const [to, setTo] = useState(start?.period_end ?? today())
+  // DATE-RANGE-001 — a new report starts on the system's period (ending yesterday), not on «30 days to today».
+  const sharedPeriod = usePeriod().range
+  const [from, setFrom] = useState(start?.period_start ?? sharedPeriod.from)
+  const [to, setTo] = useState(start?.period_end ?? sharedPeriod.to)
   // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so
   // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
   const types = useTaxonomyOptions('report.type')
@@ -1662,9 +1660,8 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
           clearable={false}
         />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={ar ? 'من' : 'From'} htmlFor="rb-from"><DateField id="rb-from" value={from} onChange={setFrom} /></Field>
-          <Field label={ar ? 'إلى' : 'To'} htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>
+        <div className="grid gap-3">
+          <Field label={ar ? 'الفترة' : 'Period'} htmlFor="rb-from"><DateRangeField id="rb-from" testId="report-period" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t) }} /></Field>
         </div>
         <div className="border-t border-border pt-4">
           {/*
