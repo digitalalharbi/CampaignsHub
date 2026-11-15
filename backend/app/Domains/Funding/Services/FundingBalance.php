@@ -144,7 +144,8 @@ final class FundingBalance
             $remaining < 0 => 'over',
             // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
             $withoutRate > 0 => 'incomplete',
-            $remaining < (float) $funding->alert_floor => 'low',
+            // Nothing spent is never «low»: a small budget under the alert floor has lost nothing yet.
+            $spent > 0 && $remaining < (float) $funding->alert_floor => 'low',
             default => 'ok',
         };
 
