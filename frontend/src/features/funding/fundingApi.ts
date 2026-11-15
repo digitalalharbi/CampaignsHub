@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
+import { api, ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
 
 /**
  * FIN-LOOP-001 — a project's approved budget, read from the endpoints that compute it.
@@ -254,23 +254,26 @@ export function useFinancialDisclaimer() {
   })
 }
 
-/** BUDGET-FX-DEFAULT-001 — the workspace's default USD→SAR rate, used where no dated rate exists. */
-export interface FundingRate { usd_sar: number; custom: boolean; peg: number; can_manage: boolean }
+/**
+ * FX-ENGINE-001 — the platform's USD→SAR rate as a workspace reads it. Managed only at /admin/settings/currency-rates:
+ * `can_manage` is always false here, and the old PUT answers 410.
+ */
+export interface FundingRate {
+  usd_sar: number | null
+  custom: false
+  peg: number
+  can_manage: false
+  managed_by: 'platform'
+  rates_page: string
+  kind: 'manual' | 'pegged' | 'automatic' | 'cross' | 'identity' | null
+  source: string | null
+  rate_date: string | null
+  stale: boolean
+  withheld: boolean
+}
 
 export function useFundingRate() {
   return useQuery({ queryKey: ['funding', 'rate'], retry: 1, queryFn: () => getData<FundingRate>('/funding/rate') })
-}
-
-export function useSetFundingRate() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (usdSar: number) => {
-      await ensureCsrfCookie()
-      return putData<FundingRate>('/funding/rate', { usd_sar: usdSar })
-    },
-    // A new rate re-reads every budget and every limit of the workspace, so all of them are refetched.
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['funding'] }); void qc.invalidateQueries({ queryKey: ['spend-limits'] }) },
-  })
 }
 
 /** BUDGET-FRESHNESS-001 — a platform behind this figure failed to sync, or its data is older than 2 hours. */

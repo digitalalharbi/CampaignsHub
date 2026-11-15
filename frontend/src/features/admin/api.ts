@@ -1,4 +1,5 @@
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
+import type { FxConversion } from '@/lib/money/fx'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -1329,24 +1330,115 @@ export interface StoredRate {
   rate: number
   rate_date: string
   source: string
+  /** FX-ENGINE-001 — manual · pegged · automatic */
+  kind?: 'manual' | 'pegged' | 'automatic'
+  effective_to?: string | null
+  note?: string | null
+  recorded_by?: string | null
+  version?: number
+  outcome?: 'applied' | 'shadowed'
+}
+
+/** FX-ENGINE-001 — a currency used by connected ad accounts, and whether it converts today. */
+export interface UsedCurrency {
+  currency: string
+  accounts: number
+  providers: string[]
+  status: 'valid' | 'stale' | 'missing' | 'base'
+  rate: number | null
+  rate_date: string | null
+  kind: string | null
+  source: string | null
+  recorded_by: string | null
+  withheld: number
+}
+
+export interface FxPolicy {
+  display_currency: 'USD' | 'SAR'
+  auto_source_enabled: boolean
+  auto_source: string
+  auto_source_label: string
+}
+
+export interface FxWorkspace { id: string; name: string; display_currency: 'USD' | 'SAR' | null; effective: 'USD' | 'SAR' }
+
+export interface FxAlert { id: string; kind: 'fx_rate_missing' | 'fx_rate_stale'; severity: string; currency: string; accounts: number; withheld: number; rate_date: string | null; since: string | null }
+
+export interface FxGuard { checked_from: string; stored_without_rate: number; unit_unknown_but_converted: number; bypasses: Record<string, number>; ok: boolean; ran_at?: string }
+
+export interface RateVersion {
+  id: string
+  rate: number
+  previous_rate: number | null
+  rate_date: string
+  effective_to: string | null
+  kind: string
+  source: string
+  note: string | null
+  version: number
+  outcome: 'applied' | 'shadowed'
+  recorded_by: string | null
+  recorded_at: string
+}
+
+export interface RecomputeSummary {
+  from: string
+  to: string
+  applied: boolean
+  examined: number
+  changed: number
+  released: number
+  withheld: number
+  unchanged: number
+  by_currency: Array<{ currency: string; rows: number; changed: number; before: number; after: number }>
+  entity: { examined: number; changed: number }
+  budgets_refreshed: number
 }
 
 export function fetchCurrencyRates(): Promise<{
   feed: CurrencyRateFeedState
   unmet_pairs: UnmetRatePair[]
   rates: StoredRate[]
+  policy?: FxPolicy
+  currencies?: UsedCurrency[]
+  alerts?: FxAlert[]
+  workspaces?: FxWorkspace[]
+  guard?: FxGuard | null
 }> {
   return getData('/admin/fx/rates')
 }
 
-/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. */
+/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. Editing makes a new version. */
 export function recordCurrencyRate(body: {
   base: string
   quote: string
   rate: number
   rate_date: string
+  effective_to?: string | null
+  note?: string | null
+  kind?: 'manual' | 'pegged'
 }): Promise<StoredRate> {
   return postData('/admin/fx/rates', body)
+}
+
+export function fetchRateHistory(base: string, quote: string): Promise<{ versions: RateVersion[] }> {
+  return getData(`/admin/fx/rates/history?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}`)
+}
+
+export function updateFxPolicy(body: Partial<Pick<FxPolicy, 'display_currency' | 'auto_source_enabled'>>): Promise<FxPolicy> {
+  return putData('/admin/fx/policy', body)
+}
+
+export function setWorkspaceDisplayCurrency(tenantId: string, display_currency: 'USD' | 'SAR' | null): Promise<FxWorkspace> {
+  return putData(`/admin/fx/workspaces/${tenantId}/display-currency`, { display_currency })
+}
+
+export function previewConversion(body: { amount: number; from: string; to: string; date: string }): Promise<FxConversion> {
+  return postData('/admin/fx/preview', body)
+}
+
+export function recomputeConverted(body: { from: string; to: string; apply?: boolean }): Promise<RecomputeSummary> {
+  return postData('/admin/fx/recompute', body)
 }
 
 /*

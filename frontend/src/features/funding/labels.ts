@@ -86,13 +86,10 @@ export const L = {
   byPercent: { ar: 'نسبة', en: '%' },
   byAmount: { ar: 'مبلغ', en: 'Amount' },
   fxRate: { ar: 'سعر الدولار', en: 'Dollar rate' },
-  fxDefault: { ar: 'سعر افتراضي', en: 'Default rate' },
-  fxEdit: { ar: 'تعديل', en: 'Edit' },
-  fxSave: { ar: 'حفظ', en: 'Save' },
-  fxCancel: { ar: 'إلغاء', en: 'Cancel' },
-  fxSaved: { ar: 'تم الحفظ', en: 'Saved' },
-  fxFailed: { ar: 'تعذّر الحفظ', en: 'Could not save' },
-  fxInvalid: { ar: 'أدخل رقمًا بين 1 و10', en: 'Enter a number from 1 to 10' },
+  fxPegged: { ar: 'مثبّت — من إعدادات المنصة', en: 'Pegged — platform setting' },
+  fxPlatform: { ar: 'من إعدادات المنصة', en: 'Platform setting' },
+  fxStale: { ar: 'سعر قديم', en: 'Stale rate' },
+  fxWithheld: { ar: 'بانتظار سعر صرف', en: 'Awaiting exchange rate' },
   periodFirstSpend: { ar: 'من أول إنفاق', en: 'From first spend' },
 } as const
 

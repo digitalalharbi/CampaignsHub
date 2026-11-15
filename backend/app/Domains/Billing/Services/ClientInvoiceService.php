@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\ClientBillingProfile;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Support\IncompleteFeeBasis;
 use App\Domains\Billing\Support\TaxTreatment;
+use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\OfficialPegs;
 use App\Domains\Metrics\Services\CurrencyConverter;
@@ -155,10 +156,8 @@ final class ClientInvoiceService
 
         if ($resolved === null && ($peg = OfficialPegs::rate($from, $to)) !== null) {
             // A legal peg needs no feed; it is recorded once, attributed, exactly as `fx:rates` records it.
-            CurrencyRate::updateOrCreate(
-                ['base_currency' => strtoupper($from), 'quote_currency' => strtoupper($to), 'rate_date' => '2001-01-01'],
-                ['rate' => $peg, 'source' => OfficialPegs::source($from, $to)],
-            );
+            // FX-ENGINE-001 — through the one writer: versioned, audited, `pegged` (applies to every date).
+            app(RateLedger::class)->record($from, $to, $peg, '2001-01-01', CurrencyRate::PEGGED, OfficialPegs::source($from, $to));
             $resolved = ['rate' => $peg];
         }
 

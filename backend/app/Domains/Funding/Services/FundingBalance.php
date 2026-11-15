@@ -184,7 +184,7 @@ final class FundingBalance
             // credit: spend so far, the optional ceiling with its own ratio, and what is ready to invoice (closed months).
             'to_date' => $credit ? round($spent, 2) : null,
             'this_month' => $thisMonth,
-            'usd_rate' => $usdRate,
+            'usd_rate' => $usdRate === null ? null : round($usdRate, 6),
             'ceiling' => $ceiling,
             'ceiling_ratio' => $ceilingRatio,
             'to_invoice' => $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['closed'] ? $m['spent'] : 0.0, $invoiceMonths)), 2),

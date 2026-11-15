@@ -93,14 +93,14 @@ final class SpendLimitGovernor
 
         /*
          * BUDGET-FX-DEFAULT-001 — a limit in another currency than the spend's is MEASURED, not refused: the spend is
-         * converted into the limit's currency at the dated rate, else the workspace default (USD↔SAR only). With no rate
+         * converted into the limit's currency by the platform engine (FX-ENGINE-001: dated rate, else the peg). With no rate
          * the old «currency_mismatch» answer stands — a floating currency is never given an invented rate.
          */
         $conversion = null;
         if ($consumed !== null && is_string($currency) && strtoupper($currency) !== strtoupper((string) $limit->currency)) {
             $r = $this->fx->resolveForWorkspace((string) $limit->tenant_id, $currency, (string) $limit->currency, $today);
             if ($r !== null) {
-                $conversion = ['from' => strtoupper($currency), 'to' => strtoupper((string) $limit->currency), 'rate' => round($r['rate'], 6), 'source' => $r['source']];
+                $conversion = ['from' => strtoupper($currency), 'to' => strtoupper((string) $limit->currency), 'rate' => round($r['rate'], 6), 'source' => $r['source'], 'kind' => $r['kind'], 'rate_date' => $r['rate_date'], 'stale' => $r['stale']];
                 $consumed *= $r['rate'];
                 $currency = strtoupper((string) $limit->currency);
             }

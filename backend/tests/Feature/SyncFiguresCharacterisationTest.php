@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use Tests\Concerns\BuildsBoundaryWorld;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -32,6 +33,7 @@ final class SyncFiguresCharacterisationTest extends TestCase
 {
     use BuildsBoundaryWorld;
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     /** Recorded on the unchanged base. Changing either is a change to stored figures, not a test update. */
     private const LANDED_DIGEST = 'c99bc5334f5ffaaeafb52ce7ab9f33c53687e572337ebba5daa5b8fb0792c8df';

@@ -209,6 +209,8 @@ final class PlatformAlertInbox
         $since = $now->copy()->subHours(max(1, (int) config('platform_alerts.lookback_hours', 72)));
 
         return PlatformAlert::query()->open()
+            // Payment alerts only: FX-ENGINE-001's currency alerts live in the inbox and are never mailed from here.
+            ->whereIn('kind', PlatformAlert::KINDS)
             ->where('first_seen_at', '>=', $since)
             ->when($skip !== [], fn ($q) => $q->whereNotIn('id', $skip))
             ->orderBy('first_seen_at')

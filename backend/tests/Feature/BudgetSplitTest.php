@@ -9,6 +9,7 @@ use App\Domains\Metrics\Models\CurrencyRate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use Tests\TestCase;
 final class BudgetSplitTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private function split(float $total, array $slots, string $currency = 'SAR'): array
     {

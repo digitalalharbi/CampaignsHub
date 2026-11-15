@@ -83,6 +83,11 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         // the approval's own project and tenant, then hands the client that creative's format and https still. Never a figure.
         'Domains/ClientWorkspaces/Models/ContentApproval.php' => 'relation',
         'Domains/ClientWorkspaces/Services/ContentApprovals.php' => 'checks a named creative is inside the approval\'s own project and reads its format and still; reads no figure',
+        // FX-ENGINE-001 — platform-admin currency tooling: counts withheld rows per currency, re-converts stored rows from their
+        // originals, and scans stored rows for a converted figure with no rate. Every stored row, for no workspace reader.
+        'Domains/Metrics/Fx/CurrencyCoverage.php' => 'counts withheld figures per currency for the platform rates page; no workspace reader',
+        'Domains/Metrics/Fx/FxRecompute.php' => 're-converts every stored row of a period from its original; writer',
+        'Domains/Metrics/Fx/MoneyGuard.php' => 'counts stored rows converted without a rate; a count, for the platform log',
         'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];
 

@@ -20,10 +20,14 @@ use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\FxMonitor;
+use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Rates\EcbReferenceRates;
 use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
@@ -59,6 +63,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -183,12 +188,42 @@ class AppServiceProvider extends ServiceProvider
                 $source = $resolved instanceof CurrencyRateSource ? $resolved : null;
             }
 
+            // FX-ENGINE-001 — the FREE daily ECB reference rates, switched on by the platform admin from the rates page
+            // (default OFF). Public, no key, no account; each rate is recorded under the source name `ecb_reference`.
+            if ($source === null && $this->app->make(FxPolicy::class)->autoSourceEnabled()) {
+                $source = $this->app->make(EcbReferenceRates::class);
+            }
+
             return new CurrencyRateFeed($source);
         });
     }
 
     public function boot(): void
     {
+        /*
+         * FX-ENGINE-001 — an ad account linked (or re-read) in a currency with no exchange rate alerts the platform admin in
+         * the app at once, not at the next daily sweep. One rate lookup; never allowed to break a sync.
+         */
+        ExternalAccount::saved(static function (ExternalAccount $account): void {
+            if (! config('fx.alert_on_link', true) || (! $account->wasChanged('currency') && ! $account->wasRecentlyCreated)) {
+                return;
+            }
+            if ($account->account_type !== 'ad_account' || ! is_string($account->currency) || $account->currency === '') {
+                return;
+            }
+            $currency = $account->currency;
+            $provider = (string) $account->provider;
+            $tenant = (string) $account->tenant_id;
+            // After the sync's own transaction commits, so an alert write can never touch the figures being stored.
+            DB::afterCommit(static function () use ($currency, $provider, $tenant): void {
+                try {
+                    app(FxMonitor::class)->accountLinked($currency, $provider, $tenant);
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            });
+        });
+
         // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.
         DB::listen(static function (QueryExecuted $query): void {
             app(PerformanceRecorder::class)->noteQuery($query->sql, (float) $query->time, app()->runningInConsole() ? 'job' : 'http');

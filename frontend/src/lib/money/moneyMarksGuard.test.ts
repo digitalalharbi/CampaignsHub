@@ -59,3 +59,90 @@ describe('money marks', () => {
     }
   })
 })
+
+/*
+ * FX-ENGINE-001 — the source guard that FAILS THE BUILD when a screen puts a currency mark on a number without the central
+ * formatter (`withMark` / `formatConversion`) or the backend's convert(). The «253 $» defect had exactly this shape: an amount
+ * in its own currency (EUR) printed with another currency's mark, no conversion in between.
+ *
+ * Three shapes are refused outside `src/lib/money/`:
+ *  - MARK  — a literal mark glued to an interpolated figure: `${n} $`, `${n} ر.س`, `$${n}`, `€${n}`, `{n} ر.س<`;
+ *  - GUESS — a money formatter (or a chart's `currency=` prop) handed a GUESSED currency: `money(x, c ?? 'SAR')`;
+ *  - LIT   — a money formatter handed a literal currency for an amount whose own name does not state that unit
+ *            (`money(spend, 'USD')`); a field the backend already converted says so (`revenue_usd`).
+ */
+const FX_MARK = /\$\{[^}]+\}\s?(?:ر\.س|€|\$(?![{\w]))|(?:^|[^\\\w$])\$\$\{|(?:€|ر\.س)\s?\$\{|\}\s*(?:ر\.س|€)(?=\s*<)/
+const FX_GUESS = /\b(?:money|moneyExact|withMark|formatConversion)\((?:[^()]|\([^()]*\))*?,\s*[^,()]*\?\?\s*'(?:USD|SAR|EUR)'\s*\)|\bcurrency=\{[^}]*\?\?\s*'(?:USD|SAR|EUR)'\}/
+const FX_LIT = /\b(?:money|moneyExact|withMark)\(\s*((?:[^,()]|\([^()]*\))+?)\s*,\s*'(USD|SAR|EUR)'\s*\)/g
+
+/** What the rules find on one line. */
+function fxFindings(line: string): string[] {
+  const t = line.trim()
+  if (t.startsWith('//') || t.startsWith('*')) return []
+  const out: string[] = []
+  if (FX_MARK.test(line)) out.push('MARK')
+  if (FX_GUESS.test(line)) out.push('GUESS')
+  for (const m of line.matchAll(FX_LIT)) {
+    const unit = m[2].toLowerCase()
+    // `(x) => money(x, 'USD')` in a column whose value is `revenue_usd`: the unit is stated by the field the backend converted.
+    if (!new RegExp(`(^|_)${unit}(_|\\b)`, 'i').test(m[1]) && !new RegExp(`_${unit}\\b`, 'i').test(line)) out.push('LIT')
+  }
+  return out
+}
+
+/**
+ * KNOWN BYPASSES — every one is a real defect of the «253 $» kind, listed so the build stays green while builder G moves each
+ * path onto the conversion contract (docs/currency-engine/F-notes.md). Nothing is allowlisted silently: each entry names its
+ * file, the exact text and the rule, and the ratchet test below FAILS when an entry no longer matches (fixed → delete it).
+ * Adding an entry is a visible decision in review.
+ */
+const KNOWN_BYPASSES: Array<{ file: string; text: string; rule: 'MARK' | 'GUESS' | 'LIT'; owner: 'G' }> = [
+  { file: '/src/features/analytics/AnalyticsPage.tsx', text: "currency={currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/analytics/OverviewCompositions.tsx', text: "currency={d.reportingCurrency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/analytics/PathAnalysis.tsx', text: "money(value, currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/campaigns/CampaignComparison.tsx', text: "money(costs[i], r.budget_currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/campaigns/CampaignComparison.tsx', text: "money(r.total_budget, r.budget_currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/campaigns/CampaignStructureTab.tsx', text: "money(s.daily_budget, s.currency ?? 'SAR')", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/clients/TabAnalytics.tsx', text: "currency={a.currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/content/CreativesPage.tsx', text: "currency={data?.currency ?? 'SAR'}", rule: 'GUESS', owner: 'G' },
+  { file: '/src/features/funding/labels.ts', text: '`أضف ${n} ر.س`', rule: 'MARK', owner: 'G' },
+]
+
+describe('FX-ENGINE-001 — no currency mark on a number outside the central formatter', () => {
+  const findings = (): Array<{ file: string; line: string; rule: string }> => {
+    const out: Array<{ file: string; line: string; rule: string }> = []
+    for (const [path, src] of Object.entries(sources)) {
+      if (/\.test\.tsx?$/.test(path) || path.startsWith('/src/lib/money/')) continue
+      for (const line of src.split('\n')) for (const rule of fxFindings(line)) out.push({ file: path, line: line.trim(), rule })
+    }
+    return out
+  }
+
+  it('the rules catch the defect shapes and pass the contract shapes', () => {
+    expect(fxFindings('const s = `${amount} $`')).toContain('MARK')
+    expect(fxFindings('const s = `$${amount}`')).toContain('MARK')
+    expect(fxFindings('<span>{spend} ر.س</span>')).toContain('MARK')
+    expect(fxFindings("money(row.spend, row.currency ?? 'USD')")).toContain('GUESS')
+    expect(fxFindings("<Chart currency={x.currency ?? 'SAR'} />")).toContain('GUESS')
+    expect(fxFindings("money(row.spend, 'USD')")).toContain('LIT')
+    expect(fxFindings("money(r.revenue_usd, 'USD')")).toEqual([])
+    expect(fxFindings("render: (r) => c(r.revenue_usd, (x) => money(x, 'USD'))")).toEqual([])
+    expect(fxFindings('money(row.spend, row.currency)')).toEqual([])
+    expect(fxFindings('withMark(fixed(c.converted_amount, 2), c.currency)')).toEqual([])
+  })
+
+  it('no screen bypasses the central formatter beyond the listed, owned defects', () => {
+    const unlisted = findings().filter((f) => !KNOWN_BYPASSES.some((k) => k.file === f.file && k.rule === f.rule && f.line.includes(k.text)))
+    expect(unlisted.map((f) => `${f.file} [${f.rule}] ${f.line.slice(0, 120)}`), "format money through formatConversion / withMark with the figure's OWN currency").toEqual([])
+  })
+
+  it('every listed bypass still exists — a fixed one must be removed from the list (ratchet)', () => {
+    const all = findings()
+    const stale = KNOWN_BYPASSES.filter((k) => !all.some((f) => k.file === f.file && k.rule === f.rule && f.line.includes(k.text)))
+    expect(stale, 'delete the fixed entries from KNOWN_BYPASSES').toEqual([])
+  })
+
+  it('the conversion contract renders through the one mark module', () => {
+    expect(sources['/src/lib/money/fx.ts']).toContain("from '@/lib/money/mark'")
+  })
+})
