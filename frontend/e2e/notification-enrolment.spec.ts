@@ -11,7 +11,13 @@ import { AUTH, switchToEnglish } from './helpers'
  *
  * `NOTIF_SHOTS=<dir>` also writes the screenshots (dark and light, desktop and 375px) that a human reads.
  */
-const SETTINGS = '/agency/settings/workspace?tab=notifications'
+/*
+ * NOTIF-V2-SETTINGS-UI-001 moved this screen. The workspace tab `?tab=notifications` is now the shared workspace
+ * notification page (internal / external sections); the person's OWN preferences — this matrix, its chips and its test
+ * buttons, unchanged — live at `/account/notifications`, the page every email's «إدارة التفضيلات» link opens
+ * (`PersonalNotificationsPage` mounts the same `NotificationsTab`). Same component, same assertions, new address.
+ */
+const SETTINGS = '/agency/account/notifications'
 const HONEST = /Sent|Email is not connected|No activity in the period|Nothing in your scope|Save your preferences first|Email is off for you|Quiet hours|Held for the digest|Your address is not verified|Try again in a minute|Already sent/
 
 async function open(page: Page, theme: 'dark' | 'light' = 'dark'): Promise<void> {
