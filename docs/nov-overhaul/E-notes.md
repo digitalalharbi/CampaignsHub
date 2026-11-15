@@ -56,4 +56,8 @@ tones, the integrations health pills, and the report print slides' platform bars
   destination the server returns, the Home leaf in the rails, and those assertions. The page and route are ready at `/home`.
 - The first-viewport sweep (`e2e/first-viewport-sweep.spec.ts`) was not given a `/agency/home` row; the role spec measures
   overflow and fit itself.
-- Firefox: the e2e spec is browser-agnostic; this run covered chromium and webkit (see the report).
+- Firefox: `e2e/role-dashboard.spec.ts` is browser-agnostic and firefox is installed, but the browser would not launch in this
+  sandbox (`sandbox_extension_issue_file_to_process … Operation not permitted`, launch timeout) — an environment limit, not a
+  product result. Chromium and webkit: 14/14 each at 360/390/430/768/1024/1366/1920.
+- Run locally with its own ports and database: `E2E_FRONTEND_PORT=5283 E2E_BACKEND_PORT=8110 E2E_PRINT_PORT=5383
+  E2E_DB_DATABASE=mediabuying_nove_e2e E2E_REDIS_PREFIX=ch-nove-e2e- npx playwright test e2e/role-dashboard.spec.ts`.
