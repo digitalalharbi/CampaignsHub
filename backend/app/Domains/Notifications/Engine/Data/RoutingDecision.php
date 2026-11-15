@@ -25,6 +25,7 @@ final class RoutingDecision
         public readonly ?string $reason = null,
         public readonly ?Carbon $notBefore = null,
         public readonly ?string $deferredReason = null,
+        public readonly ?string $subscriptionId = null,
     ) {}
 
     public function delivers(): bool
