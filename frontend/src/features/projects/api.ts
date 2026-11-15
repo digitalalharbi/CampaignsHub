@@ -2,6 +2,7 @@ import { patchData, ensureCsrfCookie, getData, getEnvelope, postData, putData } 
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 import type { ProjectLifecycleStatus } from '@/lib/projectLifecycle'
+import type { SpendReading } from '@/lib/money/fx'
 
 /**
  * PROJECT-LIST-SURFACE-001 §10 — the facts a card needs to be worth reading.
@@ -219,6 +220,8 @@ export interface PortfolioOverview {
      * The server offers no `total` key at all, so there is nothing here to print by accident.
      */
     comparable: boolean
+    /** PROJECT-LIFECYCLE-001 §7 — the shared aggregation's reading: what was excluded (no rate, named) and old rates used. */
+    reading?: SpendReading
   }
   attention: { total: number; by_state: Record<string, number> }
   /**

@@ -191,6 +191,13 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
 
       <span className="col-span-2 flex flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-self-end">
         <Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge>
+        {/* PROJECT-LIFECYCLE-001 §7 — what the spend excludes (no rate) and the old rate used, named; the drawer shows the full statement. */}
+        {row.fx && row.fx.excluded.length > 0 && (
+          <span className="max-w-[16rem] truncate text-[11px] text-warning" title={(ar ? row.fx.statement : (row.fx.statement_en ?? row.fx.statement)) ?? undefined} data-testid="row-fx-excluded">
+            {row.fx.excluded.map((e) => `${e.currency ?? '?'} · ${e.account_name}`).join('، ')}
+          </span>
+        )}
+        {row.fx && row.fx.stale.length > 0 && row.fx.stale_label && <span className="whitespace-nowrap text-[11px] text-warning" data-testid="row-fx-stale"><bdi>{ar ? row.fx.stale_label : (row.fx.stale[0]?.label_en ?? row.fx.stale_label)}</bdi></span>}
         {off && <Badge tone="warning" className="whitespace-nowrap" data-testid="plan-diff-chip">{ar ? PLAN_DIFF.ar : PLAN_DIFF.en}</Badge>}
         <FreshnessChip freshness={row.freshness} testid="row-freshness" />
       </span>

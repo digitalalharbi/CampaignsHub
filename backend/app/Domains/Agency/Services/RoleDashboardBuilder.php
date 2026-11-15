@@ -16,11 +16,13 @@ use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use App\Support\AdPlatforms;
@@ -201,6 +203,14 @@ final class RoleDashboardBuilder
     private function reading(array $readings): array
     {
         $t = ProjectBudgetReader::total($readings);
+        /*
+         * PROJECT-LIFECYCLE-001 §7 — the denominator IS the budgets page's budget (SAR, the same ledger), and in the workspace's
+         * display currency it is that same figure converted by the central engine — never a sum of the platforms' campaign
+         * budgets. The spend carries the same exclusions and old-rate labels as the budgets page (`fx`).
+         */
+        $display = FxDisplay::forRequest();
+        $to = $display->currencyFor((string) app(TenantContext::class)->tenantId());
+        $today = Carbon::today()->toDateString();
 
         return [
             'budget' => $t['approved'], 'spent' => $t['spent'], 'remaining' => $t['remaining'], 'projected' => null, 'pace' => null,
@@ -208,6 +218,9 @@ final class RoleDashboardBuilder
             'excluded' => $t['unbudgeted'], 'unmeasured' => 0, 'campaigns' => 0,
             'daily_rate_3d' => $t['pace_per_day'], 'cover_days' => $t['cover_days'],
             'budgeted' => $t['budgeted'], 'unbudgeted' => $t['unbudgeted'],
+            'budget_fx' => $t['approved'] === null ? null : $display->one($t['approved'], 'SAR', $today, $to, 'dashboard.budget'),
+            'spent_fx' => $t['spent'] === null ? null : $display->one($t['spent'], 'SAR', $today, $to, 'dashboard.spent'),
+            'fx' => $t['fx'],
         ];
     }
 

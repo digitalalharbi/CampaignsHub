@@ -7,6 +7,8 @@ namespace App\Domains\Funding\Services;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Support\BudgetFx;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Spend\SpendDay;
+use App\Domains\Metrics\Spend\SpendLedger;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,36 +38,18 @@ final class FundingSpendRefresher
         $to = $this->countsTo($funding);
 
         /*
-         * Amount and currency are read from the SAME row (a row's own original figure, else its project-currency
-         * value), then grouped by currency — two currencies on one account-day are converted separately and
-         * never added as if they were one. Estimated and modeled rows are not real spend and are left out.
+         * PROJECT-LIFECYCLE-001 rule 9 — the rows are THE spend definition every total reads ({@see SpendLedger::accountDays()}):
+         * a row's own original figure and currency, one figure per campaign and day, the selected accounts only, estimated and
+         * modeled rows left out. Two currencies on one account-day are converted separately and never added as if one.
          */
-        $currency = 'CASE WHEN daily_metrics.original_amount IS NOT NULL THEN daily_metrics.original_currency ELSE daily_metrics.project_currency END';
-        $perCampaign = DB::table('daily_metrics')
-            ->where('daily_metrics.project_id', $funding->project_id)
-            ->where('daily_metrics.metric_key', 'spend')
-            ->where('daily_metrics.metric_date', '>=', $from->toDateString())
-            ->when($to !== null, static fn ($q) => $q->where('daily_metrics.metric_date', '<=', $to->toDateString()))
-            ->whereNotIn('daily_metrics.source_type', ['estimated', 'modeled'])
-            ->selectRaw('daily_metrics.external_account_id, daily_metrics.provider, daily_metrics.metric_date, daily_metrics.external_campaign_id')
-            ->selectRaw("{$currency} AS currency")
-            ->selectRaw('MAX(COALESCE(daily_metrics.original_amount, daily_metrics.value)) AS amount')
-            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider', 'daily_metrics.metric_date', 'daily_metrics.external_campaign_id')
-            ->groupByRaw($currency);
-        BoundAccountVisibility::apply($perCampaign, 'daily_metrics');
-
-        $parts = DB::query()->fromSub($perCampaign, 'c')
-            ->leftJoin('external_accounts as a', 'a.id', '=', 'c.external_account_id')
-            ->selectRaw('c.external_account_id, MAX(c.provider) AS provider, c.metric_date, COALESCE(c.currency, MAX(a.currency)) AS currency, SUM(c.amount) AS amount')
-            ->groupBy('c.external_account_id', 'c.metric_date', 'c.currency')
-            ->get()
-            ->groupBy(static fn ($r): string => $r->external_account_id.'|'.Carbon::parse((string) $r->metric_date)->toDateString());
+        $parts = collect(SpendLedger::accountDays([(string) $funding->project_id], $from, $to))
+            ->groupBy(static fn (SpendDay $r): string => $r->accountId.'|'.$r->date);
 
         $now = now();
         $rows = [];
         foreach ($parts as $group) {
             $first = $group->first();
-            $date = Carbon::parse((string) $first->metric_date);
+            $date = Carbon::parse($first->date);
             $sar = 0.0;
             $rate = null;
             $missing = false;
@@ -78,7 +62,7 @@ final class FundingSpendRefresher
 
                     continue;
                 }
-                $sar += (float) $part->amount * $rate['rate'];
+                $sar += $part->amount * $rate['rate'];
             }
 
             $single = $group->count() === 1;
@@ -86,11 +70,11 @@ final class FundingSpendRefresher
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $funding->tenant_id,
                 'project_id' => $funding->project_id,
-                'external_account_id' => (string) $first->external_account_id,
-                'provider' => (string) $first->provider,
+                'external_account_id' => $first->accountId,
+                'provider' => $first->provider,
                 'spend_date' => $date->toDateString(),
                 // One currency: the source figure as it was. Several: the SAR total, with no single source currency to claim.
-                'original_amount' => round($single ? (float) $first->amount : $sar, 6),
+                'original_amount' => round($single ? $first->amount : $sar, 6),
                 'original_currency' => $single && $first->currency !== null ? strtoupper((string) $first->currency) : ($single ? null : 'SAR'),
                 'amount_sar' => $missing ? null : round($sar, 2),
                 'rate' => $single && ! $missing ? $rate['rate'] : null,
@@ -127,7 +111,9 @@ final class FundingSpendRefresher
             ->where('daily_metrics.project_id', $funding->project_id)
             ->where('daily_metrics.metric_key', 'spend')
             ->whereNotIn('daily_metrics.source_type', ['estimated', 'modeled'])
-            ->where('daily_metrics.value', '>', 0);
+            // PROJECT-LIFECYCLE-001 §7 — the first day of REAL spend, converted or not: a day withheld for want of a rate is still
+            // spend, so an open-ended budget counts from it (and names it as excluded) instead of silently starting later.
+            ->whereRaw('COALESCE(daily_metrics.original_amount, daily_metrics.value) > 0');
         BoundAccountVisibility::apply($spend, 'daily_metrics');
         $firstSpend = $spend->min('daily_metrics.metric_date');
 

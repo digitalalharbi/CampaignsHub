@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Status;
 
+use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +33,8 @@ use Illuminate\Support\Facades\DB;
  * - `link_expired` — the platform refused the connection (`provider_connections.status = error`).
  * - `never_synced` — not one finished run on record: awaiting a first sync, which is a setup state, not an outage.
  *
- * Archived and deleted projects are never judged ({@see LiveProjectsAdapter}).
+ * Only LIVE projects are judged — N1's one shared scope ({@see LiveProjects}, active + paused): archived, deleted and
+ * draft projects never are (PROJECT-LIFECYCLE-001 rule 5).
  */
 final class AccountDayCoverage
 {
@@ -117,7 +120,7 @@ final class AccountDayCoverage
             ->when($connectionId !== null, fn ($q) => $q->where('a.provider_connection_id', $connectionId))
             ->when($provider !== null, fn ($q) => $q->where('b.provider', $provider))
             ->when($accountId !== null, fn ($q) => $q->where('b.external_account_id', $accountId));
-        LiveProjectsAdapter::constrain($query, 'p');
+        LiveProjects::constrain($query, 'p');
 
         return array_values(array_filter($query
             ->orderBy('p.name')->orderBy('a.name')
@@ -226,6 +229,77 @@ final class AccountDayCoverage
             'last_success' => $success,
             'last_failed_at' => $failedLatest ? Carbon::parse((string) $latest->finished_at, 'UTC')->toIso8601String() : null,
         ] + $reason;
+    }
+
+    /**
+     * PROJECT-LIFECYCLE-001 (N4, finishing N3's deferral) — every bound ad platform of a project, judged by THIS rule (per
+     * account, in the account's own time zone, after the settle window and one cycle), in the reading shape the digest's
+     * «ملخص الربط» has always drawn. A platform has arrived when none of its accounts has an alerting verdict; a binding still
+     * awaiting its first sync is a setup state, not a gap (the same as the alert).
+     *
+     * @return array<string, array{arrived: bool, required_day: string, last_day: ?string, missing_days: ?int}>
+     */
+    public function projectReadings(string $tenantId, string $projectId, Carbon $now): array
+    {
+        $byProvider = [];
+        foreach ($this->judge($this->liveBindings($tenantId, $projectId), $now) as $v) {
+            $byProvider[(string) $v['provider']][] = $v;
+        }
+
+        $out = [];
+        foreach ($byProvider as $provider => $verdicts) {
+            $out[$provider] = self::providerReading($verdicts);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Why a project shows no ad spend for `$day` — one of `LinkHealth::STATES`, never a blend — read through THIS rule. Null
+     * when the project has no actively bound ad account of a live project («nothing is linked», said by the caller).
+     */
+    public function noDataState(string $tenantId, string $projectId, Carbon $day, Carbon $now): ?string
+    {
+        $verdicts = $this->judge($this->liveBindings($tenantId, $projectId), $now);
+        if ($verdicts === []) {
+            return null;
+        }
+
+        $judged = $day->toDateString();
+        foreach ($verdicts as $v) {
+            // The day asked about may not be due yet for this account: it is judged against what is due.
+            $due = min($judged, (string) $v['required_day']);
+            if (in_array($v['verdict'], self::ALERTING, true) && ($v['last_day'] === null || $v['last_day'] < $due)) {
+                return 'not_synced';
+            }
+        }
+
+        $running = DB::table('unified_campaigns')
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->where('status', CampaignStatus::Active->value)
+            ->where(fn ($q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $judged))
+            ->exists();
+
+        return $running ? 'no_spend' : 'not_running';
+    }
+
+    /**
+     * @param  non-empty-list<array<string,mixed>>  $verdicts  one platform's accounts
+     * @return array{arrived: bool, required_day: string, last_day: ?string, missing_days: ?int}
+     */
+    private static function providerReading(array $verdicts): array
+    {
+        $alerting = array_values(array_filter($verdicts, static fn (array $v): bool => in_array($v['verdict'], self::ALERTING, true)));
+        $pool = $alerting === [] ? $verdicts : $alerting;
+        $days = array_values(array_filter(array_map(static fn (array $v): ?string => $v['last_day'], $pool), static fn (?string $d): bool => $d !== null));
+        $missing = array_values(array_filter(array_map(static fn (array $v): ?int => $v['missing_days'], $pool), static fn (?int $m): bool => $m !== null));
+
+        return [
+            'arrived' => $alerting === [],
+            'required_day' => (string) max(array_map(static fn (array $v): string => (string) $v['required_day'], $pool)),
+            'last_day' => $days === [] ? null : min($days),
+            'missing_days' => $alerting === [] ? 0 : ($missing === [] ? null : max($missing)),
+        ];
     }
 
     /**

@@ -11,6 +11,7 @@ import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
 import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
 import { Money } from './money'
+import { FxSpendNote } from '@/components/money/FxAmount'
 
 type Lang = { ar: string; en: string }
 
@@ -89,6 +90,7 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
             </p>
           )}
           <FreshnessChip freshness={data.freshness} testid="budget-freshness" />
+          <FxSpendNote note={data.fx} ar={ar} testId="budget-fx-note" />
 
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">

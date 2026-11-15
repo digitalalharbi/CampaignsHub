@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
+import type { FxConversion, FxSpendNote } from '@/lib/money/fx'
 
 /**
  * ROLE-DASHBOARD-001 — `GET /api/v1/me/dashboard`: the landing page's facts for the signed-in role, already narrowed on the
@@ -98,7 +99,8 @@ export interface RoleDashboard {
   scope: { clients: number; projects: number; restricted: boolean }
   can_money: boolean
   sections: string[]
-  money: (BudgetReading & { rows: number }) | null
+  /** PROJECT-LIFECYCLE-001 §7 — the budgets page's budget (SAR); `budget_fx`/`spent_fx` = the same converted by the engine; `fx` = exclusions + old rates. */
+  money: (BudgetReading & { rows: number; budget_fx?: FxConversion | null; spent_fx?: FxConversion | null; fx?: FxSpendNote }) | null
   units: DashboardUnit[]
   daily_spend: { date: string; spend: number }[]
   alerts?: { open: number; critical: number; warning: number } | null

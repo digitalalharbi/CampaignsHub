@@ -3,6 +3,7 @@ import { RankingBarChart, MetricLineChart } from '@/features/analytics/charts'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/lib/colors'
 import { PLATFORM_ORDER } from '@/lib/platforms'
 import { ProviderMark } from '@/components/ProviderMark'
+import { FxSpendNote } from '@/components/money/FxAmount'
 import type { DashboardUnit, RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 
@@ -73,6 +74,7 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         <Kpi testId="dash-kpi-active" to={`/${portal}/campaigns`} label={t.active} value={f.count(camps?.active)} hint={camps ? `${t.paused} ${f.count(camps.paused)}` : undefined} />
         {alerts && <Kpi testId="dash-kpi-alerts" to={`/${portal}/alerts`} label={t.alerts} value={f.count(alerts.open)} hint={`${f.count(alerts.critical)} ${t.critical}`} status={alerts.critical > 0 ? 'exceeded' : alerts.open > 0 ? 'near' : 'within'} />}
       </div>
+      <FxSpendNote note={m?.fx} ar={f.ar} testId="dash-fx-spend-note" />
 
       <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">
         <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] lg:col-span-6">

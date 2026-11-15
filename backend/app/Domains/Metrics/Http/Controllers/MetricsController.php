@@ -20,7 +20,9 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Settings\AttributionSettings;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -106,6 +108,15 @@ final class MetricsController extends Controller
             'delta' => $deltas,
             // FX-APPLY-001 — what these totals were converted from: «يشمل عملات محوّلة», ⚠ stale, withheld rows and their currency.
             'fx' => $this->scoped($request)->fxCoverage($from, $to),
+            /*
+             * PROJECT-LIFECYCLE-001 §7, rule 9 — the project's spend for the same window from THE one aggregation (`SpendLedger`:
+             * each account-day from its original currency through FxEngine), the figure the budgets page, the clients list, the
+             * dashboard and the projects summary read. It names what it excluded for want of a rate and every old rate it used.
+             * Only for the unfiltered scope: a platform/campaign/outcome filter is a narrower question than «the project's spend».
+             */
+            'spend_reading' => $this->unfiltered($request) && $projectId !== ''
+                ? app(SpendLedger::class)->read([$projectId], $from, $to, ReportingCurrency::DEFAULT)
+                : null,
             /*
              * UX-METRICS-001 — which of those figures are measurements and which are absences.
              *
@@ -1516,6 +1527,12 @@ final class MetricsController extends Controller
     }
 
     /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */
+    /** No platform, campaign or outcome filter: the request asks about the whole project. */
+    private function unfiltered(Request $request): bool
+    {
+        return $this->providerFilter($request) === [] && $this->campaignFilter($request) === [] && $this->outcomeFilter($request) === [];
+    }
+
     private function scoped(Request $request): MetricsAggregator
     {
         $campaigns = $this->campaignFilter($request);

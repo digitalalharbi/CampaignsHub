@@ -260,8 +260,10 @@ final class AlertSweepBatchedReadsTest extends TestCase
          * connections, the one open-links read, the project readings) are per tenant and per sweep, not per campaign.
          * LIFECYCLE-6 — 552 → 558: the data-arrival rule reads live bindings and their runs per rule (two statements however many
          * accounts), judges a project outage per project, and looks up each per-account finding it raises. Per rule, not per campaign.
+         * PROJECT-LIFECYCLE-001 (N4) — 560 → 562: every rule type now drops findings about projects that are not live, from ONE read
+         * of the tenant's live project ids per sweep (memoised), never per rule or per campaign.
          */
-        $this->assertLessThan(560, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
+        $this->assertLessThan(562, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
         $this->assertLessThan($before + 18 * 2, $after, 'cost per campaign is back');
     }
 

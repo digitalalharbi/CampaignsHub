@@ -30,7 +30,7 @@ final class FxEngine
      * day (a GA4 series, a launch budget split, a ledger payment). Same shape as {@see CurrencyConverter::resolve()}; null when
      * withheld or when a currency code is not a currency.
      *
-     * @return array{rate: float, rate_date: ?string, source: ?string, kind: ?string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
+     * @return array{rate: float, rate_date: ?string, source: ?string, kind: ?string, stale: bool, expired: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
      */
     public function rate(string $from, string $to, Carbon|string $date): ?array
     {
@@ -43,7 +43,7 @@ final class FxEngine
             return null;
         }
 
-        return ['rate' => $c->rate, 'rate_date' => $c->rateDate, 'source' => $c->source, 'kind' => $c->kind, 'stale' => $c->stale, 'recorded_by' => $c->recordedBy, 'legs' => $c->legs];
+        return ['rate' => $c->rate, 'rate_date' => $c->rateDate, 'source' => $c->source, 'kind' => $c->kind, 'stale' => $c->stale, 'expired' => $c->expired, 'recorded_by' => $c->recordedBy, 'legs' => $c->legs];
     }
 
     public function convertValue(MoneyValue $money, string $to): FxConversion
@@ -67,6 +67,7 @@ final class FxEngine
             stale: $resolved['stale'],
             withheld: false,
             legs: $resolved['legs'],
+            expired: $resolved['expired'] ?? false,
         );
     }
 }

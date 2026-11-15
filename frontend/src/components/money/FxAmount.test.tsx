@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { FxAmount, FxCoverageNote, FxTotalAmount } from './FxAmount'
+import { FxAmount, FxCoverageNote, FxSpendNote, FxTotalAmount } from './FxAmount'
 import { conversionTooltip, type FxConversion, type FxTotal } from '@/lib/money/fx'
 
 /** FX-APPLY-001 (builder G) — the Owner's display spec for a converted figure, on the one component every screen uses. */
@@ -69,5 +69,32 @@ describe('FxTotalAmount and FxCoverageNote', () => {
     expect(screen.getByTestId('fx-includes-converted')).toBeTruthy()
     expect(screen.getByTestId('fx-stale')).toHaveTextContent('سعر الصرف أقدم من 7 أيام')
     expect(screen.getByTestId('fx-coverage-withheld')).toHaveTextContent('GBP')
+  })
+})
+
+/** PROJECT-LIFECYCLE-001 §7 (N4) — a missing rate never zeroes a total: the converted part is shown, the rest is named. */
+describe('FxSpendNote and a partial total', () => {
+  const excluded = [{ project_id: 'p', account_id: 'a', account_name: 'Account EUR', provider: 'google', currency: 'EUR', original_amount: 400, days: 4, first_day: '2026-11-05', last_day: '2026-11-08' }]
+  const statement = 'سعر صرف غير متوفر: EUR — Account EUR (400.00 EUR، 4 أيام) — مستبعد من الإجمالي.'
+
+  it('a partial total shows the converted part and marks the excluded part — never «—», never zero', () => {
+    const t: FxTotal = { currency: 'USD', converted_amount: 648, withheld: false, partial: true, includes_converted: true, currencies: ['EUR'], stale: false,
+      pending_label: 'سعر صرف غير متوفر (EUR)', rates_page: '/admin/settings/currency-rates', via: 'fx.convert', excluded, statement }
+    render(<FxTotalAmount t={t} ar testId="t" />)
+    expect(screen.getByTestId('t')).toHaveTextContent('648.00 $')
+    expect(screen.getByTestId('fx-excluded').getAttribute('title')).toBe(statement)
+  })
+
+  it('the note states each excluded part with its account and the old rate used', () => {
+    render(<FxSpendNote ar note={{ complete: false, excluded, excluded_label: 'سعر صرف غير متوفر', statement, rates_page: '/admin/settings/currency-rates',
+      stale: [{ currency: 'EUR', rate_date: '2026-11-09', expired: true, label: 'سعر قديم — بتاريخ 2026-11-09', days: 3 }], stale_label: 'سعر قديم — بتاريخ 2026-11-09' }} />)
+    expect(screen.getByTestId('fx-spend-note-excluded')).toHaveTextContent('Account EUR')
+    expect(screen.getByTestId('fx-spend-note-excluded')).toHaveTextContent('مستبعد من الإجمالي')
+    expect(screen.getByTestId('fx-spend-note-stale')).toHaveTextContent('سعر قديم — بتاريخ 2026-11-09')
+  })
+
+  it('a complete reading with no old rate renders nothing', () => {
+    const { container } = render(<FxSpendNote ar note={{ complete: true, excluded: [], excluded_label: null, statement: null, rates_page: null, stale: [], stale_label: null }} />)
+    expect(container.textContent).toBe('')
   })
 })
