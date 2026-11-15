@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ListChecks, Sunrise } from 'lucide-react'
+import { Sunrise } from 'lucide-react'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { getBrief, isUpgradeRequired, type Brief } from './followupApi'
 import { TaskList } from './FollowUpTasks'
 import { useFollowupTasks } from './useFollowupTasks'
@@ -29,10 +30,7 @@ export function FollowUpPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="followup-page">
-      <header className="flex flex-col gap-1">
-        <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-text-primary"><ListChecks size={22} /> {c('page_title')}</h1>
-        <p className="text-sm text-text-secondary">{c('page_sub')}</p>
-      </header>
+      <PageIntro title={c('page_title')} purpose={c('page_sub')} testid="followup-intro" />
 
       <section aria-labelledby="brief-h" className="min-w-0 rounded-xl border border-border bg-surface p-4">
         <h2 id="brief-h" className="mb-2 flex items-center gap-2 text-base font-bold text-text-primary"><Sunrise size={17} /> {c('brief_title')}</h2>
@@ -78,7 +76,7 @@ function BriefView({ brief, word }: { brief: Brief | null; word: string }) {
           </Block>
         )}
         {s.no_budget.length > 0 && <Block title={c('brief_no_budget')} testId="brief-no-budget">{s.no_budget.map((p) => <li key={p.project_id} className="break-words">{p.project_name}</li>)}</Block>}
-        {s.recommendations > 0 && <Block title={c('brief_recommendations')} testId="brief-reco"><li className="tnum" dir="ltr">{s.recommendations}</li></Block>}
+        {s.recommendations > 0 && <Block title={c('brief_recommendations')} testId="brief-reco"><li className="tnum">{s.recommendations}</li></Block>}
         {s.problems.length > 0 && <Block title={c('brief_problems')} testId="brief-problems">{s.problems.map((p) => <li key={p.project_id} className="break-words">{p.project_name}</li>)}</Block>}
         {ext.sent + ext.held + ext.unsubscribed > 0 && (
           <Block title={c('brief_external')} testId="brief-external">
