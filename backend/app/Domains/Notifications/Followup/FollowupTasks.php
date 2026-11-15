@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -30,8 +31,9 @@ use InvalidArgumentException;
  *
  * ## Who sees a task
  * Only internal members of the workspace, never a client-portal profile (these are operational). A task with a project is
- * visible to people who reach that project (`DigestScope`, the same ceiling the digests and alerts use) — and to its
- * assignee; a task without a project only to its assignee.
+ * visible to people who reach that project (`DigestScope`, the same ceiling the digests and alerts use), assigned or not — handing
+ * a task over does not hide it from the person who handed it over — and always to its assignee; a task without a project only to
+ * its assignee.
  */
 final class FollowupTasks
 {
@@ -149,8 +151,10 @@ final class FollowupTasks
         $reach = $this->scope->projectIdsFor($user, $tenantId);
 
         return $query->where(function (Builder $q) use ($user, $reach): void {
-            $q->where('assigned_user_id', $user->getKey())
-                ->orWhere(fn (Builder $open) => $open->whereNull('assigned_user_id')->whereNotNull('project_id')->whereIn('project_id', $reach === [] ? ['-'] : $reach));
+            $q->where('assigned_user_id', $user->getKey());
+            if ($reach !== []) {
+                $q->orWhere(fn (Builder $open) => $open->whereNotNull('project_id')->whereIn('project_id', $reach));
+            }
         });
     }
 
@@ -228,10 +232,12 @@ final class FollowupTasks
     /** @param array<string, mixed> $detail */
     private function history(FollowupTask $task, string $action, ?User $by, array $detail = []): void
     {
-        FollowupTaskEvent::withoutGlobalScopes()->create([
+        // Time-ordered id: two steps in the same second keep the order they happened in.
+        (new FollowupTaskEvent)->forceFill([
+            'id' => (string) Str::orderedUuid(),
             'tenant_id' => $task->tenant_id, 'task_id' => $task->getKey(), 'action' => $action,
             'actor_user_id' => $by?->getKey(), 'actor_label' => $by === null ? 'system' : mb_substr((string) $by->name, 0, 120),
             'detail' => array_filter($detail, static fn ($v): bool => $v !== null),
-        ]);
+        ])->save();
     }
 }

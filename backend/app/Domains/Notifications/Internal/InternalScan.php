@@ -142,8 +142,11 @@ final class InternalScan
     {
         $n = 0;
         $live = ActiveProjects::liveIds($tenantId);
+        if ($live === []) {
+            return 0;
+        }
         $rows = ActionProposal::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('status', ActionProposal::PENDING)
-            ->whereIn('project_id', $live === [] ? ['-'] : $live)->orderBy('created_at')->limit(200)->get(['id', 'project_id']);
+            ->whereIn('project_id', $live)->orderBy('created_at')->limit(200)->get(['id', 'project_id']);
         foreach ($rows as $p) {
             // The task is the standing reminder; the notification is said once.
             $this->tasks->open($tenantId, 'decide_recommendation', (string) $p->project_id, [], 'proposal', (string) $p->getKey(), null, 'recommendation.awaiting_approval');
