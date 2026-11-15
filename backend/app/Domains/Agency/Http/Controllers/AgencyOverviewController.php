@@ -38,7 +38,7 @@ use Illuminate\Support\Carbon;
  */
 final class AgencyOverviewController extends Controller
 {
-    private const MAX_DAYS = 365;
+    private const MAX_DAYS = 1100; // DATE-RANGE-001: «طوال المدة» may span years; 365 clamped it silently
 
     public function __construct(
         private readonly ClientAccess $access,
@@ -56,6 +56,19 @@ final class AgencyOverviewController extends Controller
         $len = $from->diffInDays($to) + 1;
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($len - 1);
+
+        // DATE-RANGE-001 — a comparison the reader chose (last year, or two dates) replaces the default «same length before».
+        $cf = $request->query('compare_from');
+        $ct = $request->query('compare_to');
+
+        if (is_string($cf) && is_string($ct) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cf) === 1 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ct) === 1) {
+            $prevFrom = Carbon::parse($cf)->startOfDay();
+            $prevTo = Carbon::parse($ct)->startOfDay();
+
+            if ($prevFrom->gt($prevTo)) {
+                [$prevFrom, $prevTo] = [$prevTo, $prevFrom];
+            }
+        }
 
         $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
         $this->access->restrictQuery($clientQuery, $user);
