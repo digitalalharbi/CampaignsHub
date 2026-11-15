@@ -77,7 +77,7 @@ describe('the agency headline', () => {
     expect(screen.queryByText('تحويلات المنصة')).not.toBeInTheDocument()
     const roas = screen.getByTestId('agency-kpi-roas')
     expect(roas).toHaveTextContent('4.00×')
-    expect(roas).toHaveTextContent(/دخلت 2 من 3 حملة مبيعات/)
+    expect(roas).toHaveTextContent(/دخلت 2 من 3 حملات مبيعات/) // 3–10 take the plural (lib/counted)
     // Movement against the previous window, shown because both windows are complete.
     expect(within(spend).getByText(/22/)).toBeInTheDocument()
     expect(screen.queryByTestId('agency-coverage-note')).not.toBeInTheDocument()

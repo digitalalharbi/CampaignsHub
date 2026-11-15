@@ -19,6 +19,7 @@ import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/con
 import { comparableWindows, coverageNote, readCoverage, windowsUnlikeNote } from '@/lib/coverage/contract'
 import { providerLabel } from '@/features/campaigns/labels'
 import { headline as alertHeadline } from '@/features/recommendations/findingCopy'
+import { campaigns, countedEn } from '@/lib/counted'
 
 /**
  * DASHBOARD-FIRST-SCREEN-001 — the agency dashboard answers «what is happening» before it counts.
@@ -106,7 +107,9 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   const objectives = d.by_objective ?? []
   const salesBlock = objectives.find((o) => o.family === 'sales')
   const roasHint = salesBlock?.roas != null
-    ? (ar ? `دخلت ${num(salesBlock.roas_campaigns)} من ${num(salesBlock.sales_campaigns)} حملة مبيعات` : `${num(salesBlock.roas_campaigns)} of ${num(salesBlock.sales_campaigns)} sales campaigns entered it`)
+    ? (ar
+      ? `دخلت ${num(salesBlock.roas_campaigns)} من ${campaigns(salesBlock.sales_campaigns ?? 0, 'ar')} مبيعات`
+      : `${num(salesBlock.roas_campaigns)} of ${countedEn(salesBlock.sales_campaigns ?? 0, 'sales campaign', 'sales campaigns')} entered it`)
     : (ar ? 'لا حملات مبيعات بإيراد مُبلَّغ' : 'No sales campaign reported revenue')
   const sparkOf = (key: string): ReactNode => {
     const points = sparkFor(key, (d?.timeseries ?? []) as unknown as readonly TimePoint[], undefined)
