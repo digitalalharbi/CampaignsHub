@@ -6,6 +6,7 @@ use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
+use App\Domains\Settings\Http\Controllers\AccessCenterController;
 use App\Domains\Settings\Http\Controllers\BrandingController;
 use App\Domains\Settings\Http\Controllers\ExternalRecipientController;
 use App\Domains\Settings\Http\Controllers\NotificationChannelTestController;
@@ -64,6 +65,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::get('roles', [RolesController::class, 'index'])->name('roles.index');
     Route::put('roles/{slug}', [RolesController::class, 'update'])->where('slug', '[a-z-]+')->name('roles.update');
     Route::post('roles/{slug}/reset', [RolesController::class, 'reset'])->where('slug', '[a-z-]+')->name('roles.reset');
+
+    /*
+     * ACCESS-CENTER-001 — «الفريق والنطاقات»: categories, invitations with per-invitation areas, member overrides, history.
+     * settings.manage in the controller; categories are the owner's alone; grant-only-what-you-hold; every change audited.
+     */
+    Route::get('access', [AccessCenterController::class, 'index'])->name('access.index');
+    Route::post('access/categories', [AccessCenterController::class, 'storeCategory'])->middleware('throttle:30,1')->name('access.categories.store');
+    Route::put('access/categories/{slug}', [AccessCenterController::class, 'updateCategory'])->where('slug', '[a-z0-9-]+')->name('access.categories.update');
+    Route::delete('access/categories/{slug}', [AccessCenterController::class, 'destroyCategory'])->where('slug', '[a-z0-9-]+')->name('access.categories.destroy');
+    Route::post('access/invitations', [AccessCenterController::class, 'invite'])->middleware(['throttle:20,1', EnsureWithinPlanLimit::class.':team_members'])->name('access.invitations.store');
+    Route::put('access/invitations/{invitation}', [AccessCenterController::class, 'updateInvitation'])->where('invitation', '[0-9A-Za-z]+')->name('access.invitations.update');
+    Route::post('access/invitations/{invitation}/resend', [AccessCenterController::class, 'resend'])->where('invitation', '[0-9A-Za-z]+')->middleware('throttle:10,1')->name('access.invitations.resend');
+    Route::put('access/members/{user}/overrides', [AccessCenterController::class, 'updateOverrides'])->whereUuid('user')->name('access.members.overrides');
+    Route::get('access/history', [AccessCenterController::class, 'history'])->name('access.history');
 
     // Notification preferences (per-user).
     Route::get('notifications', [NotificationPreferenceController::class, 'show'])->name('notifications.show');

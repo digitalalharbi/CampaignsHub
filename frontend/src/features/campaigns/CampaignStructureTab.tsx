@@ -204,7 +204,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
     return (
       <EmptyState
         title="الحملة غير مرتبطة بأي حملة على منصة إعلانية"
-        description="المجموعات الإعلانية والإعلانات تُقرأ من المنصة نفسها. اربط حملة خارجية من تبويب «المنصات» لتظهر بنيتها هنا."
+        description="المجموعات والإعلانات تُقرأ من المنصة نفسها. اربط حملة خارجية من تبويب «المنصات» لتظهر بنيتها هنا."
       />
     )
   }
@@ -244,7 +244,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
-          <span className="inline-flex items-center gap-1.5"><Layers size={14} /> <span className="tnum font-semibold text-text-primary">{adSets.length}</span> مجموعة إعلانية</span>
+          <span className="inline-flex items-center gap-1.5"><Layers size={14} /> <span className="tnum font-semibold text-text-primary">{adSets.length}</span> مجموعة</span>
           <span className="inline-flex items-center gap-1.5"><Megaphone size={14} /> <span className="tnum font-semibold text-text-primary">{totalAds}</span> إعلانًا</span>
           <span className="text-text-muted">مرتبطة بـ {linked.map((l) => PROVIDER(l.provider)).join(' · ')}</span>
         </div>
@@ -320,10 +320,10 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
 
       {looseAds.length > 0 && (
         <section data-testid="ads-without-ad-set" className="rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]">
-          <p className="mb-1 font-bold text-text-primary">إعلانات بلا مجموعة إعلانية</p>
+          <p className="mb-1 font-bold text-text-primary">إعلانات بلا مجموعة</p>
           {/* Said plainly, because an empty ad-set list beside a list of ads otherwise reads as a bug. */}
           <p className="mb-3 text-[11px] text-text-muted">
-            بعض المنصات — مثل لينكدإن — لا تحتوي على مستوى «مجموعة إعلانية»، فتُعرض إعلاناتها أسفل الحملة مباشرة.
+            بعض المنصات — مثل لينكدإن — لا تحتوي على مستوى «مجموعة»، فتُعرض إعلاناتها أسفل الحملة مباشرة.
           </p>
           <ul className="space-y-1.5">
             {looseAds.map((a) => <Ad key={a.id} ad={a} />)}

@@ -12,7 +12,7 @@ export const MODE_WORDS = {
 
 export const LEVEL_WORDS = {
   campaign: { ar: 'الحملات', en: 'Campaigns' },
-  ad_set: { ar: 'المجموعات الإعلانية', en: 'Ad groups' },
+  ad_set: { ar: 'المجموعات', en: 'Ad groups' },
   ad: { ar: 'الإعلانات', en: 'Ads' },
 } as const
 

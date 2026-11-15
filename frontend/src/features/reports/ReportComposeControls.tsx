@@ -20,7 +20,7 @@ import {
  */
 export const GENERIC_NAME_KINDS: ReadonlyArray<{ kind: GenericNameKind; ar: string; en: string }> = [
   { kind: 'campaign', ar: 'أسماء الحملات', en: 'Campaign names' },
-  { kind: 'ad_set', ar: 'أسماء المجموعات الإعلانية', en: 'Ad set names' },
+  { kind: 'ad_set', ar: 'أسماء المجموعات', en: 'Ad group names' },
   { kind: 'account', ar: 'أسماء الحسابات الإعلانية', en: 'Ad account names' },
   { kind: 'content', ar: 'أسماء المحتوى', en: 'Content names' },
 ]

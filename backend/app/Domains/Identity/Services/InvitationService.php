@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Identity\Services;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Services\AccessCenter;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Services\MemberNotices;
@@ -42,7 +43,7 @@ final class InvitationService
      * `$withLink` (SUPERADMIN-WORKSPACE-001) returns the one-time accept link to the PLATFORM OPERATOR who issued it, so a workspace can
      * be handed to its owner when mail does not arrive. Only the platform console asks for it; a tenant's own team invites never do.
      */
-    public function invite(Tenant $tenant, string $email, string $roleSlug, ?array $projectIds, ?User $invitedBy, bool $allowExisting = false, bool $withLink = false): array
+    public function invite(Tenant $tenant, string $email, string $roleSlug, ?array $projectIds, ?User $invitedBy, bool $allowExisting = false, bool $withLink = false, ?array $accessOverrides = null, ?array $clientIds = null): array
     {
         $email = Str::lower(trim($email));
 
@@ -80,6 +81,9 @@ final class InvitationService
             'email' => $email,
             'role_slug' => $roleSlug,
             'project_ids' => $projectIds !== null ? json_encode(array_values($projectIds)) : null,
+            // ACCESS-CENTER-001 — decided by the inviter (already checked against what they hold); applied at acceptance.
+            'access_overrides' => $accessOverrides !== null && ($accessOverrides['allow'] !== [] || $accessOverrides['deny'] !== []) ? json_encode(['allow' => array_values($accessOverrides['allow']), 'deny' => array_values($accessOverrides['deny'])]) : null,
+            'client_ids' => $clientIds !== null && $clientIds !== [] ? json_encode(array_values($clientIds)) : null,
             'token_hash' => hash('sha256', $token),
             // Claimed, then replaced by whatever the attempt below actually produced.
             'delivery_status' => 'pending',
@@ -316,18 +320,83 @@ final class InvitationService
         // this grant confers no client access of its own, and an agency's client is invited
         // through `MembershipGrant::forAgencyClient()` instead.
         $tenant = Tenant::findOrFail($inv->tenant_id);
+        /*
+         * ACCESS-CENTER-001 — the clients chosen on the invitation become the membership's ceiling, exactly as the
+         * team page would set them afterwards. Null (every invitation sent before this, and any that named none)
+         * grants no scope, as before. Each id is re-checked against THIS tenant at acceptance.
+         */
+        $clientIds = isset($inv->client_ids) && $inv->client_ids ? array_values(array_map('strval', (array) json_decode($inv->client_ids, true))) : null;
+        if ($clientIds !== null) {
+            $clientIds = DB::table('client_workspaces')->where('tenant_id', $inv->tenant_id)->whereIn('id', $clientIds)->pluck('id')->map(fn ($id) => (string) $id)->all();
+        }
         $membership = app(GrantMembership::class)->execute(new MembershipGrant(
             user: $user,
             tenant: $tenant,
             portal: Portal::forAccountType($tenant->account_type),
             role: $inv->role_slug,
+            clientScopeIds: $clientIds !== null && $clientIds !== [] ? $clientIds : null,
             grantedBy: User::find($inv->invited_by),
         ));
+
+        // ACCESS-CENTER-001 — the areas switched on or off for THIS invitation follow the person in.
+        $overrides = isset($inv->access_overrides) && $inv->access_overrides ? (array) json_decode($inv->access_overrides, true) : null;
+        if ($overrides !== null) {
+            app(AccessCenter::class)->writeOverrides(
+                (string) $inv->tenant_id,
+                (int) $user->id,
+                array_values(array_map('strval', (array) ($overrides['allow'] ?? []))),
+                array_values(array_map('strval', (array) ($overrides['deny'] ?? []))),
+                $inv->invited_by !== null ? (int) $inv->invited_by : null,
+            );
+        }
 
         DB::table('workspace_invitations')->where('id', $inv->id)
             ->update(['accepted_at' => Carbon::now(), 'accepted_user_id' => $user->id, 'updated_at' => Carbon::now()]);
 
         return $membership;
+    }
+
+    /**
+     * ACCESS-CENTER-001 — send a pending (or expired) invitation again: a NEW token, a fresh 72 hours. The old link
+     * stops working the moment this runs, so a forwarded or leaked copy dies with it.
+     *
+     * @return array{id: string, delivery_status: string, dev_link: ?string}
+     */
+    public function resend(string $tenantId, string $id, User $by): array
+    {
+        $inv = DB::table('workspace_invitations')->where('tenant_id', $tenantId)->where('id', $id)->whereNull('accepted_at')->first();
+        abort_if($inv === null, 404, 'No such invitation.');
+
+        $token = Str::random(48);
+        DB::table('workspace_invitations')->where('id', $id)->update([
+            'token_hash' => hash('sha256', $token),
+            'expires_at' => Carbon::now()->addHours(self::TTL_HOURS),
+            'delivery_status' => 'pending',
+            'updated_at' => Carbon::now(),
+        ]);
+
+        $workspace = $inv->client_workspace_id !== null
+            ? (string) ClientWorkspace::withoutGlobalScopes()->whereKey($inv->client_workspace_id)->value('name')
+            : (string) Tenant::whereKey($tenantId)->value('name');
+
+        $status = TransactionalMailer::asDeliveryStatus(app(TransactionalMailer::class)->send(
+            recipient: (string) $inv->email,
+            mail: new InvitationMail(
+                workspace: $workspace,
+                roleSlug: (string) $inv->role_slug,
+                acceptUrl: MailLinks::to("/invite/accept?token={$token}"),
+                lang: 'ar',
+                invitedBy: (string) $by->name,
+                expiresInHours: self::TTL_HOURS,
+            ),
+            kind: 'invitation',
+            template: 'mail.invitation',
+            tenantId: $tenantId,
+            dedupKey: "invitation:{$id}:".substr(hash('sha256', $token), 0, 16),
+        ));
+        DB::table('workspace_invitations')->where('id', $id)->update(['delivery_status' => $status, 'updated_at' => Carbon::now()]);
+
+        return ['id' => $id, 'delivery_status' => $status, 'dev_link' => ContactVerificationService::exposeDevSecrets() ? "/invite/accept?token={$token}" : null];
     }
 
     private function resolve(string $token): object

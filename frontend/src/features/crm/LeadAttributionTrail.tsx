@@ -19,7 +19,7 @@ import { Num } from '@/components/ui/Num'
 const RUNG_LABEL: Record<AttributionRung['rung'], { ar: string; en: string }> = {
   creative: { ar: 'المحتوى', en: 'Content' },
   ad: { ar: 'الإعلان', en: 'Ad' },
-  adset: { ar: 'المجموعة الإعلانية', en: 'Ad set' },
+  adset: { ar: 'المجموعة', en: 'Ad group' },
   campaign: { ar: 'الحملة', en: 'Campaign' },
 }
 

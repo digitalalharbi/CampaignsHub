@@ -15,6 +15,8 @@ import { toApiError } from '@/lib/api/client'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { AccessCenter } from '@/features/settings/access/AccessCenter'
 
 /**
  * `/agency/team` — who is on the team, and which clients each of them may reach (AGENCY-004).
@@ -55,6 +57,7 @@ export function membershipRoleLabel(role: string, ar: boolean): string {
 
 export function AgencyTeamPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const canRunTeam = useAuth((s) => s.hasPermission('settings.manage'))
   const qc = useQueryClient()
   const team = useQuery({ queryKey: ['agency', 'team'], queryFn: fetchAgencyTeam })
 
@@ -191,6 +194,12 @@ export function AgencyTeamPage() {
           ))}
         </ul>
       )}
+
+      {/*
+        ACCESS-CENTER-001 — invitations, categories and per-person areas, for whoever runs the team. Below the
+        member list, not above it: the page's first screen stays the figures and the people (first-viewport sweep).
+      */}
+      {canRunTeam && <div className="mt-6"><AccessCenter /></div>}
     </div>
   )
 }

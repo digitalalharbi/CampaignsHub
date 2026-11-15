@@ -234,7 +234,7 @@ describe('a refusal names the dimension it refused about', () => {
     )
 
     const note = screen.getByTestId('drivers-declined-spend')
-    expect(note).toHaveTextContent(/No ad set reported this metric/)
+    expect(note).toHaveTextContent(/No ad group reported this metric/)
     expect(note).not.toHaveTextContent(/platform/)
   })
 

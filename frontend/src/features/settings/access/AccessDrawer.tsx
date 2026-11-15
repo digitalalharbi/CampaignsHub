@@ -1,0 +1,162 @@
+import { useMemo, useState } from 'react'
+import { History, RotateCw, Save, UserMinus, XCircle } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
+import { toApiError } from '@/lib/api/client'
+import { fmtDate } from '@/lib/datetime'
+import { canAssign, diffLevels, levelsOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level } from './accessApi'
+import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
+import { ACTION_LABEL, PORTAL_ROLE_LABEL } from './labels'
+
+export type DrawerSubject = { kind: 'member'; row: AccessMember } | { kind: 'invitation'; row: AccessInvitation }
+
+/**
+ * ACCESS-CENTER-001 — one row, everything about it: category, areas for this person, clients, resend / withdraw /
+ * disable / remove, and who changed what. No bulk delete anywhere; removing is one person, one confirmation.
+ */
+export function AccessDrawer({ subject, onClose, data, ar }: { subject: DrawerSubject | null; onClose: () => void; data: AccessData; ar: boolean }) {
+  if (subject === null) return null
+  return (
+    <Modal open onClose={onClose} title={subject.kind === 'member' ? subject.row.name : subject.row.email} size="lg">
+      <DrawerBody key={`${subject.kind}-${subject.row.id}`} subject={subject} onClose={onClose} data={data} ar={ar} />
+    </Modal>
+  )
+}
+
+function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; onClose: () => void; data: AccessData; ar: boolean }) {
+  const a = useAccessActions()
+  const row = subject.row
+  const team = row.audience === 'team'
+  const isMember = subject.kind === 'member'
+  const member = isMember ? subject.row : null
+  const locked = member !== null && (member.is_owner || member.is_self)
+
+  const [category, setCategory] = useState(row.category ?? '')
+  const cat = data.categories.find((c) => c.slug === category)
+  const base = useMemo(() => levelsOf(cat?.areas), [cat])
+  // A person's current areas are their category plus their overrides; the toggles start from there.
+  const [levels, setLevels] = useState<Record<string, Level>>(() => levelsOf(row.areas))
+  const [clients, setClients] = useState<string[]>(row.scope.clients.map((c) => c.id))
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const [err, setErr] = useState('')
+  const [ok, setOk] = useState('')
+  const history = useAccessHistory(isMember ? 'member' : 'invitation', row.id)
+
+  const changedCategory = category !== row.category
+  const chosen = changedCategory ? { ...base, ...diffLevels(levelsOf(row.areas), levels) } : levels
+  const overrides = diffLevels(base, chosen)
+
+  const run = async (p: Promise<unknown>, done: string) => {
+    setErr(''); setOk('')
+    try { await p; setOk(done) } catch (e) { setErr(toApiError(e).message) }
+  }
+
+  const save = () => run((async () => {
+    if (isMember) {
+      if (changedCategory) await a.setCategory.mutateAsync({ id: row.id, role: category })
+      await a.setOverrides.mutateAsync({ id: row.id, areas: overrides })
+      const before = row.scope.clients.map((c) => c.id).sort().join()
+      if (data.agency && member && before !== [...clients].sort().join()) await a.setScope.mutateAsync({ membership: member.membership_id, client_ids: clients })
+    } else {
+      await a.updateInvitation.mutateAsync({ id: row.id, category, areas: overrides, client_ids: clients })
+    }
+  })(), ar ? 'حُفظ' : 'Saved')
+
+  return (
+    <div className="space-y-4" data-testid="access-drawer">
+      {err && <Alert severity="danger" title={ar ? 'لم يُنفّذ' : 'Not done'}>{err}</Alert>}
+      {ok && <Alert severity="positive" title={ok} />}
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+        <span dir="ltr">{row.email}</span>
+        {member?.last_login_at && <span>· {ar ? 'آخر دخول' : 'Last sign-in'} {fmtDate(member.last_login_at)}</span>}
+        {subject.kind === 'invitation' && <span>· {ar ? 'ينتهي' : 'Expires'} {fmtDate(subject.row.expires_at)}</span>}
+      </div>
+
+      {!team ? (
+        <section className="rounded-xl border border-border p-3 text-sm" data-testid="drawer-portal">
+          <div className="font-semibold text-text-primary">{ar ? 'بوابة العميل' : 'Client portal'} · {ar ? (PORTAL_ROLE_LABEL[row.category ?? '']?.ar ?? row.category) : (PORTAL_ROLE_LABEL[row.category ?? '']?.en ?? row.category)}</div>
+          <div className="mt-1 text-xs text-text-muted">{row.scope.clients.map((c) => c.name).join('، ')}</div>
+          <p className="mt-2 text-xs text-text-muted">{ar ? 'صلاحيات البوابة لا تتغيّر من هنا؛ تُدار من صفحة العميل.' : 'Portal access is not changed here; manage it on the client page.'}</p>
+        </section>
+      ) : locked ? (
+        <section className="rounded-xl border border-border p-3" data-testid="drawer-locked">
+          <AreaChips areas={data.areas} levels={levelsOf(row.areas)} ar={ar} />
+          <p className="mt-2 text-xs text-text-muted">{member?.is_owner ? (ar ? 'المالك يملك كل شيء ولا يُقيَّد.' : 'The owner holds everything.') : (ar ? 'لا تعدّل صلاحياتك بنفسك.' : 'You cannot change your own access.')}</p>
+        </section>
+      ) : (
+        <>
+          <section>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'الفئة' : 'Category'}</h3>
+            <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
+              options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en, disabled: c.slug !== row.category && !canAssign(c, data.me) }))} />
+          </section>
+          <section>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'تخصيص له فقط' : 'For this person only'}</h3>
+            <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}
+              onChange={(area, lv) => setLevels((l) => ({ ...l, [area]: lv }))} />
+          </section>
+          {data.agency && data.clients.length > 0 && (
+            <section>
+              <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'العملاء' : 'Clients'}</h3>
+              <div className="flex flex-wrap gap-1.5" data-testid="drawer-clients">
+                {data.clients.map((c) => {
+                  const on = clients.includes(c.id)
+                  return (
+                    <button key={c.id} type="button" aria-pressed={on} onClick={() => setClients((xs) => on ? xs.filter((x) => x !== c.id) : [...xs, c.id])}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-border text-text-secondary'}`}>
+                      {c.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+          <section>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'ماذا سيرى' : 'What they will see'}</h3>
+            <AreaChips areas={data.areas} levels={chosen} ar={ar} changed={Object.keys(overrides)} testId="drawer-preview" />
+          </section>
+          <div className="flex justify-end">
+            <Button onClick={save} data-testid="drawer-save"><Save size={14} aria-hidden /> {ar ? 'حفظ' : 'Save'}</Button>
+          </div>
+        </>
+      )}
+
+      <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+        {subject.kind === 'invitation' && (
+          <>
+            <Button variant="secondary" size="sm" onClick={() => run(a.resend.mutateAsync(row.id), ar ? 'أُعيد الإرسال' : 'Sent again')} data-testid="drawer-resend"><RotateCw size={13} aria-hidden /> {ar ? 'أعد الإرسال' : 'Resend'}</Button>
+            <Button variant="secondary" size="sm" onClick={() => run(a.revoke.mutateAsync(row.id).then(onClose), '')} data-testid="drawer-revoke"><XCircle size={13} aria-hidden /> {ar ? 'اسحب الدعوة' : 'Withdraw'}</Button>
+          </>
+        )}
+        {member && team && !locked && (
+          <>
+            <Button variant="secondary" size="sm" onClick={() => run(a.toggle.mutateAsync(row.id), ar ? 'تم' : 'Done')} data-testid="drawer-toggle">{member.status === 'disabled' ? (ar ? 'فعّل' : 'Enable') : (ar ? 'عطّل' : 'Disable')}</Button>
+            {!confirmRemove
+              ? <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)} data-testid="drawer-remove"><UserMinus size={13} aria-hidden /> {ar ? 'إزالة' : 'Remove'}</Button>
+              : <Button variant="danger" size="sm" onClick={() => run(a.remove.mutateAsync(row.id).then(onClose), '')} data-testid="drawer-remove-confirm">{ar ? 'تأكيد الإزالة' : 'Confirm removal'}</Button>}
+          </>
+        )}
+      </div>
+
+      <section data-testid="drawer-history">
+        <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-text-primary"><History size={14} aria-hidden /> {ar ? 'السجل' : 'History'}</h3>
+        {(history.data?.entries ?? []).length === 0
+          ? <p className="text-xs text-text-muted">{ar ? 'لا تغييرات بعد' : 'No changes yet'}</p>
+          : (
+            <ul className="space-y-1 text-xs">
+              {history.data!.entries.map((h, i) => (
+                <li key={i} className="flex flex-wrap gap-x-2 text-text-secondary">
+                  <span className="font-semibold text-text-primary">{ar ? (ACTION_LABEL[h.action]?.ar ?? h.action) : (ACTION_LABEL[h.action]?.en ?? h.action)}</span>
+                  <span>{fmtDate(h.at)}</span>
+                  {h.by && <span>· {h.by}</span>}
+                  {h.reason && <span>· {h.reason}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
+    </div>
+  )
+}

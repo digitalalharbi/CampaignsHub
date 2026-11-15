@@ -72,7 +72,7 @@ export function AudiencePanel({ projectId, range }: { projectId: string | null; 
           </>
         )
       )}
-      {kind === 'targeting' && (d.targeting.items.length === 0 ? <Empty text={tr('لا مجموعات إعلانية نشطة بإعدادات مخزنة.', 'No active ad set with stored settings.')} /> : <TargetingList items={d.targeting.items} locale={locale} />)}
+      {kind === 'targeting' && (d.targeting.items.length === 0 ? <Empty text={tr('لا مجموعات نشطة بإعدادات مخزنة.', 'No active ad group with stored settings.')} /> : <TargetingList items={d.targeting.items} locale={locale} />)}
       {kind === 'site_events' && (d.site_events.groups.length === 0
         ? <Empty text={tr('لا قياس للموقع في هذه الفترة.', 'No site measurement for this period.')} />
         : <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">{d.site_events.groups.map((g) => <SiteGroupCard key={g.dimension} group={g} locale={locale} />)}</div>)}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Access\Models\Concerns;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
@@ -84,15 +85,43 @@ trait HasRoles
         return $query;
     }
 
-    /** @return Collection<int,string> */
+    /**
+     * The keys this person holds in the tenant this request is for: their roles' keys, then their own overrides.
+     *
+     * ACCESS-CENTER-001 — «الفئة ∪/∖ تخصيص الدعوة». An override row adds (`allow`) or removes (`deny`) one key for
+     * one member in one tenant; it is written only by the access center, by somebody who holds the key they add.
+     * This is the single place a request's permissions are resolved (`hasPermission`, `ProjectAbilities`,
+     * `ClientScopeResolver`, `ProjectReach` all read through it), so an area switched off for a member is off on
+     * every route at once. A member with no override row resolves exactly what their roles held before.
+     *
+     * With no tenant bound (the sign-in payload, before a membership is chosen — displayed, never authorised
+     * against) no `allow` counts and every `deny` does: the fail-closed direction.
+     *
+     * @return Collection<int,string>
+     */
     public function permissionKeys(): Collection
     {
-        return $this->currentTenantRolesQuery()
+        $keys = $this->currentTenantRolesQuery()
             ->with('permissions:id,key')
             ->get()
             ->flatMap(fn (Role $role) => $role->permissions->pluck('key'))
             ->unique()
             ->values();
+
+        if ($this->getKey() === null) {
+            return $keys;
+        }
+
+        $overrides = app(MemberOverrideMemo::class)->for((int) $this->getKey(), app(TenantContext::class)->tenantId());
+
+        if ($overrides->isEmpty()) {
+            return $keys;
+        }
+
+        $deny = $overrides->where('effect', 'deny')->pluck('permission_key')->map(fn ($k) => (string) $k)->all();
+        $allow = $overrides->where('effect', 'allow')->pluck('permission_key')->map(fn ($k) => (string) $k)->all();
+
+        return $keys->merge($allow)->unique()->reject(fn ($k) => in_array((string) $k, $deny, true))->values();
     }
 
     public function hasPermission(string $key): bool

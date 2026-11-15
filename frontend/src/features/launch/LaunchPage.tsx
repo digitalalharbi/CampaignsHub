@@ -209,7 +209,7 @@ export function LaunchPage() {
 
           {step === 2 && (
             <div className="space-y-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-600" checked={spec.ad_set !== null} onChange={(e) => setSpec((s) => ({ ...s, ad_set: e.target.checked ? { name: '', countries: ['SA'], optimization_goal: {}, bid_amount: {} } : null, ad: e.target.checked ? s.ad : null }))} data-testid="launch-adset-on" /> {ar ? 'أنشئ مجموعة إعلانية مع الحملة' : 'Create an ad group with the campaign'}</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-600" checked={spec.ad_set !== null} onChange={(e) => setSpec((s) => ({ ...s, ad_set: e.target.checked ? { name: '', countries: ['SA'], optimization_goal: {}, bid_amount: {} } : null, ad: e.target.checked ? s.ad : null }))} data-testid="launch-adset-on" /> {ar ? 'أنشئ مجموعة مع الحملة' : 'Create an ad group with the campaign'}</label>
               {spec.ad_set && (
                 <>
                   <Field label={ar ? 'اسم المجموعة' : 'Ad group name'}>

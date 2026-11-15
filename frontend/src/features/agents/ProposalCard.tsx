@@ -53,7 +53,7 @@ export function ProposalCard({ projectId, proposal, ar, canDecide, selectable, s
           <div className="min-w-0">
             <p className="text-sm font-bold text-text-primary">
               {proposal.action === 'pause' ? (ar ? 'إيقاف' : 'Pause') : proposal.action === 'resume' ? (ar ? 'تشغيل' : 'Resume') : (ar ? 'الميزانية اليومية' : 'Daily budget')}
-              <span className="ms-1.5 text-xs font-normal text-text-muted">{proposal.target_type === 'ad_set' ? (ar ? 'مجموعة إعلانية' : 'Ad set') : (ar ? 'حملة' : 'Campaign')} · <bdi dir="ltr">{proposal.provider} {proposal.target_external_id}</bdi></span>
+              <span className="ms-1.5 text-xs font-normal text-text-muted">{proposal.target_type === 'ad_set' ? (ar ? 'مجموعة' : 'Ad group') : (ar ? 'حملة' : 'Campaign')} · <bdi dir="ltr">{proposal.provider} {proposal.target_external_id}</bdi></span>
             </p>
             {isBudget && (
               <p className="mt-1 flex items-center gap-1.5 text-sm" data-testid="proposal-preview">

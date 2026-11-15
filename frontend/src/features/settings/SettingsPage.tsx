@@ -33,7 +33,7 @@ export const SETTINGS_TABS = [
   { id: 'general', ar: 'عام', en: 'General', icon: Building2 },
   { id: 'clients', ar: 'العملاء', en: 'Clients', icon: Briefcase },
   { id: 'projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },
-  { id: 'team', ar: 'الفريق والصلاحيات', en: 'Team & permissions', icon: Users },
+  { id: 'team', ar: 'الفريق والنطاقات', en: 'Team & scopes', icon: Users },
   { id: 'notifications', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
   { id: 'security', ar: 'الأمان', en: 'Security', icon: ShieldCheck },
   { id: 'branding', ar: 'الهوية', en: 'Branding', icon: Palette },

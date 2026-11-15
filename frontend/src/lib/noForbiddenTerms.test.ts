@@ -20,6 +20,8 @@ const FORBIDDEN = [
   'سلامة التتبع', 'انقطاع القياس', 'يحتاج انتباه',
   // ALERT-RULES-MANAGE-001 — the alert labels the style guide renamed.
   'إنفاق بلا نتائج', 'مرحلة إطلاق أفضل',
+  // AD-GROUP-TERM-001 — «المجموعات» / «المجموعة», never the long form (lib/adGroupTerms.ts).
+  'المجموعات الإعلانية', 'مجموعات إعلانية', 'المجموعة الإعلانية', 'مجموعة إعلانية',
 ]
 
 const DEFERRED: string[] = []

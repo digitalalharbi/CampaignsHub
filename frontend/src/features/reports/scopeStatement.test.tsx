@@ -79,7 +79,7 @@ describe('the scope statement in the report builder', () => {
     }])
 
     const row = await screen.findByTestId('scope-statement-ad_set_ids')
-    expect(row).toHaveTextContent('Ad sets')
+    expect(row).toHaveTextContent('Ad groups')
     expect(row, 'the builder let an operator narrow to a grain that does not exist and said nothing')
       .toHaveTextContent('campaigns behind it')
   })

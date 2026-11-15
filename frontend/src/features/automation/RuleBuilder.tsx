@@ -87,7 +87,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
             <Pick label={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} all={ar ? 'كل الحسابات' : 'All accounts'} options={accounts.map((a) => ({ id: a.id, name: `${platformLabel(a.provider, ar)} · ${a.name}` }))} value={f.scope.account_ids ?? []} onChange={(v) => setScope('account_ids', v)} testid="rule-accounts" />
             <Pick label={ar ? 'الحملات' : 'Campaigns'} all={ar ? 'كل الحملات' : 'All campaigns'} options={campaigns.map((c) => ({ id: c.id, name: `${platformLabel(c.provider, ar)} · ${c.name ?? c.id}` }))} value={f.scope.campaign_ids ?? []} onChange={(v) => setScope('campaign_ids', v)} testid="rule-campaigns" />
             {f.level !== 'campaign' && (
-              <Pick label={ar ? 'المجموعات الإعلانية' : 'Ad groups'} all={ar ? 'كل المجموعات' : 'All ad groups'} options={adSets.map((s) => ({ id: s.id, name: s.name ?? s.id }))} value={f.scope.ad_set_ids ?? []} onChange={(v) => setScope('ad_set_ids', v)} testid="rule-adsets" />
+              <Pick label={ar ? 'المجموعات' : 'Ad groups'} all={ar ? 'كل المجموعات' : 'All ad groups'} options={adSets.map((s) => ({ id: s.id, name: s.name ?? s.id }))} value={f.scope.ad_set_ids ?? []} onChange={(v) => setScope('ad_set_ids', v)} testid="rule-adsets" />
             )}
           </Section>
 
