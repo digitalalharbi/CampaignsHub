@@ -32,6 +32,7 @@ const overview = (over: Partial<AgencyOverview> = {}): AgencyOverview => ({
   currency: 'SAR',
   current: totals(61_200, 741, complete),
   previous: totals(50_000, 600, complete),
+  by_objective: objectives,
   by_provider: [
     { provider: 'google', ...totals(24_700, 300, complete) },
     { provider: 'meta', ...totals(21_900, 441, complete) },
@@ -40,6 +41,13 @@ const overview = (over: Partial<AgencyOverview> = {}): AgencyOverview => ({
   freshness: { last_synced_at: '2026-10-09T20:03:00Z' },
   ...over,
 })
+
+const objectives: AgencyOverview['by_objective'] = [
+  { family: 'traffic', campaigns: 2, spend: 100, result: 50, result_key: 'clicks', result_label: { ar: 'النقرات', en: 'Clicks' }, cost_per_result: 2, cost_per_result_label: { ar: 'تكلفة النقرة (CPC)', en: 'Cost per click (CPC)' }, missing_reason: null, missing_label: null, roas: null, roas_campaigns: null, sales_campaigns: null },
+  { family: 'leads', campaigns: 1, spend: 400, result: 20, result_key: 'leads', result_label: { ar: 'المهتمين', en: 'Leads' }, cost_per_result: 20, cost_per_result_label: { ar: 'تكلفة المهتم (CPL)', en: 'Cost per lead (CPL)' }, missing_reason: null, missing_label: null, roas: null, roas_campaigns: null, sales_campaigns: null },
+  { family: 'sales', campaigns: 3, spend: 1500, result: 12, result_key: 'conversions', result_label: { ar: 'الطلبات', en: 'Orders' }, cost_per_result: 125, cost_per_result_label: { ar: 'تكلفة الطلب (CPA)', en: 'Cost per order (CPA)' }, missing_reason: null, missing_label: null, roas: 4, roas_campaigns: 2, sales_campaigns: 3 },
+  { family: 'video', campaigns: 1, spend: 80, result: null, result_key: 'video_views', result_label: { ar: 'المشاهدات', en: 'Video views' }, cost_per_result: null, cost_per_result_label: { ar: 'تكلفة المشاهدة (CPV)', en: 'Cost per view (CPV)' }, missing_reason: 'not_reported', missing_label: { ar: 'بدون بيانات: المنصة لم ترسل هذا المؤشر', en: 'No data: the platform did not send this metric' }, roas: null, roas_campaigns: null, sales_campaigns: null },
+]
 
 const alert = (id: string, severity: AlertEvent['severity'], type = 'budget_risk'): AlertEvent => ({
   id, project_id: 'p1', rule_id: 'r', type, entity_type: 'App\\Domains\\Campaigns\\Models\\UnifiedCampaign', entity_id: 'c1',
@@ -53,19 +61,36 @@ describe('the agency headline', () => {
   })
   afterEach(() => signOut())
 
-  it('states spend, results, cost and ROAS in the window’s currency, with movement when both windows are whole', async () => {
+  it('states spend, a result and its own cost per objective, and ROAS over sales only with how many entered it', async () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
-    renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
+    renderWithProviders(<AgencyHeadline ar={true} />, { locale: 'ar' })
     const spend = await screen.findByTestId('agency-kpi-spend')
     expect(spend).toHaveTextContent('61.2K ر.س')
-    expect(screen.getByTestId('agency-kpi-results')).toHaveTextContent('741')
-    expect(screen.getByTestId('agency-kpi-cpa')).toHaveTextContent('ر.س')
-    expect(screen.getByTestId('agency-kpi-roas')).toHaveTextContent('4.00×')
+    // Each objective has its own result and its own cost — never one «cost per result» across them.
+    expect(screen.getByTestId('agency-kpi-result-sales')).toHaveTextContent('12')
+    expect(screen.getByTestId('agency-kpi-result-sales')).toHaveTextContent('تكلفة الطلب (CPA)')
+    expect(screen.getByTestId('agency-kpi-result-leads')).toHaveTextContent('تكلفة المهتم (CPL)')
+    expect(screen.getByTestId('agency-kpi-result-traffic')).toHaveTextContent('تكلفة النقرة (CPC)')
+    expect(screen.getByTestId('agency-kpi-result-video')).toHaveTextContent('بدون بيانات')
+    expect(screen.queryByTestId('agency-kpi-cpa')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agency-kpi-results')).not.toBeInTheDocument()
+    expect(screen.queryByText('تحويلات المنصة')).not.toBeInTheDocument()
+    const roas = screen.getByTestId('agency-kpi-roas')
+    expect(roas).toHaveTextContent('4.00×')
+    expect(roas).toHaveTextContent(/دخلت 2 من 3 حملة مبيعات/)
     // Movement against the previous window, shown because both windows are complete.
     expect(within(spend).getByText(/22/)).toBeInTheDocument()
     expect(screen.queryByTestId('agency-coverage-note')).not.toBeInTheDocument()
     expect(screen.getByTestId('agency-compared-with')).toHaveTextContent('2026-08-12 → 2026-09-10')
     expect(screen.getByTestId('agency-freshness')).toBeInTheDocument()
+  })
+
+  it('prints no ROAS when no sales campaign reported revenue', async () => {
+    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ by_objective: (objectives ?? []).filter((o) => o.family !== 'sales') }))
+    renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
+    const roas = await screen.findByTestId('agency-kpi-roas')
+    expect(roas).toHaveTextContent('—')
+    expect(roas).toHaveTextContent('No sales campaign reported revenue')
   })
 
   /** UX-COMPACT-CHARTS-001 — each card carries the window's daily shape, and only for a metric the series holds. */
@@ -80,8 +105,8 @@ describe('the agency headline', () => {
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
     expect(within(spend).getByTestId('agency-kpi-spend-spark')).toBeInTheDocument()
-    expect(within(screen.getByTestId('agency-kpi-results')).getByTestId('agency-kpi-conversions-spark')).toBeInTheDocument()
-    // The daily rows carry no cost per result and no return: no line is invented from zeros.
+    // No blended results or cost cards exist any more, so no blended line is drawn either.
+    expect(screen.queryByTestId('agency-kpi-conversions-spark')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-kpi-cpa-spark')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-kpi-roas-spark')).not.toBeInTheDocument()
   })

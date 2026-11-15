@@ -7,6 +7,7 @@ namespace App\Domains\Agency\Http\Controllers;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Services\ProjectListSummary;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -82,7 +83,7 @@ final class AgencyOverviewController extends Controller
             return ApiResponse::success([
                 'scope' => $scope, 'period' => $period, 'previous_period' => $previous,
                 'currency' => null, 'current' => null, 'previous' => null,
-                'by_provider' => [], 'timeseries' => [], 'freshness' => ['last_synced_at' => null],
+                'by_provider' => [], 'by_objective' => [], 'timeseries' => [], 'freshness' => ['last_synced_at' => null],
             ], 'Agency overview.');
         }
 
@@ -104,6 +105,8 @@ final class AgencyOverviewController extends Controller
             'current' => $agg->totals($from, $to),
             'previous' => $agg->totals($prevFrom, $prevTo),
             'by_provider' => $agg->byProvider($from, $to),
+            // DASH-KPI-OBJECTIVE-001 — results and cost per result PER objective family; never one blend across them.
+            'by_objective' => (new ObjectivePerformance(projectIds: $projectIds))->byFamily($from, $to),
             'timeseries' => $agg->timeseries($from, $to),
             'freshness' => ['last_synced_at' => is_string($synced) ? $synced : null],
         ], 'Agency overview.');

@@ -164,6 +164,22 @@ export const fetchClientBudgets = () => getData<ClientBudgetRow[]>('/agency/clie
  * `currency` is the window's basis — null when the rows mix currencies or there are none, and then
  * every money figure prints bare. `current` is null when the operator reaches no project at all.
  */
+export interface ObjectiveResultBlock {
+  family: string
+  campaigns: number
+  spend: number
+  result: number | null
+  result_key: string | null
+  result_label: { ar: string; en: string } | null
+  cost_per_result: number | null
+  cost_per_result_label: { ar: string; en: string } | null
+  missing_reason: string | null
+  missing_label: { ar: string; en: string } | null
+  roas: number | null
+  roas_campaigns: number | null
+  sales_campaigns: number | null
+}
+
 export interface AgencyOverview {
   scope: { client_count: number; project_count: number; is_restricted: boolean }
   period: { from: string; to: string }
@@ -172,6 +188,12 @@ export interface AgencyOverview {
   current: Record<string, unknown> | null
   previous: Record<string, unknown> | null
   by_provider: Array<Record<string, unknown> & { provider: string }>
+  /**
+   * DASH-KPI-OBJECTIVE-001 — results and cost per result PER objective family. A cost per result is only ever
+   * spend ÷ result of ONE family; there is no figure across families. `roas` is the sales family's, over
+   * `roas_campaigns` of its `sales_campaigns` (those with both revenue and spend).
+   */
+  by_objective?: ObjectiveResultBlock[]
   timeseries: Array<Record<string, unknown> & { date: string }>
   freshness: { last_synced_at: string | null }
 }
