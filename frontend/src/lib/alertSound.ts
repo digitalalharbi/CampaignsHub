@@ -92,9 +92,15 @@ export function playPing(volume: number, opts: { fromGesture?: boolean } = {}): 
      * once it is actually running. Before any gesture nothing is attempted, so no autoplay warning is ever logged.
      */
     if (!gestured || ctx.state === 'closed') return false
-    void ctx.resume().then(() => { if (ctx.state === 'running') tone(ctx, level) }).catch(() => undefined)
+    /*
+     * Scheduled now, not on resume's promise (CI PR #1071, round 3): Firefox without an audio device (a headless CI box,
+     * a desktop with the output unplugged) never settles that promise, and the ping was never started at all. A tone
+     * scheduled on a suspended context sounds as soon as the browser lets the context run; on a machine that cannot
+     * sound, nothing is heard, which is the honest outcome there.
+     */
+    void ctx.resume().catch(() => undefined)
 
-    return true
+    return tone(ctx, level)
   }
 
   return tone(ctx, level)

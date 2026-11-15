@@ -164,9 +164,20 @@ describe('playPing, the Firefox way', () => {
     expect(sound.audioReady()).toBe(false) // still starting
 
     expect(sound.playPing(40)).toBe(true)
-    expect(stops).toHaveLength(0) // not counted before it can sound
+    expect(stops).toHaveLength(1) // one ping, scheduled on the starting context — it sounds when the context runs
     release()
     await Promise.resolve(); await Promise.resolve()
-    expect(stops).toHaveLength(1) // one ping, after the start
+    expect(stops).toHaveLength(1) // and not a second one when it does
+  })
+
+  it('still schedules the ping when the context never reports running (no audio device), and never before a gesture', async () => {
+    const sound = await import('./alertSound')
+    sound.installAudioUnlock()
+    expect(sound.playPing(40)).toBe(false)
+    expect(stops).toHaveLength(0)
+
+    window.dispatchEvent(new Event('click')) // resume() is asked and never settles
+    expect(sound.playPing(40)).toBe(true)
+    expect(stops).toHaveLength(1)
   })
 })
