@@ -24,6 +24,7 @@ use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
 use App\Domains\Delivery\Console\RemindDeliveryReviewers;
+use App\Domains\Funding\Console\ConvertSpendLimitsCommand;
 use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\EnsureTwoFactorPassed;
@@ -243,6 +244,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileSubscriptionPayments::class,
         // PAY-WEBHOOK-SECRET-REDACT-001 — dry run by default; `--apply` on Production only with the Owner's approval.
         RedactWebhookSecretsCommand::class,
+        // ONE-BUDGET-001 — spend limits become thresholds of the approved budget; dry run unless --apply.
+        ConvertSpendLimitsCommand::class,
         // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
         SweepPlatformPaymentAlerts::class,
     ])

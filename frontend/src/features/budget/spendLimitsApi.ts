@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ApprovedBudget } from '@/features/funding/fundingApi'
 import { deleteData, getEnvelope, patchData, postData } from '@/lib/api/client'
 
 /**
@@ -45,6 +46,11 @@ export interface SpendLimitReading {
   freshness?: Freshness
   /** BUDGET-LIMITS-ACTIONS-001 — a campaign limit's platform campaigns and whether a pause may be ASKED for. */
   actions?: LimitAction[]
+  /** ONE-BUDGET-001 — the approved budget this limit is a threshold of (null = the project has no budget yet). */
+  project_funding_id?: string | null
+  /** When the conversion linked it, and the row as it was before — read-only. */
+  converted_at?: string | null
+  legacy?: Record<string, unknown> | null
 }
 
 export interface FreshnessItem { provider: string; account: string | null; reason: 'failed' | 'access_lost' | 'old' | 'never'; error_category: string | null; last_synced_at: string | null }
@@ -68,6 +74,8 @@ export interface SpendLimitsPage {
   today: string
   /** The currency a new limit starts in: the project's own. */
   project_currency: string
+  /** ONE-BUDGET-001 — the project's approved budget, the same reading as /agency/budgets, with its alert steps. */
+  budget: ApprovedBudget | null
 }
 
 export function useSpendLimits(projectId: string | null) {
@@ -90,6 +98,7 @@ export function useSpendLimits(projectId: string | null) {
         enforcement_note_en: meta?.enforcement_note_en ?? '',
         today: meta?.today ?? '',
         project_currency: meta?.project_currency ?? 'SAR',
+        budget: meta?.budget ?? null,
       }
     },
     enabled: Boolean(projectId),

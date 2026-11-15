@@ -21,6 +21,9 @@ import { NewSpendLimitDialog } from './NewSpendLimitDialog'
 import { EditSpendLimitDialog } from './EditSpendLimitDialog'
 import { FreshnessChip } from '@/features/funding/FreshnessChip'
 import { FxRateBar } from '@/features/funding/FxRateBar'
+import { ApprovedBudgetBar, NoBudget } from '@/features/funding/ApprovedBudget'
+import type { ApprovedBudget } from '@/features/funding/fundingApi'
+import { useAuth } from '@/stores/auth'
 import { RenewAllButton } from '@/features/funding/RenewAllDialog'
 import { useState } from 'react'
 import { withMark } from '@/lib/money/mark'
@@ -173,6 +176,9 @@ export function SpendLimitsPage() {
 
       <FxRateBar />
 
+      {/* ONE-BUDGET-001 — the limits are part of the project's approved budget: the budget first, with its alert steps. */}
+      {q.data?.budget && <BudgetOfLimits budget={q.data.budget} ar={ar} />}
+
       {/*
         The same sentence was on screen three times.
 
@@ -261,6 +267,42 @@ export function SpendLimitsPage() {
       {/* BUDGET-DISCLAIMER-001 — ad-spend money is shown here, so the one financial disclaimer is too. */}
       <FinancialDisclaimer className="mt-3" />
     </div>
+  )
+}
+
+/**
+ * ONE-BUDGET-001 — the approved budget these limits belong to (the same reading as /agency/budgets) and its alert steps.
+ * A project with no budget says so and offers to add one; its limits are then measured on their own until it has one.
+ */
+function BudgetOfLimits({ budget, ar }: { budget: ApprovedBudget; ar: boolean }) {
+  const canAdd = useAuth((s) => s.hasPermission('funding.manage'))
+  if (!budget.has_budget) {
+    if (budget.withheld) return null
+
+    return (
+      <section data-testid="limits-budget" className="rounded-xl border border-border bg-surface p-3">
+        <h2 className="mb-1 text-sm font-bold text-text-primary">{ar ? 'ميزانية المشروع' : 'Project budget'}</h2>
+        <NoBudget ar={ar} canAdd={canAdd} />
+      </section>
+    )
+  }
+
+  return (
+    <section data-testid="limits-budget" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+      <h2 className="text-sm font-bold text-text-primary">{ar ? 'ميزانية المشروع' : 'Project budget'}</h2>
+      <ApprovedBudgetBar ar={ar} approved={budget.approved} spent={budget.spent} remaining={budget.remaining} ratio={budget.used_ratio} coverDays={budget.cover_days} testid="limits-budget-bar" />
+      <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="limits-budget-steps">
+        <span className="text-text-muted">{ar ? 'تنبيه عند' : 'Alert at'}</span>
+        {budget.thresholds.map((step) => {
+          const reached = budget.crossed_threshold !== null && step <= budget.crossed_threshold
+          return (
+            <span key={step} className={`tnum rounded-full px-2 py-0.5 font-semibold ${reached ? 'bg-[var(--warning-background)] text-warning' : 'bg-surface-secondary text-text-secondary'}`}>
+              {step}%
+            </span>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
