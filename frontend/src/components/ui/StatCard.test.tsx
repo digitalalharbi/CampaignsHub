@@ -210,6 +210,17 @@ describe('a card is the same height whether or not it carries a hint or a pill',
     expect(card.textContent).toBe('CPA33 SAR2%')
   })
 
+  it('keeps the two-row geometry: the movement box is trimmed, and a trailing that renders nothing leaves no box', () => {
+    // The trim is what keeps a WRAPPED movement adding what the old row added (GA4 print fit floor, CI PR #1071).
+    const withPill = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
+    expect(withPill.firstElementChild?.lastElementChild?.className).toMatch(/-my-\[4\.5px\]/)
+
+    const Nothing = () => null
+    const empty = cardOf({ label: 'CPA', value: '33 SAR', trailing: <Nothing /> })
+    expect(empty.firstElementChild?.lastElementChild?.className).toMatch(/empty:hidden/)
+    expect(empty.firstElementChild?.lastElementChild?.childElementCount).toBe(0)
+  })
+
   it('reserves the hint row, so a card without a hint matches one with', () => {
     const hinted = cardOf({ label: 'Active', value: '2', hint: '3 in total' })
     const bare = cardOf({ label: 'ROAS', value: '11.03×' })

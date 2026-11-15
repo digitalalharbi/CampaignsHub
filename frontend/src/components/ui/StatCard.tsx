@@ -203,8 +203,14 @@ export function StatCard({
         text, a copied block, a screen reader — and label → movement → value read «CPA ↑5% 40 SAR», «تكلفة النتيجة 0% 40 ر.س»:
         a percentage trailing a cost label, the unit defect `owner-acceptance-content.spec.ts` guards. It surfaced on
         Analytics → content (CI, PR #1071) the day the default period's comparison window (DATE-RANGE-001) gave the format
-        cards a measured baseline. Pixel layout unchanged: the label line keeps `min-h-6`, a wrapped movement keeps its 2px
-        gap, the value keeps its 6px gap (2 + `mt-1`) and its full row.
+        cards a measured baseline.
+
+        Same geometry as the two-row layout it replaced, measured on the GA4 print deck (where a few pixels decide the fit
+        floor): the label line keeps `min-h-6`; the value keeps its 6px gap (2 + `mt-1`) and its full row. The movement's
+        box is trimmed by `-my-[4.5px]` — half of (24px label line − 15px label text) — so on the label's line it still
+        centres in 24px, and when it WRAPS its line adds pill − 9px, i.e. exactly what the old row added (15px label + 2 +
+        pill instead of the reserved 24). Without the trim a wrapped pill made every GA4 overview tile 9px taller and the
+        slide printed at 0.84 (CI, PR #1071). `empty:hidden`: a trailing component that renders nothing leaves no box.
       */}
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
         <span className={`order-1 flex min-h-6 items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
@@ -222,7 +228,7 @@ export function StatCard({
         </span>
 
         {delta ? (
-          <span className="order-2 inline-flex">
+          <span className="order-2 -my-[4.5px] inline-flex">
             <Delta
               metric={delta.metric}
               current={delta.current}
@@ -232,7 +238,7 @@ export function StatCard({
             />
           </span>
         ) : trailing ? (
-          <span className="order-2 inline-flex">{trailing}</span>
+          <span className="order-2 -my-[4.5px] inline-flex empty:hidden">{trailing}</span>
         ) : null}
       </div>
 
