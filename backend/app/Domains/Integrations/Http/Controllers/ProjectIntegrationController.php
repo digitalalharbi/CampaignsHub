@@ -19,6 +19,7 @@ use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\ManualSyncDebounce;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\ArchiveEffects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
 use App\Domains\Subscriptions\Seats\AdAccountSeats;
@@ -62,9 +63,19 @@ final class ProjectIntegrationController extends Controller
          * `ConfirmAccountSelection` both do, which is why a deactivated binding does not block the
          * account from being bound elsewhere. This is the listing catching up with them.
          */
+        /*
+         * PROJECT-LIFECYCLE-001 §8 (N2) — the «مشترك» warning: for each account ALSO linked (actively) to another
+         * project, the other projects' names. Archiving/deleting this project stops only this project's link.
+         */
+        $project = Project::find(app(ProjectContext::class)->projectId());
+        $shared = $project === null ? [] : collect(app(ArchiveEffects::class)->sharedAccounts($project))
+            ->mapWithKeys(fn (array $a) => [$a['external_account_id'] => $a['other_projects']])->all();
         $bindings = ProjectIntegrationBinding::with('externalAccount.connection')
             ->where('is_active', true)->latest()->get()
-            ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b));
+            ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b) + ['shared_with' => array_map(
+                static fn (array $p): array => ['id' => $p['id'], 'name' => $p['name']],
+                $shared[(string) $b->external_account_id] ?? [],
+            )]);
 
         return ApiResponse::success($bindings, 'Project integrations retrieved.');
     }

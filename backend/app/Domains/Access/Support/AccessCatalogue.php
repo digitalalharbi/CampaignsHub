@@ -71,7 +71,7 @@ final class AccessCatalogue
                 'clients.create', 'clients.update', 'clients.delete', 'clients.archive', 'clients.restore',
                 'clients.manage_team', 'clients.manage_settings',
                 'projects.create', 'projects.update', 'projects.delete', 'projects.manage_members',
-                'projects.archive', 'projects.restore', 'projects.purge',
+                'projects.archive', 'projects.restore', 'projects.purge', 'projects.move',
                 'workspaces.create', 'workspaces.update', 'workspaces.delete', 'workspaces.members.manage',
                 'proposals.create', 'proposals.update', 'proposals.approve',
                 'tasks.create', 'tasks.update', 'tasks.delete',

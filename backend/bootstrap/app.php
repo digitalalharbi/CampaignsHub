@@ -135,6 +135,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // PROJECT-LIFECYCLE-001 — ops: id-scoped, dry-run by default, never delete.
         \App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand::class,
         \App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand::class,
+        // N2 — the trash's retention job (dry run by default; the scheduler passes --apply).
+        \App\Domains\Projects\Lifecycle\Console\PurgeExpiredProjectsCommand::class,
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,

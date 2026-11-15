@@ -29,6 +29,13 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  * that.
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
+
+/*
+ * PROJECT-LIFECYCLE-001 §4 (N2) — the trash's retention. Purges ONLY projects in «المحذوفات» whose `purge_after` has
+ * passed (set by a delete from the UI; rows soft-deleted before the lifecycle have none and are never purged), and sends
+ * the workspace owner the notice 3 days before. Idempotent; keeps audit + notice logs; never calls an ad platform.
+ */
+Schedule::command('lifecycle:purge-expired --apply')->dailyAt('02:30')->withoutOverlapping();
 // PRICING-SEATS-001 — released ad-account seats stamped within the hour, so the 30-day replacement window starts on time.
 Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 

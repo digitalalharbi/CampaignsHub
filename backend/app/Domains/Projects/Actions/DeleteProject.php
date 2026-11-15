@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Actions;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\ClientWorkspaces\Enums\ClientStatus;
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Lifecycle\LifecycleNotices;
 use App\Domains\Projects\Lifecycle\ProjectLifecycle;
-use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * PROJECT-DELETE-001 §8 §9 — deleting a project without reaching past it.
@@ -55,68 +58,53 @@ use Illuminate\Support\Facades\DB;
  * `is_active = false` is the product's existing vocabulary for «this account no longer feeds this
  * project», and it is what every sync path already reads. Destroying the row instead would lose the
  * fact that the account WAS bound, which is exactly the fact an audit of last quarter's spend needs.
+ *
+ * ## PROJECT-LIFECYCLE-001 §4 (builder N2) — the soft delete is ONE lifecycle call
+ *
+ * Every step above is now an archive effect recorded by {@see ProjectLifecycle::softDelete()} (bindings unlinked, links
+ * revoked, schedules/rules/routines stopped, tasks and alerts closed, forms unpublished, destinations off), so restoring
+ * from «المحذوفات» reverses exactly this delete. Permanent deletion is `ProjectPurger` (after the retention, or by hand
+ * with `projects.purge`).
+ *
+ * The client (§4): `project_only` (default) never touches the client. `project_and_client` is accepted ONLY when this is
+ * the client's last project that is not already deleted AND the client's name is typed — enforced here, not in the UI;
+ * the client is then soft-deleted through `transitionClient()` (restorable; never purged by the automatic job). The
+ * hidden default client of a workspace without a client concept is never deleted.
  */
 final class DeleteProject
 {
+    public const PROJECT_ONLY = 'project_only';
+
+    public const PROJECT_AND_CLIENT = 'project_and_client';
+
     public function __construct(
         private readonly ProjectDeletionImpact $impact,
         private readonly AuditLogger $audit,
         private readonly ProjectLifecycle $lifecycle,
+        private readonly LifecycleNotices $notices,
     ) {}
 
     /**
-     * @return array<string,mixed> the impact, as measured immediately before the deletion
+     * @return array<string,mixed> the impact, as measured immediately before the deletion, plus what the delete did
+     *
+     * @throws ValidationException
      */
-    public function handle(Project $project, ?int $actorId): array
+    public function handle(Project $project, ?int $actorId, string $clientAction = self::PROJECT_ONLY, ?string $confirmClientName = null): array
     {
-        $tenantId = (string) $project->tenant_id;
         $projectId = (string) $project->getKey();
+        $actor = $actorId === null ? null : User::find($actorId);
 
         // Measured BEFORE, so the audit record says what was actually there rather than what is left.
         $impact = $this->impact->for($project);
+        $client = $this->clientToDelete($project, $clientAction, $confirmClientName);
 
-        DB::transaction(function () use ($project, $tenantId, $projectId, $actorId): void {
-            // 1. Stop the data arriving. This project's bindings only — never the connection.
-            DB::table('project_integration_bindings')
-                ->where('tenant_id', $tenantId)
-                ->where('project_id', $projectId)
-                ->update(['is_active' => false, 'updated_at' => now()]);
+        $result = DB::transaction(function () use ($project, $actor, $client, $clientAction): array {
+            $result = $this->lifecycle->softDelete($project, $actor, 'delete', ['client_action' => $clientAction]);
+            if ($client !== null) {
+                $this->lifecycle->transitionClient($client, ClientStatus::Deleted, $actor, 'deleted_with_last_project', ['project_id' => (string) $project->getKey()]);
+            }
 
-            // 2. Stop the client-facing links answering. Revoked, not deleted: a link that was
-            //    revoked on a date is a fact, and an absent row cannot say when access ended.
-            DB::table('report_shares')
-                ->whereIn('report_id', DB::table('reports')
-                    ->where('tenant_id', $tenantId)
-                    ->where('project_id', $projectId)
-                    ->select('id'))
-                ->whereNull('revoked_at')
-                ->update(['revoked_at' => now(), 'updated_at' => now()]);
-
-            // 3. Stop the queue emailing a client about a project that no longer exists.
-            DB::table('report_schedules')
-                ->where('tenant_id', $tenantId)
-                ->where('project_id', $projectId)
-                ->where('active', true)
-                ->update(['active' => false, 'next_run_at' => null, 'updated_at' => now()]);
-
-            // 4. Stop strangers submitting to the project's public forms and stop its conversions being reported. A form is
-            //    ARCHIVED (kept, with its versions and submissions as the record of what was asked and agreed), a destination is
-            //    switched OFF — the same vocabulary the team uses; nothing is deleted. A published form answers from a slug, not a
-            //    session, so without this it would keep creating leads in a project nobody can open.
-            DB::table('lead_forms')
-                ->where('tenant_id', $tenantId)
-                ->where('project_id', $projectId)
-                ->where('status', 'published')
-                ->update(['status' => 'archived', 'updated_at' => now()]);
-            DB::table('conversion_destinations')
-                ->where('tenant_id', $tenantId)
-                ->where('project_id', $projectId)
-                ->where('status', '!=', 'off')
-                ->update(['status' => 'off', 'updated_at' => now()]);
-
-            // PROJECT-LIFECYCLE-001 — the soft delete is the `deleted` transition (status, deleted_at/by, purge_after,
-            // logged with the name snapshot). Builder N2 extends this flow (archive effects, trash, purge).
-            $this->lifecycle->transition($project, ProjectStatus::Deleted, $actorId === null ? null : User::find($actorId), 'delete');
+            return $result;
         });
 
         /*
@@ -136,9 +124,57 @@ final class DeleteProject
                 'status' => $impact['project']['status'],
                 'counts' => $impact['counts'],
             ],
+            after: ['client_action' => $clientAction, 'client_deleted' => $client !== null, 'purge_after' => optional($project->purge_after)->toIso8601String()],
             userId: $actorId,
         );
 
-        return $impact;
+        $this->notices->deleted($project, $actor);
+
+        return $impact + [
+            'client_deleted' => $client !== null,
+            'purge_after' => optional($project->purge_after)->toIso8601String(),
+            'lifecycle' => [
+                'transition' => $result['transition']->toArray(),
+                'effects' => $result['effects'],
+                'shared_accounts' => $result['shared_accounts'],
+            ],
+        ];
+    }
+
+    /**
+     * The other projects of this project's client that are not already in the trash. While there is one, only the
+     * project can be deleted — the client and its other projects are untouched (§4, server-enforced).
+     */
+    public static function otherProjectsOfClient(Project $project): int
+    {
+        return Project::withoutGlobalScopes()
+            ->where('tenant_id', $project->tenant_id)
+            ->where('client_workspace_id', $project->client_workspace_id)
+            ->where('id', '!=', $project->getKey())
+            ->whereNull('deleted_at')
+            ->count();
+    }
+
+    /** @throws ValidationException */
+    private function clientToDelete(Project $project, string $clientAction, ?string $confirmClientName): ?ClientWorkspace
+    {
+        if ($clientAction === self::PROJECT_ONLY) {
+            return null;
+        }
+        if ($clientAction !== self::PROJECT_AND_CLIENT) {
+            throw ValidationException::withMessages(['client_action' => [__('Choose «project only» or «project and client».')]]);
+        }
+        $client = ClientWorkspace::withoutGlobalScopes()->where('tenant_id', $project->tenant_id)->whereKey($project->client_workspace_id)->first();
+        if ($client === null || (bool) $client->is_canonical) {
+            throw ValidationException::withMessages(['client_action' => [__('This workspace’s default client cannot be deleted.')]]);
+        }
+        if (self::otherProjectsOfClient($project) > 0) {
+            throw ValidationException::withMessages(['client_action' => [__('The client has other projects; only the project can be deleted.')]]);
+        }
+        if (trim((string) $confirmClientName) !== trim((string) $client->name)) {
+            throw ValidationException::withMessages(['confirm_client_name' => [__('Type the client name exactly to delete the client too.')]]);
+        }
+
+        return $client;
     }
 }

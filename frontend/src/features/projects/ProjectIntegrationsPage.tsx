@@ -19,6 +19,7 @@ import { ProjectSyncHistory } from './ProjectSyncHistory'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from '@/features/tasks/labels'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
+import { lt } from '@/lib/projectLifecycle'
 import { Button } from '@/components/ui/Button'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -377,6 +378,17 @@ export function ProjectIntegrationsPage() {
           </div>
         ) : (
           <div className="mt-3 space-y-2">
+            {(bindings.data ?? []).some((b) => (b.shared_with?.length ?? 0) > 0) && (
+              <div data-testid="integrations-shared-warning" role="note" className="rounded-xl border border-warning bg-warning-soft p-3 text-sm">
+                <p className="font-bold text-warning">{lt('projects.lifecycle.shared.title', lang === 'ar')}</p>
+                <p className="mt-1 text-text-secondary">{lt('projects.lifecycle.shared.body', lang === 'ar')}</p>
+                <ul className="mt-1 grid gap-0.5 text-xs text-text-secondary">
+                  {(bindings.data ?? []).filter((b) => (b.shared_with?.length ?? 0) > 0).map((b) => (
+                    <li key={b.id} className="truncate"><bdi className="font-semibold text-text-primary">{b.account?.name ?? b.provider}</bdi> ← {(b.shared_with ?? []).map((p) => p.name).join('، ')}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {/*
               No silent caps: this card asks for five, and a card that quietly stops at five is
               indistinguishable from a project that has five tasks.
@@ -394,6 +406,12 @@ export function ProjectIntegrationsPage() {
                     <Badge tone="info">{b.purpose}</Badge>
                     {b.is_primary && <Badge tone="success">{t('primary')}</Badge>}
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
+                    {/* PROJECT-LIFECYCLE-001 §8 — «مشترك»: the same account feeds another project too. */}
+                    {(b.shared_with?.length ?? 0) > 0 && (
+                      <span title={(b.shared_with ?? []).map((p) => p.name).join('، ')} data-testid={`binding-shared-${b.id}`}>
+                        <Badge tone="warning">{lt('projects.lifecycle.shared.badge', lang === 'ar')}</Badge>
+                      </span>
+                    )}
                     {/*
                       The CONNECTION's health, which this row has always been sent and never shown.
                       `connection_status` arrives on every account — `ProjectIntegrationController`

@@ -58,6 +58,8 @@ final class Project extends Model
         'setup_completion' => 'integer',
         'archived_at' => 'datetime',
         'purge_after' => 'datetime',
+        'purged_at' => 'datetime',
+        'purge_warned_at' => 'datetime',
     ];
 
     protected static function booted(): void

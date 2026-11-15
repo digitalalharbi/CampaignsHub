@@ -50,7 +50,7 @@ final class PermissionSeeder extends Seeder
         'audit' => ['view'],
         'settings' => ['manage'],
         'workspaces' => ['view', 'create', 'update', 'delete', 'members.manage'],
-        'projects' => ['view', 'view.all', 'create', 'update', 'delete', 'manage_members', 'archive', 'restore', 'purge'],
+        'projects' => ['view', 'view.all', 'create', 'update', 'delete', 'manage_members', 'archive', 'restore', 'purge', 'move'],
         'ai' => ['view', 'manage', 'use'],
         'notifications' => ['view'],
         'tasks' => ['view', 'create', 'update', 'delete'],

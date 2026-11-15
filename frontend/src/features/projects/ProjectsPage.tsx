@@ -15,6 +15,7 @@ import {
   type Project,
 } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { formatWholePercent } from '@/lib/percent'
 import { PLATFORM_LABELS, PLATFORM_ORDER } from '@/lib/platforms'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -470,7 +471,7 @@ export function ProjectsPage() {
                 </div>
                 <p className="mt-2 text-xs text-text-secondary">{ws?.name ?? '—'}</p>
                 <span className="mt-1 block text-xs text-text-muted">
-                  {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
+                  {t('setup')}: <span className="tnum">{formatWholePercent(p.setup_completion)}</span>
                 </span>
 
                 {/*

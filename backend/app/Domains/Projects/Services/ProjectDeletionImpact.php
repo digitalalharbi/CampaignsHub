@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Projects\Services;
 
+use App\Domains\Projects\Actions\DeleteProject;
+use App\Domains\Projects\Lifecycle\ArchiveEffects;
+use App\Domains\Projects\Lifecycle\TrashRetention;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Facades\DB;
 
@@ -122,6 +125,20 @@ final class ProjectDeletionImpact
             ->whereNull('deleted_at')
             ->count();
 
+        /*
+         * PROJECT-LIFECYCLE-001 §4 (N2) — the rest of what the confirm window states: budgets, rules, recipients. Only
+         * switches that are ON count (a rule already off, a budget already closed, is not an impact).
+         */
+        $counts['budgets'] = DB::table('project_funding')->where('tenant_id', $tenantId)->where('project_id', $projectId)->count();
+        $counts['spend_limits'] = DB::table('spend_limits')->where('tenant_id', $tenantId)->where('project_id', $projectId)->count();
+        $counts['alert_rules'] = DB::table('alert_rules')->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('active', true)->count();
+        $counts['automation_rules'] = DB::table('automation_rules')->where('tenant_id', $tenantId)->where('project_id', $projectId)->where('enabled', true)->count();
+        $counts['recipients'] = DB::table('notification_recipients')->where('tenant_id', $tenantId)->where('project_id', $projectId)->count()
+            + DB::table('external_digest_recipient_projects')->where('tenant_id', $tenantId)->where('project_id', $projectId)->count();
+
+        $client = DB::table('client_workspaces')->where('tenant_id', $tenantId)->where('id', $project->client_workspace_id)->first(['id', 'name', 'is_canonical']);
+        $otherProjects = DeleteProject::otherProjectsOfClient($project);
+
         return [
             'project' => [
                 'id' => $projectId,
@@ -140,6 +157,20 @@ final class ProjectDeletionImpact
              */
             'revokes_provider_authorisation' => false,
             'deletes_advertising_accounts' => false,
+            'ad_platforms_untouched' => true,
+            // «مشترك» — accounts also linked to another project: only THIS project's link is removed.
+            'shared_accounts' => app(ArchiveEffects::class)->sharedAccounts($project),
+            /*
+             * §4 — the client question. `can_delete_client` is true only when this is the client's last project that is
+             * not already deleted (and the client is not the workspace's hidden default); the server enforces the same.
+             */
+            'client' => $client === null ? null : [
+                'id' => (string) $client->id,
+                'name' => (string) $client->name,
+                'other_projects' => $otherProjects,
+                'can_delete_client' => $otherProjects === 0 && ! (bool) $client->is_canonical,
+            ],
+            'retention_days' => app(TrashRetention::class)->daysFor($tenantId),
         ];
     }
 }

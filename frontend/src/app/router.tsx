@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -43,6 +43,8 @@ const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), '
 const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
 const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
 const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
+// PROJECT-LIFECYCLE-001 §8 — «فتح»: an archived project opens view-only; a live one keeps its usual destination.
+const ProjectOpenPage = lazyPage(() => import('@/features/projects/lifecycle/ProjectOpenPage'), 'ProjectOpenPage')
 const ProjectTeamPage = lazyPage(() => import('@/features/projects/ProjectTeamPage'), 'ProjectTeamPage')
 const SystemStatusPage = lazyPage(() => import('@/features/system/SystemStatusPage'), 'SystemStatusPage')
 const PublicHomePage = lazyPage(() => import('@/features/marketing/PublicHomePage'), 'PublicHomePage')
@@ -382,6 +384,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'portfolio', element: <PortfolioPage /> },
           { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/:projectId', element: <ProjectOpenPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
@@ -618,7 +621,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'portfolio', element: <PortfolioPage /> },
             // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
             { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
-            { path: 'projects/:projectId', element: <AgencyProjectToClientRedirect /> },
+            // PROJECT-LIFECYCLE-001 §8 — still lands on the client for a live project; an archived one opens view-only.
+            { path: 'projects/:projectId', element: <ProjectOpenPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*

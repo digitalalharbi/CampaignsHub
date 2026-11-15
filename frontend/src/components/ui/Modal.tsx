@@ -74,8 +74,11 @@ export function Modal({
        * Not a slide or a scale: a dialog whose buttons move while it opens is a click that misses
        * (see CLICK-STABLE-001 below). A fade changes nothing a pointer can land on, and nothing waits
        * for it — the dialog is interactive from its first frame.
+       *
+       * z-[60], the overlay layer (DetailPanel, drawers): at z-50 the phone's bottom tab bar (also z-50, later in the
+       * document) sat over the sheet's footer and swallowed its confirm button (found by project-lifecycle.spec at 390px).
        */
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center sm:p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

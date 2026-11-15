@@ -79,6 +79,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
     Route::get('{project}/lifecycle', [ProjectController::class, 'lifecycleHistory'])->name('lifecycle');
     Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
+    // PROJECT-LIFECYCLE-001 §4–§5 (N2) — restore window, permanent delete from «المحذوفات», move to another client.
+    Route::get('{project}/restore-impact', [ProjectController::class, 'restoreImpact'])->name('restore-impact');
+    Route::post('{project}/purge', [ProjectController::class, 'purge'])->name('purge');
+    Route::get('{project}/move-impact', [ProjectController::class, 'moveImpact'])->name('move-impact');
+    Route::post('{project}/move', [ProjectController::class, 'move'])->name('move');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
 

@@ -10,8 +10,11 @@ use App\Domains\ClientWorkspaces\Services\CanonicalWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Actions\DeleteProject;
+use App\Domains\Projects\Actions\RestoreProject;
 use App\Domains\Projects\Lifecycle\InvalidLifecycleTransition;
 use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectMover;
+use App\Domains\Projects\Lifecycle\ProjectPurger;
 use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Resources\ProjectResource;
@@ -44,7 +47,14 @@ final class ProjectController extends Controller
         $user = $request->user();
         abort_unless($user->hasPermission('projects.view'), 403);
 
-        $query = Project::query()->latest();
+        /*
+         * PROJECT-LIFECYCLE-001 §4 (N2) — «المحذوفات»: `status=deleted` (alias `trash`) lists the soft-deleted projects not
+         * yet permanently deleted, newest deletion first. Every other list keeps excluding them (SoftDeletes scope).
+         */
+        $trash = in_array($request->string('status')->toString(), ['deleted', 'trash'], true);
+        $query = $trash
+            ? Project::onlyTrashed()->inLifecycle(ProjectStatus::Deleted)->whereNull('purged_at')->orderByDesc('deleted_at')
+            : Project::query()->latest();
 
         if (($reachable = $this->reachable($user)) !== null) {
             $query->whereIn('id', $reachable);
@@ -57,7 +67,9 @@ final class ProjectController extends Controller
          * `include_archived` adds the archived ones («المؤرشفة»); `status=archived` lists only those. Deleted projects
          * are soft-deleted and never listed here (the trash is its own list).
          */
-        if ($status = $request->string('status')->toString()) {
+        if ($trash) {
+            // already constrained above
+        } elseif ($status = $request->string('status')->toString()) {
             $query->inLifecycle(ProjectStatus::normalise($status));
         } elseif ($request->boolean('include_archived')) {
             $query->inLifecycle(ProjectStatus::Draft, ProjectStatus::Active, ProjectStatus::Paused, ProjectStatus::Archived);
@@ -68,7 +80,7 @@ final class ProjectController extends Controller
             $query->where('name', 'ilike', "%{$search}%");
         }
 
-        $projects = $query->get();
+        $projects = $query->with(['clientWorkspace' => fn ($q) => $q->withoutGlobalScopes()->withTrashed()->select(['id', 'name'])])->get();
 
         /*
          * PROJECT-LIST-SURFACE-001 §10 — the facts that make the list worth opening.
@@ -257,20 +269,22 @@ final class ProjectController extends Controller
      * POST projects/{project}/restore — un-archive, after confirmation (`{confirm: true}`). `projects.restore`.
      * Returns the project to the state it had before the archive and reverses every recorded archive effect.
      */
-    public function restore(Request $request, string $project): JsonResponse
+    public function restore(Request $request, string $project, RestoreProject $restorer): JsonResponse
     {
         abort_unless($request->user()->hasPermission('projects.restore'), 403);
-        $model = $this->find($project);
+        $model = $this->findWithTrashed($project);
         $this->authorizeReach($request->user(), $model);
-        $request->validate(['confirm' => ['required', 'accepted']]);
+        $data = $request->validate(['confirm' => ['required', 'accepted'], 'relink_accounts' => ['sometimes', 'boolean']]);
 
-        $result = $this->guarded(fn () => $this->lifecycle()->unarchive($model, $request->user(), true));
+        // §5 — from «المؤرشفة» or «المحذوفات»; unlinked accounts re-linked when confirmed (default) and still available.
+        $result = $this->guarded(fn () => $restorer->handle($model, $request->user(), (bool) ($data['relink_accounts'] ?? true)));
 
         return ApiResponse::success(
             (new ProjectResource($model->refresh()))->resolve($request) + ['lifecycle' => [
                 'transition' => $result['transition']->toArray(),
                 'restored' => $result['restored'],
                 'skipped' => $result['skipped'],
+                'client_restored' => $result['client_restored'] ?? false,
             ]],
             'Project restored.',
         );
@@ -349,6 +363,9 @@ final class ProjectController extends Controller
 
         $request->validate([
             'confirm_name' => ['required', 'string'],
+            // §4 — when the project is the client's only one: «المشروع فقط» (default) or «المشروع والعميل».
+            'client_action' => ['sometimes', 'string', Rule::in([DeleteProject::PROJECT_ONLY, DeleteProject::PROJECT_AND_CLIENT])],
+            'confirm_client_name' => ['sometimes', 'nullable', 'string'],
         ]);
 
         /*
@@ -364,9 +381,84 @@ final class ProjectController extends Controller
             ]);
         }
 
-        $impact = $delete->handle($model, $request->user()?->id);
+        $impact = $delete->handle(
+            $model,
+            $request->user()?->id,
+            (string) $request->input('client_action', DeleteProject::PROJECT_ONLY),
+            $request->input('confirm_client_name'),
+        );
 
         return ApiResponse::success($impact, 'Project deleted.');
+    }
+
+    /**
+     * GET projects/{project}/restore-impact — what restoring would bring back (§5): the state it returns to, the accounts
+     * a restore would re-link and whether each is still available, and whether the client comes back with it. Read-only.
+     */
+    public function restoreImpact(Request $request, string $project, RestoreProject $restorer): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.restore'), 403);
+        $model = $this->findWithTrashed($project);
+        $this->authorizeReach($request->user(), $model);
+
+        return ApiResponse::success($restorer->impact($model), 'Restore impact.');
+    }
+
+    /**
+     * POST projects/{project}/purge — «حذف نهائي» from «المحذوفات». `projects.purge` + the typed project name. Refused
+     * unless the project is in the trash. Keeps audit + notice logs (name snapshot); never calls an ad platform.
+     */
+    public function purge(Request $request, string $project, ProjectPurger $purger): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.purge'), 403);
+        $model = $this->findWithTrashed($project);
+        $this->authorizeReach($request->user(), $model);
+        $request->validate(['confirm_name' => ['required', 'string']]);
+        if (trim((string) $request->input('confirm_name')) !== trim((string) $model->name)) {
+            throw ValidationException::withMessages(['confirm_name' => [__('Type the project name exactly to confirm deletion.')]]);
+        }
+
+        $counts = $this->guarded(fn () => $purger->purge($model, $request->user(), false));
+
+        return ApiResponse::success(['id' => (string) $model->getKey(), 'name' => (string) $model->name, 'purged' => true, 'counts' => array_filter($counts), 'ad_platforms_untouched' => true], 'Project permanently deleted.');
+    }
+
+    /** GET projects/{project}/move-impact?client_workspace_id= — what «نقل لعميل آخر» re-points. `projects.move`. Read-only. */
+    public function moveImpact(Request $request, string $project, ProjectMover $mover): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.move'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+        $target = $request->string('client_workspace_id')->toString();
+
+        return ApiResponse::success($mover->impact($model, $target === '' ? null : $target), 'Move impact.');
+    }
+
+    /**
+     * POST projects/{project}/move — «نقل المشروع لعميل آخر» (§5). `projects.move` (workspace owner by default) + the typed
+     * project name. Inside the SAME workspace only: a client of another workspace is refused server-side (422).
+     */
+    public function move(Request $request, string $project, ProjectMover $mover): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('projects.move'), 403);
+        $model = $this->find($project);
+        $this->authorizeReach($request->user(), $model);
+        $data = $request->validate(['client_workspace_id' => ['required', 'uuid'], 'confirm_name' => ['required', 'string']]);
+        if (trim((string) $data['confirm_name']) !== trim((string) $model->name)) {
+            throw ValidationException::withMessages(['confirm_name' => [__('Type the project name exactly to confirm the move.')]]);
+        }
+        if (($why = $mover->refusal($model, (string) $data['client_workspace_id'])) !== null) {
+            throw ValidationException::withMessages(['client_workspace_id' => [match ($why) {
+                'same_client' => __('The project already belongs to this client.'),
+                'target_not_active' => __('The target client is archived or deleted.'),
+                'project_deleted' => __('A deleted project cannot be moved.'),
+                default => __('The client is not in this workspace.'),
+            }]]);
+        }
+
+        $counts = $this->guarded(fn () => $mover->move($model, (string) $data['client_workspace_id'], $request->user()));
+
+        return ApiResponse::success((new ProjectResource($model->refresh()))->resolve($request) + ['moved' => array_filter($counts)], 'Project moved.');
     }
 
     /** Pause / resume — `projects.update`, through the one transition function (which logs and audits). */
@@ -457,6 +549,15 @@ final class ProjectController extends Controller
     private function reachable(User $user): ?array
     {
         return app(ProjectReach::class)->idsFor($user);
+    }
+
+    /** Tenant-scoped lookup that also finds a project in «المحذوفات» (never a purged tombstone). */
+    private function findWithTrashed(string $id): Project
+    {
+        $model = Project::withTrashed()->whereNull('purged_at')->find($id);
+        abort_if($model === null, 404, 'Project not found.');
+
+        return $model;
     }
 
     /** Tenant-scoped lookup (global TenantScope makes cross-tenant fail-closed → 404). */

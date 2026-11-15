@@ -96,6 +96,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // PRICING-SEATS-001 — hourly; stamps a released ad-account seat near when it was released.
         'seats:reconcile',
         'subscriptions:lifecycle',
+        // PROJECT-LIFECYCLE-001 §4 (N2) — daily 02:30; purges only trashed projects past purge_after, warns owners 3 days before.
+        'lifecycle:purge-expired',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',
         // PLATFORM-PAYMENT-ALERTS-001 — every fifteen minutes, offset from the reconcile sweep; reads only, files owner alerts.
@@ -188,6 +190,7 @@ final class ScheduledWorkInventoryTest extends TestCase
             'fx:rates',
             'fx:monitor',
             'subscriptions:lifecycle',
+            'lifecycle:purge-expired',
             'subscriptions:reconcile-payments',
             'platform:payment-alerts',
             // Two overlapping refreshes write the same keys: harmless (an upsert), but doubled work for nothing.

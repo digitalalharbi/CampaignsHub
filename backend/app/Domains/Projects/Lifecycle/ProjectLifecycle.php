@@ -53,7 +53,31 @@ interface ProjectLifecycle
      *
      * @throws InvalidLifecycleTransition
      */
-    public function unarchive(Project $project, ?User $actor, bool $confirmed): array;
+    public function unarchive(Project $project, ?User $actor, bool $confirmed, bool $relinkAccounts = true): array;
+
+    /**
+     * Soft delete (§4, builder N2): transition to `deleted` (purge_after = now + plan retention) and apply every archive
+     * effect with the accounts unlinked, plus the delete-only effects (share links revoked, public forms unpublished,
+     * conversion destinations off). Recorded per effect so {@see self::restoreFromTrash()} reverses exactly this delete.
+     * Never touches an ad platform, a connection, an ad account or another project's link.
+     *
+     * @param  array<string,mixed>  $context
+     * @return array{transition: TransitionRecord, effects: array<string,int>, shared_accounts: list<array<string,mixed>>}
+     *
+     * @throws InvalidLifecycleTransition
+     */
+    public function softDelete(Project $project, ?User $actor, ?string $reason = null, array $context = []): array;
+
+    /**
+     * Restore from «المحذوفات» (§5): back to the state the project had when it was deleted (archived, draft, active or
+     * paused), reversing ONLY the delete's recorded effects. Unlinked accounts are re-linked when `$relinkAccounts` and
+     * the account is still available. Requires the caller's explicit confirmation.
+     *
+     * @return array{transition: TransitionRecord, restored: array<string,int>, skipped: array<string,int>}
+     *
+     * @throws InvalidLifecycleTransition
+     */
+    public function restoreFromTrash(Project $project, ?User $actor, bool $confirmed, bool $relinkAccounts = true): array;
 
     /**
      * What archiving would stop, and which accounts are shared with another project (warning data). Read-only.

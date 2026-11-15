@@ -50,7 +50,9 @@ final class ProjectStateMachine implements ProjectLifecycle
             $changes = ['status' => $to->value];
 
             if ($to === ProjectStatus::Archived) {
-                $changes += ['archived_at' => $now, 'archived_by' => $actor?->getKey(), 'previous_status' => $from === ProjectStatus::Deleted ? $row->previous_status : $from->value];
+                // Back from the trash into «المؤرشفة»: the state before THAT archive is the one un-archiving returns to
+                // (the delete recorded `previous_status = archived`, so it is read from the archive's own log row).
+                $changes += ['archived_at' => $from === ProjectStatus::Deleted ? ($row->archived_at ?? $now) : $now, 'archived_by' => $from === ProjectStatus::Deleted ? ($row->archived_by ?? $actor?->getKey()) : $actor?->getKey(), 'previous_status' => $from === ProjectStatus::Deleted ? $this->stateBeforeLastArchive((string) $row->getKey()) : $from->value];
             } elseif ($to === ProjectStatus::Deleted) {
                 $changes += [
                     'deleted_at' => $now,
@@ -179,13 +181,13 @@ final class ProjectStateMachine implements ProjectLifecycle
         });
     }
 
-    public function unarchive(Project $project, ?User $actor, bool $confirmed): array
+    public function unarchive(Project $project, ?User $actor, bool $confirmed, bool $relinkAccounts = true): array
     {
         if (! $confirmed) {
             throw new InvalidLifecycleTransition('Un-archiving needs explicit confirmation.');
         }
 
-        return DB::transaction(function () use ($project, $actor): array {
+        return DB::transaction(function () use ($project, $actor, $relinkAccounts): array {
             $current = Project::withoutGlobalScopes()->withTrashed()->whereKey($project->getKey())->firstOrFail();
             if (ProjectStatus::normalise($current->status) !== ProjectStatus::Archived) {
                 throw InvalidLifecycleTransition::between((string) $current->status, 'unarchive');
@@ -195,11 +197,66 @@ final class ProjectStateMachine implements ProjectLifecycle
                 $back = ProjectStatus::Active;
             }
 
-            $record = $this->transition($project, $back, $actor, 'unarchive');
-            $result = $this->effects->restore($project, $actor);
+            $record = $this->transition($project, $back, $actor, 'unarchive', $relinkAccounts ? [] : ['relink_accounts' => false]);
+            $result = $this->effects->restore($project, $actor, null, $relinkAccounts);
 
             return ['transition' => $record, 'restored' => $result['restored'], 'skipped' => $result['skipped']];
         });
+    }
+
+    public function softDelete(Project $project, ?User $actor, ?string $reason = null, array $context = []): array
+    {
+        return DB::transaction(function () use ($project, $actor, $reason, $context): array {
+            $shared = $this->effects->sharedAccounts($project);
+            $record = $this->transition($project, ProjectStatus::Deleted, $actor, $reason ?? 'delete', $context + ['unlink_accounts' => true]);
+            $effects = $this->effects->apply($project, $actor, true, $record->id, false, true);
+
+            return ['transition' => $record, 'effects' => $effects, 'shared_accounts' => $shared];
+        });
+    }
+
+    public function restoreFromTrash(Project $project, ?User $actor, bool $confirmed, bool $relinkAccounts = true): array
+    {
+        if (! $confirmed) {
+            throw new InvalidLifecycleTransition('Restoring from the trash needs explicit confirmation.');
+        }
+
+        return DB::transaction(function () use ($project, $actor, $relinkAccounts): array {
+            $current = Project::withoutGlobalScopes()->whereKey($project->getKey())->firstOrFail();
+            if (ProjectStatus::normalise($current->status) !== ProjectStatus::Deleted || $current->getAttribute('purged_at') !== null) {
+                throw InvalidLifecycleTransition::between((string) $current->status, 'restore_from_trash');
+            }
+            $back = ProjectStatus::tryFrom((string) $current->previous_status);
+            if ($back === null || $back === ProjectStatus::Deleted) {
+                $back = ProjectStatus::Active;
+            }
+            $deleteTransition = $this->lastTransitionInto((string) $current->getKey(), ProjectStatus::Deleted);
+
+            $record = $this->transition($project, $back, $actor, 'restore_from_trash', $relinkAccounts ? [] : ['relink_accounts' => false]);
+            $result = $this->effects->restore($project, $actor, $deleteTransition, $relinkAccounts);
+
+            return ['transition' => $record, 'restored' => $result['restored'], 'skipped' => $result['skipped']];
+        });
+    }
+
+    /** The id of the newest transition of this project INTO `$status`, or null. */
+    public function lastTransitionInto(string $projectId, ProjectStatus $status): ?string
+    {
+        $id = DB::table('project_status_transitions')->where('project_id', $projectId)->where('to_status', $status->value)
+            ->orderByDesc('created_at')->orderByDesc('id')->value('id');
+
+        return $id === null ? null : (string) $id;
+    }
+
+    /** The state the project was in before its most recent archive (falls back to active). */
+    private function stateBeforeLastArchive(string $projectId): string
+    {
+        $from = DB::table('project_status_transitions')->where('project_id', $projectId)->where('to_status', ProjectStatus::Archived->value)
+            ->where('from_status', '!=', ProjectStatus::Deleted->value)
+            ->orderByDesc('created_at')->orderByDesc('id')->value('from_status');
+        $state = ProjectStatus::tryFrom((string) $from);
+
+        return $state !== null && ($state->isLive() || $state === ProjectStatus::Draft) ? $state->value : ProjectStatus::Active->value;
     }
 
     public function archiveImpact(Project $project): array
