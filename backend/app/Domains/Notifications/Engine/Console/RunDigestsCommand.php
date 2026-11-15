@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Engine\Console;
 
 use App\Domains\Notifications\Engine\Scheduling\DigestRunner;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 
 /** `notifications:v2-digests` — queue the external digests that are due (every five minutes). Sends nothing itself. */
@@ -17,6 +18,7 @@ final class RunDigestsCommand extends Command
     public function handle(DigestRunner $runner): int
     {
         $r = $runner->run();
+        app(ScheduledRunRows::class)->report($r['intents']);
         $this->line("subscriptions: {$r['subscriptions']}  intents: {$r['intents']}  empty periods: {$r['skipped_empty_period']}");
 
         return self::SUCCESS;
