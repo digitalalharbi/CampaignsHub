@@ -7,6 +7,7 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
 use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
 use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
+use App\Domains\Notifications\External\Http\ExternalPreviewController;
 use App\Domains\Notifications\External\Http\ExternalRecipientsController;
 use App\Domains\Notifications\External\Http\ExternalReviewsController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
@@ -156,6 +157,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
         Route::post('recipients/{recipient}/subscriptions', [ExternalRecipientsController::class, 'storeSubscription'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('subscriptions.store');
         Route::patch('subscriptions/{subscription}', [ExternalRecipientsController::class, 'updateSubscription'])->whereUuid('subscription')->middleware('plan.feature:notifications.external')->name('subscriptions.update');
         Route::post('subscriptions/{subscription}/{action}', [ExternalRecipientsController::class, 'subscriptionAction'])->whereUuid('subscription')->whereIn('action', ['pause', 'resume', 'cancel', 'duplicate'])->middleware('plan.feature:notifications.external')->name('subscriptions.action');
+        Route::post('preview', [ExternalPreviewController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
+        Route::post('test-send', [ExternalPreviewController::class, 'testSend'])->middleware(['plan.feature:notifications.external', 'throttle:5,1'])->name('test-send');
+        Route::post('send-now', [ExternalPreviewController::class, 'sendNow'])->middleware(['plan.feature:notifications.external', 'throttle:10,1'])->name('send-now');
         Route::get('reviews', [ExternalReviewsController::class, 'index'])->name('reviews.index');
         Route::post('reviews/{review}/send', [ExternalReviewsController::class, 'send'])->whereUuid('review')->middleware('plan.feature:notifications.external')->name('reviews.send');
         Route::post('reviews/{review}/skip', [ExternalReviewsController::class, 'skip'])->whereUuid('review')->name('reviews.skip');

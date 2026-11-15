@@ -55,7 +55,7 @@
 [data-ogsc] .ch-card { background: {{ $d('surface') }} !important; }
 [data-ogsc] .ch-ink { color: {{ $d('text-primary') }} !important; }
 [data-ogsc] .ch-muted { color: {{ $d('text-muted') }} !important; }
-@media (max-width: 620px) { .ch-wrap { width: 100% !important; } .ch-pad { padding-left: {{ $s3 }} !important; padding-right: {{ $s3 }} !important; } }
+@media (max-width: 620px) { .ch-wrap { width: 100% !important; } .ch-pad { padding-left: {{ $s2 }} !important; padding-right: {{ $s2 }} !important; } .ch-stack { display: inline-block !important; width: 48% !important; box-sizing: border-box; vertical-align: top; } }
 </style>
 @endif
 </head>
@@ -123,7 +123,7 @@
 <div class="ch-muted" style="font-size:{{ $xs }};font-weight:600;color:{{ $c('text-muted') }};margin:{{ $s2 }} 0">{{ $group['objective'] }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 @foreach ($group['cards'] as $k)
-<td valign="top" width="{{ (int) floor(100 / max(1, count($group['cards']))) }}%" style="padding:2px">
+<td class="ch-stack" valign="top" width="{{ (int) floor(100 / max(1, count($group['cards']))) }}%" style="padding:2px">
 <div class="ch-soft" style="background:{{ $c('surface-secondary') }};border-radius:{{ $rs }};padding:{{ $s3 }}">
 <div class="ch-muted" style="font-size:{{ $xs }};color:{{ $c('text-muted') }}">{{ $k['label'] }}</div>
 <div class="ch-ink" dir="ltr" style="font-size:{{ $lg }};font-weight:700;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $k['value'] }}</div>
@@ -184,10 +184,10 @@
 @php $b = $m['project_card']['budget']; @endphp
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:{{ $s3 }};font-size:{{ $xs }};color:{{ $c('text-secondary') }}">
 <tr>
-<td width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['approved'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['approved'] }}</div></td>
-<td width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['spent'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['spent'] }}</div></td>
-<td width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['remaining'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['remaining'] }}</div></td>
-<td width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['pace'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['pace'] }}</div></td>
+<td class="ch-stack" width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['approved'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['approved'] }}</div></td>
+<td class="ch-stack" width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['spent'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['spent'] }}</div></td>
+<td class="ch-stack" width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['remaining'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['remaining'] }}</div></td>
+<td class="ch-stack" width="25%"><div style="color:{{ $c('text-muted') }}">{{ $m['labels']['pace'] }}</div><div dir="ltr" style="font-weight:600;color:{{ $c('text-primary') }};text-align:{{ $m['align'] }}">{{ $b['pace'] }}</div></td>
 </tr></table>
 @if ($b['ratio'] !== null)
 <div style="margin-top:{{ $s3 }};height:8px;background:{{ $c('surface-secondary') }};border-radius:{{ T::radius('radius-pill') }};overflow:hidden"><div style="height:8px;width:{{ (int) min(100, round($b['ratio'] * 100)) }}%;background:{{ $c('brand-600') }};border-radius:{{ T::radius('radius-pill') }}"></div></div>
