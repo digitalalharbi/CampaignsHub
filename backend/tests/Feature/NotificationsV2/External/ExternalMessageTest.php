@@ -48,27 +48,29 @@ final class ExternalMessageTest extends TestCase
         $this->assertSame('Launch — Alpha Agency | ملخص 2026-11-01 – 2026-11-14 · CampaignsHub', $mail->getSubject());
         $this->assertSame('Alpha Agency عبر كامبينز هَب', $mail->getFrom()[0]->getName());
         $this->assertSame('info@campaignshub.io', $mail->getFrom()[0]->getAddress());
-        $this->assertStringContainsString('تقرير مشروع: Launch', $html);
-        $this->assertStringContainsString('تديره: Alpha Agency', $html);
-        $this->assertStringContainsString('مرحبًا أستاذة سارة،', $html); // shown literally, no title added
-        $this->assertStringContainsString('هذه الرسالة مخصصة لك بصفتك المالية في مشروع Launch لدى Alpha Agency، وتشمل بيانات Launch فقط.', $text);
-        $this->assertStringContainsString('لماذا وصلتك هذه الرسالة؟ أنت مشترك في تقارير مشروع Launch من Alpha Agency منذ 2026-10-01.', $text);
-        $this->assertStringContainsString('تم إنشاء هذا التقرير تلقائيًا بواسطة CampaignsHub', $text);
-        $this->assertStringContainsString('ولا يتطلب أي إجراء منك', $text);
-        $this->assertMatchesRegularExpression('/الرقم المرجعي: N-[0-9]{6}-[A-Z0-9]{8}/u', $text);
+        // The approved weekly spend-summary template in its external mode (Owner, 2026-11-15): the same header, cards and footer.
+        $this->assertStringContainsString('ملخص الإنفاق', $html);
+        $this->assertStringContainsString('data-block="spend-total"', $html);
+        $this->assertStringContainsString('Alpha Agency · مشروع: Launch', $html);                     // workspace + project identity under the header
+        $this->assertStringContainsString('مخصصة لك بصفتك المالية — بيانات Launch فقط', $html);       // the one-line privacy notice
+        $this->assertStringContainsString('مرحبًا، أستاذة سارة', $html);                              // shown literally, no title added
+        $this->assertStringContainsString('المرجع المالي: فواتير المنصات والمحاسبة المالية.', $html);
+        $this->assertStringContainsString('المرجع المالي: فواتير المنصات والمحاسبة المالية.', $text);
+        $this->assertSame(1, substr_count($html, 'data-unsubscribe="1"'));
+        $this->assertStringContainsString('© '.date('Y').' CampaignsHub', $html);                      // the usual footer
+        $this->assertMatchesRegularExpression('/N-[0-9]{6}-[A-Z0-9]{8}/', $text);
         $this->assertStringContainsString('List-Unsubscribe', $mail->getHeaders()->toString());
 
-        // Only allowed links: unsubscribe/manage and the footprint. No platform page, no id route.
+        // The only links: the signed unsubscribe and the click-counted footprint. No platform page, no button, no id route.
         preg_match_all('/href="([^"]+)"/', $html, $m);
+        $this->assertCount(2, $m[1]);
         foreach ($m[1] as $href) {
             $this->assertMatchesRegularExpression('#/n/(u|f)/#', html_entity_decode($href), $href);
         }
-        foreach (['مطلوب منك', 'أقر بالاستلام', 'آخر موعد', 'فشل', 'خسارة', 'عاجل', 'إنذار'] as $forbidden) {
+        $this->assertStringNotContainsString('class="ch-btn', $html);
+        foreach (['مطلوب منك', 'أقر بالاستلام', 'آخر موعد', 'فشل', 'خسارة', 'عاجل', 'إنذار', 'تجاوزت', 'افتح', 'إعدادات الإشعارات'] as $forbidden) {
             $this->assertStringNotContainsString($forbidden, $html);
         }
-        // Per-objective KPIs: the sales cost per order and the awareness figures stand apart.
-        $this->assertStringContainsString('المبيعات', $html);
-        $this->assertStringContainsString('الوعي والوصول', $html);
         $this->assertLessThan(100 * 1024, strlen($html));
         $this->assertSame(1, DB::table('usage_counters')->where('tenant_id', $this->tenant->id)->where('metric', 'notif.external_messages')->value('count'));
     }
@@ -149,32 +151,30 @@ final class ExternalMessageTest extends TestCase
         $this->assertSame(3, DB::table('notification_delivery_log')->where('status', 'sent')->count()); // primary + 2 copies, each logged
     }
 
-    public function test_charts_key_off_or_no_renderer_falls_back_to_tables(): void
+    public function test_the_approved_templates_carry_no_image_at_all(): void
     {
-        $this->disable('notifications.external.charts');
-        [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
+        // The approved digests and spend summaries draw with table cells: no chart image, no inline part, nothing a blocked-images client loses.
+        [, $s] = $this->subscribe('pm@client.test', 'project_manager', [$this->project->id]);
         $this->raise('digest.periodic', $this->project->id, $s);
         $this->drain();
-
-        $html = (string) $this->sent()[0]['email']->getHtmlBody();
-        $this->assertStringNotContainsString('cid:', $html);
-        $this->assertStringContainsString('2026-11-01', $html); // the trend table
-        $this->assertStringContainsString('Snapchat', $html);   // the platform table
+        $mail = $this->sent()[0]['email'];
+        $this->assertStringNotContainsString('cid:', (string) $mail->getHtmlBody());
+        $this->assertCount(0, $mail->getAttachments());
+        $this->assertStringContainsString('ملخص المشروع', (string) $mail->getHtmlBody());   // the project summary template
     }
 
-    public function test_numbers_and_currency_follow_the_recipient_display_currency_with_the_rate_footer(): void
+    public function test_the_display_currency_of_the_summary_is_the_templates_own_with_the_reference_in_the_text(): void
     {
-        [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id], [], ['display_currency' => 'USD', 'language' => 'en']);
+        [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id], [], ['language' => 'en']);
         $this->raise('digest.periodic', $this->project->id, $s);
         $this->drain();
 
         $mail = $this->sent()[0]['email'];
         $text = (string) $mail->getTextBody();
         $this->assertSame('Alpha Agency via CampaignsHub', $mail->getFrom()[0]->getName());
-        $this->assertStringContainsString('4,200.00 $', $text);
-        $this->assertStringContainsString('Exchange rates: 1 SAR = 0.266667 USD (as of 1986-06-01)', $text);
-        $this->assertStringNotContainsString('ر.س', $text);
-        $this->assertStringContainsString('Hello,', $text);
+        $this->assertStringContainsString('Spend summary', $text);
+        $this->assertStringContainsString('Financial reference: platform invoices and accounting records.', $text);
+        $this->assertStringContainsString('Unsubscribe', $text);
     }
 
     public function test_unsubscribe_type_project_all_and_reduce_leave_the_rest_and_notify_internally(): void

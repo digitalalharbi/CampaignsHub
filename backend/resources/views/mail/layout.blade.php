@@ -180,9 +180,10 @@
                                         </td>
                                     </tr>
                                 @endif
+@if (empty($hideFootprint ?? null))
                                 <tr>
                                     <td data-footer-line="copyright" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0 0 4px;">
-                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub @if (! ($standalone ?? false))· <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a>@endif</span>
+                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub @if (! ($standalone ?? false))· <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a>@elseif (! empty($footprintUrl ?? ''))· <a href="{{ $footprintUrl }}" style="{!! $ftrLink !!}">campaignshub.io</a>@endif</span>
                                     </td>
                                 </tr>
                                 <tr>
@@ -190,6 +191,7 @@
                                         {{ $t['sender'] }}
                                     </td>
                                 </tr>
+@endif
                             </table>
                         </td>
                     </tr>

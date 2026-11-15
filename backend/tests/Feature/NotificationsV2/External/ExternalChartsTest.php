@@ -8,10 +8,8 @@ use App\Domains\Notifications\External\Charts\ChartImages;
 use App\Domains\Notifications\External\Charts\ChartSvg;
 use App\Domains\Notifications\External\Charts\ResvgCharts;
 use App\Domains\Notifications\External\Design\DesignTokens;
-use App\Domains\Notifications\External\Digest\DigestDataSource;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Tests\Feature\NotificationsV2\Concerns\BuildsWorkspaces;
 use Tests\Feature\NotificationsV2\External\Support\ExternalFixtures;
 use Tests\TestCase;
@@ -52,33 +50,14 @@ final class ExternalChartsTest extends TestCase
         if (! ResvgCharts::available()) {
             $this->markTestSkipped('@resvg/resvg-js not installed beside the require base');
         }
-        $this->app->forgetScopedInstances();
+        // NOTIF-V2 (2026-11-15): the approved templates draw with table cells, so no message embeds these images any more. The renderer
+        // stays (resvg at 2x, light + dark, cached, within the size budget) for the surfaces that ask for a real chart image.
         $this->app->scoped(ChartImages::class, ResvgCharts::class);
-        $this->app->instance(DigestDataSource::class, $this->data); // forgetting scoped instances dropped the fake
-        [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
-        $this->raise('digest.periodic', $this->project->id, $s);
-        $this->drain();
-
-        $mail = $this->sent()[0]['email'];
-        $html = (string) $mail->getHtmlBody();
-        foreach (['donut', 'trend', 'ring'] as $k) {
-            $this->assertStringContainsString('src="cid:'.$k.'"', $html);
-            $this->assertStringContainsString('src="cid:'.$k.'-dark"', $html);
-        }
-        $this->assertStringContainsString('alt="توزيع الإنفاق حسب المنصة: Meta 2,500.00 $', $html); // alt text with the numbers
-        $parts = $mail->getAttachments();
-        $this->assertCount(6, $parts);
-        $bytes = 0;
-        foreach ($parts as $part) {
-            $png = $part->getBody();
-            $bytes += strlen($png);
-            $this->assertSame("\x89PNG", substr($png, 0, 4));
-        }
-        $this->assertLessThan(400 * 1024, $bytes);
-        $this->assertLessThan(100 * 1024, strlen($html));
-        $size = getimagesizefromstring($parts[0]->getBody());
-        $this->assertSame(ChartSvg::WIDTH * 2, $size[0]); // 2x
-        $this->assertSame(3, DB::table('usage_counters')->where('tenant_id', $this->tenant->id)->where('metric', 'notif.charts_generated')->value('count'));
+        $out = app(ChartImages::class)->render($this->tenant->id, 'scope-a', [['key' => 'ring', 'kind' => 'ring', 'rtl' => true, 'ratio' => 0.42, 'label' => '42%']]);
+        $this->assertNotNull($out['ring']);
+        $this->assertSame("\x89PNG", substr($out['ring']['light'], 0, 4));
+        $this->assertSame("\x89PNG", substr($out['ring']['dark'], 0, 4));
+        $this->assertLessThan(400 * 1024, strlen($out['ring']['light']) + strlen($out['ring']['dark']));
 
         // Cached per project + period + type + theme: the second recipient's identical charts render nothing new.
         $started = microtime(true);

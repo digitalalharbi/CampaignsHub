@@ -110,13 +110,14 @@ final class ExternalPeriodsAndScreenTest extends TestCase
 
         $data = app(MetricsDigestDataSource::class)->project($this->tenant->id, $this->project->id, '2026-11-01', '2026-11-14', 'SAR');
         $this->assertEqualsWithDelta((float) $screenSar->converted, (float) $data['spend'], 0.01);
+        // The message IS the approved spend summary, built from the same read the Budgets screen uses (ProjectSpendSummary): its spend is the
+        // aggregator's own total for the window, in the project's currency.
         // RELEASE-INTEGRATION — and the headline equals THE spend ledger (N4: the campaigns page, budgets, clients list, dashboards).
         $ledger = app(SpendLedger::class)->read([$this->project->id], Carbon::parse('2026-11-01'), Carbon::parse('2026-11-14'), 'SAR');
         $this->assertTrue($ledger['complete']);
         $this->assertEqualsWithDelta((float) $ledger['amount'], (float) $data['spend'], 0.01);
         $text = (string) $this->sent()[0]['email']->getTextBody();
-        $this->assertStringContainsString(number_format((float) $screenSar->converted, 2, '.', ',').' ر.س', $text);
-        $this->assertStringContainsString('1 USD = 3.75 SAR', $text);
+        $this->assertStringContainsString(number_format((float) $totals['spend'], 0, '.', ','), $text);
         $purchases = (float) $totals['conversions']; // the system's sales result (ObjectiveResult)
         $this->assertEqualsWithDelta($purchases, (float) $data['objectives'][0]['result'], 0.01);
         $this->assertEqualsWithDelta(round((float) $screenSar->converted / $purchases, 2), (float) $data['objectives'][0]['cost_per_result'], 0.01);
