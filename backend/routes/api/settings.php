@@ -6,6 +6,7 @@ use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
 use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
+use App\Domains\Notifications\Engine\Http\Controllers\WorkspaceNotificationSettingsController;
 use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
 use App\Domains\Notifications\External\Http\ExternalPreviewController;
 use App\Domains\Notifications\External\Http\ExternalRecipientsController;
@@ -132,6 +133,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // already record it.
     Route::get('notifications/deliveries', [TeamNotificationsController::class, 'deliveries'])->name('notifications.deliveries');
     // NOTIF-V2-ENGINE-001 — the shared notifications engine, workspace level (one component for every workspace type).
+    // NOTIF-V2-SETTINGS-UI-001 — the data of the one workspace-level notification settings page (any workspace type).
+    Route::get('workspace/notifications/settings', [WorkspaceNotificationSettingsController::class, 'show'])->name('workspace.notifications.settings.show');
+    Route::match(['put', 'patch'], 'workspace/notifications/settings', [WorkspaceNotificationSettingsController::class, 'update'])->middleware('throttle:60,1')->name('workspace.notifications.settings.update');
+    Route::get('workspace/notifications/kpis', [WorkspaceNotificationSettingsController::class, 'kpis'])->name('workspace.notifications.kpis');
     Route::get('workspace/notifications/entitlements', [WorkspacePlanUsageController::class, 'entitlements'])->name('workspace.notifications.entitlements');
     Route::get('workspace/notifications/usage', [WorkspacePlanUsageController::class, 'usage'])->name('workspace.notifications.usage');
     // The proof of notice: read-only, no write route exists (the tables refuse UPDATE/DELETE too).

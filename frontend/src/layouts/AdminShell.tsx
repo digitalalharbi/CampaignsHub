@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
+  Bell,
   ClipboardCheck,
   CreditCard,
   PackagePlus,
@@ -78,6 +79,7 @@ const adminNav = [
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
   { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
+  { to: '/admin/notifications', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
   /*
    * PROVCFG-001 — a daily entry, not an advanced one.

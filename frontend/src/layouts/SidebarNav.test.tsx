@@ -85,3 +85,41 @@ describe('SidebarNav', () => {
     expect(screen.getByRole('link', { name: 'Campaigns' })).toBeVisible()
   })
 })
+
+describe('SidebarNav on the 64px strip (NOV-SIDEBAR-001)', () => {
+  function strip(route = '/app/dashboard') {
+    return renderWithProviders(
+      <SidebarNav groups={GROUPS} ar={false} collapsed label="Sections" />,
+      { route, locale: 'en' },
+    )
+  }
+
+  it('draws one icon per group and names it for assistive technology', () => {
+    strip()
+
+    expect(screen.getByTestId('nav-group-work')).toHaveAttribute('aria-label', 'Work')
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  })
+
+  it('opens a group beside its icon on press and closes it on Escape', () => {
+    strip()
+    const trigger = screen.getByTestId('nav-group-work')
+
+    expect(screen.queryByRole('link', { name: 'Campaigns' })).not.toBeInTheDocument()
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: 'Campaigns' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Clients' })).toBeVisible()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('marks the group that holds the current page, and keeps every section in the document', () => {
+    const { container } = strip('/app/campaigns')
+
+    expect(screen.getByTestId('nav-group-work').className).toContain('text-brand-600')
+    expect(container.querySelectorAll('a[href="/app/campaigns"]')).toHaveLength(1)
+    expect(container.querySelectorAll('a[href="/app/clients"]')).toHaveLength(1)
+  })
+})
