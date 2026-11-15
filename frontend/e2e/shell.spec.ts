@@ -155,7 +155,7 @@ test.describe('the phone navigation layer (NOV-SIDEBAR-001)', () => {
  * Pages that have been converted to fit (NOV-FIT-001). A page joins this list when it is converted, and from then
  * on a regression that makes it scroll — or cuts its content off — fails here with the page and the size named.
  */
-const FITTED = ['/agency/clients', '/agency/team']
+const FITTED = ['/agency/clients', '/agency/team', '/agency/tasks']
 
 /**
  * What a locked page can get wrong is not a document scrollbar — the document is pinned and never scrolls — but

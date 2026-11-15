@@ -8,9 +8,11 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
  * The chevrons point the way the language reads: «next» is to the left in Arabic.
  */
 export function Pager({
-  page, pages, onPage, total, ar, testid,
-}: { page: number; pages: number; onPage: (page: number) => void; total?: number; ar: boolean; testid?: string }) {
+  page, pages, onPage, total, ar, testid, hideWhenSingle = false,
+}: { page: number; pages: number; onPage: (page: number) => void; total?: number; ar: boolean; testid?: string; hideWhenSingle?: boolean }) {
   const last = Math.max(1, pages)
+  // A control that does nothing teaches the reader to ignore it — but the space stays, so the page above does not move.
+  if (hideWhenSingle && last <= 1) return <div aria-hidden className="h-11 shrink-0" />
   const Prev = ar ? ChevronRight : ChevronLeft
   const Next = ar ? ChevronLeft : ChevronRight
 
