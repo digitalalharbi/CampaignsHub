@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -182,8 +183,9 @@ export function NotificationCenter() {
         )}
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50" data-testid="notification-drawer">
+      {/* A portal: a header with a backdrop filter is the containing block of its fixed descendants, and would clip the drawer to itself. */}
+      {open && createPortal(
+        <div className="fixed inset-0 z-[60]" data-testid="notification-drawer">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden />
           <div role="dialog" aria-modal="true" aria-label={t('nc_title')} className="absolute inset-y-0 end-0 flex w-full max-w-full flex-col overflow-hidden border-s border-border bg-surface shadow-xl sm:w-[26rem]">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -205,7 +207,7 @@ export function NotificationCenter() {
           </div>
           {tab !== 'followup' && (
           <>
-          <div role="tablist" aria-label={t('nc_title')} className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5">
+          <div role="tablist" aria-label={t('nc_title')} data-testid="bell-filter-tabs" className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -395,7 +397,8 @@ export function NotificationCenter() {
           </div>
           </div>
           {rerouteFor && <RerouteDialog notificationId={rerouteFor} onClose={() => setRerouteFor(null)} />}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
