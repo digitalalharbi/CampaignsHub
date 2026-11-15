@@ -359,6 +359,13 @@ final class ConnectionHubController extends Controller
                 'needs_attention' => $discovered->contains(
                     fn (ExternalAccount $a): bool => $a->last_sync_error_category !== null,
                 ),
+                /*
+                 * SOURCE-FAILURE-REASON-001 — ADDITIVE. Why the newest failing account did not sync, as the sync recorded it (a closed
+                 * category, never a provider sentence): the page puts it in plain words and invents no other cause.
+                 */
+                'last_error_category' => $discovered->first(
+                    fn (ExternalAccount $a): bool => $a->last_sync_error_category !== null,
+                )?->last_sync_error_category,
                 'last_success_at' => $lastSuccess === null ? null : Carbon::parse($lastSuccess)->toIso8601String(),
                 'next_sync_at' => NextScheduledSync::at(
                     $connectionState === IntegrationTruth::CONNECTED && $chosenIds !== [],
