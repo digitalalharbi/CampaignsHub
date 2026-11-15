@@ -18,6 +18,8 @@ final class ProjectResource extends JsonResource
         return [
             'id' => $this->id,
             'client_workspace_id' => $this->client_workspace_id,
+            // PROJECT-LIFECYCLE-001 §8 — the «العميل» column, readable in every portal (only when the list loaded it).
+            'client_name' => $this->whenLoaded('clientWorkspace', fn () => $this->clientWorkspace?->name),
             'name' => $this->name,
             // PROJECT-LIFECYCLE-DERIVED-001 — derived on read from what the project really has; the columns are not rewritten.
             'status' => ProjectStatusDisplay::status((string) $this->status, $this->list_summary ?? $this->lifecycle_facts),

@@ -31,6 +31,18 @@ use Illuminate\Support\Str;
  * | alert_closed | alert_events (open/snoozed) | status=resolved + reason | kept closed (`kept_closed`) — a point-in-time signal; the evaluator re-raises it if it still holds |
  * | proposal_expired | action_proposals (pending) | status=expired + reason | kept expired (`kept_closed`) — a stale recommendation is not revived |
  *
+ * Soft delete (N2, §4) applies the same table with `unlink` forced on, plus three kinds that only a delete needs —
+ * the paths that answer from outside a session:
+ *
+ * | kind | target | delete | restore |
+ * |---|---|---|---|
+ * | share_revoked | report_shares of this project's reports (live) | revoked_at=now | revoked_at back to NULL |
+ * | lead_form_unpublished | lead_forms (published) | status=archived | back to published |
+ * | conversion_destination_off | conversion_destinations (not off) | status=off | back to its status |
+ *
+ * Restore can be limited to ONE transition's effects ({@see self::restore()} `$onlyTransitionId`): restoring a
+ * project deleted while archived reverses the delete's effects only, and leaves the archive's in place.
+ *
  * Notifications, emails, digests, recommendations and aggregation need no row change: they read {@see LiveProjects},
  * which an archived project is not in. Spend limits and budgets are configuration that is simply no longer read.
  */
@@ -38,13 +50,16 @@ final class ArchiveEffects
 {
     private const CLOSED_TASK_STATUSES = ['completed', 'cancelled'];
 
+    /** An account in one of these states is no longer available to re-link (§5). */
+    private const UNAVAILABLE_ACCOUNT_STATUSES = ['removed', 'deleted', 'revoked', 'disconnected'];
+
     /**
      * @return array<string,int> kind => rows changed (or that WOULD change on a dry run)
      */
-    public function apply(Project $project, ?User $actor, bool $unlinkAccounts = false, ?string $transitionId = null, bool $dryRun = false): array
+    public function apply(Project $project, ?User $actor, bool $unlinkAccounts = false, ?string $transitionId = null, bool $dryRun = false, bool $forDelete = false): array
     {
         $summary = [];
-        foreach ($this->plan($project, $unlinkAccounts) as $kind => $spec) {
+        foreach ($this->plan($project, $unlinkAccounts || $forDelete) + ($forDelete ? $this->deletePlan($project) : []) as $kind => $spec) {
             $rows = $this->targets($project, $spec)->get();
             $summary[$kind] = $rows->count();
             if ($dryRun) {
@@ -59,15 +74,20 @@ final class ArchiveEffects
     }
 
     /**
+     * @param  string|null  $onlyTransitionId  reverse only the effects recorded by this transition (restore from the trash
+     *                                         of a project that was archived before it was deleted)
+     * @param  bool  $relinkAccounts  false keeps unlinked accounts unlinked (the person declined the re-link in the restore
+     *                                window; outcome `kept_unlinked`)
      * @return array{restored: array<string,int>, skipped: array<string,int>}
      */
-    public function restore(Project $project, ?User $actor): array
+    public function restore(Project $project, ?User $actor, ?string $onlyTransitionId = null, bool $relinkAccounts = true): array
     {
         $restored = [];
         $skipped = [];
         $effects = DB::table('project_archive_effects')
             ->where('project_id', $project->getKey())
             ->whereNull('restored_at')
+            ->when($onlyTransitionId !== null, fn ($q) => $q->where('transition_id', $onlyTransitionId))
             ->orderByDesc('applied_at')->orderByDesc('id')
             ->get();
 
@@ -79,10 +99,15 @@ final class ArchiveEffects
 
             if (in_array($kind, ['alert_closed', 'proposal_expired'], true)) {
                 $outcome = 'kept_closed';
+            } elseif ($kind === 'binding_unlinked' && ! $relinkAccounts) {
+                $outcome = 'kept_unlinked';
             } else {
                 $current = DB::table((string) $effect->target_table)->where('id', $effect->target_id)->first();
                 if ($current === null) {
                     $outcome = 'skipped_missing';
+                } elseif (str_starts_with($kind, 'binding_') && ! $this->accountAvailable($current)) {
+                    // §5 — re-linked only if the account is still available (not removed from the inventory).
+                    $outcome = 'skipped_unavailable';
                 } elseif (! $this->stillHolds($current, $after)) {
                     $outcome = 'skipped_changed';
                 } else {
@@ -118,6 +143,34 @@ final class ArchiveEffects
             'shared_accounts' => $this->sharedAccounts($project),
             'ad_platforms_untouched' => true,
         ];
+    }
+
+    /**
+     * Read-only: what restoring would re-link (§5). Each account this project had unlinked by an archive/delete that a
+     * restore would reverse, and whether it is still available. Shared accounts: only THIS project's link is restored.
+     *
+     * @return list<array{binding_id: string, external_account_id: string, provider: string, name: string|null, external_id: string|null, available: bool}>
+     */
+    public function relinkCandidates(Project $project, ?string $onlyTransitionId = null): array
+    {
+        $rows = DB::table('project_archive_effects as e')
+            ->join('project_integration_bindings as b', DB::raw('b.id::text'), '=', 'e.target_id')
+            ->leftJoin('external_accounts as a', 'a.id', '=', 'b.external_account_id')
+            ->where('e.project_id', $project->getKey())
+            ->where('e.kind', 'binding_unlinked')
+            ->whereNull('e.restored_at')
+            ->when($onlyTransitionId !== null, fn ($q) => $q->where('e.transition_id', $onlyTransitionId))
+            ->orderBy('a.name')
+            ->get(['b.id as binding_id', 'b.external_account_id', 'b.provider', 'a.name', 'a.external_id', 'a.status', 'a.id as account_id']);
+
+        return $rows->map(fn (object $r): array => [
+            'binding_id' => (string) $r->binding_id,
+            'external_account_id' => (string) $r->external_account_id,
+            'provider' => (string) $r->provider,
+            'name' => $r->name,
+            'external_id' => $r->external_id,
+            'available' => $r->account_id !== null && ! in_array((string) $r->status, self::UNAVAILABLE_ACCOUNT_STATUSES, true),
+        ])->values()->all();
     }
 
     /**
@@ -228,15 +281,60 @@ final class ArchiveEffects
     }
 
     /**
-     * @param  array{table: string, where: callable, set: callable}  $spec
+     * The kinds only a soft delete applies (§4): the paths that answer from outside a session.
+     *
+     * @return array<string, array{table: string, where: callable, set: callable, query?: callable}>
+     */
+    private function deletePlan(Project $project): array
+    {
+        $now = Carbon::now();
+
+        return [
+            'share_revoked' => [
+                'table' => 'report_shares',
+                // Shares hang off a report: this project's reports only (tenant + project), never by tenant alone.
+                'query' => static fn (): Builder => DB::table('report_shares')->whereIn('report_id', DB::table('reports')
+                    ->where('tenant_id', $project->tenant_id)->where('project_id', $project->getKey())->select('id')),
+                'where' => static fn ($q) => $q->whereNull('revoked_at'),
+                'set' => static fn (object $r): array => ['revoked_at' => $now],
+            ],
+            'lead_form_unpublished' => [
+                'table' => 'lead_forms',
+                'where' => static fn ($q) => $q->where('status', 'published'),
+                'set' => static fn (object $r): array => ['status' => 'archived'],
+            ],
+            'conversion_destination_off' => [
+                'table' => 'conversion_destinations',
+                'where' => static fn ($q) => $q->where('status', '!=', 'off'),
+                'set' => static fn (object $r): array => ['status' => 'off'],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{table: string, where: callable, set: callable, query?: callable}  $spec
      */
     private function targets(Project $project, array $spec): Builder
     {
         // Id-scoped AND tenant-scoped: only this project's own rows, ever.
-        $q = DB::table($spec['table'])->where('project_id', $project->getKey())->where('tenant_id', $project->tenant_id);
+        $q = isset($spec['query'])
+            ? ($spec['query'])()
+            : DB::table($spec['table'])->where('project_id', $project->getKey())->where('tenant_id', $project->tenant_id);
         ($spec['where'])($q);
 
         return $q->orderBy('id');
+    }
+
+    /** The binding's ad account still exists in the inventory and is not removed (§5 «if still available»). */
+    private function accountAvailable(object $binding): bool
+    {
+        if (! property_exists($binding, 'external_account_id') || $binding->external_account_id === null) {
+            return true;
+        }
+        $account = DB::table('external_accounts')->where('id', $binding->external_account_id)->first(['status']);
+
+        return $account !== null
+            && ! in_array((string) ($account->status ?? ''), self::UNAVAILABLE_ACCOUNT_STATUSES, true);
     }
 
     /**
@@ -274,6 +372,13 @@ final class ArchiveEffects
         foreach ($after as $column => $value) {
             if (in_array($column, ['meta', 'context', 'next_run_at', 'resolved_at'], true)) {
                 continue; // carriers of the change, not the switch itself
+            }
+            if ($column === 'revoked_at') {
+                if (($current->revoked_at ?? null) === null) {
+                    return false; // un-revoked since: somebody already decided
+                }
+
+                continue;
             }
             if ($this->scalar($current->{$column} ?? null) !== $this->scalar($value)) {
                 return false;
