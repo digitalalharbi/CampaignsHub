@@ -96,7 +96,7 @@ export function NotificationCenter() {
    * That is the whole realtime mechanism: no socket, no per-second polling, and a pushed message from the service worker asks
    * for the same refetch (see `pushRefresh.ts`).
    */
-  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true })
+  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0 })
   useBellSound(summary.data)
   usePushRefresh()
   const q = useQuery({ queryKey: ['notifications', 'list', filter], queryFn: () => listNotifications(filter), enabled: open, refetchInterval: open ? 30_000 : false })

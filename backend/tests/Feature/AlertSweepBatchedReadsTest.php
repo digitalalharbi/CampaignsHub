@@ -258,9 +258,13 @@ final class AlertSweepBatchedReadsTest extends TestCase
          * All of it is per rule set, not per campaign — the growth bound below is unchanged and still holds (+34 for 18 campaigns).
          * LINK-HEALTH-YESTERDAY-001 — 509 → 552 measured once both landed: the link rule's reads (yesterday's runs for the tenant's
          * connections, the one open-links read, the project readings) are per tenant and per sweep, not per campaign.
+         * NOTIF-BELL-001 — 558 → 559 and +34 → +38 for 18 campaigns: when an alert closes, its bell notification closes with it, in ONE
+         * UPDATE (`NotificationInbox::closeForAlert`, hooked on the event so the sweep, the «حُلّ» button and a rule's removal all reach it).
+         * That is one statement per alert that closes — an event, not a campaign read — so the bound moves by the four closings in this world
+         * and still stays well under one statement per campaign.
          */
-        $this->assertLessThan(560, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
-        $this->assertLessThan($before + 18 * 2, $after, 'cost per campaign is back');
+        $this->assertLessThan(570, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
+        $this->assertLessThan($before + 18 * 2 + 6, $after, 'cost per campaign is back');
     }
 
     public function test_the_schedule_will_not_stack_a_sweep_and_a_killed_run_costs_one_tick_at_most(): void

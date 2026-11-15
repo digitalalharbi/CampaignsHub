@@ -141,26 +141,23 @@ final class NotificationInbox
     public function closeForAlert(AlertEvent $event): void
     {
         $kind = BellKind::forAlert((string) $event->type, (array) ($event->context ?? []));
+        $types = $kind === null ? [] : BellKind::alertTypesOf($kind);
 
-        // Two rules can raise the same finding about the same object and share its notification; it stays while either is open.
-        $stillOpen = $kind !== null && $event->entity_id !== null && AlertEvent::withoutGlobalScopes()
-            ->where('tenant_id', $event->tenant_id)->where('entity_type', $event->entity_type)->where('entity_id', (string) $event->entity_id)
-            ->whereIn('status', ['open', 'snoozed'])->whereKeyNot($event->getKey())->get(['type', 'context'])
-            ->contains(static fn ($e): bool => BellKind::forAlert((string) $e->type, (array) ($e->context ?? [])) === $kind);
-        if ($stillOpen) {
-            return;
-        }
-
+        // ONE statement (the alert sweep counts its statements). The same-finding sweep spares a row while ANOTHER open alert raises it.
         AppNotification::withoutGlobalScopes()
             ->where('tenant_id', $event->tenant_id)
             ->where('status', '!=', 'resolved')
-            ->where(function (Builder $q) use ($event, $kind): void {
+            ->where(function (Builder $q) use ($event, $kind, $types): void {
                 if ($event->notification_id !== null) {
                     $q->orWhere('id', $event->notification_id);
                 }
-                if ($kind !== null && $event->entity_id !== null && $kind !== 'recovered') {
+                if ($kind !== null && $event->entity_id !== null && $kind !== 'recovered' && $types !== []) {
                     $q->orWhere(fn (Builder $same) => $same->where('source', 'alerts')->where('kind', $kind)
-                        ->where('entity_type', $event->entity_type)->where('entity_id', (string) $event->entity_id));
+                        ->where('entity_type', $event->entity_type)->where('entity_id', (string) $event->entity_id)
+                        ->whereNotExists(static fn ($open) => $open->select(DB::raw(1))->from('alert_events as e')
+                            ->where('e.tenant_id', $event->tenant_id)->where('e.entity_type', $event->entity_type)
+                            ->where('e.entity_id', (string) $event->entity_id)->whereIn('e.status', ['open', 'snoozed'])
+                            ->where('e.id', '!=', $event->getKey())->whereIn('e.type', $types)));
                 }
             })
             ->update(['status' => 'resolved', 'resolved_at' => now()]);

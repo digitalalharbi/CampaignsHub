@@ -83,19 +83,26 @@ final class NotificationDispatcher
          * counts the repeat, and — only when the finding got worse — brings it back as unread. No second email,
          * no second push: a repeat is not a new event.
          */
+        $checked = false;
         if (($p['upsert_daily'] ?? false) === true && $kind !== null) {
             $dayKey = $this->dayKey($tenantId, $userId, $kind, $p);
-            $existing = AppNotification::query()->where('tenant_id', $tenantId)->where('type', '!=', 'suppressed')
+            // ONE read answers both questions: is there a notification for this finding today, or a ledger tombstone for it.
+            $existing = AppNotification::query()->where('tenant_id', $tenantId)
                 ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id'))
-                ->where('dedup_key', $dayKey)->first();
-            if ($existing !== null) {
+                ->where('dedup_key', $dayKey)->latest('created_at')->first();
+            if ($existing !== null && $existing->type !== 'suppressed') {
                 return $this->refresh($existing, $p);
             }
+            // A tombstone (the person switched this off) inside the window is a repeat of a refusal, as it always was.
+            if ($existing !== null && $existing->created_at >= Carbon::now()->subMinutes(self::DEDUP_WINDOW_MINUTES)) {
+                return null;
+            }
             $dedupKey = $dayKey;
+            $checked = true;
         }
 
         // 1) Dedup — an identical notification within the window is collapsed.
-        if ($this->isDuplicate($tenantId, $userId, $dedupKey)) {
+        if (! $checked && $this->isDuplicate($tenantId, $userId, $dedupKey)) {
             return null;
         }
 

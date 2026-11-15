@@ -151,6 +151,18 @@ final class BellKind
     }
 
     /**
+     * The alert event types whose findings carry this kind — what «the same finding» means when one rule closes and another may not have.
+     *
+     * @return list<string>
+     */
+    public static function alertTypesOf(string $kind): array
+    {
+        $types = array_keys(array_filter(self::BY_ALERT, static fn (string $k): bool => $k === $kind));
+
+        return str_starts_with($kind, 'budget_') ? [...$types, 'budget_risk'] : $types;
+    }
+
+    /**
      * The page of the object a notification is about, relative to the reader's portal — the bell's «افتح» button and a push's click.
      *
      * Null when the kind says nothing better than the notification's own `action_url`.
