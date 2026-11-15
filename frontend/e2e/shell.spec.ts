@@ -79,6 +79,23 @@ test.describe('the side rail (NOV-SIDEBAR-001)', () => {
     await expect(flyout).toBeHidden()
   })
 
+  test('the client and project control is one icon away on the strip, and opens in place', async ({ page }) => {
+    await ready(page, '/agency/clients')
+    const rail = page.locator('aside').first()
+
+    // Not drawn on the strip itself — two unlabelled dropdowns do not fit in 64px…
+    await expect(rail.getByTestId('agency-scope')).toHaveCount(0)
+    const icon = page.getByTestId('agency-scope-collapsed')
+    await expect(icon).toBeVisible()
+
+    // …but one press away, and the strip does not change width.
+    await icon.click()
+    await expect(page.getByTestId('agency-scope')).toBeVisible()
+    expect(Math.round((await rail.boundingBox())!.width)).toBe(64)
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('agency-scope')).toHaveCount(0)
+  })
+
   test('Escape closes a flyout', async ({ page }) => {
     await ready(page, '/agency/clients')
     await page.getByTestId('nav-group-finance').click()

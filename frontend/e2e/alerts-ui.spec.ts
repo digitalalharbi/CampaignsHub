@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, csrfHeaders, E2E_ORIGIN } from './helpers'
+import { AUTH, csrfHeaders, E2E_ORIGIN, openRail } from './helpers'
 
 /**
  * Alerts management UI (/agency/alerts) on Chromium/Firefox/WebKit: the page renders the operator surface for the
@@ -23,6 +23,7 @@ test('alerts page renders all sections and a rule created in the UI persists', a
 
   // Page + entitlement nav link.
   await expect(page.getByRole('heading', { level: 1, name: /Alerts|التنبيهات/ })).toBeVisible()
+  await openRail(page)
   await expect(page.getByRole('link', { name: /^Alerts$|^التنبيهات$/ }).first()).toBeVisible()
 
   // The three lifecycle filters exist.
@@ -78,6 +79,7 @@ test('the notification bell links to the alerts page', async ({ browser, page })
   await page.goto('/agency')
   /* Language-agnostic below, and asking for English costs a webkit failure — see the note above. */
   // The alerts entry is reachable from the sidebar (the bell's items deep-link to the same page).
+  await openRail(page)
   await page.getByRole('link', { name: /^Alerts$|^التنبيهات$/ }).first().click()
   await expect(page).toHaveURL(/\/agency\/alerts/)
 })

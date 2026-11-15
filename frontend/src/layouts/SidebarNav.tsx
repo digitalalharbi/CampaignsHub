@@ -307,6 +307,50 @@ function useRailPop() {
   return { open, setOpen, toggleFromClick, wrapRef, triggerRef, panelRef, hover, focus, style }
 }
 
+/**
+ * NOV-SIDEBAR-001 — a control the 64px strip has no room for, opened beside its icon.
+ *
+ * The strip used to drop the agency's client → project switcher entirely («steps aside»), which was harmless while the
+ * rail opened wide by default and is not now that it starts as a strip: the one control every section is read through
+ * would have been unreachable. It opens on PRESS (a form is not a tooltip, so no hover-open), its body is mounted only
+ * while open (no hidden duplicate of the real control in the document), and Escape or a press outside closes it.
+ */
+export function RailPopover({
+  icon: Icon, label, children, testid,
+}: { icon: LucideIcon; label: string; children: React.ReactNode; testid?: string }) {
+  const pop = useRailPop()
+  const panelId = useId()
+
+  return (
+    <div ref={pop.wrapRef} className="flex justify-center">
+      <button
+        ref={pop.triggerRef}
+        type="button"
+        data-testid={testid}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={panelId}
+        title={label}
+        onClick={() => pop.setOpen(!pop.open)}
+        className="flex h-11 w-11 items-center justify-center rounded-xl text-text-secondary transition hover:bg-surface-hover hover:text-text-primary"
+      >
+        <Icon size={20} aria-hidden />
+      </button>
+      <div
+        id={panelId}
+        ref={pop.panelRef}
+        role="dialog"
+        aria-label={label}
+        style={pop.style}
+        className={`${pop.open ? 'block' : 'hidden'} fixed z-[70] w-72 max-w-[90vw] rounded-xl border border-border bg-surface-elevated p-3 shadow-[var(--shadow-large)]`}
+      >
+        {pop.open && children}
+      </div>
+    </div>
+  )
+}
+
 /** One icon for a whole group on the strip; its sections open beside it. Every link stays in the document. */
 function RailGroup({
   group, ar, all, holdsCurrent, onNavigate,

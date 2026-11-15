@@ -65,6 +65,25 @@ export async function openFilters(page: Page, id: string) {
   }
 }
 
+/**
+ * NOV-SIDEBAR-001 — open the agency rail, if it is the 64px icon strip.
+ *
+ * The rail starts collapsed, and in the strip a section's name is a tooltip and its link sits in a flyout that is not
+ * in the accessibility tree until it opens. A spec that reads names from the rail, or clicks a rail link by its name,
+ * opens it first, exactly as a reader does. Safe to call when it is already open.
+ */
+export async function openRail(page: Page, options: { optional?: boolean } = {}): Promise<void> {
+  const toggle = page.getByTestId('rail-toggle')
+  if (options.optional) {
+    // A portal whose rail is not this one (the advertiser's is always open) has no toggle — nothing to do there.
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 30_000 })
+    if ((await toggle.count()) === 0) return
+  }
+  await toggle.waitFor({ state: 'visible', timeout: 30_000 })
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}
+
 /** Flip the app to English for stable selectors (default locale is Arabic). */
 /**
  * Put the page into English, and FAIL if it did not go.
