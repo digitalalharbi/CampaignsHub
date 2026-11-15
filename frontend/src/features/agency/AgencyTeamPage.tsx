@@ -148,9 +148,6 @@ export function AgencyTeamPage() {
     <div className="w-full">
       {head}
 
-      {/* ACCESS-CENTER-001 — the one place invitations and access are decided, for whoever runs the team. */}
-      {canRunTeam && <div className="mb-4"><AccessCenter /></div>}
-
       <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
         <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />
         <span>
@@ -197,6 +194,12 @@ export function AgencyTeamPage() {
           ))}
         </ul>
       )}
+
+      {/*
+        ACCESS-CENTER-001 — invitations, categories and per-person areas, for whoever runs the team. Below the
+        member list, not above it: the page's first screen stays the figures and the people (first-viewport sweep).
+      */}
+      {canRunTeam && <div className="mt-6"><AccessCenter /></div>}
     </div>
   )
 }
