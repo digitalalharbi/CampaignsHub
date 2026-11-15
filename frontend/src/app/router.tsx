@@ -116,6 +116,7 @@ const PlatformLegalPage = lazyPage(() => import('@/features/admin/PlatformLegalP
 const ProviderReviewPage = lazyPage(() => import('@/features/admin/ProviderReviewPage'), 'ProviderReviewPage')
 const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 'BillingPage')
 const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
+const AdminNotificationsPage = lazyPage(() => import('@/features/admin/AdminNotificationsPage'), 'AdminNotificationsPage')
 const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
 const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
 const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'AddonsPage')
@@ -598,6 +599,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             // inside Audit: it is the surface an operator opens when a customer says an email never
             // arrived, and the audit trail is about people's actions rather than the mailer's.
             { path: 'email', element: <EmailOperationsPage /> },
+            // NOTIF-V2-SETTINGS-UI-001 — the platform's notification layer: catalog, texts, plan features, footprint, statistics.
+            { path: 'notifications', element: <AdminNotificationsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],
