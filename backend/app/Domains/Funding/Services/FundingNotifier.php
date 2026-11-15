@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
@@ -14,6 +13,7 @@ use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Models\Membership;

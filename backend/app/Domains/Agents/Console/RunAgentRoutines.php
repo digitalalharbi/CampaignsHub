@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Console;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Services\RoutineStarter;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
 

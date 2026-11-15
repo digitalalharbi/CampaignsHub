@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Automation\Console;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Automation\Models\AutomationRule;
 use App\Domains\Automation\Services\RuleEvaluator;
 use App\Domains\Automation\Support\RuleSchedule;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;

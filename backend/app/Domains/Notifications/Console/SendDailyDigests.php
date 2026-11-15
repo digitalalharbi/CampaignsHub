@@ -40,7 +40,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class SendDailyDigests extends Command
 {
-
     protected $signature = 'notifications:send-digests
         {--user= : Send for one user id only — for verifying a change without mailing an account}
         {--force : Ignore the recipient’s chosen hour and day; sent as an on-demand copy that never takes the period’s scheduled slot}

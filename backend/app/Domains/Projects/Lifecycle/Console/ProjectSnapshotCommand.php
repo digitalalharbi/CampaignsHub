@@ -6,6 +6,7 @@ namespace App\Domains\Projects\Lifecycle\Console;
 
 use App\Domains\Projects\Lifecycle\ProjectSnapshot;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 
 /**
  * PROJECT-LIFECYCLE-001 §PROTECTION — `lifecycle:snapshot --project=<id>`: READ-ONLY counts of one project as JSON
@@ -27,7 +28,7 @@ final class ProjectSnapshotCommand extends Command
             return self::INVALID;
         }
 
-        $asOf = $this->option('as-of') ? \Illuminate\Support\Carbon::parse((string) $this->option('as-of')) : null;
+        $asOf = $this->option('as-of') ? Carbon::parse((string) $this->option('as-of')) : null;
         $snapshot = $snapshots->for($id, $asOf);
         if ($snapshot === null) {
             $this->error('No project with that id.');

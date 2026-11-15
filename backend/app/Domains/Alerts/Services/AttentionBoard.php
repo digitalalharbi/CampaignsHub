@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Alerts\Services;
 
-use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Agents\Models\ActionProposal;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Carbon;
