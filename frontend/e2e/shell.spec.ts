@@ -150,3 +150,109 @@ test.describe('the phone navigation layer (NOV-SIDEBAR-001)', () => {
     await expect(page.getByTestId('mobile-drawer')).toHaveCount(0)
   })
 })
+
+/**
+ * Pages that have been converted to fit (NOV-FIT-001). A page joins this list when it is converted, and from then
+ * on a regression that makes it scroll — or cuts its content off — fails here with the page and the size named.
+ */
+const FITTED = ['/agency/clients', '/agency/team']
+
+/**
+ * What a locked page can get wrong is not a document scrollbar — the document is pinned and never scrolls — but
+ * CONTENT CUT OFF by the lock. So this measures the box the content lives in, not only the document.
+ */
+async function overflow(page: Page) {
+  return page.evaluate(() => {
+    const d = document.documentElement
+    const content = document.querySelector<HTMLElement>('.portal-content')
+    const footer = document.querySelector<HTMLElement>('[data-testid="portal-footer"]')
+    const cut: string[] = []
+    if (content) {
+      const box = content.getBoundingClientRect()
+      for (const el of content.querySelectorAll<HTMLElement>('*')) {
+        const r = el.getBoundingClientRect()
+        const style = getComputedStyle(el)
+        if (r.height === 0 || style.position === 'fixed' || style.position === 'absolute' || style.display === 'none') continue
+        if (r.bottom > box.bottom + 1) cut.push(`${el.dataset.testid ?? el.tagName}:${Math.round(r.bottom - box.bottom)}`)
+        if (cut.length > 4) break
+      }
+    }
+
+    return {
+      docV: d.scrollHeight - d.clientHeight,
+      docH: d.scrollWidth - d.clientWidth,
+      contentV: content ? content.scrollHeight - content.clientHeight : 0,
+      contentH: content ? content.scrollWidth - content.clientWidth : 0,
+      footerVisible: footer ? footer.getBoundingClientRect().bottom <= window.innerHeight + 1 : true,
+      cut,
+    }
+  })
+}
+
+test.describe('a converted page fits a desktop screen with no scroll (NOV-FIT-001)', () => {
+  for (const path of FITTED) {
+    for (const [w, h] of [[1366, 768], [1440, 900], [1920, 1080]] as const) {
+      for (const locale of ['ar', 'en'] as const) {
+        test(`${path} · ${w}×${h} · ${locale}`, async ({ page }) => {
+          await page.addInitScript((l) => localStorage.setItem('campaign-hub-locale', l), locale)
+          await page.setViewportSize({ width: w, height: h })
+          await ready(page, path)
+          await page.waitForTimeout(600) // the row count settles after the first measurement
+
+          await expect(page.locator('[data-fit="true"]')).toHaveCount(1)
+          const m = await overflow(page)
+          expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+          expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
+          expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
+          expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
+          expect(m.cut, 'elements hang below the content box').toEqual([])
+          expect(m.footerVisible, 'the footer is below the fold').toBe(true)
+        })
+      }
+    }
+  }
+})
+
+test.describe('no page scrolls sideways at any width (NOV-FIT-001)', () => {
+  for (const path of FITTED) {
+    for (const w of WIDTHS) {
+      test(`${path} · ${w}px`, async ({ page }) => {
+        await page.setViewportSize({ width: w, height: w < 768 ? 800 : 768 })
+        await ready(page, path)
+        await page.waitForTimeout(400)
+
+        const m = await overflow(page)
+        expect(m.docH, `scrolls sideways by ${m.docH}px at ${w}px`).toBeLessThanOrEqual(0)
+        expect(m.contentH).toBeLessThanOrEqual(0)
+        // Below the lock a page flows: it may scroll vertically, it may never be cut off.
+        if (w < 1280) expect(m.contentV, `content cut off at ${w}px`).toBeLessThanOrEqual(1)
+      })
+    }
+  }
+
+  test('touch targets on a phone are at least 44px', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: AUTH.owner, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+    const page = await context.newPage()
+    await ready(page, '/agency/clients')
+    await page.waitForTimeout(500)
+    const small = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('button, [role="tab"], select, input:not([type="checkbox"]):not([type="radio"])')]
+      .filter((el) => el.offsetParent !== null)
+      .map((el) => ({ n: el.getAttribute('aria-label') ?? el.dataset.testid ?? el.textContent?.trim().slice(0, 20) ?? el.tagName, h: Math.round(el.getBoundingClientRect().height) }))
+      .filter((x) => x.h < 44))
+    expect(small, `controls under 44px: ${JSON.stringify(small)}`).toEqual([])
+    await context.close()
+  })
+
+  test('a field is 16px or larger on a phone, so iOS does not zoom on focus', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: AUTH.owner, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+    const page = await context.newPage()
+    await ready(page, '/agency/clients')
+    await page.getByTestId('clients-filters-toggle').click()
+    const sizes = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('input:not([type="checkbox"]):not([type="radio"]), select, textarea')]
+      .filter((el) => el.offsetParent !== null)
+      .map((el) => parseFloat(getComputedStyle(el).fontSize)))
+    expect(sizes.length).toBeGreaterThan(0)
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(16)
+    await context.close()
+  })
+})
