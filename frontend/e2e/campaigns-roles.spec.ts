@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { API_HEADERS, AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
+import { API_HEADERS, AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish, openRail } from './helpers'
 
 /**
  * Role / RBAC E2E — proves authorization is enforced by the SERVER, not just hidden buttons.
@@ -20,6 +20,8 @@ async function selectFirstClientAndProject(page: import('@playwright/test').Page
    * project scope instead, so their control offers projects directly (AGENCY-006) — the sequence
    * adapts to the grant rather than assuming one shape for everyone.
    */
+  // NOV-SIDEBAR-001 — the scope control is in the rail, and the rail starts as an icon strip: open it, as a reader does.
+  await openRail(page, { optional: true })
   // Wait for the control to finish loading before asking what shape it has: `count()` does not
   // wait, so checking it during the loading skeleton reports zero and silently skips the client.
   await expect(page.getByTestId('agency-scope')).toBeVisible({ timeout: 20000 })
@@ -149,6 +151,7 @@ test.describe('Client Viewer (scoped to one project)', () => {
      * The claim is unchanged and is the one that matters: it exposes exactly the one project their
      * membership allows — plus the placeholder — and nothing from the other twenty.
      */
+    await openRail(page, { optional: true }) // NOV-SIDEBAR-001 — the control lives in the rail, which starts as a strip
     const projectSelect = page.getByTestId('agency-scope-project')
     await expect(projectSelect).toBeVisible({ timeout: 20000 })
     await expect(projectSelect.locator('option')).toHaveCount(2)

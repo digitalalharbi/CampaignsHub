@@ -23,7 +23,7 @@ import { useUi } from '@/stores/ui'
  * disclosure beside the platform being connected. A footer that listed all thirteen would be the
  * homepage footer again, one level down — which is the defect this replaces.
  */
-export function PortalFooter() {
+export function PortalFooter({ compact = false }: { compact?: boolean } = {}) {
   const locale = useUi((s) => s.locale)
   const links = policyLinks('portal', locale)
   const year = new Date().getFullYear()
@@ -31,9 +31,9 @@ export function PortalFooter() {
   return (
     <footer
       data-testid="portal-footer"
-      className="mt-8 border-t border-border pt-4 text-xs text-text-muted"
+      className={`border-t border-border text-xs text-text-muted ${compact ? 'mt-0 py-1.5' : 'mt-8 pt-4'}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className={`flex items-center justify-between gap-x-4 ${compact ? 'flex-nowrap overflow-hidden whitespace-nowrap' : 'flex-wrap gap-y-2'}`}>
         {/* The platform's attribution, in the language the page is being read in. */}
         <span dir={locale === 'ar' ? 'rtl' : 'ltr'}>
           © {year} {locale === 'ar' ? brand.lockup.nameAr : brand.lockup.nameEn}

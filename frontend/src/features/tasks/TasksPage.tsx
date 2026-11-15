@@ -2,8 +2,7 @@ import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { Num } from '@/components/ui/Num'
 import { useEffect, useMemo, useState } from 'react'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
-import { StatCard } from '@/components/ui/StatCard'
-import { ChartCard, StatusMixBar } from '@/features/analytics/charts'
+import { StatusMixBar } from '@/features/analytics/charts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BellRing, CheckCircle2, LayoutGrid, ListChecks, Plus, Rows3, Truck, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -11,7 +10,10 @@ import { usePortalPath } from '@/app/portalPath'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { PRIORITY_META, STATUS_META, priorityLabel, statusLabel } from './labels'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { FitPage } from '@/components/fit/FitPage'
+import { KpiMini, KpiStrip, type KpiTone } from '@/components/fit/KpiMini'
+import { Pager } from '@/components/fit/Pager'
+import { useFitRows } from '@/components/fit/useFitRows'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { DateField } from '@/components/ui/DateField'
@@ -82,6 +84,13 @@ export function TasksPage() {
   const needle = useDebouncedValue(term.trim(), 250)
 
   const [page, setPage] = useState(1)
+  /*
+   * NOV-FIT-001 — the server is asked for as many tasks as the screen holds. A list row is `TASK_ROW` px and the
+   * mix strip and pager below it are reserved; the board shows `laneCap` cards per lane and says how many more.
+   */
+  const fit = useFitRows({ rowHeight: TASK_ROW + 8, reserve: 44 + 76, min: 3, max: 25, fallback: 10 })
+  const perPage = view === 'board' ? 25 : fit.rows
+  const laneCap = Math.max(1, Math.floor((fit.rows * (TASK_ROW + 8)) / 78))
 
   const filters = useMemo(
     () => ({
@@ -104,8 +113,8 @@ export function TasksPage() {
   useEffect(() => setPage(1), [status, priority, needle, mine])
 
   const q = useQuery({
-    queryKey: ['tasks', 'page', filters, page],
-    queryFn: () => listTasks({ ...filters, page }),
+    queryKey: ['tasks', 'page', filters, page, perPage],
+    queryFn: () => listTasks({ ...filters, page, perPage }),
     placeholderData: (prev) => prev,
   })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] })
@@ -120,229 +129,188 @@ export function TasksPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      {/*
-        UX-PAGE-HERO-001 · PRODUCT-VISUAL-001 §20 — the product's header, and the queue's state in it.
+    <FitPage
+      testid="tasks-page"
+      introTestid="tasks-intro"
+      title={c.title}
+      info={c.subtitle}
+      actions={canCreate ? (
+        <button onClick={() => setCreating(true)}
+          className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">
+          <Plus size={15} /> {c.new_task}
+        </button>
+      ) : undefined}
+      kpis={
+        /*
+          UX-PAGE-HERO-001 · PRODUCT-VISUAL-001 §20 — the queue's state, in the head.
 
-        The page drew its own `<h1>` at `text-3xl` — a fifth spelling of a header — above four
-        summary cards that answered «what needs doing today» a scroll below the title. The counts
-        are the headline of a work queue, so they sit in the head; the cards keep their own component
-        and their own «unknown» handling, which is what makes a failed request read as «we do not
-        know» instead of as four zeros.
-      */}
-      <PageIntro
-        testid="tasks-intro"
-        title={c.title}
-        purpose={c.subtitle}
-        actions={canCreate ? (
-          <button onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">
-            <Plus size={15} /> {c.new_task}
-          </button>
-        ) : undefined}
-        kpis={
-          <>
-            <SummaryCard label={c.sum_total} value={summary.total} tone="brand" unknown={q.isError} />
-            <SummaryCard label={c.sum_open} value={summary.open} tone="info" unknown={q.isError} />
-            {/*
-              ALERTS-COPY-001, on the tasks board — nothing overdue is good news, painted red.
+          The cards keep their «unknown» handling, which is what makes a failed request read as «we do not
+          know» instead of as four zeros. `tasks-intro-kpis` is the handle the first-viewport sweep reads.
+        */
+        <KpiStrip testid="tasks-intro-kpis">
+          <SummaryCard label={c.sum_total} value={summary.total} tone="brand" icon={ListChecks} unknown={q.isError} />
+          <SummaryCard label={c.sum_open} value={summary.open} tone="info" icon={Rows3} unknown={q.isError} />
+          {/*
+            ALERTS-COPY-001, on the tasks board — nothing overdue is good news, painted red.
 
-              `tone="danger"` was unconditional, so a team that is fully on schedule met a red card
-              announcing it. Colour is a judgement, and a red zero spends the reader's attention on
-              the one number that did not need it — which is how people learn to stop looking at red.
-            */}
-            <SummaryCard
-              label={c.sum_overdue}
-              value={summary.overdue}
-              tone={summary.overdue > 0 ? 'danger' : 'success'}
-              unknown={q.isError}
-            />
-            <SummaryCard label={c.sum_done} value={summary.done} tone="success" unknown={q.isError} />
-          </>
-        }
-      />
-      <OpsHubBar />
+            `tone="danger"` was unconditional, so a team that is fully on schedule met a red card
+            announcing it. Colour is a judgement, and a red zero spends the reader's attention on
+            the one number that did not need it — which is how people learn to stop looking at red.
+          */}
+          <SummaryCard label={c.sum_overdue} value={summary.overdue} tone={summary.overdue > 0 ? 'danger' : 'success'} icon={AlertTriangle} unknown={q.isError} />
+          <SummaryCard label={c.sum_done} value={summary.done} tone="success" icon={CheckCircle2} unknown={q.isError} />
+        </KpiStrip>
+      }
+      toolbar={
+        <>
+          <OpsHubBar />
+          {/*
+            The filters, on the page — UX-SWEEP-001.
 
-      {/*
-        The filters, on the page — UX-SWEEP-001.
-
-        SIMPLIFY-002 folded status, assignee and priority behind one button. Those are the three
-        questions somebody opens a task list to ask; folding them left a page whose only visible
-        controls were a search box and a view switcher, which reads as a list that cannot be
-        narrowed at all. They are inline now, with the applied ones as chips that each undo their
-        own value. Nothing about this page has a rare axis, so there is no «More filters» at all.
-      */}
-      <FilterBar
-        id="tasks"
-        ar={ar}
-        applied={[
-          ...(status === 'all' ? [] : [{
-            key: `status:${status}`,
-            axis: ar ? 'الحالة' : 'Status',
-            label: statusLabel(status, ar),
-            onRemove: () => setStatus('all'),
-          }]),
-          ...(priority === 'all' ? [] : [{
-            key: `priority:${priority}`,
-            axis: c.priority,
-            label: priorityLabel(priority, ar),
-            onRemove: () => setPriority('all'),
-          }]),
-          ...(mine ? [{
-            key: 'mine',
-            axis: ar ? 'المُسنَدة' : 'Assigned to',
-            label: c.mine,
-            onRemove: () => setMine(false),
-          }] : []),
-        ]}
-        onReset={() => { setStatus('all'); setPriority('all'); setMine(false) }}
-        trailing={
-          <div className="flex overflow-hidden rounded-lg border border-border">
-            <button onClick={() => setView('list')} aria-label={c.view_list} title={c.view_list}
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
-              <Rows3 size={14} />
-            </button>
-            <button onClick={() => setView('board')} aria-label={c.view_board} title={c.view_board}
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'board' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
-              <LayoutGrid size={14} />
-            </button>
-          </div>
-        }
-      >
-        <FilterSearch value={term} placeholder={c.search_ph} testid="tasks-search" onChange={setTerm} />
-
-        <FilterSelect
-          label={ar ? 'الحالة' : 'Status'}
-          value={status}
-          testid="tasks-status"
-          options={[{ value: 'all', label: c.all }, ...FILTER_STATUSES.map((v) => ({ value: v, label: statusLabel(v, ar) }))]}
-          onChange={setStatus}
-        />
-
-        <FilterSelect
-          label={c.priority}
-          value={priority}
-          testid="tasks-priority"
-          options={[{ value: 'all', label: c.all }, ...FILTER_PRIORITIES.map((v) => ({ value: v, label: priorityLabel(v, ar) }))]}
-          onChange={setPriority}
-        />
-
-        <FilterSelect
-          label={ar ? 'المُسنَدة' : 'Assigned to'}
-          value={mine ? 'mine' : 'all'}
-          testid="tasks-assignee"
-          options={[{ value: 'all', label: c.all }, { value: 'mine', label: c.mine }]}
-          onChange={(v) => setMine(v === 'mine')}
-        />
-      </FilterBar>
-
-      {/* Body */}
-      {q.isLoading ? (
-        <StateBox>{c.loading}</StateBox>
-      ) : q.isError ? (
-        // AGENCY-PERMS: a refusal, an expired session and a dead server used to print the same
-        // sentence here, and only the last of the three is something a Retry button can fix.
-        <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="tasks-failure" onRetry={() => q.refetch()} />
-      ) : tasks.length === 0 ? (
-        <StateBox>{unfiltered ? c.none : c.no_match}</StateBox>
-      ) : view === 'board' ? (
-        <BoardView tasks={tasks} ar={ar} canUpdate={canUpdate}
-          onStatus={(id, s) => updateStatus(id, s)} />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {tasks.map((t) => (
-            <TaskRow key={t.id} task={t} c={c} ar={ar} canUpdate={canUpdate}
-              onStatus={(s) => updateStatus(t.id, s)} onOpen={() => setSelected(t)} />
-          ))}
-        </ul>
-      )}
-
-      {/*
-        No silent caps: the reader is told what they are looking at out of what exists.
-
-        A page that simply shows twenty-five rows of a hundred, with nothing saying so, is
-        indistinguishable from a workspace that has twenty-five tasks — which is the reason this
-        endpoint was unbounded in the first place.
-      */}
-      {(q.data?.lastPage ?? 1) > 1 && (
-        <nav className="flex items-center justify-between gap-3 text-sm" data-testid="tasks-pager">
-          <span className="text-text-secondary">
-            {ar
-              ? `${tasks.length} من ${summary.total} — صفحة ${q.data?.page ?? 1} من ${q.data?.lastPage ?? 1}`
-              : `${tasks.length} of ${summary.total} — page ${q.data?.page ?? 1} of ${q.data?.lastPage ?? 1}`}
-          </span>
-          <span className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={(q.data?.page ?? 1) <= 1}
-              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
-            >
-              {ar ? 'السابق' : 'Previous'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={(q.data?.page ?? 1) >= (q.data?.lastPage ?? 1)}
-              className="rounded-lg border border-border px-3 py-1.5 font-medium text-text-primary disabled:opacity-40"
-            >
-              {ar ? 'التالي' : 'Next'}
-            </button>
-          </span>
-        </nav>
-      )}
-
-      {/*
-        VIZ-OPS-001 — how much of the ledger is still open, BELOW the ledger itself.
-
-        ## Why it is after the list
-
-        The owner's rule: «the feature and the service come first on the page, clearly, without
-        needing to scroll — and the analytical results after them.» A task board is a place to DO the
-        work; the reading of it is what you look at once you have seen the work. This first sat
-        between the head and the filters, so the list every visit is actually about was pushed down by
-        a chart about the list.
-
-        The four counts cannot say it either way — that part has not changed.
-
-        The cards answer «how many» four times. «How much of it is still open» is a fifth question,
-        and the one somebody opens this board to ask.
-
-        ## `overdue` is NOT a band here, and drawing it as one would be wrong arithmetic
-
-        The server counts it as «a due date in the past that nobody has finished» — a SUBSET of open,
-        not a sibling. Putting the three in one bar would count every overdue task twice and push the
-        bands past the total, which `StatusMixBar` refuses outright rather than normalising. So the
-        bar divides open · done · everything else, and lateness is stated where it lives: inside open.
-
-        «Everything else» is a real band, not padding: `cancelled` is neither open nor done, so the
-        two do not cover the ledger, and calling their sum the total would make both shares too large.
-      */}
-      {summary.total > 0 && (
-        <ChartCard
-          title={ar ? 'حالة المهام' : 'How the board stands'}
-          subtitle={ar ? 'حصة كل حالة من إجمالي المهام المطابقة للتصفية.' : 'Each state’s share of every task the filter matched.'}
-        >
-          <StatusMixBar
-            testId="task-mix"
+            Status, assignee and priority are the three questions somebody opens a task list to ask, so they
+            are inline, with the applied ones as chips that each undo their own value. Dense (NOV-FIT-001):
+            one row on a desktop.
+          */}
+          <FilterBar
+            id="tasks"
             ar={ar}
-            label={ar ? 'المهام' : 'Tasks'}
-            total={summary.total}
-            residualLabel={ar ? 'أخرى' : 'Neither'}
-            bands={[
-              { key: 'open', label: ar ? 'مفتوحة' : 'Open', count: summary.open, tone: 'info' },
-              { key: 'done', label: ar ? 'منجزة' : 'Done', count: summary.done, tone: 'success' },
+            density="dense"
+            applied={[
+              ...(status === 'all' ? [] : [{
+                key: `status:${status}`,
+                axis: ar ? 'الحالة' : 'Status',
+                label: statusLabel(status, ar),
+                onRemove: () => setStatus('all'),
+              }]),
+              ...(priority === 'all' ? [] : [{
+                key: `priority:${priority}`,
+                axis: c.priority,
+                label: priorityLabel(priority, ar),
+                onRemove: () => setPriority('all'),
+              }]),
+              ...(mine ? [{
+                key: 'mine',
+                axis: ar ? 'المُسنَدة' : 'Assigned to',
+                label: c.mine,
+                onRemove: () => setMine(false),
+              }] : []),
             ]}
-          />
-          {summary.overdue > 0 && (
-            <p data-testid="task-overdue-note" className="mt-3 text-sm text-warning">
-              {ar
-                ? `${summary.overdue.toLocaleString('en-US')} من المهام المفتوحة تجاوزت موعدها.`
-                : `${summary.overdue.toLocaleString('en-US')} of the open tasks are past their due date.`}
-            </p>
+            onReset={() => { setStatus('all'); setPriority('all'); setMine(false) }}
+            trailing={
+              <div className="flex overflow-hidden rounded-lg border border-border">
+                <button onClick={() => setView('list')} aria-label={c.view_list} title={c.view_list}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'list' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+                  <Rows3 size={14} />
+                </button>
+                <button onClick={() => setView('board')} aria-label={c.view_board} title={c.view_board}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${view === 'board' ? 'bg-brand-500 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+                  <LayoutGrid size={14} />
+                </button>
+              </div>
+            }
+          >
+            <FilterSearch value={term} placeholder={c.search_ph} testid="tasks-search" onChange={setTerm} />
+
+            <FilterSelect
+              label={ar ? 'الحالة' : 'Status'}
+              value={status}
+              testid="tasks-status"
+              options={[{ value: 'all', label: c.all }, ...FILTER_STATUSES.map((v) => ({ value: v, label: statusLabel(v, ar) }))]}
+              onChange={setStatus}
+            />
+
+            <FilterSelect
+              label={c.priority}
+              value={priority}
+              testid="tasks-priority"
+              options={[{ value: 'all', label: c.all }, ...FILTER_PRIORITIES.map((v) => ({ value: v, label: priorityLabel(v, ar) }))]}
+              onChange={setPriority}
+            />
+
+            <FilterSelect
+              label={ar ? 'المُسنَدة' : 'Assigned to'}
+              value={mine ? 'mine' : 'all'}
+              testid="tasks-assignee"
+              options={[{ value: 'all', label: c.all }, { value: 'mine', label: c.mine }]}
+              onChange={(v) => setMine(v === 'mine')}
+            />
+          </FilterBar>
+        </>
+      }
+    >
+      <div ref={fit.ref} className="flex min-h-0 flex-1 flex-col gap-2">
+        <div className="min-h-0 flex-1">
+          {q.isLoading ? (
+            <StateBox>{c.loading}</StateBox>
+          ) : q.isError ? (
+            // AGENCY-PERMS: a refusal, an expired session and a dead server used to print the same
+            // sentence here, and only the last of the three is something a Retry button can fix.
+            <QueryFailure error={q.error} ar={ar} fallbackTitle={c.error} testId="tasks-failure" onRetry={() => q.refetch()} />
+          ) : tasks.length === 0 ? (
+            <StateBox>{unfiltered ? c.none : c.no_match}</StateBox>
+          ) : view === 'board' ? (
+            <BoardView tasks={tasks} ar={ar} canUpdate={canUpdate} cap={laneCap}
+              onStatus={(id, s) => updateStatus(id, s)} onOpen={setSelected} />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {tasks.map((t) => (
+                <TaskRow key={t.id} task={t} c={c} ar={ar} canUpdate={canUpdate}
+                  onStatus={(s) => updateStatus(t.id, s)} onOpen={() => setSelected(t)} />
+              ))}
+            </ul>
           )}
-        </ChartCard>
-      )}
+        </div>
+
+        {/*
+          VIZ-OPS-001 — how much of the ledger is still open, AFTER the ledger itself, as one slim strip.
+
+          The owner's rule: «the feature and the service come first on the page, clearly, without
+          needing to scroll — and the analytical results after them.» A task board is a place to DO the
+          work; the reading of it comes once the work is in view.
+
+          ## `overdue` is NOT a band here, and drawing it as one would be wrong arithmetic
+
+          The server counts it as «a due date in the past that nobody has finished» — a SUBSET of open,
+          not a sibling. Putting the three in one bar would count every overdue task twice and push the
+          bands past the total, which `StatusMixBar` refuses outright rather than normalising. So the
+          bar divides open · done · everything else, and lateness is stated where it lives: inside open.
+
+          «Everything else» is a real band, not padding: `cancelled` is neither open nor done, so the
+          two do not cover the ledger, and calling their sum the total would make both shares too large.
+        */}
+        {summary.total > 0 && (
+          <div className="shrink-0 rounded-xl border border-border bg-surface px-3 py-2">
+            <StatusMixBar
+              testId="task-mix"
+              ar={ar}
+              label={ar ? 'حالة المهام' : 'How the board stands'}
+              total={summary.total}
+              residualLabel={ar ? 'أخرى' : 'Neither'}
+              bands={[
+                { key: 'open', label: ar ? 'مفتوحة' : 'Open', count: summary.open, tone: 'info' },
+                { key: 'done', label: ar ? 'منجزة' : 'Done', count: summary.done, tone: 'success' },
+              ]}
+            />
+            {summary.overdue > 0 && (
+              <p data-testid="task-overdue-note" className="mt-1 text-xs text-warning">
+                {ar
+                  ? `${summary.overdue.toLocaleString('en-US')} من المهام المفتوحة تجاوزت موعدها.`
+                  : `${summary.overdue.toLocaleString('en-US')} of the open tasks are past their due date.`}
+              </p>
+            )}
+          </div>
+        )}
+
+        <Pager
+          testid="tasks-pager"
+          hideWhenSingle
+          ar={ar}
+          page={q.data?.page ?? 1}
+          pages={q.data?.lastPage ?? 1}
+          total={summary.total}
+          onPage={setPage}
+        />
+      </div>
 
       {selected && (
         <TaskDrawer task={selected} c={c} ar={ar} canUpdate={canUpdate}
@@ -353,7 +321,7 @@ export function TasksPage() {
       {creating ? (
         <CreateTaskDrawer c={c} ar={ar} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); invalidate() }} />
       ) : null}
-    </div>
+    </FitPage>
   )
 
   function updateStatus(id: string, s: string) {
@@ -378,8 +346,8 @@ function StateBox({ children, tone }: { children: React.ReactNode; tone?: 'dange
  * list knows how many tasks there are, so the honest figure is "not available", not zero.
  */
 /** UX-KPI-PRESENTATION-001 — the shared card. The tone and the em dash are this surface's, not a second design. */
-function SummaryCard({ label, value, tone, unknown }: { label: string; value: number; tone: 'brand' | 'info' | 'danger' | 'success'; unknown?: boolean }) {
-  return <StatCard label={label} value={unknown ? '—' : value} tone={tone} dot />
+function SummaryCard({ label, value, tone, unknown, icon }: { label: string; value: number; tone: KpiTone; unknown?: boolean; icon: typeof ListChecks }) {
+  return <KpiMini label={label} value={unknown ? '—' : value} tone={tone} icon={icon} />
 }
 
 function StatusBadge({ status, ar }: { status: string; ar: boolean }) {
@@ -428,24 +396,28 @@ function TaskOrigin({ task, ar }: { task: Task; ar: boolean }) {
   )
 }
 
+/** A list row is this tall (px): one line of title and chips, one of origin and due date. */
+const TASK_ROW = 64
+
 function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: Copy; ar: boolean; canUpdate: boolean; onStatus: (s: string) => void; onOpen: () => void }) {
   const pr = PRIORITY_META[task.priority]
   const done = task.status === 'completed'
   return (
-    <li className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={onOpen} className={`text-start font-semibold hover:text-brand-600 ${done ? 'text-text-muted line-through' : 'text-text-primary'}`}>{task.title}</button>
-          <span className={`text-[11px] font-bold ${pr?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(task.priority, ar)}</span>
+    <li data-testid="task-row" className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between md:h-16 md:overflow-hidden">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <button onClick={onOpen} title={task.description ?? task.title} className={`min-w-0 truncate text-start font-semibold hover:text-brand-600 ${done ? 'text-text-muted line-through' : 'text-text-primary'}`}>{task.title}</button>
+          <span className={`shrink-0 text-xs font-bold ${pr?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(task.priority, ar)}</span>
           {task.is_overdue ? (
-            <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-[11px] font-semibold text-danger">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-xs font-semibold text-danger">
               <AlertTriangle size={12} /> {c.overdue}
             </span>
           ) : null}
         </div>
-        {task.description ? <p className="line-clamp-1 text-sm text-text-secondary">{task.description}</p> : null}
-        <TaskOrigin task={task} ar={ar} />
-        {task.due_date ? <span className="text-[11px] text-text-muted">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
+        <div className="flex min-w-0 items-center gap-x-3 md:h-5 md:overflow-hidden">
+          <TaskOrigin task={task} ar={ar} />
+          {task.due_date ? <span className="shrink-0 text-xs text-text-muted">{c.due}: <span className="tnum" dir="ltr">{fmtDate(task.due_date)}</span></span> : null}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         {/*
@@ -482,36 +454,42 @@ function TaskRow({ task, c, ar, canUpdate, onStatus, onOpen }: { task: Task; c: 
   )
 }
 
-function BoardView({ tasks, ar, canUpdate, onStatus }: { tasks: Task[]; ar: boolean; canUpdate: boolean; onStatus: (id: string, s: string) => void }) {
+function BoardView({ tasks, ar, canUpdate, onStatus, onOpen, cap }: { tasks: Task[]; ar: boolean; canUpdate: boolean; onStatus: (id: string, s: string) => void; onOpen: (t: Task) => void; cap: number }) {
   // Columns: the open workflow stages plus completed — each is a lane of its tasks.
   const columns: string[] = [...OPEN_STATUSES, 'completed']
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid h-full gap-2 md:grid-cols-3 xl:grid-cols-6">
       {columns.map((col) => {
         const items = tasks.filter((t) => t.status === col)
+        const shown = items.slice(0, cap)
         return (
-          <div key={col} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface-secondary/40 p-3">
+          <div key={col} className="flex min-h-0 flex-col gap-1.5 overflow-hidden rounded-xl border border-border bg-surface-secondary/40 p-2">
             <div className="flex items-center justify-between">
               <StatusBadge status={col} ar={ar} />
               <span className="tnum text-xs font-bold text-text-muted" dir="ltr">{items.length}</span>
             </div>
             {items.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border p-4 text-center text-[11px] text-text-muted">—</p>
-            ) : items.map((t) => (
-              <div key={t.id} className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3">
-                <span className={`text-sm font-semibold ${t.status === 'completed' ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</span>
-                <div className="flex items-center justify-between">
-                  <span className={`text-[11px] font-bold ${PRIORITY_META[t.priority]?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(t.priority, ar)}</span>
-                  {t.due_date ? <span className={`text-[11px] tnum ${t.is_overdue ? 'text-danger' : 'text-text-muted'}`} dir="ltr">{fmtDate(t.due_date)}</span> : null}
+              <p className="rounded-lg border border-dashed border-border p-2 text-center text-xs text-text-muted">—</p>
+            ) : shown.map((t) => (
+              <div key={t.id} className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-2">
+                <button type="button" onClick={() => onOpen(t)} title={t.title} className={`truncate text-start text-sm font-semibold ${t.status === 'completed' ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</button>
+                <div className="flex items-center justify-between gap-1">
+                  <span className={`text-xs font-bold ${PRIORITY_META[t.priority]?.tone ?? 'text-text-secondary'}`}>● {priorityLabel(t.priority, ar)}</span>
+                  {t.due_date ? <span className={`text-xs tnum ${t.is_overdue ? 'text-danger' : 'text-text-muted'}`} dir="ltr">{fmtDate(t.due_date)}</span> : null}
                 </div>
                 {canUpdate ? (
                   <select value={t.status} onChange={(e) => onStatus(t.id, e.target.value)}
-                    className="mt-1 rounded-lg border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary">
+                    aria-label={`${ar ? 'الحالة' : 'Status'}: ${t.title}`}
+                    className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs font-semibold text-text-secondary">
                     {statusOptions(t.status).map((s) => <option key={s} value={s}>{statusLabel(s, ar)}</option>)}
                   </select>
                 ) : null}
               </div>
             ))}
+            {/* Honest about what the lane is not showing — «+3» rather than a lane that silently stops. */}
+            {items.length > shown.length && (
+              <p data-testid={`board-more-${col}`} className="text-center text-xs font-semibold text-text-muted"><span className="tnum" dir="ltr">+{items.length - shown.length}</span></p>
+            )}
           </div>
         )
       })}

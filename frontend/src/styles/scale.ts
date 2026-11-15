@@ -55,3 +55,39 @@ export const CARD_GAP = 'gap-3 sm:gap-4'
 
 /** A page's own title. */
 export const PAGE_TITLE = 'text-2xl font-extrabold tracking-tight sm:text-[28px]'
+
+/*
+ * NOV-FIT-001 — the rhythm of a page that has to fit the screen.
+ *
+ * A page that never scrolls is a budget: every row of it is paid for in pixels. The budget only balances if the
+ * pages spend the same coin, so the spacing and the type of a fitted page are decided here, once, from steps that
+ * already exist (no new arbitrary size, which the type-scale ratchet forbids).
+ *
+ *   gap between blocks        10px   (`gap-2.5`)       inside a card           12px × 8px
+ *   page title                20px → 24px from `sm`     a KPI figure            24px → 30px from `sm`
+ *   table row                 44px — also the touch floor, so a row is one tap target
+ */
+/** The gap between the blocks of a fitted page. */
+export const FIT_GAP = 'gap-2.5'
+
+/** A fitted page's title — one line, never the 28px hero. */
+export const FIT_TITLE = 'text-xl font-extrabold tracking-tight sm:text-2xl'
+
+/** The big number of a compact KPI card. */
+export const FIT_KPI_VALUE = 'tnum text-2xl font-extrabold leading-none tracking-tight sm:text-3xl'
+
+/** A compact card's surface and padding. */
+export const FIT_CARD = 'rounded-xl border border-border bg-surface'
+export const FIT_CARD_PAD = 'px-3 py-2'
+
+/** Pixel budget a table spends, read by `useFitRows` so the row count and the CSS cannot disagree. */
+export const FIT_ROW_HEIGHT = 44
+export const FIT_HEAD_HEIGHT = 40
+export const FIT_PAGER_HEIGHT = 44
+
+/**
+ * The viewport a page is locked to its height in. Below it — a phone, a tablet, a short desktop window — the page
+ * flows and scrolls vertically like any other, because a locked page on a small screen would cut content off.
+ * `index.css` carries the same query; `fitMedia.test.ts` fails if the two drift apart.
+ */
+export const FIT_LOCK_QUERY = '(min-width: 1280px) and (min-height: 640px)'

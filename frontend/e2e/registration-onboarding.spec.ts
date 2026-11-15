@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aFreshSaudiNumber, signIn, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, signIn, switchToEnglish, openRail } from './helpers'
 
 /**
  * Full registration → onboarding acceptance: register → verify email → account type → service → workspace →
@@ -484,6 +484,7 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
   await expect(page).toHaveURL(/\/agency\/dashboard/)
   // Personal full menu: Clients is present.
   await switchToEnglish(page)
+  await openRail(page)
   await expect(page.getByRole('link', { name: /Clients|العملاء/ }).first()).toBeVisible()
 
   // Persistence across reload — stays onboarded on the dashboard.

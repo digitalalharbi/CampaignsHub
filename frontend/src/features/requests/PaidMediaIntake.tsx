@@ -26,6 +26,7 @@ import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { withMark } from '@/lib/money/mark'
+import { uuid } from '@/lib/uuid'
 
 interface UploadFile {
   localId: string
@@ -162,7 +163,7 @@ export function PaidMediaIntake() {
     const token = await ensureSession()
     if (!token) return
     for (const file of selected) {
-      const localId = crypto.randomUUID()
+      const localId = uuid()
       setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
       await uploadOne(token, localId, file)
     }

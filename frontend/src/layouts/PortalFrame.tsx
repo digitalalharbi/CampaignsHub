@@ -1,5 +1,7 @@
 import { MoneyWithheldNote } from '@/components/MoneyWithheldNote'
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { FitContext } from './fitContext'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 import { ReviewBanner } from '@/components/ReviewBanner'
 import { SupportBanner } from '@/components/SupportBanner'
 import { PortalFooter } from '@/features/legal/PolicyFooter'
@@ -70,6 +72,10 @@ export function PortalFrame({
   moreHeader,
   /** Rail width, which the portals vary by their own collapse state. */
   railWidth = 'w-[264px]',
+  /** NOV-SIDEBAR-001 — the 64px icon strip: tighter padding so a 44px target fits inside it. */
+  railCompact = false,
+  /** What the phone's navigation layer is called for assistive technology. */
+  drawerLabel,
   /** The reading measure for content. Portals with dense tables use the wide one. */
   contentWidth = 'max-w-[1440px]',
   /**
@@ -92,30 +98,30 @@ export function PortalFrame({
   moreGroups?: MobileMoreGroup[]
   moreHeader?: ReactNode
   railWidth?: string
+  railCompact?: boolean
+  drawerLabel?: string
   contentWidth?: string
   endPanel?: ReactNode
   style?: CSSProperties
   children: ReactNode
 }) {
   const hasTabs = Boolean(tabs && tabs.length > 0)
+  /* NOV-FIT-001 — set by a page that fits the screen (`useFitLock`); `index.css` pins the height from it. */
+  const [fit, setFit] = useState(false)
 
   return (
-    <div data-testid={testId} style={style} className="flex min-h-[100dvh] bg-background text-text-primary">
+    <FitContext.Provider value={setFit}>
+    <div data-testid={testId} data-fit={fit ? 'true' : undefined} style={style} className="flex min-h-[100dvh] bg-background text-text-primary">
       {rail && (
         <aside
-          className={`sticky top-0 hidden h-[100dvh] shrink-0 flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 transition-[width] duration-[var(--motion-panel)] ease-[var(--motion-ease)] md:flex ${railWidth}`}
+          className={`sticky top-0 z-50 hidden h-[100dvh] shrink-0 flex-col overflow-y-auto border-e border-border bg-surface transition-[width] duration-[var(--motion-panel)] ease-[var(--motion-ease)] md:flex ${railCompact ? 'items-stretch gap-3 px-2 py-3' : 'gap-6 p-3.5'} ${railWidth}`}
         >
           {rail}
         </aside>
       )}
 
-      {drawer && drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onDrawerClose} />
-          <aside className="absolute inset-y-0 start-0 flex h-full w-[280px] max-w-[82vw] flex-col gap-6 overflow-y-auto border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]">
-            {drawer}
-          </aside>
-        </div>
+      {drawer && drawerOpen && onDrawerClose && (
+        <MobileDrawer label={drawerLabel} onClose={onDrawerClose}>{drawer}</MobileDrawer>
       )}
 
       {/*
@@ -127,7 +133,7 @@ export function PortalFrame({
         * gets a chance to contain it. This is what keeps a dense portal page honest at 1280px and at
         * 375px alike.
         */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="portal-col flex min-w-0 flex-1 flex-col">
         <SupportBanner />
         <ReviewBanner />
         {header}
@@ -136,7 +142,7 @@ export function PortalFrame({
           * The column that fixes the dead space: `main` is the flex parent, the content box takes
           * the slack, the footer is last and therefore sits on the bottom edge of a short page.
           */}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="portal-main flex min-w-0 flex-1 flex-col">
           {/*
             UI-DENSITY-001 — the frame gives the work more of the screen.
 
@@ -149,7 +155,7 @@ export function PortalFrame({
             drifts into its own rhythm. The side padding keeps a 12px floor on a phone, which is what
             stops text meeting the bezel.
           */}
-          <div className={`mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
+          <div className={`portal-content mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
             {/* MEMBER-VISIBILITY-001 — said once, above whatever the page draws, for the project in view. */}
             <MoneyWithheldNote />
             {children}
@@ -161,8 +167,8 @@ export function PortalFrame({
             * row above it; paying it on the content box as well would add a phone-sized gap between
             * the content and the footer on every page — the same dead space in a new place.
             */}
-          <div className={`px-4 sm:px-5 lg:px-6 ${hasTabs ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
-            <div className={`mx-auto w-full ${contentWidth}`}><PortalFooter /></div>
+          <div className={`portal-foot px-4 sm:px-5 lg:px-6 ${hasTabs ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
+            <div className={`mx-auto w-full ${contentWidth}`}><PortalFooter compact={fit} /></div>
           </div>
         </main>
       </div>
@@ -177,6 +183,48 @@ export function PortalFrame({
       )}
 
       {hasTabs && <MobileTabBar tabs={tabs!} moreGroups={moreGroups} moreHeader={moreHeader} />}
+    </div>
+    </FitContext.Provider>
+  )
+}
+
+/**
+ * NOV-SIDEBAR-001 — the phone's navigation, a layer ABOVE the page and not a column beside it.
+ *
+ * Closed until the ☰ opens it. While open it owns the keyboard (Tab stays inside, Escape closes), the page
+ * behind it does not scroll, a press on the backdrop closes it, and it keeps clear of the notch and the home
+ * indicator (`env(safe-area-inset-*)`), which is what `viewport-fit=cover` makes the page responsible for.
+ * It is `md:hidden`: from tablet width up the rail is the navigation, and a stale open state cannot show a
+ * second one.
+ */
+function MobileDrawer({ label, onClose, children }: { label?: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLElement>(null)
+  useFocusTrap(panel, true)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = previous }
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label={label} data-testid="mobile-drawer">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} data-testid="mobile-drawer-backdrop" />
+      <aside
+        ref={panel}
+        tabIndex={-1}
+        className="absolute inset-y-0 start-0 flex h-full w-[min(300px,86vw)] flex-col gap-5 overflow-y-auto overscroll-contain border-e border-border bg-surface p-3.5 shadow-[var(--shadow-large)]"
+        style={{
+          paddingTop: 'max(0.875rem, env(safe-area-inset-top))',
+          paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))',
+          paddingInlineStart: 'max(0.875rem, env(safe-area-inset-left))',
+        }}
+      >
+        {children}
+      </aside>
     </div>
   )
 }
