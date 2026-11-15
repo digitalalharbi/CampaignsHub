@@ -32,7 +32,8 @@ final class RenderMailPreviews extends Command
     protected $signature = 'notifications:preview
         {--out=storage/app/mail-previews : Where to write the files}
         {--locale= : One language only — `ar` or `en`. Both by default}
-        {--as-test : As a test message would look (EMAIL-TEST-SEND-001). It renders; nothing here sends}';
+        {--as-test : As a test message would look (EMAIL-TEST-SEND-001). It renders; nothing here sends}
+        {--compat : Also the external templates and the confirmation, each with a .stripped.html twin (no <style>, as the Gmail app on a non-Google account shows it) — EMAIL-CLIENT-COMPAT-001}';
 
     protected $description = 'Render every email type to HTML, in both languages, for visual review.';
 
@@ -49,13 +50,18 @@ final class RenderMailPreviews extends Command
         $written = 0;
 
         foreach ($locales as $locale) {
-            foreach (MailGallery::messages($locale) as $name => $mailable) {
+            $all = $this->option('compat') ? MailGallery::compatMessages($locale) : MailGallery::messages($locale);
+            foreach ($all as $name => $mailable) {
                 $path = sprintf('%s/%s.%s.html', rtrim($dir, '/'), $name, $locale);
                 if ($this->option('as-test')) {
                     TestSendMark::apply($mailable, $locale);
                 }
-                file_put_contents($path, $mailable->render());
+                $html = $mailable->render();
+                file_put_contents($path, $html);
                 $this->line($path);
+                if ($this->option('compat')) {
+                    file_put_contents(substr($path, 0, -5).'.stripped.html', (string) preg_replace('#<style\b[^>]*>.*?</style>#si', '', $html));
+                }
                 $written++;
             }
         }
