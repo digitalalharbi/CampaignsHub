@@ -9,12 +9,14 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\SpendLimitEvent;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use Database\Seeders\MetricDefinitionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\FundingFixtures;
 use Tests\TestCase;
 
@@ -102,11 +104,43 @@ final class NovSpendLimitAlertsTest extends TestCase
         }
         // consumed 400, remaining 600, last-3-days rate 100/day => 6 days from today
 
-        $row = app(SpendLimitGovernor::class)->read($limit, Carbon::today(), detail: true);
+        // RIYADH-DAY-001 — read on the day the product reads it on (the Riyadh day the fixtures' days are counted in).
+        $row = app(SpendLimitGovernor::class)->read($limit, PeriodResolver::today(), detail: true);
 
         $this->assertSame('projected', $row['run_out']['reason']);
         $this->assertSame(100.0, $row['run_out']['per_day']);
-        $this->assertSame(Carbon::today()->addDays(6)->toDateString(), $row['run_out']['date']);
+        $this->assertSame(PeriodResolver::today()->addDays(6)->toDateString(), $row['run_out']['date']);
+    }
+
+    /**
+     * RIYADH-DAY-001 — the limits page reads the same run-out at 00:08 Riyadh (21:08 UTC, the hour CI caught) as at midday.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function aroundRiyadhMidnight(): array
+    {
+        return ['00:08 Riyadh' => ['2026-11-15 21:08:00'], '23:57 Riyadh' => ['2026-11-15 20:57:00'], 'midday Riyadh' => ['2026-11-15 09:00:00']];
+    }
+
+    #[DataProvider('aroundRiyadhMidnight')]
+    public function test_the_limits_page_reads_the_run_out_on_the_riyadh_day_at_any_hour(string $utc): void
+    {
+        Carbon::setTestNow(Carbon::parse($utc, 'UTC'));
+        try {
+            $project = $this->newProject('Palm');
+            $this->makeLimit($project, 1_000, 'SAR');
+            $this->limitSpend($project, 9, 100);
+            foreach ([3, 2, 1] as $ago) {
+                $this->limitSpend($project, $ago, 100);
+            }
+
+            $row = collect($this->actingAs($this->owner(), 'sanctum')->getJson("/api/v1/projects/{$project->id}/spend-limits")->assertOk()->json('data'))->first();
+
+            $this->assertSame(100, (int) $row['run_out']['per_day']);
+            $this->assertSame(Carbon::now('Asia/Riyadh')->startOfDay()->addDays(6)->toDateString(), $row['run_out']['date']);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_no_run_out_date_without_recent_spend(): void

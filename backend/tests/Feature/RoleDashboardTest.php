@@ -14,14 +14,17 @@ use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -98,7 +101,7 @@ final class RoleDashboardTest extends TestCase
         DailyMetric::create([
             'id' => (string) Str::uuid(), 'project_id' => $project->id, 'external_account_id' => (string) Str::uuid(),
             'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $campaign->id, 'provider' => 'meta',
-            'metric_key' => 'spend', 'metric_date' => now()->subDays($daysAgo)->toDateString(), 'value' => $value, 'project_currency' => 'SAR',
+            'metric_key' => 'spend', 'metric_date' => PeriodResolver::today()->subDays($daysAgo)->toDateString(), 'value' => $value, 'project_currency' => 'SAR',
         ]);
     }
 
@@ -124,11 +127,41 @@ final class RoleDashboardTest extends TestCase
         $this->assertEqualsWithDelta(0.7, $units['Alpha']['ratio'], 0.001);
         $this->assertEqualsWithDelta(300, $units['Alpha']['remaining'], 0.01);
         $this->assertSame(3, $units['Alpha']['days_left']);
-        $this->assertSame(now()->addDays(3)->toDateString(), $units['Alpha']['run_out_on']);
+        // RIYADH-DAY-001 — the days are Riyadh days (the platforms' and the product's), so the date is counted from Riyadh's today.
+        $this->assertSame(PeriodResolver::today()->addDays(3)->toDateString(), $units['Alpha']['run_out_on']);
         $this->assertEqualsWithDelta(100, $units['Alpha']['daily_rate_3d'], 0.01);
         // Closest to running out leads.
         $this->assertSame('Alpha', $d['units'][0]['name']);
         $this->assertSame(['manager', 'pm', 'finance', 'marketer'], $d['available_views']);
+    }
+
+    /**
+     * RIYADH-DAY-001 — the same reading either side of Riyadh's midnight, while the server's UTC clock is still on the
+     * previous day (00:08 Riyadh = 21:08 UTC; 23:57 Riyadh = 20:57 UTC). CI caught the 00:08 case: the rate was counted on
+     * the Riyadh day and the date added to the UTC one.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function aroundRiyadhMidnight(): array
+    {
+        return ['00:08 Riyadh' => ['2026-11-15 21:08:00'], '23:57 Riyadh' => ['2026-11-15 20:57:00'], 'midday Riyadh' => ['2026-11-15 09:00:00']];
+    }
+
+    #[DataProvider('aroundRiyadhMidnight')]
+    public function test_the_run_out_reading_is_the_same_at_any_hour_of_the_riyadh_day(string $utc): void
+    {
+        Carbon::setTestNow(Carbon::parse($utc, 'UTC'));
+        try {
+            $this->campaign($this->alpha, 1000, 400, 100);
+
+            $units = collect($this->dash($this->member(WorkspaceRolePresets::OWNER, null))['units'])->keyBy('name');
+
+            $this->assertSame(3, $units['Alpha']['days_left']);
+            $this->assertEqualsWithDelta(100, $units['Alpha']['daily_rate_3d'], 0.01);
+            $this->assertSame(Carbon::now('Asia/Riyadh')->startOfDay()->addDays(3)->toDateString(), $units['Alpha']['run_out_on']);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_a_project_manager_scoped_to_one_client_never_reads_the_other(): void

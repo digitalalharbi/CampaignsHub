@@ -34,6 +34,7 @@ use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
@@ -1479,15 +1480,16 @@ final class AlertEvaluator
     private function internalSpendLimits(AlertRule $rule, Carbon $now): array
     {
         $out = [];
+        $day = PeriodResolver::today($now); // RIYADH-DAY-001 — the limit's dates and its reading on one day
 
         SpendLimit::query()
             ->where('active', true)
-            ->whereDate('starts_on', '<=', $now->toDateString())
-            ->whereDate('ends_on', '>=', $now->toDateString())
+            ->whereDate('starts_on', '<=', $day->toDateString())
+            ->whereDate('ends_on', '>=', $day->toDateString())
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
-            ->each(function (SpendLimit $limit) use ($now, &$out): void {
-                $reading = $this->limits->read($limit, $now->copy()->startOfDay());
+            ->each(function (SpendLimit $limit) use ($now, $day, &$out): void {
+                $reading = $this->limits->read($limit, $day->copy());
 
                 // No comparable figure is not a breach. It is the state where nothing can be said.
                 if ($reading['utilisation'] === null) {

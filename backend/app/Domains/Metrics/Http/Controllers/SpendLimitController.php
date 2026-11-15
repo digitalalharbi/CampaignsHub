@@ -14,6 +14,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -22,7 +23,6 @@ use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
@@ -52,7 +52,8 @@ final class SpendLimitController extends Controller
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
-        $today = Carbon::today();
+        // RIYADH-DAY-001 — the limits are read on the Riyadh day, the day the run-out's «last three complete days» are counted in.
+        $today = PeriodResolver::today();
 
         // ONE-BUDGET-001 — limits are thresholds of the approved budget: linked automatically once the project has one.
         app(ConvertSpendLimits::class)->linkProject($project);
@@ -174,7 +175,7 @@ final class SpendLimitController extends Controller
         ]);
 
         return ApiResponse::success(
-            $this->governor->read($limit, Carbon::today(), detail: true) + $this->budgetLink($limit),
+            $this->governor->read($limit, PeriodResolver::today(), detail: true) + $this->budgetLink($limit),
             'Spend limit created.',
             ['enforcement' => SpendLimit::ENFORCEMENT],
             status: 201,
@@ -188,7 +189,7 @@ final class SpendLimitController extends Controller
 
         $spendLimit->update($this->validated($request, partial: true));
 
-        return ApiResponse::success($this->governor->read($spendLimit->refresh(), Carbon::today(), detail: true), 'Spend limit updated.');
+        return ApiResponse::success($this->governor->read($spendLimit->refresh(), PeriodResolver::today(), detail: true), 'Spend limit updated.');
     }
 
     /**

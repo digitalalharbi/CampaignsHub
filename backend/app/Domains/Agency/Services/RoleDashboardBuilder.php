@@ -19,6 +19,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
@@ -82,7 +83,9 @@ final class RoleDashboardBuilder
         // Only the workspace manager may look at another role's page; for anyone else the request is ignored.
         $view = $isOwner && in_array($requested, self::VIEWS, true) ? (string) $requested : $default;
 
-        $today = Carbon::today();
+        // RIYADH-DAY-001 — ONE «today», the Riyadh day: the run-out's rate (ProjectBudgetReader) is already counted on it,
+        // so a date added to a UTC «today» landed a day early from 00:00 to 03:00 Riyadh.
+        $today = PeriodResolver::today();
         $to = $today->copy();
         $from = $to->copy()->subDays(29);
 
@@ -210,7 +213,7 @@ final class RoleDashboardBuilder
          */
         $display = FxDisplay::forRequest();
         $to = $display->currencyFor((string) app(TenantContext::class)->tenantId());
-        $today = Carbon::today()->toDateString();
+        $today = PeriodResolver::today()->toDateString();
 
         return [
             'budget' => $t['approved'], 'spent' => $t['spent'], 'remaining' => $t['remaining'], 'projected' => null, 'pace' => null,
