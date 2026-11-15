@@ -9,6 +9,7 @@ use App\Domains\Notifications\External\Charts\ChartImages;
 use App\Domains\Notifications\External\Charts\ResvgCharts;
 use App\Domains\Notifications\External\Charts\TableOnlyCharts;
 use App\Domains\Notifications\External\Checks\ExternalPreSendChecks;
+use App\Domains\Notifications\External\Console\ExternalEventsCommand;
 use App\Domains\Notifications\External\Console\ReviewSweepCommand;
 use App\Domains\Notifications\External\Content\ExternalMessageComposer;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
@@ -39,7 +40,7 @@ final class ExternalNotificationsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([ReviewSweepCommand::class]);
+            $this->commands([ReviewSweepCommand::class, ExternalEventsCommand::class]);
         }
     }
 }

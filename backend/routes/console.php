@@ -175,6 +175,8 @@ Schedule::command('notifications:v2-grace-heads-up')->dailyAt('09:05')->timezone
 Schedule::command('notifications:v2-consent-sweep')->dailyAt('09:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 // NOTIF-V2-EXTERNAL-001 — held external messages with no decision in the review window are skipped with a notice.
 Schedule::command('notifications:v2-review-sweep')->everyFifteenMinutes()->withoutOverlapping();
+// NOTIF-V2-EXTERNAL-001 — the default external events (continuity planning, improvement, new campaign, month end/start), once a day.
+Schedule::command('notifications:v2-external-events')->dailyAt('07:30')->timezone('Asia/Riyadh')->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
