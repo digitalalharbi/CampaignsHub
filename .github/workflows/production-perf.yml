@@ -7,23 +7,23 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: 'Hours of request and query counters to read'
+        description: 'Mode: read (read-only checks and dry runs)'
         required: false
-        default: '24'
+        default: 'read'
       reconcile_account:
-        description: 'Optional: an ad account (ours or the provider''s id) to reconcile — provider spend vs stored spend, read-only'
+        description: 'Live project id (for the read-only snapshot)'
         required: false
         default: ''
       reconcile_from:
-        description: 'Reconcile window start, YYYY-MM-DD'
+        description: 'Archived project id (for the read-only read check)'
         required: false
         default: ''
       reconcile_to:
-        description: 'Reconcile window end, YYYY-MM-DD'
+        description: 'unused'
         required: false
         default: ''
       tokens:
-        description: 'Optional: comma-separated link tokens to explain read-only (state + recent access log)'
+        description: 'unused'
         required: false
         default: ''
 
@@ -51,37 +51,57 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            q() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | "' 2>&1 <<EOF
+            BEGIN READ ONLY;
+            $1
+            ROLLBACK;
+            EOF
+            }
+            art() { $DC exec -T backend php artisan "$@" 2>&1; }
+            # RELEASE-VERIFY-001 (Owner-approved 2026-11-15/16). READ-ONLY: dry runs and counts only. No names, no emails, no tokens printed.
+            # Ids arrive as inputs, are validated as UUIDs and never echoed.
+            UUID='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            LIVE="${RACCOUNT}"; ARCH="${RFROM}"
+            echo "== RELEASE-VERIFY $(date -u +%FT%TZ) mode=${HOURS}"
+            [ "${HOURS}" = "read" ] || { echo "only mode=read exists in this branch"; exit 0; }
+            echo "## 0. migrations pending (must be 0)"
+            art migrate:status --pending 2>&1 | grep -ciE "pending" 
+            echo "## 1. mail DNS (SPF/DKIM/DMARC report; changes nothing)"
+            art mail:dns-check
+            echo "## 2. currency: conversion report Oct+Nov (anonymous indexes)"
+            art fx:conversion-report
+            echo "## 3. currency audit (masked)"
+            art money:currency-audit --sample=3
+            echo "## 4. duplicate report schedules (dry run)"
+            art reports:dedupe-schedules --dry-run
+            echo "## 5. false data-arrival alerts (dry run)"
+            art alerts:reevaluate-data-arrival --dry-run
+            echo "## 6. archive effects for every archived project (dry run)"
+            art lifecycle:apply-archive-effects --all-archived --dry-run
+            echo "## 7. notification kind backfill (dry run)"
+            art notifications:backfill-kind --dry-run
+            echo "## 8. legacy external recipients import (dry run)"
+            art notifications:v2-import-legacy --dry-run
+            echo "## 9. spend limits -> budgets (count only, no --apply)"
+            art funding:convert-spend-limits
+            if [[ "$LIVE" =~ $UUID ]]; then
+              echo "## 10. live project snapshot (counts)"
+              art lifecycle:snapshot --project="$LIVE"
             fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            if [[ "$ARCH" =~ $UUID ]]; then
+              echo "## 11. archived project snapshot (counts)"
+              art lifecycle:snapshot --project="$ARCH"
+              if [[ "$LIVE" =~ $UUID ]]; then
+                echo "## 12. read check: data shared between the live and the archived project (counts only)"
+                echo "bindings on the same ad account (both projects):"
+                q "select count(*) from project_integration_bindings a join project_integration_bindings b on a.external_account_id=b.external_account_id where a.project_id='$LIVE' and b.project_id='$ARCH';"
+                echo "same client | live project's client = archived project's client:"
+                q "select (select client_workspace_id from projects where id='$LIVE') = (select client_workspace_id from projects where id='$ARCH');"
+                echo "archived project: state | accounts | bindings active | scheduled reports | budgets:"
+                q "select (select status from projects where id='$ARCH'), (select count(*) from project_integration_bindings where project_id='$ARCH'), (select count(*) from project_integration_bindings where project_id='$ARCH' and is_active), (select count(*) from reports where project_id='$ARCH' and is_scheduled), (select count(*) from budgets where project_id='$ARCH');"
+              fi
+            fi
+            echo "== done"
