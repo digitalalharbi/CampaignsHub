@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\External;
 
 use App\Domains\Notifications\Engine\Contracts\MessageComposer;
 use App\Domains\Notifications\External\Charts\ChartImages;
+use App\Domains\Notifications\External\Charts\ResvgCharts;
 use App\Domains\Notifications\External\Charts\TableOnlyCharts;
 use App\Domains\Notifications\External\Content\ExternalMessageComposer;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
@@ -24,7 +25,8 @@ final class ExternalNotificationsServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(DigestDataSource::class, MetricsDigestDataSource::class);
-        $this->app->scoped(ChartImages::class, TableOnlyCharts::class);
+        // Charts: resvg when its runtime is present, else tables (never a broken image).
+        $this->app->scoped(ChartImages::class, fn () => ResvgCharts::available() ? new ResvgCharts : new TableOnlyCharts);
         $this->app->scoped(ExternalMessageComposer::class);
         $this->app->bind(MessageComposer::class, fn ($app) => $app->make(ExternalMessageComposer::class));
         $this->app->bind(ExternalTransport::class);
