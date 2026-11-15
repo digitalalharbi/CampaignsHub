@@ -17,6 +17,7 @@ export const ENTITLEMENT_KEYS = [
   'followup.morning_brief',
   'followup.tasks',
   'branding.remove_platform_footprint',
+  'projects.trash_retention_days',
 ] as const
 export type EntitlementKey = (typeof ENTITLEMENT_KEYS)[number]
 
@@ -33,6 +34,7 @@ export const ENTITLEMENT_DEFAULTS: Record<EntitlementKey, boolean> = {
   'followup.morning_brief': true,
   'followup.tasks': true,
   'branding.remove_platform_footprint': false,
+  'projects.trash_retention_days': true,
 }
 
 export const LIMIT_KEYS = [
@@ -42,6 +44,7 @@ export const LIMIT_KEYS = [
   'devices_per_user',
   'monthly_push',
   'monthly_charts',
+  'trash_retention_days',
 ] as const
 export type LimitKey = (typeof LIMIT_KEYS)[number]
 

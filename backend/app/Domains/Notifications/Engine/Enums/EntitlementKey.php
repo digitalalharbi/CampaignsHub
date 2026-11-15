@@ -21,6 +21,8 @@ enum EntitlementKey: string
     case MorningBrief = 'followup.morning_brief';
     case Tasks = 'followup.tasks';
     case RemovePlatformFootprint = 'branding.remove_platform_footprint';
+    // RELEASE-INTEGRATION — PROJECT-LIFECYCLE-001 §1: how long a deleted project stays in the trash (limit `trash_retention_days`).
+    case TrashRetention = 'projects.trash_retention_days';
 
     /** @return list<string> */
     public static function values(): array

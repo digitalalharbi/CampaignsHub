@@ -17,6 +17,7 @@ use App\Domains\Subscriptions\Services\SubscriptionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\LifecycleFixtures;
@@ -281,6 +282,26 @@ final class ProjectLifecycleContractTest extends TestCase
         $this->assertSame('deleted', $row->status);
         $this->assertNotNull($row->deleted_at);
         $this->assertSame(45, (int) round($row->deleted_at->diffInDays($row->purge_after)));
+    }
+
+    public function test_trash_retention_reads_the_entitlement_table_first_then_a_workspace_override(): void
+    {
+        // RELEASE-INTEGRATION — builder M's plan-features table: an admin row's limit wins over the plan JSON and the default.
+        $ws = $this->lifecycleWorkspace();
+        $tenant = (string) $ws['tenant']->id;
+        DB::table('notification_plan_features')->insert(['id' => (string) Str::uuid(), 'key' => TrashRetention::FEATURE, 'plan_code' => null, 'workspace_type' => null,
+            'enabled' => true, 'limits' => json_encode([TrashRetention::LIMIT => 60]), 'grace_days' => 14, 'keep_existing' => true, 'created_at' => now(), 'updated_at' => now()]);
+        app()->forgetScopedInstances();
+        $this->assertSame(60, app(TrashRetention::class)->daysFor($tenant));
+
+        DB::table('tenant_limit_overrides')->insert(['tenant_id' => $tenant, 'metric' => 'notif.'.TrashRetention::LIMIT, 'limit_value' => 90, 'reason' => 'test', 'created_at' => now(), 'updated_at' => now()]);
+        app()->forgetScopedInstances();
+        $this->assertSame(90, app(TrashRetention::class)->daysFor($tenant));
+
+        // Zero never empties the trash early: the default applies.
+        DB::table('tenant_limit_overrides')->where('tenant_id', $tenant)->update(['limit_value' => 0]);
+        app()->forgetScopedInstances();
+        $this->assertSame(30, app(TrashRetention::class)->daysFor($tenant));
     }
 
     /** @return array<string,mixed> */

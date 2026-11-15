@@ -197,7 +197,7 @@ final class EntitlementsAndUsageTest extends TestCase
             ->assertJsonPath('data.period', '2026-11');
         $this->assertSame(2, $response->json('data.counts')['notif.external_messages']);
         $this->actingAs($ownerA)->getJson('/api/v1/settings/workspace/notifications/entitlements')->assertOk()
-            ->assertJsonCount(11, 'data.entitlements')
+            ->assertJsonCount(12, 'data.entitlements') // the eleven notification keys + projects.trash_retention_days (RELEASE-INTEGRATION)
             ->assertJsonPath('data.workspace_type.key', 'agency');
         $this->assertInstanceOf(Tenant::class, $b);
     }

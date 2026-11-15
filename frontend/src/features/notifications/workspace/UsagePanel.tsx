@@ -11,11 +11,13 @@ const KEY_AR: Record<string, string> = {
   'notifications.internal': 'الإشعارات الداخلية', 'notifications.push': 'إشعارات الجوال', 'notifications.sound': 'صوت التنبيه', 'notifications.external': 'الإشعارات الخارجية',
   'notifications.external.charts': 'الرسوم في الرسائل الخارجية', 'notifications.external.cc_bcc': 'النسخ في الرسائل الخارجية', 'notifications.external.custom_subject': 'موضوع مخصص',
   'notifications.external.review_mode': 'المراجعة قبل الإرسال', 'followup.morning_brief': 'الملخص الصباحي', 'followup.tasks': 'مهام المتابعة', 'branding.remove_platform_footprint': 'إزالة بصمة المنصة',
+  'projects.trash_retention_days': 'مدة بقاء المشروع المحذوف',
 }
 const KEY_EN: Record<string, string> = {
   'notifications.internal': 'Internal notifications', 'notifications.push': 'Mobile push', 'notifications.sound': 'Alert sound', 'notifications.external': 'External notifications',
   'notifications.external.charts': 'Charts in external messages', 'notifications.external.cc_bcc': 'CC and BCC', 'notifications.external.custom_subject': 'Custom subject',
   'notifications.external.review_mode': 'Review before send', 'followup.morning_brief': 'Morning brief', 'followup.tasks': 'Follow-up tasks', 'branding.remove_platform_footprint': 'Remove platform footprint',
+  'projects.trash_retention_days': 'Trash retention',
 }
 
 /** The workspace usage page: this month's counters against the plan's limits, and the state of every plan key. */

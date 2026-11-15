@@ -151,6 +151,7 @@ function limitOwner(limit: string): string {
   return ({
     external_recipients: 'notifications.external', monthly_messages: 'notifications.external', cc_per_message: 'notifications.external.cc_bcc',
     devices_per_user: 'notifications.push', monthly_push: 'notifications.push', monthly_charts: 'notifications.external.charts',
+    trash_retention_days: 'projects.trash_retention_days',
   } as Record<string, string>)[limit] ?? ''
 }
 

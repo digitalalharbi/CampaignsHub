@@ -43,6 +43,7 @@ return [
         'followup_morning_brief' => 'Morning brief',
         'followup_tasks' => 'Follow-up list',
         'branding_remove_platform_footprint' => 'Remove platform footprint',
+        'projects_trash_retention_days' => 'Days a deleted project stays in the trash',
     ],
     'upgrade' => 'Upgrade',
     'events' => [

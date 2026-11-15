@@ -43,6 +43,7 @@ return [
         'followup_morning_brief' => 'موجز الصباح',
         'followup_tasks' => 'قائمة المتابعة',
         'branding_remove_platform_footprint' => 'إزالة بصمة المنصة',
+        'projects_trash_retention_days' => 'مدة بقاء المشروع المحذوف في المحذوفات',
     ],
     'upgrade' => 'ترقية',
     'events' => [

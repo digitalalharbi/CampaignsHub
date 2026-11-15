@@ -14,8 +14,8 @@ const state = (over: Partial<EntitlementState>): EntitlementState => ({
 })
 
 describe('notification entitlements', () => {
-  it('lists the eleven keys of the spec, every one on except the footprint removal', () => {
-    expect(ENTITLEMENT_KEYS).toHaveLength(11)
+  it('lists the eleven keys of the spec plus the trash retention, every one on except the footprint removal', () => {
+    expect(ENTITLEMENT_KEYS).toHaveLength(12)
     const off = ENTITLEMENT_KEYS.filter((k) => !ENTITLEMENT_DEFAULTS[k])
     expect(off).toEqual(['branding.remove_platform_footprint'])
   })

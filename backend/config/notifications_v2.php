@@ -21,6 +21,8 @@ return [
             'followup.morning_brief' => true,
             'followup.tasks' => true,
             'branding.remove_platform_footprint' => false,
+            // PROJECT-LIFECYCLE-001 §1 — always on: the trash cannot be switched off, only its length (limit below) varies per plan.
+            'projects.trash_retention_days' => true,
         ],
 
         // §1: generous and editable per plan (notification_plan_features.limits) and per workspace (tenant_limit_overrides,
@@ -32,6 +34,7 @@ return [
             'devices_per_user' => 10,
             'monthly_push' => 50000,
             'monthly_charts' => 50000,
+            'trash_retention_days' => (int) env('LIFECYCLE_TRASH_RETENTION_DAYS', 30),
         ],
 
         // Which key each limit belongs to (shown beside it in admin and on the usage page).
@@ -42,6 +45,7 @@ return [
             'devices_per_user' => 'notifications.push',
             'monthly_push' => 'notifications.push',
             'monthly_charts' => 'notifications.external.charts',
+            'trash_retention_days' => 'projects.trash_retention_days',
         ],
 
         'grace_days' => 14,
