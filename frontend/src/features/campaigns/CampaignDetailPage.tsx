@@ -339,7 +339,11 @@ export function CampaignDetailPage() {
       {tab === 'overview' && (
         <TabPanel>
           {/* CMC-2 — KPIs + executive summary (this campaign only). */}
-          <div className="mb-4 flex items-center justify-between gap-2">
+          {/*
+            `flex-wrap` + `min-w-0`: the period picker (DATE-RANGE-001) is ~300px with its label, and beside the title at 390px it
+            pushed the page 25px sideways (first-viewport-detail, CI PR #1071). It now drops under the title when both do not fit.
+          */}
+          <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
             <CardTitle>{t('cmc_performance')}</CardTitle>
             <DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" />
           </div>
