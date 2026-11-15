@@ -643,7 +643,7 @@ function ContentBlock({ kind, half = false, payload, locale, currency, platform,
       ) : (
         <div className={`grid grid-cols-2 gap-3 ${half ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
           {items.map((ad, i) => (
-            <ContentTile key={ad.content_key ?? `${ad.provider}-${i}`} content={ad} locale={locale} currency={currency || null} onOpen={onOpen} rank={kind === 'best' ? i + 1 : undefined} resultsOnly />
+            <ContentTile key={ad.content_key ?? `${ad.provider}-${i}`} content={ad} locale={locale} currency={currency || null} onOpen={onOpen} rank={kind === 'best' ? i + 1 : undefined} resultsOnly rankedBy={kind === 'best' ? payload.ads_basis : undefined} />
           ))}
         </div>
       )}

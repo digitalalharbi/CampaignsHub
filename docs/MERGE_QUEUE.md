@@ -43,3 +43,8 @@ GitHub's own merge queue (`merge_group`) is not available here: the repository b
 have no `needs`, so they start at once. Measured on #1054 (the first PR landed through the tier): CI 26.5 min, merge 7.8 min after
 CI ended, deploy 5 min, 41 min in all.
 
+## Measured landing times 2026-11-14/15
+
+- **Baseline before the CI tiering:** about 49 min average push to deployed (7 samples, 2026-11-13).
+- **After:** 31 landings since 2026-11-14 03:00 — median push to deployed 30.5 min. Clean PRs (no block, no rerun) took 24-32 min with CI at 18-26 min. Merge to verified deploy was 1-9 min typical (4 landings took 16-20 min). Runner wait was about 0, except one episode of about 14 min caused by agents pushing many branches at once.
+- **Lessons:** never push many branches at once (the free plan shares a 20-job runner cap); blocked rows stay last in `queue.tsv`; the guard scripts stay on; `refresh.sh` auto-detaches agent worktrees; `fix_lost_main_lines.sh` repairs lines a restack lost.
