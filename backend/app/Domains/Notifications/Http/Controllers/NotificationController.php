@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Http\Controllers;
 
 use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Notifications\Internal\EngineKinds;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Resources\NotificationResource;
 use App\Domains\Notifications\Services\NotificationInbox;
 use App\Domains\Notifications\Services\SoundPreferences;
+use App\Domains\Notifications\Support\BellKind;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,6 +40,20 @@ final class NotificationController extends Controller
         }
         if ($project = $request->string('project_id')->toString()) {
             $query->where('project_id', $project);
+        }
+        // NOTIF-V2-INTERNAL-001 — the centre's tabs and filters, all server-side so the count and the rows agree.
+        if ($request->string('tab')->toString() === 'unread') {
+            $this->inbox->unread($query, $user);
+        }
+        if ($type = $request->string('type')->toString()) {
+            $query->whereIn('kind', EngineKinds::aliases($type));
+        }
+        if ($priority = $request->string('priority')->toString()) {
+            $query->whereIn('severity', match ($priority) {
+                'critical' => ['critical', 'error'],
+                'important' => ['warning'],
+                default => ['info', 'success'],
+            });
         }
         // NOTIF-BELL-001 — the panel's filters (حرج / ميزانية / أداء / مزامنة), applied on the server so the count and the rows agree.
         if ($group = $request->string('group')->toString()) {
@@ -74,9 +92,13 @@ final class NotificationController extends Controller
             ->keyBy('notification_id');
         $readByMe = DB::table('notification_reads')->where('user_id', $user->id)
             ->whereIn('notification_id', $rows->pluck('id')->all())->pluck('notification_id')->flip();
-        $rows->each(static function (AppNotification $n) use ($events, $readByMe): void {
+        $projectNames = DB::table('projects')->whereIn('id', $rows->pluck('project_id')->filter()->unique()->all())->pluck('name', 'id');
+        $workspace = (string) (DB::table('tenants')->where('id', app(TenantContext::class)->tenantId())->value('name') ?? '');
+        $rows->each(static function (AppNotification $n) use ($events, $readByMe, $projectNames, $workspace): void {
             $n->setRelation('alertEvent', $events->get($n->id));
             $n->setAttribute('read_by_me', $readByMe->has($n->id));
+            $n->setAttribute('project_name', $n->project_id === null ? null : ($projectNames[$n->project_id] ?? null));
+            $n->setAttribute('workspace_name', $workspace);
         });
 
         return ApiResponse::success(
@@ -86,8 +108,29 @@ final class NotificationController extends Controller
                 'unread' => $unread,
                 'total' => $total,
                 'withheld' => max(0, $total - $rows->count()),
+                'facets' => $this->facets($user, ($user->locale ?? 'ar') !== 'en'),
             ],
         );
+    }
+
+    /**
+     * What the filters can offer, from everything this reader can see (not from the page): their projects and the kinds present.
+     *
+     * @return array{projects: list<array{id: string, name: string}>, kinds: list<array{kind: string, label: string}>}
+     */
+    private function facets(User $user, bool $ar): array
+    {
+        $base = $this->inbox->visible($user);
+        $ids = (clone $base)->whereNotNull('project_id')->distinct()->limit(60)->pluck('project_id')->all();
+        $projects = DB::table('projects')->whereIn('id', $ids)->orderBy('name')->get(['id', 'name'])
+            ->map(static fn ($p): array => ['id' => (string) $p->id, 'name' => (string) $p->name])->all();
+        $kinds = (clone $base)->whereNotNull('kind')->distinct()->limit(60)->pluck('kind')->map(static function ($k) use ($ar): ?array {
+            $label = BellKind::label((string) $k, $ar);
+
+            return $label === null ? null : ['kind' => (string) $k, 'label' => $label];
+        })->filter()->values()->all();
+
+        return ['projects' => $projects, 'kinds' => $kinds];
     }
 
     /**

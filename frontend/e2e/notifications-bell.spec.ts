@@ -64,7 +64,7 @@ test.describe('the bell', () => {
     await expect(page.getByTestId('bell-badge')).toHaveText('99+', { timeout: 20_000 })
 
     await bell(page).click()
-    const panel = page.getByRole('tablist')
+    const panel = page.getByTestId('bell-filter-tabs')
     for (const label of ['الكل', 'حرج', 'ميزانية', 'أداء', 'مزامنة']) await expect(panel.getByRole('tab', { name: label })).toBeVisible()
 
     await page.getByTestId('bell-filter-performance').click()

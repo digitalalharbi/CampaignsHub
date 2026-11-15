@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Notifications\Internal\EngineKinds;
+
 /**
  * NOTIF-BELL-001 — what a bell notification REALLY is, named once.
  *
@@ -25,7 +27,7 @@ namespace App\Domains\Notifications\Support;
 final class BellKind
 {
     /** Panel filters, in the order the panel shows them (the first, «الكل», is no filter). */
-    public const GROUPS = ['critical', 'budget', 'performance', 'sync'];
+    public const GROUPS = ['critical', 'budget', 'performance', 'sync', 'external'];
 
     /** @var array<string, array{ar: string, en: string, group: string}> */
     private const KINDS = [
@@ -169,6 +171,11 @@ final class BellKind
      */
     public static function openPath(?string $kind, ?string $projectId): ?string
     {
+        // NOTIF-V2-INTERNAL-001 — an engine event names its own page.
+        if (EngineKinds::has($kind)) {
+            return EngineKinds::path($kind, $projectId);
+        }
+
         $q = $projectId === null ? '' : '?project='.$projectId;
 
         return match (self::group($kind)) {
@@ -184,23 +191,31 @@ final class BellKind
 
     public static function has(?string $kind): bool
     {
-        return $kind !== null && isset(self::KINDS[$kind]);
+        return $kind !== null && (isset(self::KINDS[$kind]) || EngineKinds::has($kind));
     }
 
     public static function label(?string $kind, bool $ar): ?string
     {
+        if (EngineKinds::has($kind)) {
+            return EngineKinds::label($kind, $ar);
+        }
+
         return self::has($kind) ? self::KINDS[$kind][$ar ? 'ar' : 'en'] : null;
     }
 
     /** The panel filter a kind belongs to: budget | performance | sync | other (critical is by severity, not kind). */
     public static function group(?string $kind): string
     {
+        if (EngineKinds::has($kind)) {
+            return EngineKinds::group($kind);
+        }
+
         return self::has($kind) ? self::KINDS[$kind]['group'] : 'other';
     }
 
     /** @return list<string> the kinds of a panel filter */
     public static function kindsOf(string $group): array
     {
-        return array_keys(array_filter(self::KINDS, static fn (array $k): bool => $k['group'] === $group));
+        return [...array_keys(array_filter(self::KINDS, static fn (array $k): bool => $k['group'] === $group)), ...EngineKinds::kindsOf($group)];
     }
 }

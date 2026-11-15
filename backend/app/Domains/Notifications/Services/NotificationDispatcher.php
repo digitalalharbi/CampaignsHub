@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Internal\LegacyBridge;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
@@ -181,6 +182,8 @@ final class NotificationDispatcher
 
         // NOTIF-PUSH-001 — a phone is rung only for the few things that warrant it, off this call, and never at the bell's expense.
         $this->ring($notification);
+        // NOTIF-V2-FOLLOWUP-001 — the finding may open a follow-up task; the bell itself is unchanged.
+        LegacyBridge::seen($notification);
 
         return $notification;
     }
@@ -328,6 +331,7 @@ final class NotificationDispatcher
         if ($worse) {
             $this->ring($n);
         }
+        LegacyBridge::seen($n);
 
         return $n;
     }

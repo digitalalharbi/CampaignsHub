@@ -78,6 +78,7 @@ const ClientsPortfolioPage = lazyPage(() => import('@/features/clients/ClientsPo
 const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage'), 'PortfolioPage')
 const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
 const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
+const FollowUpPage = lazyPage(() => import('@/features/notifications/FollowUpPage'), 'FollowUpPage')
 const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
 const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
 const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
@@ -410,6 +411,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // NOTIF-V2-FOLLOWUP-001 — ONE page for every workspace type; the portal prefix only decides the path.
+          { path: 'followup', element: <FollowUpPage /> },
           // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
           { path: 'budgets', element: <BudgetsPage /> },
           /*
@@ -658,6 +661,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
+            { path: 'followup', element: <FollowUpPage /> },
             /*
              * AGENCY-DECISION-SURFACES-001 — the two decision pages existed only under `/app`.
              *

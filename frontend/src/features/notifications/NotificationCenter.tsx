@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck, ExternalLink } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlarmClock, Bell, BellOff, CheckCheck, ExternalLink, MoreVertical, Send, X } from 'lucide-react'
 import { BellVisual } from './BellVisual'
-import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification, type BellFilter } from './api'
+import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead, muteNotification, snoozeNotification, type AppNotification, type BellFilter, type CenterQuery } from './api'
 import { badgeText, FILTERS } from './bellFormat'
 import { useBellSound } from './useBellSound'
 import { usePushRefresh } from './pushRefresh'
+import { useUnreadBadge } from './unreadBadge'
+import { useCopy } from './centerCopy'
+import { TaskList } from './FollowUpTasks'
+import { useFollowupTasks } from './useFollowupTasks'
+import { RerouteDialog } from './RerouteDialog'
+import { isUpgradeRequired } from './followupApi'
+import { UpgradeLock } from './UpgradeLock'
 import {
   bucketLabel,
   groupByTime,
@@ -87,6 +95,17 @@ export function NotificationCenter() {
   const ref = useRef<HTMLDivElement>(null)
 
   const [filter, setFilter] = useState<BellFilter>('all')
+  // NOTIF-V2-INTERNAL-001 — the centre's own tabs (الكل / غير مقروء / متابعة) and its project / type / priority filters.
+  const c = useCopy()
+  const [tab, setTab] = useState<'all' | 'unread' | 'followup'>('all')
+  const [project, setProject] = useState('')
+  const [type, setType] = useState('')
+  const [priority, setPriority] = useState('')
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [rerouteFor, setRerouteFor] = useState<string | null>(null)
+  const query: CenterQuery | undefined = tab === 'unread' || project || type || priority
+    ? { tab: tab === 'unread' ? 'unread' : 'all', project_id: project || undefined, type: type || undefined, priority: (priority || undefined) as CenterQuery['priority'] }
+    : undefined
 
   /*
    * NOTIF-BELL-001 — the number is live and the list is lazy.
@@ -99,7 +118,16 @@ export function NotificationCenter() {
   const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0 })
   useBellSound(summary.data)
   usePushRefresh()
-  const q = useQuery({ queryKey: ['notifications', 'list', filter], queryFn: () => listNotifications(filter), enabled: open, refetchInterval: open ? 30_000 : false })
+  const q = useQuery({
+    queryKey: ['notifications', 'list', filter, query ?? null],
+    queryFn: () => (query ? listNotifications(filter, query) : listNotifications(filter)),
+    enabled: open && tab !== 'followup',
+    // The filters' options must not vanish while a narrower list loads.
+    placeholderData: keepPreviousData,
+    refetchInterval: open ? 30_000 : false,
+  })
+  const followup = useFollowupTasks('open', open)
+  const followupLocked = isUpgradeRequired(followup.error)
   const refresh = () => qc.invalidateQueries({ queryKey: ['notifications'] })
   const markRead = useMutation({ meta: { feedback: 'none' }, mutationFn: markNotificationRead, onSuccess: refresh })
   const markAll = useMutation({
@@ -112,15 +140,23 @@ export function NotificationCenter() {
     },
   })
 
+  const snooze = useMutation({ meta: { feedback: 'none' }, mutationFn: (v: { id: string; preset: '1h' | 'tomorrow' }) => snoozeNotification(v.id, v.preset), onSuccess: () => { setMenuFor(null); void refresh() } })
+  const mute = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => muteNotification(id), onSuccess: () => { setMenuFor(null); void refresh() } })
+
+  // A side drawer: Escape closes it, and the page behind does not scroll while it is open.
   useEffect(() => {
     if (!open) return
-    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = previous }
   }, [open])
 
   // The summary is the number of record; the list's own figure is the fallback until the first summary lands.
   const unread = summary.data?.unread ?? q.data?.unread ?? 0
+  // The bell icon, the tab title and the installed app's icon all carry the same real number.
+  useUnreadBadge(unread)
   const items = q.data?.items ?? []
   const withheld = q.data?.withheld ?? 0
   const total = q.data?.total ?? items.length
@@ -147,15 +183,31 @@ export function NotificationCenter() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute end-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <span className="text-sm font-bold text-text-primary">{t('nc_title')}{unread > 0 ? ` · ${unread} ${t('nc_unread')}` : ''}</span>
-            {unread > 0 && (
-              <button onClick={() => markAll.mutate()} className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"><CheckCheck size={13} /> {t('nc_mark_all')}</button>
-            )}
+      {/* A portal: a header with a backdrop filter is the containing block of its fixed descendants, and would clip the drawer to itself. */}
+      {open && createPortal(
+        <div className="fixed inset-0 z-[60]" data-testid="notification-drawer">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} aria-hidden />
+          <div role="dialog" aria-modal="true" aria-label={t('nc_title')} className="absolute inset-y-0 end-0 flex w-full max-w-full flex-col overflow-hidden border-s border-border bg-surface shadow-xl sm:w-[26rem]">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <span className="min-w-0 truncate text-sm font-bold text-text-primary">{t('nc_title')}{unread > 0 ? ` · ${unread} ${t('nc_unread')}` : ''}</span>
+            <div className="flex shrink-0 items-center gap-2">
+              {unread > 0 && (
+                <button onClick={() => markAll.mutate()} className="flex h-9 items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"><CheckCheck size={13} /> {t('nc_mark_all')}</button>
+              )}
+              <button type="button" aria-label={c('close')} data-testid="notification-drawer-close" onClick={() => setOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"><X size={16} /></button>
+            </div>
           </div>
-          <div role="tablist" aria-label={t('nc_title')} className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5">
+          <div role="tablist" aria-label={t('nc_title')} className="flex gap-1 border-b border-border px-2 py-1.5" data-testid="notification-tabs">
+            {([['all', c('tab_all'), c('tab_all_label')], ['unread', c('tab_unread'), c('tab_unread')], ['followup', c('tab_followup'), c('tab_followup')]] as const).map(([k, label, aria]) => (
+              <button key={k} role="tab" aria-selected={tab === k} aria-label={aria} data-testid={`center-tab-${k}`} onClick={() => setTab(k)}
+                className={`h-9 flex-1 rounded-lg px-2 text-xs font-bold transition-colors ${tab === k ? 'bg-text-primary text-surface' : 'text-text-secondary hover:bg-surface-hover'}`}>
+                {label}{k === 'followup' && (followup.data?.counts.open ?? 0) > 0 ? <span dir="ltr" className="tnum ms-1 rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] text-white">{followup.data?.counts.open}</span> : null}
+              </button>
+            ))}
+          </div>
+          {tab !== 'followup' && (
+          <>
+          <div role="tablist" aria-label={t('nc_title')} data-testid="bell-filter-tabs" className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -169,9 +221,32 @@ export function NotificationCenter() {
               </button>
             ))}
           </div>
-          <div className="max-h-80 overflow-y-auto">
+          <div className="grid grid-cols-3 gap-1.5 border-b border-border px-2 py-1.5" data-testid="center-filters">
+            <select aria-label={c('filter_project')} value={project} onChange={(e) => setProject(e.target.value)} className="h-9 min-w-0 rounded-lg border border-border bg-surface px-1 text-xs text-text-primary">
+              <option value="">{c('filter_project')}</option>
+              {(q.data?.facets?.projects ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select aria-label={c('filter_type')} value={type} onChange={(e) => setType(e.target.value)} className="h-9 min-w-0 rounded-lg border border-border bg-surface px-1 text-xs text-text-primary">
+              <option value="">{c('filter_type')}</option>
+              {(q.data?.facets?.kinds ?? []).map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+            </select>
+            <select aria-label={c('filter_priority')} value={priority} onChange={(e) => setPriority(e.target.value)} className="h-9 min-w-0 rounded-lg border border-border bg-surface px-1 text-xs text-text-primary">
+              <option value="">{c('filter_priority')}</option>
+              <option value="critical">{c('priority_critical')}</option>
+              <option value="important">{c('priority_important')}</option>
+              <option value="info">{c('priority_info')}</option>
+            </select>
+          </div>
+          </>
+          )}
+          {tab === 'followup' && (
+            <div className="min-h-0 flex-1 overflow-y-auto" data-testid="center-followup">
+              {followupLocked ? <div className="p-3"><UpgradeLock name={c('tab_followup')} /></div> : <TaskList tasks={followup.data?.items ?? []} projectWord={followup.data?.terms.project ?? ''} compact onNavigate={() => setOpen(false)} />}
+            </div>
+          )}
+          <div className={`min-h-0 flex-1 overflow-y-auto ${tab === 'followup' ? 'hidden' : ''}`}>
             {items.length === 0 ? (
-              <p className="p-6 text-center text-sm text-text-muted">{t('nc_empty')}</p>
+              <p className="p-6 text-center text-sm text-text-muted">{tab === 'unread' ? c('empty_unread') : t('nc_empty')}</p>
             ) : (
               <ul>
                 {/*
@@ -201,7 +276,7 @@ export function NotificationCenter() {
                               data-severity={tone}
                               data-scope={scope}
                               onClick={() => openItem(n)}
-                              className={`relative flex w-full items-start gap-2.5 border-b border-border/60 py-2.5 pe-12 ps-4 text-start transition-colors last:border-0 hover:bg-surface-secondary ${isUnread ? 'bg-brand-primary-soft/40' : ''}`}
+                              className={`relative flex w-full items-start gap-2.5 border-b border-border/60 py-2.5 pe-20 ps-4 text-start transition-colors last:border-0 hover:bg-surface-secondary ${isUnread ? 'bg-brand-primary-soft/40' : ''}`}
                             >
                               {/* The rail keeps its colour whether the row has been read or not. */}
                               <span
@@ -237,6 +312,11 @@ export function NotificationCenter() {
                                   </span>
                                 )}
                                 <BellVisual visual={n.visual} ar={ar} />
+                                {(n.project_name || n.workspace_name) && (
+                                  <span data-testid="notification-context" className="mt-0.5 block truncate text-[11px] font-semibold text-text-muted">
+                                    {[n.project_name, n.workspace_name].filter(Boolean).join(' — ')}
+                                  </span>
+                                )}
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
                                   {/*
                                     Scope, said rather than inferred. A notification is written for a
@@ -261,17 +341,33 @@ export function NotificationCenter() {
                                 </span>
                               </span>
                             </button>
-                            {(n.open_url ?? n.action_url) && (
-                              <button
-                                type="button"
-                                data-testid={`notification-open-${n.id}`}
-                                aria-label={ar ? 'افتح' : 'Open'}
-                                title={ar ? 'افتح' : 'Open'}
-                                onClick={() => openItem(n)}
-                                className="absolute end-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-brand-600"
-                              >
-                                <ExternalLink size={15} />
-                              </button>
+                            <div className="absolute end-1 top-1 flex items-center">
+                              {(n.open_url ?? n.action_url) && (
+                                <button
+                                  type="button"
+                                  data-testid={`notification-open-${n.id}`}
+                                  aria-label={ar ? 'افتح' : 'Open'}
+                                  title={ar ? 'افتح' : 'Open'}
+                                  onClick={() => openItem(n)}
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-brand-600"
+                                >
+                                  <ExternalLink size={15} />
+                                </button>
+                              )}
+                              <button type="button" data-testid={`notification-actions-${n.id}`} aria-label={c('actions')} aria-expanded={menuFor === n.id} onClick={() => setMenuFor(menuFor === n.id ? null : n.id)}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover"><MoreVertical size={15} /></button>
+                            </div>
+                            {menuFor === n.id && (
+                              <div role="menu" data-testid={`notification-menu-${n.id}`} className="flex flex-wrap gap-1.5 border-b border-border/60 bg-surface-secondary px-3 py-2">
+                                <button role="menuitem" type="button" data-testid={`notification-snooze-1h-${n.id}`} onClick={() => snooze.mutate({ id: n.id, preset: '1h' })} className="inline-flex h-9 items-center gap-1 rounded-lg bg-surface px-2.5 text-xs font-semibold text-text-primary hover:bg-surface-hover"><AlarmClock size={13} /> {c('snooze_1h')}</button>
+                                <button role="menuitem" type="button" data-testid={`notification-snooze-tomorrow-${n.id}`} onClick={() => snooze.mutate({ id: n.id, preset: 'tomorrow' })} className="inline-flex h-9 items-center gap-1 rounded-lg bg-surface px-2.5 text-xs font-semibold text-text-primary hover:bg-surface-hover"><AlarmClock size={13} /> {c('snooze_tomorrow')}</button>
+                                {n.project_id && n.kind && (
+                                  <button role="menuitem" type="button" data-testid={`notification-mute-${n.id}`} onClick={() => mute.mutate(n.id)} className="inline-flex h-9 items-center gap-1 rounded-lg bg-surface px-2.5 text-xs font-semibold text-text-primary hover:bg-surface-hover"><BellOff size={13} /> {c('mute')}</button>
+                                )}
+                                {n.kind === 'report_ready' && (
+                                  <button role="menuitem" type="button" data-testid={`notification-reroute-${n.id}`} onClick={() => { setMenuFor(null); setRerouteFor(n.id) }} className="inline-flex h-9 items-center gap-1 rounded-lg bg-surface px-2.5 text-xs font-semibold text-text-primary hover:bg-surface-hover"><Send size={13} /> {c('reroute')}</button>
+                                )}
+                              </div>
                             )}
                           </li>
                         )
@@ -299,7 +395,10 @@ export function NotificationCenter() {
               </ul>
             )}
           </div>
-        </div>
+          </div>
+          {rerouteFor && <RerouteDialog notificationId={rerouteFor} onClose={() => setRerouteFor(null)} />}
+        </div>,
+        document.body,
       )}
     </div>
   )

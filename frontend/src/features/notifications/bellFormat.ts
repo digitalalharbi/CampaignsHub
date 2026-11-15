@@ -17,4 +17,5 @@ export const FILTERS: ReadonlyArray<{ key: BellFilter; ar: string; en: string }>
   { key: 'budget', ar: 'ميزانية', en: 'Budget' },
   { key: 'performance', ar: 'أداء', en: 'Performance' },
   { key: 'sync', ar: 'مزامنة', en: 'Sync' },
+  { key: 'external', ar: 'خارجية', en: 'External' },
 ]

@@ -26,13 +26,26 @@ final class PushTypes
 
     public const APPROVAL = 'approval';
 
+    /** Catalog event => the bell kind whose push switch governs it. */
+    private const ENGINE_KINDS = [
+        'budget.threshold_90' => 'budget_90',
+        'budget.threshold_100' => 'budget_100',
+        'budget.overrun' => 'budget_over',
+        'spend_limit.reached' => 'budget_100',
+        'sync.failed' => 'sync_failed',
+        'connection.expired' => 'sync_failed',
+        'connection.expiring' => 'sync_failed',
+        'recommendation.awaiting_approval' => 'approval_request',
+    ];
+
     /** @var list<string> */
     public const ALL = [self::CRITICAL, self::BUDGET_90, self::BUDGET_100, self::SYNC_FAILED, self::APPROVAL];
 
     /** The push type of a notification, or null when it must not be pushed. */
     public static function of(AppNotification $n): ?string
     {
-        $kind = (string) ($n->kind ?? '');
+        // NOTIF-V2-INTERNAL-001 — the catalog's event keys stand for the same facts as the bell's older kinds, under the same five switches.
+        $kind = self::ENGINE_KINDS[(string) ($n->kind ?? '')] ?? (string) ($n->kind ?? '');
         $type = (string) $n->type;
 
         if ($type === 'approval_request' || $kind === 'approval_request' || str_contains($type, 'approval')) {
