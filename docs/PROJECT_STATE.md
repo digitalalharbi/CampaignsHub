@@ -36,8 +36,8 @@ Verify, do not trust: `git fetch origin && git log --oneline -10 origin/main && 
 - **Two-step verification:** TWO-STEP-001 enforced at every sign-in (authenticator, email, SMS) (#1066). SMS is AWAITING_CREDENTIALS.
 - **Access center:** one center for every invitation, categories, per-invitation areas, role presets, «المجموعات» rename everywhere (#1067, #1029).
 - **Agents center:** one assistant with its team, chat, settings drawer, memory (AGENTS-ASSISTANT-001, #1068). The provider key is AWAITING_CREDENTIALS.
-- **Audience center:** slices 1 and 2, GEO-001, Snapchat location targeting, TikTok audience report, portal «الجمهور» (#1037, #1069).
-- **Client portal:** three sections, client content approval, project-manager notice (#1038 series).
+- **Audience center:** slices 1 and 2, GEO-001, Snapchat location targeting, TikTok audience report, portal «الجمهور» (#1037, #1039).
+- **Client portal:** three sections, client content approval, project-manager notice (#1032).
 - **Content and integrations:** media for Meta/TikTok/Snapchat, X promoted tweets, LinkedIn scopes, TikTok campaign status, SHARE-COPY-LEAK-001, plan usage meter, approved sidebar/home/plans, platform payment alerts.
 - **CI tiering and deploy speed:** CI-TIER-001/002/003 (chromium on every PR, firefox+webkit on the PR being landed, 5 shards), local paratest, flake root-causes. Measured times are in `docs/MERGE_QUEUE.md`.
 
