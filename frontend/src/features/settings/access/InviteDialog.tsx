@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/Input'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { clients as countedClients } from '@/lib/counted'
-import { canAssign, diffLevels, levelsOf, useAccessActions, type AccessData, type Level } from './accessApi'
+import { canAssign, diffLevels, levelsOf, useAccessActions, type AccessData, type Level, type SectionStates } from './accessApi'
 import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
 import { PORTAL_ROLE_LABEL } from './labels'
+import { SectionToggles } from './SectionToggles'
 
 type Audience = 'team' | 'client'
 
@@ -28,6 +29,8 @@ export function InviteDialog({ open, onClose, data, ar }: { open: boolean; onClo
   const [custom, setCustom] = useState(false)
   const [levels, setLevels] = useState<Record<string, Level>>({})
   const [clients, setClients] = useState<string[]>([])
+  // ACCESS-SECTIONS-001 — sections switched for THIS invitation only; the category decides the rest.
+  const [sectionsOff, setSectionsOff] = useState<SectionStates>({})
   const [portalClient, setPortalClient] = useState('')
   const [portalRole, setPortalRole] = useState('client_viewer')
   const [err, setErr] = useState('')
@@ -39,14 +42,14 @@ export function InviteDialog({ open, onClose, data, ar }: { open: boolean; onClo
   const overrides = diffLevels(base, chosen)
 
   const pickCategory = (slug: string) => { setCategory(slug); setLevels({}) }
-  const reset = () => { setEmail(''); setLevels({}); setCustom(false); setClients([]); setErr(''); setSent(null) }
+  const reset = () => { setEmail(''); setLevels({}); setCustom(false); setClients([]); setSectionsOff({}); setErr(''); setSent(null) }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr('')
     try {
       if (audience === 'team') {
-        await invite.mutateAsync({ email, category, areas: overrides, ...(clients.length ? { client_ids: clients } : {}) })
+        await invite.mutateAsync({ email, category, areas: overrides, sections: sectionsOff, ...(clients.length ? { client_ids: clients } : {}) })
       } else {
         await invitePortal.mutateAsync({ client: portalClient, email, role: portalRole })
       }
@@ -87,7 +90,12 @@ export function InviteDialog({ open, onClose, data, ar }: { open: boolean; onClo
                   <Plus size={13} aria-hidden /> {ar ? 'تخصيص لهذه الدعوة' : 'Customise for this invitation'}
                 </button>
               ) : (
-                <div className="mt-2">
+                <div className="mt-2 space-y-2">
+                  {(data.sections ?? []).length > 0 && (
+                    <SectionToggles sections={data.sections ?? []} ar={ar} testId="invite-sections"
+                      states={Object.fromEntries((data.sections ?? []).map((x) => [x.key, sectionsOff[x.key] ?? true]))}
+                      onChange={(k, on) => setSectionsOff((x) => { const next = { ...x }; if (on) delete next[k]; else next[k] = false; return next })} />
+                  )}
                   <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}
                     onChange={(area, lv) => setLevels((l) => ({ ...l, [area]: lv }))} />
                 </div>

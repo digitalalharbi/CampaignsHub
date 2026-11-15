@@ -15,8 +15,15 @@ vi.mock('./accessApi', async (importOriginal) => {
     useAccess: () => ({ data, isLoading: false, isError: false }),
     useAccessHistory: () => ({ data: { entries: [{ action: 'access.member_overrides_changed', by: 'Owner', at: '2026-11-15T10:00:00Z', reason: 'no money' }] } }),
     useAccessActions: () => actions,
+    useAccessAudit: () => ({ data: { entries: [{ action: 'access.member_updated', by: 'Owner', target: 'Sara', at: '2026-11-15T11:00:00Z', reason: null, changes: [{ field: 'category', from: 'viewer', to: 'media-buyer' }, { field: 'sections', added: [], removed: ['invoices'] }] }] } }),
   }
 })
+
+const SECTIONS = [
+  { key: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
+  { key: 'budgets', ar: 'الميزانيات', en: 'Budgets' },
+  { key: 'invoices', ar: 'الفواتير', en: 'Invoices' },
+]
 
 const AREAS = [
   { key: 'projects', ar: 'إدارة المشاريع', en: 'Projects' },
@@ -36,9 +43,10 @@ function cat(slug: string, ar: string, kind: Category['kind'], levels: Record<st
 /** ACCESS-CENTER-001 — the board, the one invitation dialog, the drawer and «ماذا سيرى». */
 describe('AccessCenter', () => {
   beforeEach(() => {
-    actions = Object.fromEntries(['invite', 'invitePortal', 'updateInvitation', 'resend', 'revoke', 'setCategory', 'setOverrides', 'setScope', 'toggle', 'remove', 'createCategory', 'updateCategory', 'deleteCategory'].map((k) => [k, mut()]))
+    actions = Object.fromEntries(['invite', 'invitePortal', 'updateInvitation', 'resend', 'revoke', 'setCategory', 'setOverrides', 'setScope', 'updateMember', 'toggle', 'remove', 'createCategory', 'updateCategory', 'deleteCategory'].map((k) => [k, mut()]))
     data = {
       areas: AREAS,
+      sections: SECTIONS,
       categories: [
         cat('tenant-owner', 'مدير المساحة', 'owner', { projects: 'manage', campaigns: 'manage', finance: 'manage', team: 'manage' }, { admin: true, all_clients: true, members: 1 }),
         cat('media-buyer', 'مشتري إعلانات', 'builtin', { projects: 'view', campaigns: 'manage', finance: 'view' }, { members: 1 }),
@@ -47,7 +55,7 @@ describe('AccessCenter', () => {
       ],
       members: [
         { id: 'u-owner', membership_id: 'm1', name: 'Owner', email: 'owner@a.test', audience: 'team', category: 'tenant-owner', category_name_ar: 'مدير المساحة', category_name_en: 'Workspace manager', is_owner: true, is_self: true, areas: lv({ projects: 'manage', campaigns: 'manage', finance: 'manage', team: 'manage' }), overrides: { allow: 0, deny: 0 }, override_areas: [], scope: { all: true, clients: [] }, status: 'active', last_login_at: '2026-11-14T08:00:00Z' },
-        { id: 'u-buyer', membership_id: 'm2', name: 'Sara', email: 'sara@a.test', audience: 'team', category: 'media-buyer', category_name_ar: 'مشتري إعلانات', category_name_en: 'Media buyer', is_owner: false, is_self: false, areas: lv({ projects: 'view', campaigns: 'manage' }), overrides: { allow: 0, deny: 2 }, override_areas: ['finance'], scope: { all: false, clients: [{ id: 'c1', name: 'Acme' }] }, status: 'active', last_login_at: null },
+        { id: 'u-buyer', membership_id: 'm2', name: 'Sara', email: 'sara@a.test', audience: 'team', category: 'media-buyer', category_name_ar: 'مشتري إعلانات', category_name_en: 'Media buyer', is_owner: false, is_self: false, areas: lv({ projects: 'view', campaigns: 'manage' }), sections: { campaigns: true, budgets: true, invoices: false }, overrides: { allow: 0, deny: 2 }, override_areas: ['finance'], scope: { all: false, clients: [{ id: 'c1', name: 'Acme' }] }, status: 'active', last_login_at: null },
         { id: 'u-portal', membership_id: 'm3', name: 'Client', email: 'client@acme.test', audience: 'client', category: 'client_viewer', category_name_ar: null, category_name_en: null, is_owner: false, is_self: false, areas: null, overrides: { allow: 0, deny: 0 }, override_areas: [], scope: { all: false, clients: [{ id: 'c1', name: 'Acme' }] }, status: 'active', last_login_at: null },
       ],
       invitations: [
@@ -97,7 +105,7 @@ describe('AccessCenter', () => {
     fireEvent.click(screen.getByTestId('invite-client-c1'))
 
     fireEvent.click(screen.getByTestId('invite-send'))
-    await waitFor(() => expect(actions.invite.mutateAsync).toHaveBeenCalledWith({ email: 'new@a.test', category: 'media-buyer', areas: { finance: 'none' }, client_ids: ['c1'] }))
+    await waitFor(() => expect(actions.invite.mutateAsync).toHaveBeenCalledWith({ email: 'new@a.test', category: 'media-buyer', areas: { finance: 'none' }, sections: {}, client_ids: ['c1'] }))
   })
 
   it('invites a client-portal user through the same dialog, with the portal roles only', async () => {
@@ -134,8 +142,37 @@ describe('AccessCenter', () => {
 
     fireEvent.click(within(drawer).getByTestId('toggle-campaigns-view'))
     fireEvent.click(within(drawer).getByTestId('drawer-save'))
-    await waitFor(() => expect(actions.setOverrides.mutateAsync).toHaveBeenCalledWith({ id: 'u-buyer', areas: { campaigns: 'view', finance: 'none' } }))
+    await waitFor(() => expect(actions.updateMember.mutateAsync).toHaveBeenCalledWith({ id: 'u-buyer', areas: { campaigns: 'view', finance: 'none' }, sections: {} }))
     expect(actions.setCategory.mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('edits a member after the invitation: sections pre-filled, one save carries role, sections and clients (ACCESS-SECTIONS-001)', async () => {
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-sara@a.test'))
+    const drawer = screen.getByTestId('access-drawer')
+    expect(within(drawer).getByTestId('section-campaigns')).toHaveAttribute('aria-checked', 'true')
+    expect(within(drawer).getByTestId('section-invoices')).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(within(drawer).getByTestId('section-budgets'))
+    fireEvent.click(within(drawer).getByTestId('drawer-category-finance'))
+    fireEvent.click(within(within(drawer).getByTestId('drawer-clients')).getByText('Beta'))
+    fireEvent.click(within(drawer).getByTestId('drawer-save'))
+    await waitFor(() => expect(actions.updateMember.mutateAsync).toHaveBeenCalledTimes(1))
+    const sent = actions.updateMember.mutateAsync.mock.calls[0][0]
+    expect(sent).toMatchObject({ id: 'u-buyer', category: 'finance', sections: { budgets: false }, client_ids: ['c1', 'c2'] })
+    expect(actions.setOverrides.mutateAsync).not.toHaveBeenCalled()
+    expect(actions.setScope.mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('shows the access log compactly: who, whom, when and what changed (ACCESS-SECTIONS-001)', () => {
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-audit-toggle'))
+    const log = screen.getByTestId('access-audit-rows')
+    expect(log).toHaveTextContent('عُدّلت الصلاحيات')
+    expect(log).toHaveTextContent('Sara')
+    expect(log).toHaveTextContent('Owner')
+    expect(log).toHaveTextContent('مشتري إعلانات') // the category name, not its slug
+    expect(log).toHaveTextContent('−الفواتير')
   })
 
   it('locks the owner and the reader themselves, and leaves a portal user to the client page', () => {

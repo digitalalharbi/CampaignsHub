@@ -18,6 +18,7 @@ import { UsageMeterChip } from '@/features/subscriptions/UsageMeterChip'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
+import { useSectionAllowed } from '@/lib/accessSections'
 import { SidebarNav } from './SidebarNav'
 import { appAllGroups, appNavGroups, appSettingsGroup } from './appNav'
 import { PortalFrame } from './PortalFrame'
@@ -54,6 +55,8 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
   // Filter by the workspace's entitlements (personal = full menu; company = simplified). No
   // entitlements yet (older payload) → show everything, preserving the previous behaviour.
   const nav = useAuth((s) => s.user?.account?.nav)
+  // ACCESS-SECTIONS-001 — a section the member lacks is hidden, not drawn disabled.
+  const sectionAllowed = useSectionAllowed()
 
   return (
     <SidebarNav
@@ -61,7 +64,7 @@ function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?:
       ar={ar}
       collapsed={collapsed}
       onNavigate={onNavigate}
-      allow={(leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent)}
+      allow={(leaf) => (!nav || leaf.ent === undefined || nav.includes(leaf.ent)) && sectionAllowed(leaf.to)}
       label={ar ? 'أقسام مساحة العمل' : 'Workspace sections'}
       storageKey="nav.collapsed.app"
     />
@@ -127,9 +130,10 @@ export function AppShell() {
   useSectionTitle(appAllGroups)
 
   // The same entitlement filter the rail applies, so the phone offers the same set — never more.
-  const allowed = (leaf: { ent?: string }) => !nav || leaf.ent === undefined || nav.includes(leaf.ent)
+  const sectionAllowed = useSectionAllowed()
+  const allowed = (leaf: { ent?: string; to: string }) => (!nav || leaf.ent === undefined || nav.includes(leaf.ent)) && sectionAllowed(leaf.to)
   const workspace = { group: appSettingsGroup, allow: allowed }
-  const moreGroups = moreGroupsFrom([...appNavGroups, appSettingsGroup], APP_TABS, (leaf) => !nav || leaf.ent === undefined || nav.includes(leaf.ent))
+  const moreGroups = moreGroupsFrom([...appNavGroups, appSettingsGroup], APP_TABS, allowed)
 
   return (
     <PortalFrame

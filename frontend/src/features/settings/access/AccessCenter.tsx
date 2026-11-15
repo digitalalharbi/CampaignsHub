@@ -11,6 +11,7 @@ import { ChipPicker } from './AreaControls'
 import { InviteDialog } from './InviteDialog'
 import { AccessDrawer, type DrawerSubject } from './AccessDrawer'
 import { CategoriesPanel } from './CategoriesPanel'
+import { AccessAuditLog } from './AccessAuditLog'
 import { PORTAL_ROLE_LABEL, STATUS_LABEL } from './labels'
 
 type Filter = 'all' | 'team' | 'client' | 'invites'
@@ -39,6 +40,7 @@ export function AccessCenter() {
     <div className="space-y-4" data-testid="access-center">
       <Board data={data} ar={ar} filter={filter} setFilter={setFilter} onInvite={() => setInviting(true)} onOpen={setSubject} />
       <CategoriesPanel data={data} ar={ar} />
+      <AccessAuditLog data={data} ar={ar} />
       <InviteDialog open={inviting} onClose={() => setInviting(false)} data={data} ar={ar} />
       <AccessDrawer subject={subject} onClose={() => setSubject(null)} data={data} ar={ar} />
     </div>
