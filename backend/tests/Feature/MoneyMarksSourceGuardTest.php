@@ -114,4 +114,59 @@ final class MoneyMarksSourceGuardTest extends TestCase
         }
         $this->assertStringContainsString('$noMoney', File::get(resource_path('views/mail/daily-digest.blade.php')));
     }
+
+    /**
+     * FX-ENGINE-001 — the build FAILS when product code puts a currency mark on a number without the central formatter
+     * (`FundingMoney::withMark`) or hands it a GUESSED currency. The «253 $» defect had exactly this shape. The rule is checked
+     * against synthetic samples first, so it cannot pass by matching nothing.
+     */
+    public function test_no_product_output_glues_a_literal_mark_or_a_guessed_currency_to_a_figure(): void
+    {
+        $mark = '/\.\s*\' ?(?:\$|€|ر\.س)\'|"[^"]*\{\$[^}]+\} ?(?:\$|€|ر\.س)"|withMark\([^;]*\?\?\s*\'(?:USD|SAR|EUR)\'/u';
+
+        foreach (["number_format(\$x, 2).' $'", "number_format(\$x).' ر.س'", '"{$amount} €"', "FundingMoney::withMark(\$f, \$row->currency ?? 'SAR')"] as $bad) {
+            $this->assertMatchesRegularExpression($mark, $bad, 'the rule must catch: '.$bad);
+        }
+        foreach (['FundingMoney::withMark($f, $row->currency)', "FundingMoney::withMark(\$f, 'SAR')"] as $good) {
+            $this->assertDoesNotMatchRegularExpression($mark, $good);
+        }
+
+        $offenders = [];
+        foreach ([...File::allFiles(app_path()), ...File::allFiles(resource_path('views'))] as $file) {
+            $path = $file->getPathname();
+            if (str_ends_with($path, 'Funding/Support/FundingMoney.php')) {
+                continue; // the formatter itself
+            }
+            foreach (preg_split('/\R/', File::get($path)) as $i => $line) {
+                $trim = ltrim($line);
+                if (str_starts_with($trim, '*') || str_starts_with($trim, '//') || str_starts_with($trim, '/*')) {
+                    continue;
+                }
+                if (preg_match($mark, $line)) {
+                    $offenders[] = str_replace(base_path().'/', '', $path).':'.($i + 1);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'format money through FundingMoney::withMark with the figure\'s OWN currency, after FxEngine::convert()');
+    }
+
+    /** FX-ENGINE-001 — rates are written by ONE writer (RateLedger: versioned, audited). A second writer would overwrite history. */
+    public function test_exchange_rates_are_written_only_through_the_rate_ledger(): void
+    {
+        $writer = '/CurrencyRate::(?:create|updateOrCreate|insert|upsert)\(|CurrencyRate::query\(\)->(?:create|insert|update|upsert|delete)\(|table\(\'currency_rates\'\)->(?:insert|update|upsert|delete)\(|table\(\'currency_rate_versions\'\)->(?:update|delete)\(/';
+        $offenders = [];
+        foreach (File::allFiles(app_path()) as $file) {
+            if (str_ends_with($file->getPathname(), 'Metrics/Fx/RateLedger.php')) {
+                continue;
+            }
+            foreach (preg_split('/\R/', File::get($file->getPathname())) as $i => $line) {
+                if (preg_match($writer, $line)) {
+                    $offenders[] = str_replace(app_path().'/', '', $file->getPathname()).':'.($i + 1);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'write rates through App\Domains\Metrics\Fx\RateLedger::record()');
+    }
 }
