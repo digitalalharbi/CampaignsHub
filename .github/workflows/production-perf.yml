@@ -60,13 +60,35 @@ jobs:
             ROLLBACK;
             EOF
             }
-            art() { $DC exec -T backend php artisan "$@" 2>&1; }
+            art() { $DC exec -T backend php artisan "$@" 2>&1 | sed -E 's/([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/\1-***/g'; }
             # RELEASE-VERIFY-001 (Owner-approved 2026-11-15/16). READ-ONLY: dry runs and counts only. No names, no emails, no tokens printed.
             # Ids arrive as inputs, are validated as UUIDs and never echoed.
             UUID='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
             LIVE="${RACCOUNT}"; ARCH="${RFROM}"
             echo "== RELEASE-VERIFY $(date -u +%FT%TZ) mode=${HOURS}"
-            [ "${HOURS}" = "read" ] || { echo "only mode=read exists in this branch"; exit 0; }
+            if [ "${HOURS}" = "apply-core" ]; then
+              # APPLY-CORE: the Owner-approved post-deploy steps. Each is reversible or additive; none deletes. Ids masked in the output.
+              echo "## A1. close false data-arrival alerts (--apply; reversible with --undo)"
+              art alerts:reevaluate-data-arrival --apply
+              echo "## A2. archive effects for every archived project (--apply; never deletes)"
+              art lifecycle:apply-archive-effects --all-archived --apply
+              echo "## A3. key the report schedules (additive)"
+              art reports:dedupe-schedules
+              echo "## A4. name existing notifications by kind (additive)"
+              art notifications:backfill-kind
+              echo "## A5. legacy external recipients -> pending confirmation (nothing sent, nothing deleted)"
+              art notifications:v2-import-legacy
+              if [[ "$LIVE" =~ $UUID ]]; then
+                echo "## A6. live project snapshot AFTER (counts)"
+                art lifecycle:snapshot --project="$LIVE"
+              fi
+              if [[ "$ARCH" =~ $UUID ]]; then
+                echo "## A7. archived project snapshot AFTER (counts)"
+                art lifecycle:snapshot --project="$ARCH"
+              fi
+              echo "== done"; exit 0
+            fi
+            [ "${HOURS}" = "read" ] || { echo "modes: read | apply-core"; exit 0; }
             echo "## 0. migrations pending (must be 0)"
             art migrate:status --pending 2>&1 | grep -ciE "pending" 
             echo "## 1. mail DNS (SPF/DKIM/DMARC report; changes nothing)"
@@ -100,8 +122,6 @@ jobs:
                 q "select count(*) from project_integration_bindings a join project_integration_bindings b on a.external_account_id=b.external_account_id where a.project_id='$LIVE' and b.project_id='$ARCH';"
                 echo "same client | live project's client = archived project's client:"
                 q "select (select client_workspace_id from projects where id='$LIVE') = (select client_workspace_id from projects where id='$ARCH');"
-                echo "archived project: state | accounts | bindings active | scheduled reports | budgets:"
-                q "select (select status from projects where id='$ARCH'), (select count(*) from project_integration_bindings where project_id='$ARCH'), (select count(*) from project_integration_bindings where project_id='$ARCH' and is_active), (select count(*) from reports where project_id='$ARCH' and is_scheduled), (select count(*) from budgets where project_id='$ARCH');"
               fi
             fi
             echo "== done"
