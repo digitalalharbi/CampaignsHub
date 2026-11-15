@@ -151,6 +151,57 @@ final class MoneyMarksSourceGuardTest extends TestCase
         $this->assertSame([], $offenders, 'format money through FundingMoney::withMark with the figure\'s OWN currency, after FxEngine::convert()');
     }
 
+    /**
+     * FX-APPLY-001 (builder G) — money is CONVERTED through one function, `FxEngine::convert()` (or its `rate()` for a series).
+     *
+     * A path that looks a rate up on its own (`$rates->resolve(…)`, `resolveForWorkspace(…)`, `rateFor(…)`) produces a number with
+     * no FxConversion behind it — no rate date, no kind, no stale flag, no withheld state — which is how a figure reaches a screen
+     * without the engine. The homes below apply the SAME rule at INGEST or REPAIR (they write the stored converted figure with its
+     * rate beside it) or are the engine itself; each is named, none is a pattern. Checked against samples first.
+     */
+    private const ENGINE_HOMES = [
+        'Domains/Metrics/Services/CurrencyConverter.php' => 'the rate-selection rule itself',
+        'Domains/Metrics/Fx/FxEngine.php' => 'the one convert()',
+        'Domains/Metrics/Fx/FxRecompute.php' => 'repair: re-converts stored rows from their originals («إعادة حساب»)',
+        'Domains/Metrics/Services/ReportingCurrency.php' => 'ingest: writes value + exchange_rate + rate_date + rate_source',
+        'Domains/Commerce/Services/CommerceCurrency.php' => 'ingest of store orders (a separate pipeline, F-notes «deferred»), writes its rate beside the figure',
+        'Domains/Metrics/Console/RenormaliseReportingCurrency.php' => 'repair command (MONEY-USD-002), writes its rate beside the figure',
+        'Domains/Metrics/Console/MoneyCurrencyAuditCommand.php' => 'read-only diagnostic: asks only whether a rate exists',
+    ];
+
+    public function test_no_path_converts_money_outside_the_engine(): void
+    {
+        $lookup = '/\$(?:this->)?(?:rates|fx|converter|currency)->(?:resolve|resolveForWorkspace|rateFor)\(|->resolveForWorkspace\(|->rateFor\(/';
+        foreach (['$this->rates->resolve($a, $b, $d)', '$this->fx->resolveForWorkspace($t, $a, $b, $d)', '$rates->resolve($c, $r, $today)', '$this->converter->resolve($c, \'USD\', $d)'] as $bad) {
+            $this->assertMatchesRegularExpression($lookup, $bad, 'the rule must catch: '.$bad);
+        }
+        foreach (['$this->fx->convert(1, $a, $b, $d)', '$this->fx->rate($a, $b, $d)', '$this->time->resolve($row, $tz)'] as $good) {
+            $this->assertDoesNotMatchRegularExpression($lookup, $good);
+        }
+
+        $offenders = [];
+        foreach (File::allFiles(app_path()) as $file) {
+            $rel = str_replace(app_path().'/', '', $file->getPathname());
+            if (array_key_exists($rel, self::ENGINE_HOMES)) {
+                continue;
+            }
+            foreach (preg_split('/\R/', File::get($file->getPathname())) as $i => $line) {
+                $trim = ltrim($line);
+                if (str_starts_with($trim, '*') || str_starts_with($trim, '//')) {
+                    continue;
+                }
+                if (preg_match($lookup, $line)) {
+                    $offenders[] = $rel.':'.($i + 1);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'convert money through App\Domains\Metrics\Fx\FxEngine::convert() (or ->rate() for a series)');
+        foreach (array_keys(self::ENGINE_HOMES) as $home) {
+            $this->assertFileExists(app_path($home), 'an ENGINE_HOMES entry that no longer exists: remove it');
+        }
+    }
+
     /** FX-ENGINE-001 — rates are written by ONE writer (RateLedger: versioned, audited). A second writer would overwrite history. */
     public function test_exchange_rates_are_written_only_through_the_rate_ledger(): void
     {
