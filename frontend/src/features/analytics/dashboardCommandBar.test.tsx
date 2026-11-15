@@ -38,6 +38,7 @@ describe('the dashboard filter bar', () => {
       .filter(Boolean)
 
     expect(order[0]).toContain('المشروع')
-    expect(order[1]).toContain('الفترة')
+    // DATE-RANGE-001 — the period control now states the period in words, so it opens with the preset's name.
+    expect(order[1]).toContain('آخر')
   })
 })
