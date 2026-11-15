@@ -9,6 +9,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Providers\Snapchat\SnapchatVocabulary;
 use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 
@@ -406,6 +407,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'daily_budget' => isset($c['daily_budget_micro']) ? (float) $c['daily_budget_micro'] / self::MICRO : null,
                 'lifetime_budget' => isset($c['lifetime_spend_cap_micro']) ? (float) $c['lifetime_spend_cap_micro'] / self::MICRO : null,
                 'currency' => null, // stated on the account, not the campaign
+                'platform_created_at' => PlatformCreatedAt::from($c['created_at'] ?? null), // CONS-I-AGE
                 'raw' => $c,
             ];
         }

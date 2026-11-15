@@ -114,6 +114,8 @@ final class ImportExternalCampaigns
                     'daily_budget' => $row['daily_budget'] ?? null,
                     'lifetime_budget' => $row['lifetime_budget'] ?? null,
                     'currency' => $row['currency'] ?? $account->currency,
+                    // CONS-I-AGE — the platform's own creation time; a sweep that does not carry it never wipes a known one.
+                    'platform_created_at' => $row['platform_created_at'] ?? $campaign->platform_created_at,
                     'raw' => $row,
                     'last_synced_at' => now(),
                 ])->save();

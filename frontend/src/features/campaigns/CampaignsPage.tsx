@@ -4,7 +4,7 @@ import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { excludedRows, portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -2000,11 +2000,21 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
         </div>
       )}
 
-      {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
+      {/* No silent caps: a campaign left out of the total is counted where the total is read, and NAMED on request. */}
       {b.excluded > 0 && (
-        <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
-          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
-        </span>
+        <details className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
+          <summary className="cursor-pointer select-none">
+            {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
+          </summary>
+          <ul className="mt-1 space-y-0.5" data-testid="budget-pacing-excluded-list">
+            {excludedRows(rows).map(({ row, reason }) => (
+              <li key={row.campaign_id} className="flex flex-wrap items-center gap-x-2">
+                <span className="font-semibold text-text-secondary">{row.campaign_name}</span>
+                <span>{reason === 'no_budget' ? (ar ? 'بلا ميزانية' : 'no budget') : reason === 'other_currency' ? (ar ? 'بعملة مختلفة' : 'different currency') : (ar ? 'إنفاق ناقص' : 'partial spend')}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   )

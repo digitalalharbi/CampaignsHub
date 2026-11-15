@@ -216,6 +216,8 @@ final class AutomationRulesController extends Controller
         return ApiResponse::success(['run' => $this->runShape($run), 'results' => array_map(fn (array $r): array => [
             'provider' => $r['target']['provider'], 'name' => $r['target']['name'], 'external_id' => $r['target']['external_id'], 'level' => $r['target']['level'],
             'matched' => $r['matched'], 'status' => $r['status'], 'metrics' => $r['metrics'], 'before' => $r['before'] ?? null, 'after' => $r['after'] ?? null,
+            // CONS-I-DRYRUN — the indicator's Arabic name, its value in the display currency, and the exact reason when unjudged.
+            'readings' => $r['readings'] ?? [], 'reason' => $r['reason'] ?? null,
         ], $results)], 'Dry run.');
     }
 
