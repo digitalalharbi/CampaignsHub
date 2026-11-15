@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships, type PortalKey } from './memberships'
@@ -6,6 +6,7 @@ import { AccessRecovery } from './AccessRecovery'
 import { PortalEntryChoice } from './PortalEntryChoice'
 import { usePortalEntry } from './usePortalEntry'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
 
 /**
  * The entry gate for a portal route tree (LOGIN-002).
@@ -33,6 +34,7 @@ import { useUi } from '@/stores/ui'
  */
 export function RequirePortal({ portal }: { portal: PortalKey }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const isAdmin = useAuth((s) => s.user?.is_platform_admin === true)
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
   const entry = usePortalEntry(portal, state.data)
 
@@ -75,6 +77,12 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
           escape was clearing site data by hand.
         */}
         <AccessRecovery memberships={held} onboarding={held.length === 0} />
+          {/* CONS-ADMIN-SWITCH — the admin panel is this account's own; say where it is instead of leaving a wall. */}
+          {isAdmin && (
+            <Link to="/admin" data-testid="denied-back-to-admin" className="mt-3 inline-block text-sm font-semibold text-brand-600 hover:underline">
+              {ar ? 'العودة إلى لوحة الإدارة' : 'Back to the admin panel'}
+            </Link>
+          )}
       </div>
     </div>
   )

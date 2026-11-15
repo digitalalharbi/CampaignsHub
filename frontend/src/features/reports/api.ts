@@ -1046,6 +1046,10 @@ export interface ReportScheduleRow {
   cron: string | null
   report_id: string | null
   active: boolean
+  /** CONS-SCHEDULE-ONE — `duplicate_schedule` on a copy switched off because another schedule builds the same report. */
+  disabled_reason?: string | null
+  disabled_at?: string | null
+  duplicate_of?: string | null
   is_demo: boolean
   last_run_at: string | null
   next_run_at: string | null
@@ -1055,7 +1059,7 @@ export interface ReportScheduleRow {
   delivery_reasons?: Record<string, number>
 }
 
-export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at'>>
+export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at' | 'disabled_reason' | 'disabled_at' | 'duplicate_of'>>
 
 const schedulesBase = (projectId: string) => `/projects/${projectId}/reports/schedules`
 

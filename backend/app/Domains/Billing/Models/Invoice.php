@@ -26,6 +26,8 @@ final class Invoice extends Model
         'due_date', 'issued_at', 'paid_at',
         'period_start', 'period_end', 'source', 'reviewed_at', 'reviewed_by', 'sent_at', 'supersedes_id',
         'correction_reason', 'profile_snapshot',
+        // FIN-WALLET-001 — `wallet_top_up` names the project whose budget a confirmed payment tops up.
+        'purpose', 'project_id',
     ];
 
     protected $casts = [

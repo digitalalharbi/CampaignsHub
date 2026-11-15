@@ -7,8 +7,13 @@ namespace App\Domains\Delivery\Services;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Models\DeliveryPack;
+use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Models\Report;
+use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Models\ReportShare;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * DELIV-DASH-001 — one row per client: where this week's delivery stands, where the money stands, and the
@@ -34,9 +39,10 @@ final class DeliveryOverview
 
     /**
      * @param  bool  $mayReadBilling  whether the reader may see invoices — a row without it carries none
+     * @param  list<string>|null  $reachableProjects  the reader's project confinement (`ProjectReach::confinedIdsFor`); null = none
      * @return array<string,mixed>
      */
-    public function row(ClientWorkspace $client, ?Carbon $today = null, bool $mayReadBilling = true): array
+    public function row(ClientWorkspace $client, ?Carbon $today = null, bool $mayReadBilling = true, ?array $reachableProjects = null): array
     {
         $today = ($today ?? Carbon::today())->copy();
 
@@ -57,7 +63,19 @@ final class DeliveryOverview
         $overdue = $invoiceState === 'overdue';
         $followUp = $viewed && $overdue;
 
-        [$action, $visual] = $this->next($pack, $readiness, $overdue, $today, DeliverySettings::for($client));
+        $scheduled = $this->scheduled($client, $reachableProjects);
+        $settings = DeliverySettings::for($client);
+
+        [$action, $visual] = $this->next($pack, $readiness, $overdue, $today, $settings);
+
+        /*
+         * CONS-DELIVERY-SCHEDULED — a client whose reports go out on a schedule, and who has no weekly pack switched on, is
+         * not waiting for the operator to «prepare» anything: that row used to read «لا توجد حزمة بعد» and ask for a pack
+         * while the scheduled report was being sent. The pack flow still wins wherever it is switched on.
+         */
+        if ($pack === null && $scheduled['active'] > 0 && ($settings['enabled'] ?? false) !== true) {
+            [$action, $visual] = $overdue ? ['follow_up_payment', 'urgent'] : ['none', 'ok'];
+        }
 
         return [
             'client_id' => (string) $client->getKey(),
@@ -68,6 +86,7 @@ final class DeliveryOverview
                 'status' => $pack->status,
                 'sent_at' => $pack->sent_at?->toIso8601String(),
             ],
+            'scheduled' => $scheduled,
             'report' => $readiness === null ? null : ['status' => $readiness['report'], 'undecided_recommendations' => $readiness['undecided_recommendations']],
             'evidence' => $readiness === null ? null : $readiness['evidence']['count'],
             'last_viewed_at' => $viewedAt === null ? null : Carbon::parse((string) $viewedAt)->toIso8601String(),
@@ -83,6 +102,54 @@ final class DeliveryOverview
             'follow_up_required' => $followUp,
             'next_action' => $followUp ? 'follow_up_payment' : $action,
             'visual' => $followUp ? 'urgent' : $visual,
+        ];
+    }
+
+    /**
+     * CONS-DELIVERY-SCHEDULED — the client's ACTUAL report schedules, read from `report_schedules` and their own ledger.
+     *
+     * Scoped by the tenant scope on every model, by the client's projects, and by the reader's project confinement. A copy
+     * switched off as a duplicate is not a schedule. The last report is the one the schedules' delivery ledger names, or a
+     * report the dispatcher marked with its schedule; its delivery states are exactly what the ledger recorded.
+     *
+     * @param  list<string>|null  $reachableProjects
+     * @return array{active:int,next_run_at:?string,last_run_at:?string,last_report:?array<string,mixed>,deliveries:array<string,int>}
+     */
+    private function scheduled(ClientWorkspace $client, ?array $reachableProjects): array
+    {
+        $projects = Project::query()->where('client_workspace_id', $client->getKey())
+            ->when($reachableProjects !== null, fn ($q) => $q->whereIn('id', $reachableProjects))
+            ->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        $schedules = $projects === [] ? collect() : ReportSchedule::withoutGlobalScope(ProjectScope::class)
+            ->whereIn('project_id', $projects)->get();
+        $active = $schedules->where('active', true);
+
+        $ids = $schedules->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $lastReportId = $ids === [] ? null : DB::table('report_deliveries')->where('tenant_id', $client->tenant_id)
+            ->whereIn('schedule_id', $ids)->whereNotNull('report_id')->orderByDesc('created_at')->value('report_id');
+        $last = $lastReportId === null ? null : Report::withoutGlobalScope(ProjectScope::class)
+            ->whereIn('project_id', $projects)->whereKey($lastReportId)->first();
+
+        $deliveries = $last === null ? [] : DB::table('report_deliveries')->where('tenant_id', $client->tenant_id)
+            ->where('report_id', $last->getKey())->select('status')->selectRaw('COUNT(*) AS total')->groupBy('status')
+            ->pluck('total', 'status')->map(fn ($n) => (int) $n)->all();
+
+        $next = $active->pluck('next_run_at')->filter()->min();
+        $lastRun = $schedules->pluck('last_run_at')->filter()->max();
+
+        return [
+            'active' => $active->count(),
+            'next_run_at' => $next?->toIso8601String(),
+            'last_run_at' => $lastRun?->toIso8601String(),
+            'last_report' => $last === null ? null : [
+                'id' => (string) $last->getKey(),
+                'project_id' => (string) $last->project_id,
+                'status' => $last->status,
+                'generated_at' => $last->generated_at?->toIso8601String(),
+                'period' => ['from' => $last->period_start?->toDateString(), 'to' => $last->period_end?->toDateString()],
+            ],
+            'deliveries' => $deliveries,
         ];
     }
 

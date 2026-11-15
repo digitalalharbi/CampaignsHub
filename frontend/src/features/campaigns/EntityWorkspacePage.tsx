@@ -5,20 +5,20 @@ import { useQuery } from '@tanstack/react-query'
 import { Columns3 } from 'lucide-react'
 import { EntityTab, type EntityWorkspaceControls } from '@/features/analytics/AnalyticsPage'
 import { useEntities } from '@/features/analytics/api'
-import { useLastNDaysRange } from '@/features/analytics/hooks'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { entityColumnLabel, entityColumnPlan } from '@/features/analytics/entityObjectiveColumns'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { ManagementOverview } from './ManagementOverview'
 import { getCampaign } from './api'
 import type { CampaignRelevance } from './campaignRelevance'
 import { providerLabel } from './labels'
-import { FilterBar, FilterChips, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
+import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { Modal } from '@/components/ui/Modal'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import type { EntityRow } from '@/features/analytics/api'
-import { days as countedDays } from '@/lib/counted'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 
@@ -38,7 +38,6 @@ import { useUi } from '@/stores/ui'
  */
 type Level = 'ad_set' | 'ad'
 
-const PERIODS = [7, 30, 90] as const
 const HIDDEN_KEY = (level: Level) => `ch-entity-columns-hidden:${level}`
 
 function readHidden(level: Level): string[] {
@@ -54,8 +53,8 @@ function readHidden(level: Level): string[] {
 export function EntityWorkspacePage({ level }: { level: Level }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const { currentProjectId } = useProject()
-  const [days, setDays] = useState<(typeof PERIODS)[number]>(30)
-  const range = useLastNDaysRange(days)
+  // DATE-RANGE-001 — the system's one period, shared with every page; rolling presets end yesterday.
+  const { days, setDays, range } = usePeriod()
   const [platform, setPlatform] = useState('all')
   const [status, setStatus] = useState<'all' | CampaignRelevance>('all')
   const [search, setSearch] = useState('')
@@ -90,7 +89,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
     const next = Array.isArray(f.hidden) ? f.hidden.filter((k): k is string => typeof k === 'string') : []
     setHidden(next)
     try { localStorage.setItem(HIDDEN_KEY(level), JSON.stringify(next)) } catch { /* a private window keeps the choice for this visit only */ }
-    if (typeof v.date_range?.days === 'number' && (PERIODS as readonly number[]).includes(v.date_range.days)) setDays(v.date_range.days as (typeof PERIODS)[number])
+    if (typeof v.date_range?.days === 'number') setDays(v.date_range.days)
   }
 
   const workspace: EntityWorkspaceControls = { search, status, hidden, onManage: setManaging }
@@ -136,13 +135,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
           </button>
         )}
       >
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(days)}
-          options={PERIODS.map((d) => ({ value: String(d), label: countedDays(d, ar ? 'ar' : 'en') }))}
-          onChange={(v) => setDays(Number(v) as (typeof PERIODS)[number])}
-          testid={`entity-period-${level}`}
-        />
+        <DateRangePicker projectId={currentProjectId} testId={`entity-period-${level}`} />
         <FilterSelect
           label={ar ? 'المنصة' : 'Platform'}
           value={platform}

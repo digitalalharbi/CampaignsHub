@@ -40,6 +40,16 @@ final class MembershipController extends Controller
         $memberships = $this->resolver->membershipsFor($user);
         $active = $this->context->membership();
 
+        /*
+         * CONS-ADMIN-SWITCH — the platform admin's requests run in platform scope, so the context never holds the workspace
+         * they chose. The session's choice is read here instead, through the selector, which re-verifies on every request
+         * that the membership is still theirs, active and usable. Nothing is granted by it: it can only name one of the
+         * memberships listed below.
+         */
+        if ($active === null && $user->is_platform_admin) {
+            $active = $this->selector->selected($request, $user);
+        }
+
         // SUPERADMIN-SUPPORT-ACCESS-001 — during a support visit the visited workspace is the only one there is.
         if ($active !== null && $active->getAttribute('support_session_id') !== null) {
             return ApiResponse::success([
@@ -86,6 +96,8 @@ final class MembershipController extends Controller
              */
             'requested_portal' => $requested?->value,
             'requested_portal_held' => $requested === null ? null : $this->resolver->holds($user, $requested),
+            // CONS-ADMIN-SWITCH — the account also holds the admin panel, so the menu offers the way back to it.
+            'platform_admin' => (bool) $user->is_platform_admin,
             'pending_registration' => $pending !== null
                 ? ['id' => (string) $pending->getKey(), 'state' => $pending->state->value]
                 : null,

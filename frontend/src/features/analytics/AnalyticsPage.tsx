@@ -27,7 +27,6 @@ import {
   useEntities,
   useFreshness,
   useFunnel,
-  useLastNDaysRange,
   useAttribution,
   useNormalization,
   useObjectiveExplanations,
@@ -68,7 +67,9 @@ import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
-import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
+import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { moneyState, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 
@@ -80,13 +81,12 @@ import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DistributionBars } from './DistributionBars'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
-import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
 import { AdvertiserProjectsStrip, AdvertiserSourcesStrip } from '@/features/dashboard/AdvertiserContext'
 import { usePortalBase } from '@/app/portalPath'
-import { PeriodLabel } from '@/components/patterns/Status'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
@@ -144,6 +144,7 @@ import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
+import { useClientProjectAutoSelect } from '@/features/agency/clientProject'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { PortfolioPage } from '@/features/projects/PortfolioPage'
 import { LiveOperatingTab } from './LiveOperatingTab'
@@ -318,6 +319,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
   useProjectFromUrl()
   const { currentProjectId, setCurrentProjectId } = useProject()
+  // CONS-CLIENT-PROJECT — a client chosen in the sidebar brings its project with it.
+  useClientProjectAutoSelect()
   const portalBase = usePortalBase()
   /*
    * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
@@ -325,7 +328,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
    * that colleague a different answer to the question they were discussing.
    */
-  const [days, setDays] = useUrlNumber('days', 30)
+  // DATE-RANGE-001 — the system's one period (from/to/compare in the address); rolling presets end yesterday.
+  const { days, setDays, range } = usePeriod()
   const [urlTab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
 
   /*
@@ -393,9 +397,9 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
     if (v.filters?.objective) next.objective = { value: String(v.filters.objective), fallback: 'all' }
     // A list is comma-joined, and empty means «every» by saying nothing — `useUrlList`'s own rule.
     if (v.filters?.provider) next.provider = { value: v.filters.provider.join(','), fallback: '' }
-    if (v.date_range?.days) next.days = { value: String(v.date_range.days), fallback: '30' }
 
     if (Object.keys(next).length > 0) writeFilters(next)
+    if (v.date_range?.days) setDays(v.date_range.days)
   }
   const appliedDefault = useRef(false)
   useEffect(() => {
@@ -407,7 +411,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedViews.data])
-  const range = useLastNDaysRange(days)
 
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
@@ -597,7 +600,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         eyebrow={projectName ?? ''}
         meta={
           <>
-            <PeriodLabel from={range.from} to={range.to} testId={`${surface}-head-period`} />
             <DataFreshness
               lastSyncAt={freshestAt}
               ar={ar}
@@ -674,17 +676,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           onChange={setCurrentProjectId}
         />
 
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(days)}
-          testid={`${surface}-period`}
-          options={[
-            { value: '7', label: ar ? '7 أيام' : '7 days' },
-            { value: '30', label: ar ? '30 يوم' : '30 days' },
-            { value: '90', label: ar ? '90 يوم' : '90 days' },
-          ]}
-          onChange={(v) => setDays(Number(v))}
-        />
+        <DateRangePicker projectId={currentProjectId} budgetHint testId={`${surface}-period`} />
 
         {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
             charts below key off. One filter bar, one vocabulary, across both pages. */}

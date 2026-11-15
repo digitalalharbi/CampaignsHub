@@ -29,6 +29,11 @@ export interface Proposal {
   created_at: string | null
   /** The daily budget when the change was asked — the «before» of the preview (null when unknown or not a budget). */
   current_daily_budget?: number | null
+  /**
+   * CONS-I-APPROVAL — the same budget in the currency the reader reads. `daily_budget` / `current_daily_budget` are null when no
+   * rate exists (`reason` says why); `converted` is false when the platform's currency already is the display currency.
+   */
+  display?: { currency: string; daily_budget: number | null; current_daily_budget: number | null; converted: boolean; source_currency: string | null; reason: string | null } | null
 }
 
 export interface ProposalList {

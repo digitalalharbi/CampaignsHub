@@ -4,6 +4,7 @@ import { NewClientDialog } from './NewClientDialog'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
+import { resetClientProjectAutoPick } from '@/features/agency/clientProject'
 import { renderWithProviders } from '@/test/utils'
 
 vi.mock('@/features/projects/api', async (orig) => {
@@ -64,6 +65,7 @@ describe('the scope control shows the project only for a client with two', () =>
     ] as never)
     useProject.setState({ currentProjectId: null })
     useAgencyClient.setState({ currentClientId: null })
+    resetClientProjectAutoPick()
   })
 
   it('hides the project and works inside it for a one-project client', async () => {
@@ -74,11 +76,12 @@ describe('the scope control shows the project only for a client with two', () =>
     expect(screen.queryByTestId('agency-scope-project')).not.toBeInTheDocument()
   })
 
-  it('brings the «المشاريع» switch back for a client with a second project', async () => {
+  it('brings the «المشاريع» switch back for a client with a second project, with one preselected (CONS-CLIENT-PROJECT)', async () => {
     useAgencyClient.setState({ currentClientId: 'c2' })
     renderWithProviders(<AgencyScopeSwitcher />, { route: '/agency/dashboard', locale: 'ar' })
 
     expect(await screen.findByTestId('agency-scope-project')).toBeInTheDocument()
-    expect(useProject.getState().currentProjectId).toBeNull()
+    // No sync facts in this fixture: the server's order (newest project first) decides.
+    await waitFor(() => expect(useProject.getState().currentProjectId).toBe('p2'))
   })
 })

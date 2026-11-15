@@ -1,4 +1,5 @@
 import { deleteData, getData, postData, putData } from '@/lib/api/client'
+import type { ApprovedBudget, ApprovedBudgetTotal } from '@/features/funding/fundingApi'
 
 /**
  * The agency portal's data layer (ADR 0002).
@@ -139,6 +140,14 @@ export interface ClientBudgetRow {
    * the roll-up mixes currencies (a sum across two units is not a trend).
    */
   daily_spend_7d?: number[] | null
+  /**
+   * ONE-BUDGET-001 — the client's APPROVED project budgets (/agency/budgets), added up in SAR over each budget's own
+   * period. This is «the budget» on the home cards; the dashboard window never changes it.
+   */
+  project_budget?: ApprovedBudgetTotal
+  project_budgets?: { project_id: string; project_name: string; budget: ApprovedBudget }[]
+  /** «ميزانيات الحملات في المنصات» — the campaign budgets set inside the platforms. Informational only, never «the budget». */
+  platform_campaign_budgets?: { budget: number | null; spent: number | null; currency: string | null; campaigns: number }
 }
 
 export interface ProjectBudgetRow {
@@ -164,6 +173,22 @@ export const fetchClientBudgets = () => getData<ClientBudgetRow[]>('/agency/clie
  * `currency` is the window's basis — null when the rows mix currencies or there are none, and then
  * every money figure prints bare. `current` is null when the operator reaches no project at all.
  */
+export interface ObjectiveResultBlock {
+  family: string
+  campaigns: number
+  spend: number
+  result: number | null
+  result_key: string | null
+  result_label: { ar: string; en: string } | null
+  cost_per_result: number | null
+  cost_per_result_label: { ar: string; en: string } | null
+  missing_reason: string | null
+  missing_label: { ar: string; en: string } | null
+  roas: number | null
+  roas_campaigns: number | null
+  sales_campaigns: number | null
+}
+
 export interface AgencyOverview {
   scope: { client_count: number; project_count: number; is_restricted: boolean }
   period: { from: string; to: string }
@@ -172,12 +197,19 @@ export interface AgencyOverview {
   current: Record<string, unknown> | null
   previous: Record<string, unknown> | null
   by_provider: Array<Record<string, unknown> & { provider: string }>
+  /**
+   * DASH-KPI-OBJECTIVE-001 — results and cost per result PER objective family. A cost per result is only ever
+   * spend ÷ result of ONE family; there is no figure across families. `roas` is the sales family's, over
+   * `roas_campaigns` of its `sales_campaigns` (those with both revenue and spend).
+   */
+  by_objective?: ObjectiveResultBlock[]
   timeseries: Array<Record<string, unknown> & { date: string }>
   freshness: { last_synced_at: string | null }
 }
 
-export function fetchAgencyOverview(range?: { from: string; to: string }): Promise<AgencyOverview> {
-  const qs = range ? `?from=${range.from}&to=${range.to}` : ''
+export function fetchAgencyOverview(range?: { from: string; to: string }, compare?: { from: string; to: string } | null): Promise<AgencyOverview> {
+  // DATE-RANGE-001 — a chosen comparison (last year, or two dates) replaces the default «same length before».
+  const qs = range ? `?from=${range.from}&to=${range.to}${compare ? `&compare_from=${compare.from}&compare_to=${compare.to}` : ''}` : ''
 
   return getData<AgencyOverview>(`/agency/overview${qs}`)
 }

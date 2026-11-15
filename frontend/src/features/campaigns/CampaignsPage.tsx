@@ -2,9 +2,8 @@ import { comparableWindows } from '@/lib/coverage/contract'
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { excludedRows, portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -46,15 +45,16 @@ const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
 }
 import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
-import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
+import { useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { useBudget, useCampaigns, useFreshness, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
-import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { ProvenanceBadge, TrendPill } from '@/features/analytics/components'
 import { compact, money, num } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
@@ -67,6 +67,8 @@ import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
+import { ApprovedBudgetPacing } from '@/features/funding/ApprovedBudget'
+import { useApprovedBudget } from '@/features/funding/fundingApi'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -150,8 +152,12 @@ export function CampaignsPage() {
    * load because a governance sidecar did would be a worse outcome than the missing chip.
    */
   const spendLimits = useSpendLimits(projectId)
+  // ONE-BUDGET-001 — the project's approved budget (one source, its own period); the strip and the pacing line read it.
+  const approved = useApprovedBudget(projectId)
+  const canAddBudget = useAuth((s) => s.hasPermission('funding.manage'))
 
-  const [days, setDays] = useUrlNumber('days', 30)
+  /* DATE-RANGE-001 — the system's one period; rolling presets end yesterday, as the platforms' do. */
+  const { days, setDays, range } = usePeriod()
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
@@ -244,7 +250,6 @@ export function CampaignsPage() {
     setModalOpen(false)
     if (launching) setLaunch('')
   }
-  const range = useLastNDaysRange(days)
 
   /*
    * The canonical key expanded into the raw objectives the API filters on — the same expansion the
@@ -806,7 +811,6 @@ export function CampaignsPage() {
         badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={
           <>
-            <PeriodLabel from={range.from} to={range.to} testId="campaigns-period" />
             {/*
               Freshness from the project's own freshness endpoint — the newest arrival across its
               sources. `null` while it answers, which `DataFreshness` already draws as «لم تصل
@@ -844,7 +848,7 @@ export function CampaignsPage() {
               row pushes everything after it onto a line of its own. */}
           <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-          <RangeTabs value={days} onChange={setDays} />
+          <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
           {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }
@@ -917,6 +921,8 @@ export function CampaignsPage() {
         currency={summary.data?.currency ?? null}
         paused={counts.paused ?? 0}
         ar={ar}
+        approved={approved.data}
+        canAddBudget={canAddBudget}
       />
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
@@ -1005,7 +1011,8 @@ export function CampaignsPage() {
             An incomparable scope reads «—» and says why. It never reads 0%, which an operator takes
             as «we have spent nothing» when the truth is that nothing here could be added up.
           */}
-          <BudgetPacingRow rows={budget.data ?? []} ar={ar} />
+          {/* ONE-BUDGET-001 — paced against the APPROVED budget; the campaign budgets in the platforms are not «the budget». */}
+          {approved.data && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
@@ -2000,11 +2007,21 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
         </div>
       )}
 
-      {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
+      {/* No silent caps: a campaign left out of the total is counted where the total is read, and NAMED on request. */}
       {b.excluded > 0 && (
-        <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
-          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
-        </span>
+        <details className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
+          <summary className="cursor-pointer select-none">
+            {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
+          </summary>
+          <ul className="mt-1 space-y-0.5" data-testid="budget-pacing-excluded-list">
+            {excludedRows(rows).map(({ row, reason }) => (
+              <li key={row.campaign_id} className="flex flex-wrap items-center gap-x-2">
+                <span className="font-semibold text-text-secondary">{row.campaign_name}</span>
+                <span>{reason === 'no_budget' ? (ar ? 'بلا ميزانية' : 'no budget') : reason === 'other_currency' ? (ar ? 'بعملة مختلفة' : 'different currency') : (ar ? 'إنفاق ناقص' : 'partial spend')}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   )

@@ -3,6 +3,7 @@ import { fireEvent, screen } from '@testing-library/react'
 import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
+import { resetPeriodSession } from '@/lib/period/usePeriod'
 
 /**
  * ANALYTICS-FILTER-TRUTH-001 — «deep-link / refresh / Back preserve state», on the page.
@@ -51,6 +52,7 @@ vi.mock('./SavedViewsBar', () => ({ SavedViewsBar: () => null }))
  */
 describe('the dashboard opened from a link that already carries filters', () => {
   beforeEach(() => {
+    resetPeriodSession(); window.localStorage.clear()
     vi.clearAllMocks()
     signInWith(['campaigns.view'])
     useProject.getState().setCurrentProjectId('p1')
@@ -67,19 +69,19 @@ describe('the dashboard opened from a link that already carries filters', () => 
   })
 
   it('arrives on the period the link asked for', async () => {
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard?days=7' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard?from=2026-09-03&to=2026-09-09' })
     await screen.findByTestId('dashboard-intro')
 
-    // `FilterChips` is a button group, not a select — the chosen period is the pressed chip.
-    expect(screen.getByRole('button', { name: '7 days', pressed: true })).toBeInTheDocument()
+    // DATE-RANGE-001 — a shared link carries the two DATES; the button says them.
+    expect(screen.getByTestId('dashboard-period-summary')).toHaveTextContent('3 Sep – 9 Sep 2026')
   })
 
   /* A period that is not a period is not obeyed — it would ask for a window ending before it starts. */
   it('ignores a nonsense period rather than passing it to the backend', async () => {
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard?days=-5' })
+    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard?from=2026-13-40&to=nope&days=-5' })
     await screen.findByTestId('dashboard-intro')
 
-    expect(screen.getByRole('button', { name: '30 days', pressed: true })).toBeInTheDocument()
+    expect(screen.getByTestId('dashboard-period-summary')).toHaveTextContent('Last 7 days')
   })
 
   it('writes a filter chosen on the page into the link, so a refresh keeps it', async () => {

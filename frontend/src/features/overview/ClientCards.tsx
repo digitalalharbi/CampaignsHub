@@ -8,7 +8,9 @@ import { Skeleton } from '@/components/ui/States'
 import { KpiSparkline } from '@/features/analytics/charts'
 import { money } from '@/features/analytics/format'
 import { days as countedDays } from '@/lib/counted'
-import { budgetRatio, coverDays, isNearEnd, orderClients, totalsOf } from './overviewMath'
+import { NoBudget, SpentOfApproved } from '@/features/funding/ApprovedBudget'
+import { useAuth } from '@/stores/auth'
+import { budgetRatio, coverDays, hasBudget, isNearEnd, orderClients, totalsOf } from './overviewMath'
 
 /**
  * «الرئيسية › كل العملاء» — four figures, then one card per client (NAV-HOME-PLANS-001, master task 13).
@@ -17,17 +19,21 @@ import { budgetRatio, coverDays, isNearEnd, orderClients, totalsOf } from './ove
  * the grid wraps instead of scrolling, so the whole estate reads on one screen and never needs a sideways swipe.
  *
  * The figures are summed from the very rows the cards draw (`totalsOf`), so the cards always add up to the strip.
+ * ONE-BUDGET-001 — «the budget» here is the APPROVED project budget (/agency/budgets, SAR, the budget's own period). The
+ * campaign budgets set inside the platforms show on a card only as a small «ميزانيات الحملات في المنصات» line.
  * Reads the same cached query as the rest of the agency dashboard — no second request, no second opinion.
  */
 const COPY = {
   ar: {
     title: 'كل العملاء', spend: 'الإنفاق', left: 'المتبقي', running: 'عملاء شغالين', near: 'قرّبت تخلص',
     cover: (n: number) => (n === 0 ? 'خلصت' : `تكفي ${countedDays(n, 'ar')}`), noCover: 'بدون بيانات', of: 'من', mixed: 'عملات مختلفة', failed: 'ما قدرنا نحمّل العملاء.',
+    platforms: 'ميزانيات الحملات في المنصات',
     open: (name: string) => `افتح ${name}`,
   },
   en: {
     title: 'All clients', spend: 'Spend', left: 'Remaining', running: 'Active clients', near: 'Running out',
     cover: (n: number) => (n === 0 ? 'Used up' : `${countedDays(n, 'en')} left`), noCover: 'No data', of: 'of', mixed: 'Mixed currencies', failed: 'Could not load the clients.',
+    platforms: 'Campaign budgets in the platforms',
     open: (name: string) => `Open ${name}`,
   },
 }
@@ -64,20 +70,27 @@ function BudgetRing({ ratio, size = 46 }: { ratio: number | null; size?: number 
   )
 }
 
-function ClientCard({ row, ar, onOpen, alerts }: { row: ClientBudgetRow; ar: boolean; onOpen: (row: ClientBudgetRow) => void; alerts: number }) {
+function ClientCard({ row, ar, onOpen, alerts, canAdd }: { row: ClientBudgetRow; ar: boolean; onOpen: (row: ClientBudgetRow) => void; alerts: number; canAdd: boolean }) {
   const t = ar ? COPY.ar : COPY.en
+  const budgeted = hasBudget(row)
+  const pb = row.project_budget
+  const platform = row.platform_campaign_budgets
+  const firstUnbudgeted = row.project_budgets?.find((p) => !p.budget.has_budget)
   const ratio = budgetRatio(row)
   const days = coverDays(row)
   const near = isNearEnd(row)
   const line = row.daily_spend_7d ?? []
 
   return (
-    <button
-      type="button"
+    // A card that holds a link («أضف ميزانية») cannot itself be a <button>: a focusable element with the button role instead.
+    <div
+      role="button"
+      tabIndex={0}
       data-testid={`overview-client-${row.client_id}`}
       aria-label={t.open(row.client_name)}
       onClick={() => onOpen(row)}
-      className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-surface p-2.5 text-start transition-colors hover:border-brand-400"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(row) } }}
+      className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-surface p-2.5 text-start transition-colors hover:border-brand-400"
     >
       <BudgetRing ratio={ratio} />
       <span className="min-w-0 flex-1">
@@ -85,20 +98,30 @@ function ClientCard({ row, ar, onOpen, alerts }: { row: ClientBudgetRow; ar: boo
           <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
           {alerts > 0 && <span className="tnum shrink-0 rounded-full bg-[var(--warning-background)] px-1.5 text-xs font-bold text-warning" title={ar ? 'تنبيهات' : 'Alerts'}>{alerts}</span>}
         </span>
-        <span className={`block truncate text-xs font-semibold ${near ? 'text-warning' : 'text-text-secondary'}`}>
-          {days === null ? t.noCover : t.cover(days)}
-        </span>
-        <span className="tnum block truncate text-xs text-text-muted">
-          {money(row.spent, row.currency)} {t.of} {money(row.budget, row.currency)}
-        </span>
+        {budgeted ? (
+          <>
+            <span className={`block truncate text-xs font-semibold ${near ? 'text-warning' : 'text-text-secondary'}`}>
+              {days === null ? t.noCover : t.cover(days)}
+            </span>
+            <SpentOfApproved ar={ar} spent={pb?.spent ?? null} approved={pb?.approved ?? null} className="block truncate text-xs text-text-muted" />
+          </>
+        ) : (
+          <NoBudget ar={ar} canAdd={canAdd} clientName={row.client_name} projectName={firstUnbudgeted?.project_name} className="mt-0.5" />
+        )}
+        {platform && platform.budget !== null && (
+          <span className="tnum block truncate text-[11px] text-text-muted" data-testid={`overview-platform-budgets-${row.client_id}`} title={t.platforms}>
+            {t.platforms}: {money(platform.budget, platform.currency)}
+          </span>
+        )}
       </span>
       {line.length > 1 && <span className="hidden w-16 shrink-0 sm:block" aria-hidden><KpiSparkline points={line} height={30} color={STROKE[toneOf(ratio)]} /></span>}
-    </button>
+    </div>
   )
 }
 
 export function ClientCards({ ar, onOpenClient }: { ar: boolean; onOpenClient: (row: ClientBudgetRow) => void }) {
   const t = ar ? COPY.ar : COPY.en
+  const canAdd = useAuth((s) => s.hasPermission('funding.manage'))
   const budgets = useQuery({ queryKey: ['agency', 'client-budgets'], queryFn: fetchClientBudgets, retry: false })
   const alerts = useQuery({ queryKey: ['agency', 'alerts', 'open'], queryFn: () => listAlertEvents('open'), retry: false })
 
@@ -138,7 +161,7 @@ export function ClientCards({ ar, onOpenClient }: { ar: boolean; onOpenClient: (
       </StatGrid>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {ordered.map((row) => (
-          <ClientCard key={row.client_id} row={row} ar={ar} onOpen={onOpenClient} alerts={alertsByClient.get(row.client_id) ?? 0} />
+          <ClientCard key={row.client_id} row={row} ar={ar} onOpen={onOpenClient} alerts={alertsByClient.get(row.client_id) ?? 0} canAdd={canAdd} />
         ))}
       </div>
     </section>

@@ -27,7 +27,9 @@ test.describe('the campaigns landing deep link', () => {
     const to = Date.parse(req.searchParams.get('to') ?? '')
     // Fourteen days inclusive — not the 30-day default a page that ignored the link would ask for.
     expect(Math.round((to - from) / 86_400_000) + 1).toBe(days)
-    await expect.poll(async () => new URL(page.url()).searchParams.get('days'), { timeout: 20000 }).toBe(String(days))
+    // DATE-RANGE-001 — an old `?days=N` link opens the matching preset (ending yesterday) and the address now carries the two dates.
+    await expect.poll(async () => new URL(page.url()).searchParams.get('from'), { timeout: 20000 }).toBe(req.searchParams.get('from'))
+    expect(new URL(page.url()).searchParams.get('to')).toBe(req.searchParams.get('to'))
 
     // The same window reaches the strip Analytics' totals come from.
     const strip = page.waitForRequest((r) => /\/metrics\/summary\b/.test(r.url()) && r.url().includes(`from=${req.searchParams.get('from')}`), { timeout: 30000 })

@@ -48,10 +48,13 @@ final class AddFundingPayment
     ) {}
 
     /**
-     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount?: float|int|string|null, payment_mode?: string|null, platform_plan?: array<int, mixed>|null, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, reference?: string|null, note?: string|null, idempotency_key: string}  $input
+     * FIN-WALLET-001 — `$actor` is null for a SYSTEM entry (a confirmed payment of a top-up invoice): no person's reach
+     * applies, so the client and the project must be named by id, and the entry records its `source`.
+     *
+     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount?: float|int|string|null, payment_mode?: string|null, platform_plan?: array<int, mixed>|null, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, reference?: string|null, note?: string|null, idempotency_key: string, source?: array<string, string>|null}  $input
      * @return array{payment: FundingPayment, created: bool}
      */
-    public function __invoke(User $actor, array $input, bool $retried = false): array
+    public function __invoke(?User $actor, array $input, bool $retried = false): array
     {
         $tenantId = $this->tenant->tenantId();
         $currency = strtoupper((string) ($input['currency'] ?? 'SAR'));
@@ -63,6 +66,10 @@ final class AddFundingPayment
             throw ValidationException::withMessages([$mode === 'direct' ? 'amount' : 'payment_mode' => [__('funding.direct_needs_amount')]]);
         }
 
+        if ($actor === null && (empty($input['client_workspace_id']) || empty($input['project_id']))) {
+            throw ValidationException::withMessages(['project_id' => [__('validation.exists', ['attribute' => 'project'])]]);
+        }
+
         $rate = $this->fx->resolve($currency, 'SAR', $paidOn);
         if ($rate === null) {
             throw ValidationException::withMessages(['currency' => [__('funding.no_rate', ['currency' => $currency])]]);
@@ -72,14 +79,16 @@ final class AddFundingPayment
             return DB::transaction(function () use ($actor, $input, $tenantId, $currency, $paidOn, $amount, $rate, $mode): array {
                 $client = $this->client($actor, $input, $tenantId);
                 $project = $this->project($actor, $input, $client, $tenantId);
-                $ceilings = $this->access->projectCeilings($actor);
-                abort_unless($this->access->projectAllowed($ceilings, (string) $client->id, (string) $project->id)
-                    && ! $this->reach->moneyWithheld($actor, (string) $project->id), 404);
+                if ($actor !== null) {
+                    $ceilings = $this->access->projectCeilings($actor);
+                    abort_unless($this->access->projectAllowed($ceilings, (string) $client->id, (string) $project->id)
+                        && ! $this->reach->moneyWithheld($actor, (string) $project->id), 404);
+                }
 
                 DB::select('select pg_advisory_xact_lock(hashtext(?))', ['funding:'.$project->id]);
                 $funding = ProjectFunding::query()->firstOrCreate(
                     ['project_id' => $project->id],
-                    ['tenant_id' => $tenantId, 'client_workspace_id' => $client->id, 'payment_method' => 'prepaid', 'created_by' => $actor->id],
+                    ['tenant_id' => $tenantId, 'client_workspace_id' => $client->id, 'payment_method' => 'prepaid', 'created_by' => $actor?->id],
                 );
 
                 $existing = FundingPayment::query()->where('project_id', $project->id)
@@ -135,8 +144,10 @@ final class AddFundingPayment
                     'remaining_before' => $before,
                     'remaining_after' => null,
                     'idempotency_key' => $input['idempotency_key'],
-                    'created_by' => $actor->id,
-                    'meta' => $isFirst ? ['payment_mode' => $mode, 'platform_plan' => $planned] : null,
+                    'created_by' => $actor?->id,
+                    // FIN-WALLET-001 — where the money came from: a payment in the system (`source`), else a manual entry and its reference.
+                    'meta' => ($isFirst ? ['payment_mode' => $mode, 'platform_plan' => $planned] : [])
+                        + ['source' => $input['source'] ?? ['type' => 'manual', 'reference' => $input['reference'] ?? null]],
                 ]);
 
                 // The amount may move the first counted day (the first one, or one dated earlier), so spend is
@@ -157,13 +168,13 @@ final class AddFundingPayment
                         'amount_sar' => $amountSar, 'paid_on' => $paidOn->toDateString(), 'reference' => $payment->reference,
                         'remaining' => $after, 'payment_mode' => $funding->payment_mode, 'platform_plan' => $funding->platform_plan,
                     ],
-                    userId: $actor->id,
+                    userId: $actor?->id,
                     tenantId: $tenantId,
                 );
 
                 // Told only once the money is committed; a failed notice never undoes it.
                 $cycle = FundingPayment::query()->where('project_id', $project->id)->count();
-                DB::afterCommit(fn () => $this->notifier->added($payment, (int) $actor->id, $cycle));
+                DB::afterCommit(fn () => $this->notifier->added($payment, $actor?->id === null ? null : (int) $actor->id, $cycle));
 
                 return ['payment' => $payment, 'created' => true];
             });
@@ -180,17 +191,20 @@ final class AddFundingPayment
     }
 
     /** @param array<string, mixed> $input */
-    private function client(User $actor, array $input, string $tenantId): ClientWorkspace
+    private function client(?User $actor, array $input, string $tenantId): ClientWorkspace
     {
         if (! empty($input['client_workspace_id'])) {
             $client = ClientWorkspace::query()->find($input['client_workspace_id']);
-            if ($client === null || ! $this->access->canAccessClient($actor, $client)) {
+            if ($client === null || ($actor !== null && ! $this->access->canAccessClient($actor, $client))) {
                 throw ValidationException::withMessages(['client_workspace_id' => [__('funding.client_taken')]]);
             }
 
             return $client;
         }
 
+        if ($actor === null) {
+            throw ValidationException::withMessages(['client_workspace_id' => [__('funding.client_taken')]]);
+        }
         $name = trim((string) ($input['client_name'] ?? ''));
         DB::select('select pg_advisory_xact_lock(hashtext(?))', ['funding-client:'.$tenantId.':'.mb_strtolower($name)]);
 
@@ -228,7 +242,7 @@ final class AddFundingPayment
     }
 
     /** @param array<string, mixed> $input */
-    private function project(User $actor, array $input, ClientWorkspace $client, string $tenantId): Project
+    private function project(?User $actor, array $input, ClientWorkspace $client, string $tenantId): Project
     {
         if (! empty($input['project_id'])) {
             $project = Project::query()->where('client_workspace_id', $client->id)->find($input['project_id']);
@@ -239,6 +253,9 @@ final class AddFundingPayment
             return $project;
         }
 
+        if ($actor === null) {
+            throw ValidationException::withMessages(['project_id' => [__('validation.exists', ['attribute' => 'project'])]]);
+        }
         $name = trim((string) ($input['project_name'] ?? ''));
         DB::select('select pg_advisory_xact_lock(hashtext(?))', ['funding-project:'.$client->id.':'.mb_strtolower($name)]);
 

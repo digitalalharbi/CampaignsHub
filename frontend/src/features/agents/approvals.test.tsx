@@ -32,6 +32,26 @@ describe('the approvals queue', () => {
   })
   afterEach(() => signOut())
 
+  /** CONS-I-APPROVAL — «ميزانية يومية 36 €» was raw: the request leads with the display currency and keeps the platform figure beside it. */
+  it('shows a budget request in the display currency after conversion, the platform figure beside it', async () => {
+    const eur = proposal({ payload: { daily_budget: 36 }, currency: 'EUR', display: { currency: 'USD', daily_budget: 39.6, current_daily_budget: 33, converted: true, source_currency: 'EUR', reason: null } })
+    vi.mocked(listProposals).mockResolvedValue({ proposals: [eur], limits: LIMITS })
+
+    renderWithProviders(<ApprovalsPage />, { locale: 'ar' })
+
+    const row = await screen.findByTestId('proposal-p1')
+    expect(row).toHaveTextContent('ميزانية يومية 39.6 $ (36 €)')
+  })
+
+  it('shows the platform figure alone, and says so, when no rate exists to convert it', async () => {
+    const eur = proposal({ payload: { daily_budget: 36 }, currency: 'EUR', display: { currency: 'USD', daily_budget: null, current_daily_budget: null, converted: false, source_currency: 'EUR', reason: 'no_rate' } })
+    vi.mocked(listProposals).mockResolvedValue({ proposals: [eur], limits: LIMITS })
+
+    renderWithProviders(<ApprovalsPage />, { locale: 'ar' })
+
+    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('ميزانية يومية 36 € — بدون تحويل: ما فيه سعر صرف')
+  })
+
   it('shows the request, its reason and the standing limits, and asks the server to approve', async () => {
     vi.mocked(listProposals).mockResolvedValue({ proposals: [proposal()], limits: LIMITS })
     vi.mocked(decideProposal).mockResolvedValue(proposal({ status: 'blocked', violations: ['execution_not_enabled_for_provider'] }))

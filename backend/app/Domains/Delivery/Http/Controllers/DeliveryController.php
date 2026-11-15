@@ -75,6 +75,9 @@ final class DeliveryController extends Controller
     {
         abort_unless($request->user()?->hasPermission('reports.view'), 403);
 
+        // CONS-DELIVERY-SCHEDULED — the schedules a confined reader sees are those of the projects they reach.
+        $reach = app(ProjectReach::class)->confinedIdsFor($request->user());
+
         $rows = ClientWorkspace::query()->where('status', 'active')->whereNull('archived_at')->orderBy('name')->get()
             ->filter(function (ClientWorkspace $c) use ($request): bool {
                 try {
@@ -85,7 +88,7 @@ final class DeliveryController extends Controller
                     return false;
                 }
             })
-            ->map(function (ClientWorkspace $c) use ($request, $overview): array {
+            ->map(function (ClientWorkspace $c) use ($request, $overview, $reach): array {
                 try {
                     $this->access->assert($request->user(), 'billing.view', $c);
                     $billing = true;
@@ -93,7 +96,7 @@ final class DeliveryController extends Controller
                     $billing = false;
                 }
 
-                return $overview->row($c, null, $billing);
+                return $overview->row($c, null, $billing, $reach);
             })
             ->values()->all();
 

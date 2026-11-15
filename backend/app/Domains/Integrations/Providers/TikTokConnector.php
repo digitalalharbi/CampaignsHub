@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\Support\TikTokCampaignStatus;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\Log;
@@ -407,6 +408,8 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
                     ? (float) $c['budget']
                     : null,
                 'currency' => null,
+                // CONS-I-AGE — TikTok states the creation time in UTC; kept as the campaign's real age.
+                'platform_created_at' => PlatformCreatedAt::from($c['create_time'] ?? null),
                 'raw' => (array) $c,
             ];
         }

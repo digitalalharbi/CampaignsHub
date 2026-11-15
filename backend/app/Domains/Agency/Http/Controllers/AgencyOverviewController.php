@@ -7,6 +7,7 @@ namespace App\Domains\Agency\Http\Controllers;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Services\ProjectListSummary;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
@@ -38,7 +39,7 @@ use Illuminate\Support\Carbon;
  */
 final class AgencyOverviewController extends Controller
 {
-    private const MAX_DAYS = 365;
+    private const MAX_DAYS = 1100; // DATE-RANGE-001: «طوال المدة» may span years; 365 clamped it silently
 
     public function __construct(
         private readonly ClientAccess $access,
@@ -56,6 +57,19 @@ final class AgencyOverviewController extends Controller
         $len = $from->diffInDays($to) + 1;
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($len - 1);
+
+        // DATE-RANGE-001 — a comparison the reader chose (last year, or two dates) replaces the default «same length before».
+        $cf = $request->query('compare_from');
+        $ct = $request->query('compare_to');
+
+        if (is_string($cf) && is_string($ct) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cf) === 1 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ct) === 1) {
+            $prevFrom = Carbon::parse($cf)->startOfDay();
+            $prevTo = Carbon::parse($ct)->startOfDay();
+
+            if ($prevFrom->gt($prevTo)) {
+                [$prevFrom, $prevTo] = [$prevTo, $prevFrom];
+            }
+        }
 
         $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
         $this->access->restrictQuery($clientQuery, $user);
@@ -82,7 +96,7 @@ final class AgencyOverviewController extends Controller
             return ApiResponse::success([
                 'scope' => $scope, 'period' => $period, 'previous_period' => $previous,
                 'currency' => null, 'current' => null, 'previous' => null,
-                'by_provider' => [], 'timeseries' => [], 'freshness' => ['last_synced_at' => null],
+                'by_provider' => [], 'by_objective' => [], 'timeseries' => [], 'freshness' => ['last_synced_at' => null],
             ], 'Agency overview.');
         }
 
@@ -104,6 +118,8 @@ final class AgencyOverviewController extends Controller
             'current' => $agg->totals($from, $to),
             'previous' => $agg->totals($prevFrom, $prevTo),
             'by_provider' => $agg->byProvider($from, $to),
+            // DASH-KPI-OBJECTIVE-001 — results and cost per result PER objective family; never one blend across them.
+            'by_objective' => (new ObjectivePerformance(projectIds: $projectIds))->byFamily($from, $to),
             'timeseries' => $agg->timeseries($from, $to),
             'freshness' => ['last_synced_at' => is_string($synced) ? $synced : null],
         ], 'Agency overview.');

@@ -111,6 +111,8 @@ export interface BudgetPayment {
   added_at: string
   plan_before?: { provider: string; percent: number }[] | null
   plan_after?: { provider: string; percent: number }[] | null
+  /** FIN-WALLET-001 — where a deposit came from: a payment in the system (an invoice), or a manual entry with its reference. */
+  source?: { type: 'invoice_payment'; invoice_number?: string; via?: 'manual' | 'gateway' } | { type: 'manual'; reference: string | null } | { type: 'spend_limit' } | null
 }
 
 export interface BudgetPoint { date: string; approved: number; spent: number; remaining: number | null; added: number }
@@ -169,6 +171,60 @@ export function useBudget(projectId: string | null) {
     queryKey: ['funding', projectId],
     enabled: projectId !== null,
     queryFn: () => getData<BudgetDetail>(`/funding/projects/${projectId}`),
+  })
+}
+
+/**
+ * ONE-BUDGET-001 — the approved project budget as every other surface reads it (`ProjectBudgetReader` on the server):
+ * SAR, over the budget's OWN period, never a dashboard window. `has_budget: false` means «بدون ميزانية».
+ */
+export type ApprovedBudget =
+  | { has_budget: false; withheld?: boolean }
+  | {
+      has_budget: true
+      project_id: string
+      currency: 'SAR'
+      payment_mode: PaymentMode
+      payment_method: 'prepaid' | 'direct' | 'unset'
+      status: BudgetStatus
+      approved: number
+      deposits: number
+      settlements: number
+      spent: number
+      remaining: number | null
+      used_ratio: number | null
+      pace_per_day: number | null
+      cover_days: number | null
+      run_out_date: string | null
+      projected: number | null
+      period_start: string | null
+      period_end: string | null
+      thresholds: number[]
+      crossed_threshold: number | null
+      complete: boolean
+      last_spend_day: string | null
+    }
+
+/** Several projects' approved budgets added (SAR). `approved`/`remaining` are null when none has a balance. */
+export interface ApprovedBudgetTotal {
+  currency: 'SAR'
+  budgeted: number
+  unbudgeted: number
+  without_balance: number
+  approved: number | null
+  spent: number | null
+  remaining: number | null
+  used_ratio: number | null
+  pace_per_day: number | null
+  cover_days: number | null
+}
+
+export function useApprovedBudget(projectId: string | null) {
+  return useQuery({
+    queryKey: ['funding', 'approved', projectId],
+    enabled: projectId !== null,
+    retry: false,
+    queryFn: () => getData<ApprovedBudget>(`/projects/${projectId}/approved-budget`),
   })
 }
 
