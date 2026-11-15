@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Fx\FxConversion;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
@@ -88,6 +90,22 @@ final class ClientPortfolioStats
             ->pluck('v', 'project_id');
 
         /*
+         * FX-APPLY-001 — `sum(value)` skips a row with no rate for its date (value NULL), so a EUR account with an unconverted day
+         * read as a SMALLER spend, not as a withheld one. The same window says, per project, how many rows were withheld and which
+         * currencies the converted figure came from, so a total with a withheld part is «—» and a mixed one says «يشمل عملات محوّلة».
+         */
+        $fxByProject = $projectIds === [] ? collect() : DB::table('daily_metrics')
+            ->where('tenant_id', $tenantId)->whereIn('project_id', $projectIds)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->where('metric_key', 'spend')->where('metric_date', '>=', $from)->whereNotNull('original_amount')
+            ->groupBy('project_id')
+            ->select('project_id')
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NULL) AS withheld')
+            ->selectRaw("STRING_AGG(DISTINCT UPPER(COALESCE(original_currency, '?')), ',') FILTER (WHERE value IS NULL) AS withheld_currencies")
+            ->selectRaw('STRING_AGG(DISTINCT UPPER(original_currency), \',\') FILTER (WHERE value IS NOT NULL) AS currencies')
+            ->get()->keyBy('project_id');
+
+        /*
          * «آخر مزامنة» comes from the one freshness service (UNIFIED-001), in ONE bulk call for the
          * whole page — not `max(data_freshness_at)` read here. The old query saw ad platforms only, so
          * this column and the client's own analytics header could name different moments for the same
@@ -132,9 +150,20 @@ final class ClientPortfolioStats
         // Fold spend + freshness from project → client.
         $spendByClient = [];
         $syncByClient = [];
+        $fxByClient = [];
         foreach ($projectMap as $pid => $cid) {
             if (isset($spendByProject[$pid])) {
                 $spendByClient[$cid] = ($spendByClient[$cid] ?? 0) + (float) $spendByProject[$pid];
+            }
+            $fxRow = $fxByProject->get($pid);
+            if ($fxRow !== null) {
+                $fxByClient[$cid]['withheld'] = ($fxByClient[$cid]['withheld'] ?? 0) + (int) $fxRow->withheld;
+                foreach (array_filter(explode(',', (string) $fxRow->withheld_currencies)) as $c) {
+                    $fxByClient[$cid]['withheld_currencies'][$c] = true;
+                }
+                foreach (array_filter(explode(',', (string) $fxRow->currencies)) as $c) {
+                    $fxByClient[$cid]['currencies'][$c] = true;
+                }
             }
             if (isset($freshByProject[$pid]) && $freshByProject[$pid]) {
                 $syncByClient[$cid] = max($syncByClient[$cid] ?? '', (string) $freshByProject[$pid]);
@@ -150,6 +179,7 @@ final class ClientPortfolioStats
                 'open_requests' => (int) ($openRequests[$cid] ?? 0),
                 'alerts' => (int) ($alerts[$cid] ?? 0),
                 'spend' => isset($spendByClient[$cid]) ? round($spendByClient[$cid], 2) : null,
+                'spend_fx' => $this->spendFx($tenantId, $spendByClient[$cid] ?? null, $currencies, $fxByClient[$cid] ?? []),
                 'spend_currency_mode' => count($currencies) > 1 ? 'mixed' : (count($currencies) === 1 ? 'single' : 'none'),
                 'currency' => count($currencies) === 1 ? $currencies[0] : null,
                 'data_sources' => array_keys($providersByClient[$cid] ?? []),
@@ -161,5 +191,44 @@ final class ClientPortfolioStats
         }
 
         return $out;
+    }
+
+    /**
+     * FX-APPLY-001 — the client's 30-day spend as the reader's display currency, through FxEngine.
+     *
+     * `spend` (above, untouched) is the reporting-basis sum. A withheld part withholds the figure (`converted_amount: null`) —
+     * never the smaller sum of what did convert, never zero.
+     *
+     * @param  list<string>  $basis  the reporting currencies the stored rows were normalised into
+     * @param  array{withheld?: int, withheld_currencies?: array<string, true>, currencies?: array<string, true>}  $fx
+     * @return array<string, mixed>|null
+     */
+    private function spendFx(string $tenantId, ?float $spend, array $basis, array $fx): ?array
+    {
+        if ($spend === null && ($fx['withheld'] ?? 0) === 0) {
+            return null;
+        }
+        $display = FxDisplay::forRequest();
+        $to = $display->currencyFor($tenantId);
+        $withheld = array_keys($fx['withheld_currencies'] ?? []);
+        // One reporting basis → one part converted to the display currency; two bases (legacy SAR beside USD rows) cannot be
+        // added without knowing which row is which, so the part has no unit and the total is withheld.
+        $parts = $spend === null || $basis === [] ? [] : [['amount' => $spend, 'currency' => count($basis) === 1 ? $basis[0] : null]];
+        $total = $display->total($parts, $to);
+        $originals = array_keys($fx['currencies'] ?? []);
+        sort($originals);
+        if (($fx['withheld'] ?? 0) > 0) {
+            $named = array_values(array_filter($withheld, static fn (string $c): bool => $c !== '?'));
+            $total = array_merge($total, [
+                'converted_amount' => null, 'withheld' => true, 'withheld_parts' => (int) $fx['withheld'], 'withheld_currencies' => $named,
+                'pending_label' => $named === [] ? 'بانتظار سعر صرف' : 'بانتظار سعر صرف ('.implode('، ', $named).')',
+                'rates_page' => FxConversion::RATES_PAGE,
+            ]);
+        }
+
+        return array_merge($total, [
+            'currencies' => $originals,
+            'includes_converted' => array_diff($originals, [$to]) !== [],
+        ]);
     }
 }
