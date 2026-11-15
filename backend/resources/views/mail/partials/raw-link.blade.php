@@ -12,7 +12,7 @@
     <tr>
         <td dir="{{ $dir }}" align="{{ $startSide }}" style="padding-top:14px; text-align:{{ $startSide }}; font-family:{!! $font !!}; font-size:12px; line-height:1.7; color:#5b6b68;">
             {{ $t['or_paste'] }}<br />
-            <span class="ch-url" dir="ltr" style="direction:ltr; unicode-bidi:embed; display:inline-block; max-width:100%; word-break:break-all; overflow-wrap:anywhere; color:#0b7a62; text-align:left;"><a href="{{ $url }}" style="color:#0b7a62; text-decoration:underline; word-break:break-all;">{{ $url }}</a></span>
+            <span class="ch-url" dir="ltr" style="direction:ltr; unicode-bidi:embed; word-break:break-all; overflow-wrap:anywhere; color:#0b7a62; text-align:left;"><a href="{{ $url }}" style="color:#0b7a62; text-decoration:underline; word-break:break-all;">{{ $url }}</a></span>
         </td>
     </tr>
 </table>
