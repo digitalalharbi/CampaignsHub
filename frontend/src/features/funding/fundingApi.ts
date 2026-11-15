@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
+import type { FxSpendNote } from '@/lib/money/fx'
 
 /**
  * FIN-LOOP-001 — a project's approved budget, read from the endpoints that compute it.
@@ -74,6 +75,8 @@ export interface BudgetRow {
   spend_without_rate: number
   complete: boolean
   last_spend_day: string | null
+  /** PROJECT-LIFECYCLE-001 §7 — the parts the spend excludes (no rate, named) and the old rates it used (`SpendLedger`). */
+  fx?: FxSpendNote | null
   /** `spent` in SAR (it adds up to the totals); `spent_usd` is the platform's own figure in USD, null with no rate; `unconverted` keeps days with no rate in their own currency. */
   by_platform: { provider: string; spent: number; spent_usd?: number | null; unconverted_days?: number; unconverted?: { currency: string; amount: number }[] }[]
   this_month: number | null
@@ -203,6 +206,7 @@ export type ApprovedBudget =
       crossed_threshold: number | null
       complete: boolean
       last_spend_day: string | null
+      fx?: FxSpendNote
     }
 
 /** Several projects' approved budgets added (SAR). `approved`/`remaining` are null when none has a balance. */
@@ -217,6 +221,7 @@ export interface ApprovedBudgetTotal {
   used_ratio: number | null
   pace_per_day: number | null
   cover_days: number | null
+  fx?: FxSpendNote
 }
 
 export function useApprovedBudget(projectId: string | null) {

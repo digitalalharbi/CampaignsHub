@@ -1,4 +1,4 @@
-import type { FxCoverage } from '@/lib/money/fx'
+import type { FxCoverage, SpendReading } from '@/lib/money/fx'
 import type { ObjectivePathsBlock } from './ObjectivePathCards'
 import type { BudgetExplanationPayload } from './BudgetReading'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -125,6 +125,8 @@ export interface Summary {
   previous: MetricTotals
   /** FX-APPLY-001 — what these totals were converted from («يشمل عملات محوّلة»), stale rates and withheld rows. */
   fx?: FxCoverage
+  /** PROJECT-LIFECYCLE-001 §7 — the project's spend from the ONE shared aggregation (null under a platform/campaign filter). */
+  spend_reading?: SpendReading | null
   delta: Partial<Record<keyof MetricTotals, number | null>>
   /**
    * UX-METRICS-001 — which of `current`'s zeros are measurements.

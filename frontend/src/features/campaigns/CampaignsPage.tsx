@@ -9,7 +9,7 @@ import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { portalBaseOf } from '@/app/portalPath'
 import { useQuery } from '@tanstack/react-query'
-import { FxAmount, FxCoverageNote } from '@/components/money/FxAmount'
+import { FxAmount, FxCoverageNote, FxSpendNote } from '@/components/money/FxAmount'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
@@ -895,6 +895,7 @@ export function CampaignsPage() {
         }
       />
       <FxCoverageNote fx={summary.data?.fx} ar={ar} />
+      <FxSpendNote note={summary.data?.spend_reading} ar={ar} testId="campaigns-fx-spend-note" />
       <FinancialDisclaimer />
 
       {/*

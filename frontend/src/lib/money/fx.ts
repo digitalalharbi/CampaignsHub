@@ -43,6 +43,10 @@ export type FxConversion = {
   legs: Array<Record<string, unknown>>
   /** the serializer's stamp — a payload without it did not pass through convert() */
   via: 'fx.convert' | 'fx.guard'
+  /** PROJECT-LIFECYCLE-001 §7 — the rate used is past its validity (still used, flagged) */
+  expired?: boolean
+  /** «سعر قديم — بتاريخ 2026-11-09» when `stale` */
+  stale_label?: string | null
 }
 
 export const RATES_PAGE = '/admin/settings/currency-rates'
@@ -136,6 +140,57 @@ export type FxTotal = {
   pending_label: string | null
   rates_page: string | null
   via: 'fx.convert' | 'fx.guard'
+  /** PROJECT-LIFECYCLE-001 §7 — a total shown WITHOUT its excluded parts (named in `excluded` / `statement`), never withheld whole. */
+  partial?: boolean
+  excluded?: FxExcludedPart[]
+  statement?: string | null
+  statement_en?: string | null
+  stale_parts?: FxStalePart[]
+  stale_label?: string | null
+}
+
+/**
+ * PROJECT-LIFECYCLE-001 §7 — a part of a spend total that had NO exchange rate: excluded from the total and named (currency,
+ * account, original amount, days). Every page reads it from the one backend aggregation (`SpendLedger`).
+ */
+export type FxExcludedPart = {
+  project_id: string
+  account_id: string
+  account_name: string
+  provider: string
+  currency: string | null
+  original_amount: number
+  days: number
+  first_day: string
+  last_day: string
+}
+
+/** A part converted at an old (or expired) rate: used, labelled «سعر قديم — بتاريخ …». */
+export type FxStalePart = { project_id?: string; currency: string; rate_date: string | null; expired: boolean; label: string | null; label_en?: string | null; days: number }
+
+/** What a spend total excluded and which old rates it used — `SpendLedger` readings and the budgets' `fx` note share it. */
+export type FxSpendNote = {
+  complete: boolean
+  excluded: FxExcludedPart[]
+  excluded_label: string | null
+  statement: string | null
+  statement_en?: string | null
+  stale: FxStalePart[]
+  stale_label: string | null
+  rates_page: string | null
+}
+
+/** One spend total from the shared aggregation (`SpendLedger::read`). */
+export type SpendReading = FxSpendNote & {
+  currency: string
+  from: string | null
+  to: string | null
+  /** null only when NOTHING could be converted */
+  amount: number | null
+  partial: boolean
+  currencies: string[]
+  includes_converted: boolean
+  by_project: Record<string, number>
 }
 
 /** The words for a total that adds converted currencies. */
@@ -143,7 +198,8 @@ export const INCLUDES_CONVERTED = { ar: 'يشمل عملات محوّلة', en: 
 
 /** The ONE renderer of a converted total. */
 export function formatFxTotal(t: FxTotal, ar: boolean, digits = 2): ConversionText & { includesConverted: boolean } {
-  if (t.withheld || t.converted_amount === null) {
+  // PROJECT-LIFECYCLE-001 §7 — a partial total (some parts had no rate) is SHOWN; its exclusions are stated beside it.
+  if (t.converted_amount === null || (t.withheld && !t.partial)) {
     return { text: t.pending_label ?? pendingRateLabel(t.withheld_currencies?.[0] ?? null, ar), withheld: true, stale: false, link: t.rates_page ?? RATES_PAGE, basis: null, includesConverted: t.includes_converted }
   }
   return {
