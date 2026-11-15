@@ -40,7 +40,9 @@ export function FxAmount({ c, ar, showOriginal = false, digits = 2, empty = '—
   const tip = conversionTooltip(c, ar, digits)
 
   return (
-    <span className="inline-flex items-center gap-1" data-testid={testId} data-fx-converted={converted ? 'true' : 'false'} title={tip ?? f.basis ?? undefined}>
+    // `flex-wrap max-w-full`: with the original beside it («4,000.00 $ ⇆ محوّل (15,000.00 ر.س)») the amount is wider than a
+    // half-width cell on a phone; it wraps instead of pushing the page sideways (campaign header at 375, launch-success).
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1" data-testid={testId} data-fx-converted={converted ? 'true' : 'false'} title={tip ?? f.basis ?? undefined}>
       <bdi dir="ltr" className="tnum">{f.text}</bdi>
       {converted && (
         <span className="inline-flex items-center gap-0.5 text-[10px] text-text-muted" aria-label={ar ? 'محوّل' : 'Converted'} data-testid="fx-converted-icon">
