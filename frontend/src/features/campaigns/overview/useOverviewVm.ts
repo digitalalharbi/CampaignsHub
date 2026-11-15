@@ -129,7 +129,8 @@ export function useOverviewVm(input: {
 
   return useMemo(
     () => ({
-      currency: withheldCurrency ?? currency ?? 'SAR',
+      // FX-APPLY-001 — the figures' own currency or none; never a guessed «SAR».
+      currency: withheldCurrency ?? currency ?? undefined,
       /*
        * `DataStatus` has three cases — demo, live, stale — and «mixed» is not one of them. A project
        * holding demo rows BESIDE real ones still carries the warning, because the totals add them

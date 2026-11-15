@@ -8,8 +8,8 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Metrics\Models\DailyMetric;
-use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -31,7 +31,7 @@ final class Ga4AttributionMatch
 
     public function __construct(
         private readonly Ga4AttributionMatcher $matcher,
-        private readonly CurrencyConverter $converter,
+        private readonly FxEngine $converter,
         private readonly ReportingTimezone $timezones,
     ) {}
 
@@ -244,7 +244,7 @@ final class Ga4AttributionMatch
         }
         $k = $currency.'|'.$date;
         if (! array_key_exists($k, $this->rates)) {
-            $this->rates[$k] = $this->converter->resolve($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
+            $this->rates[$k] = $this->converter->rate($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
         }
 
         return $this->rates[$k] === null ? null : $amount * $this->rates[$k];

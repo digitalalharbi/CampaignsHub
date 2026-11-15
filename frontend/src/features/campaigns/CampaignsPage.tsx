@@ -9,6 +9,7 @@ import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { portalBaseOf } from '@/app/portalPath'
 import { useQuery } from '@tanstack/react-query'
+import { FxAmount, FxCoverageNote } from '@/components/money/FxAmount'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
@@ -893,6 +894,7 @@ export function CampaignsPage() {
           </>
         }
       />
+      <FxCoverageNote fx={summary.data?.fx} ar={ar} />
       <FinancialDisclaimer />
 
       {/*
@@ -1523,7 +1525,8 @@ export function CampaignsPage() {
                         case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
                         case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
                         case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
-                        case 'budget': return <span className="tnum">{money(c.total_budget, c.budget_currency)}</span>
+                        // FX-APPLY-001 — the budget in the display currency through FxEngine, «محوّل» + the rate in its tooltip.
+                        case 'budget': return c.total_budget === null ? <span className="text-text-muted">—</span> : <FxAmount c={c.budget_fx} ar={ar} testId="campaign-budget-cell" />
                         case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
                         case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
                         default: {
@@ -1829,7 +1832,7 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend
         )}
       </div>
       <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
+        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{c.total_budget === null ? '—' : <FxAmount c={c.budget_fx} ar={locale === 'ar'} />}</b></span>
         {/*
           CAMPAIGN-INTELLIGENCE-HUB — the result this campaign was BOUGHT for, beside what it cost.
           A budget and a count of linked platform campaigns say nothing about whether the money is

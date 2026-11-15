@@ -25,7 +25,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { ErrorSummary, MultiSelectField, SelectField, type FieldError, type Option } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
-import { currencyMark } from '@/lib/money/mark'
+import { withMark } from '@/lib/money/mark'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
@@ -665,10 +665,11 @@ function ContextChips({ e, c }: { e: AlertEvent; c: Copy }) {
     beside the figure. On a screen whose whole subject is how much of a budget is gone, a number
     with no unit is the shape the budget-pacing surfaces refuse everywhere else.
   */
-  const unit = typeof ctx.budget_currency === 'string' ? ` ${currencyMark(ctx.budget_currency)}` : ''
+  // FX-APPLY-001 — the figure takes its own currency's mark through the one mark module.
+  const unitCurrency = typeof ctx.budget_currency === 'string' ? ctx.budget_currency : null
   /* Named for what it does, not `money` — that name belongs to the shared formatter the
      MONEY-CURRENCY guard scans for, and a local one wearing it defeats the scan. */
-  const withUnit = (v: unknown) => `${num(v)}${unit}`
+  const withUnit = (v: unknown) => withMark(String(num(v)), unitCurrency)
 
   if ('spend' in ctx) chips.push(`${c.value}: ${withUnit(ctx.spend)}`)
   if ('ratio' in ctx) chips.push(`${c.value}: ${Math.round(Number(ctx.ratio) * 100)}%`)

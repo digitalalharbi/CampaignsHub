@@ -6,7 +6,7 @@ namespace App\Domains\Integrations\Measurement;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -51,7 +51,7 @@ final class Ga4StoreAnalytics
     private array $rates = [];
 
     public function __construct(
-        private readonly CurrencyConverter $converter,
+        private readonly FxEngine $converter,
         private readonly Ga4PlatformGap $gap,
     ) {}
 
@@ -191,7 +191,7 @@ final class Ga4StoreAnalytics
             return null;
         }
         if (! array_key_exists($date, $this->rates)) {
-            $this->rates[$date] = $this->converter->resolve($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
+            $this->rates[$date] = $this->converter->rate($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
         }
 
         return $this->rates[$date];
@@ -269,7 +269,7 @@ final class Ga4StoreAnalytics
         if ($this->windowUsd($daily, $currency, $period['from'], $period['to']) === null && array_filter($daily) !== []) {
             return ['available' => false, 'reason' => 'no_rate', 'from' => $currency];
         }
-        $resolved = $this->converter->resolve($currency, 'USD', Carbon::parse($period['to']));
+        $resolved = $this->converter->rate($currency, 'USD', Carbon::parse($period['to']));
 
         return ['available' => $resolved !== null, 'from' => $currency, 'rate' => $resolved['rate'] ?? null, 'rate_date' => $resolved['rate_date'] ?? null, 'source' => $resolved['source'] ?? null]
             + ($resolved === null ? ['reason' => 'no_rate'] : []);
@@ -534,7 +534,7 @@ final class Ga4StoreAnalytics
         foreach ($reported as $platform => $r) {
             $usd = null;
             if ($r['revenue'] !== null && $r['currency'] !== null && $r['currency'] !== '') {
-                $rate = $this->converter->resolve((string) $r['currency'], 'USD', $to)['rate'] ?? null;
+                $rate = $this->converter->rate((string) $r['currency'], 'USD', $to)['rate'] ?? null;
                 $usd = $rate === null ? null : $r['revenue'] * $rate;
             }
             $out[$platform] = ['conversions' => $r['conversions'], 'revenue' => $r['revenue'], 'currency' => $r['currency'], 'revenue_usd' => $usd];

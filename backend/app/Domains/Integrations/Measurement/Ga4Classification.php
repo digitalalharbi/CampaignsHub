@@ -6,7 +6,7 @@ namespace App\Domains\Integrations\Measurement;
 
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Metrics\Fx\FxEngine;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -51,7 +51,7 @@ final class Ga4Classification
     /** @var array<string, ?float> */
     private array $rates = [];
 
-    public function __construct(private readonly Ga4PlatformGap $gap, private readonly CurrencyConverter $converter) {}
+    public function __construct(private readonly Ga4PlatformGap $gap, private readonly FxEngine $converter) {}
 
     /**
      * @param  array{group: string, page?: int, per_page?: int, platform?: ?string, channel?: ?string, campaign?: ?string, sort?: string, dir?: string}  $o
@@ -181,7 +181,7 @@ final class Ga4Classification
         }
         $k = $currency.'|'.$date;
         if (! array_key_exists($k, $this->rates)) {
-            $this->rates[$k] = $this->converter->resolve($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
+            $this->rates[$k] = $this->converter->rate($currency, 'USD', Carbon::parse($date))['rate'] ?? null;
         }
 
         return $this->rates[$k] === null ? null : $amount * $this->rates[$k];

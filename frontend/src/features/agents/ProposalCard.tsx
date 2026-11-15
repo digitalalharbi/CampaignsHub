@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, Loader2, Pencil, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
+import { FxAmount } from '@/components/money/FxAmount'
 import { formatMoney } from '@/features/funding/money'
 import { toApiError } from '@/lib/api/client'
 import { amendProposal, decideProposal, type Proposal } from './api'
@@ -61,10 +62,11 @@ export function ProposalCard({ projectId, proposal, ar, canDecide, selectable, s
             </p>
             {isBudget && (
               <p className="mt-1 flex items-center gap-1.5 text-sm" data-testid="proposal-preview">
-                <bdi dir="ltr" className="tnum text-text-muted">{moneyText(before)}</bdi>
+                {/* FX-APPLY-001 — through FxEngine: converted figure + «محوّل», the platform's own in brackets, withheld → «—» ⚠ link. */}
+                {d?.current_conversion ? <span className="text-text-muted"><FxAmount c={d.current_conversion} ar={ar} /></span> : <bdi dir="ltr" className="tnum text-text-muted">{moneyText(before)}</bdi>}
                 <Arrow size={13} aria-hidden className="text-text-muted" />
-                <bdi dir="ltr" className="tnum font-bold text-text-primary">{moneyText(after)}</bdi>
-                {ownText && <bdi dir="ltr" className="tnum text-xs text-text-muted" data-testid="proposal-original">({ownText})</bdi>}
+                {d?.conversion ? <span className="font-bold text-text-primary"><FxAmount c={d.conversion} ar={ar} showOriginal testId="proposal-after" /></span> : <bdi dir="ltr" className="tnum font-bold text-text-primary">{moneyText(after)}</bdi>}
+                {!d?.conversion && ownText && <bdi dir="ltr" className="tnum text-xs text-text-muted" data-testid="proposal-original">({ownText})</bdi>}
               </p>
             )}
             {proposal.reason && <p className="mt-1 text-xs text-text-secondary" dir="auto">{proposal.reason}</p>}

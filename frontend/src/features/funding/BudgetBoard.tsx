@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/Badge'
 import { useUi } from '@/stores/ui'
 import type { BudgetRow } from './fundingApi'
 import { L, MODE, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
-import { Money, currencyMark, moneyNumber } from './money'
+import { Money, moneyNumber } from './money'
+import { withMark } from '@/lib/money/mark'
 
 type Lang = { ar: string; en: string }
 
@@ -38,8 +39,8 @@ export function PeriodChip({ start, end, stated, ar }: { start: string | null; e
  */
 export function platformTip(i: BudgetRow['by_platform'][number], ar: boolean): string {
   const name = providerLabel(i.provider, ar ? 'ar' : 'en')
-  const usd = i.spent_usd === null || i.spent_usd === undefined ? null : `${moneyNumber(i.spent_usd)} ${currencyMark('USD')}`
-  const raw = (i.unconverted ?? []).map((u) => `${moneyNumber(u.amount)} ${currencyMark(u.currency)}`)
+  const usd = i.spent_usd === null || i.spent_usd === undefined ? null : withMark(moneyNumber(i.spent_usd), 'USD')
+  const raw = (i.unconverted ?? []).map((u) => withMark(moneyNumber(u.amount), u.currency))
   const parts = [usd, ...raw].filter(Boolean)
 
   return `${name} · ${parts.join(' + ') || '—'}${i.unconverted_days ? ` · ${ar ? L.noRate.ar : L.noRate.en}` : ''}`

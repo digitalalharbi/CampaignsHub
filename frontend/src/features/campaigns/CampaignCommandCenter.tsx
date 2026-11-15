@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { FxAmount } from '@/components/money/FxAmount'
+import { useMemo, useState, type ReactNode } from 'react'
 import { changeFieldLabel, changeValueLabel, changedFields } from './campaignChangeHistory'
 import { useUi } from '@/stores/ui'
 import { TrendingDown, TrendingUp } from 'lucide-react'
@@ -78,10 +79,10 @@ function spendInBudgetCurrency(
  */
 function budgetComparableSpend(
   totals: MoneyTotals | undefined,
-  budgetCurrency: string,
+  budgetCurrency: string | null,
   reportingCurrency: string | null,
 ): number | null {
-  if (totals === undefined || !allowsDerived(readCoverage(totals, 'spend'))) return null
+  if (totals === undefined || budgetCurrency === null || !allowsDerived(readCoverage(totals, 'spend'))) return null
 
   return spendInBudgetCurrency(totals, budgetCurrency, reportingCurrency)
 }
@@ -118,7 +119,7 @@ function budgetRisk(
 }
 
 /** A remaining figure, with an overrun shown as what it is rather than as a minus sign the eye skips. */
-function remainingText(remaining: number | null, cur: string): string {
+function remainingText(remaining: number | null, cur: string | null): string {
   if (remaining === null) return '—'
 
   return remaining < 0 ? `−${money(-remaining, cur)}` : money(remaining, cur)
@@ -143,7 +144,7 @@ function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'do
 function KpiCard({
   label, value, sub, delta, deltaKey, spark,
 }: {
-  label: string; value: string; sub?: string; delta?: number | null; deltaKey?: Sparkable; spark?: number[]
+  label: string; value: ReactNode; sub?: string; delta?: number | null; deltaKey?: Sparkable; spark?: number[]
 }) {
   const tone = deltaKey ? deltaTone(deltaKey, delta) : trend(delta)
   const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
@@ -177,7 +178,8 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
 
   const k = summary.data?.current
   const budget = campaign.total_budget ?? null
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the budget's own currency, never a guessed «SAR».
+  const cur = campaign.budget_currency || null
   const locale = useUi((u) => u.locale)
   const ar = locale === 'ar'
 
@@ -243,8 +245,14 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
    * advertiser in the campaign's own currency and is never withheld. Routing it through a
    * provider-money contract would invent a provenance question it does not have.
    */
-  const spendRead = moneyFromTotals(k, 'spend', true, cur)
-  const revenueRead = moneyFromTotals(k, 'revenue', true, cur)
+  /*
+   * FX-APPLY-001 — THE «253 € here, 253 $ in the table» defect. These totals are in the summary's REPORTING currency
+   * (`summary.currency`, USD), and this line labelled them with the campaign's BUDGET currency: a EUR campaign's spend read
+   * «253 €» while the table read the same figure as «253 $». Totals are labelled with their own currency; the budget keeps its.
+   */
+  const rc = summary.data?.currency ?? null
+  const spendRead = moneyFromTotals(k, 'spend', true, rc)
+  const revenueRead = moneyFromTotals(k, 'revenue', true, rc)
   const roasRead = readRoas(k, true)
 
   if (summary.isLoading) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
@@ -260,7 +268,8 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
       </p>
     )}
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-      <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
+      {/* FX-APPLY-001 — the campaign page shows the budget in BOTH currencies: converted (display) and its own. */}
+      <KpiCard label="الميزانية" value={budget != null ? (campaign.budget_fx ? <FxAmount c={campaign.budget_fx} ar={ar} showOriginal testId="campaign-budget-fx" /> : money(budget, cur)) : '—'} />
       <KpiCard label="الإنفاق" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
       <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
       <KpiCard
@@ -271,7 +280,7 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
         deltaKey={resultDeltaKey ?? undefined}
         spark={resultDeltaKey ? sparks(perf.data, resultDeltaKey) : undefined}
       />
-      <KpiCard label={costLabelOf(result, ar)} value={derived ? resultCostText(result, k, cur) : '—'} delta={spendRead.withheld ? null : costDelta} deltaKey={result.key === 'clicks' ? 'cpc' : 'cpa'} />
+      <KpiCard label={costLabelOf(result, ar)} value={derived ? resultCostText(result, k, rc) : '—'} delta={spendRead.withheld ? null : costDelta} deltaKey={result.key === 'clicks' ? 'cpc' : 'cpa'} />
       {/* Revenue and ROAS belong to a sales campaign only — any other objective was never bought to return revenue. */}
       {sells && <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />}
       {sells && <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />}
@@ -285,10 +294,10 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
         * claimed zero.
         */}
       <KpiCard label="CTR" value={derived ? percent(k?.ctr) : '—'} delta={d.ctr} deltaKey="ctr" spark={derived ? sparks(perf.data, 'ctr') : undefined} />
-      <KpiCard label="CPC" value={derived ? rowCostPer(k, 'cpc', 'clicks', cur) : '—'} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
+      <KpiCard label="CPC" value={derived ? rowCostPer(k, 'cpc', 'clicks', rc) : '—'} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
       {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
           generic reader — and rather than as a field name no payload carries. */}
-      <KpiCard label="CPM" value={derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur) : '—'} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
+      <KpiCard label="CPM" value={derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, rc) : '—'} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
       {sells && <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />}
       <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" />
     </div>
@@ -338,7 +347,7 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
     // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
     // No single spend figure in the budget currency ⇒ util is null and the «almost exhausted» claim
     // simply cannot fire, rather than firing wrong or staying silent because a subset looked small.
-    const spendVsBudget = budgetComparableSpend(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
+    const spendVsBudget = budgetComparableSpend(k as MoneyTotals | undefined, campaign.budget_currency || null, summary.data?.currency ?? null)
     const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
       // CAMPAIGN-KPI-COVERAGE-001 — a ratio only where the window's coverage allows one.
@@ -372,7 +381,9 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
 export function CampaignPerformanceTab({ campaign, projectId, range, locale }: { campaign: UnifiedCampaign; projectId: string; range: Range; locale: Locale }) {
   const perf = useCampaignPerformance(projectId, campaign.id, range)
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the series and the platform split are in the summary's reporting currency, never the budget's.
+  const summary = useCampaignSummary(projectId, campaign.id, range)
+  const cur = summary.data?.currency ?? null
   const series = perf.data ?? []
   // PARTIAL-WITHHELD-001 (d/f) — the spend/revenue trend plots EFFECTIVE money in one currency, or
   // «—»: a trend cannot drop a withheld/partial day the way the donut drops a platform.
@@ -435,7 +446,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
         {moneySeries === null
           ? <div className="flex h-[240px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
           : sells
-            ? <SpendRevenueAreaChart data={moneySeries.rows} height={240} currency={moneySeries.currency ?? cur} />
+            ? <SpendRevenueAreaChart data={moneySeries.rows} height={240} currency={moneySeries.currency ?? cur ?? undefined} />
             : <MetricLineChart data={moneySeries.rows as unknown as Array<Record<string, unknown>>} series={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend' }]} height={240} />}
       </ChartCard>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -457,7 +468,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend share unavailable — partial or multi-currency'}</div>
             : platformDonut.data.length
               ? <>
-                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} currency={platformDonutRank?.currency ?? cur} />
+                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} currency={platformDonutRank?.currency ?? cur ?? undefined} />
                   {platformDonut.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? `${platformDonut.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة` : `${platformDonut.dropped} platform(s) not included — partial or multi-currency`}</p>}
                 </>
               : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
@@ -480,17 +491,18 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
   const perf = useCampaignPerformance(projectId, campaign.id, range)
   const activity = useCampaignActivity(projectId, campaign.id)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the budget's own currency, never a guessed «SAR».
+  const cur = campaign.budget_currency || null
 
   const budget = campaign.total_budget ?? null
   // PARTIAL-WITHHELD-001 — DISPLAY the spend through the contract (partial ⇒ «—», withheld ⇒ its own
   // currency), and do the budget MATH only from a single spend figure in the budget currency.
-  const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, cur)
+  const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, summary.data?.currency ?? null)
   const spendVsBudget = budgetComparableSpend(summary.data?.current, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   // PARTIAL-WITHHELD-001 (d/f) — planned-vs-actual trend plots effective money in one currency, or «—».
-  const moneySeries = resolveMoneySeries((perf.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], cur)
+  const moneySeries = resolveMoneySeries((perf.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], summary.data?.currency ?? null)
 
   const pacing = useMemo(() => {
     if (!campaign.starts_on || !campaign.ends_on || budget == null) return null
@@ -513,7 +525,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   )
   // PARTIAL-WITHHELD-001 — a budget-allocation donut is a spend share; real only when the platforms
   // are comparable in one currency. Null (chart shows «unavailable») otherwise, never fake shares.
-  const platformAllocRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', cur)
+  const platformAllocRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', summary.data?.currency ?? null)
   /*
    * A donut drops and discloses; only a TOTAL fails closed (PARTIAL-WITHHELD-001). A platform with no
    * comparable magnitude is left off and counted, so the platforms that ARE known still draw.
@@ -542,7 +554,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
         <ChartCard title="المخطط مقابل الفعلي" subtitle="الاتجاه التراكمي" className="lg:col-span-2">
           {moneySeries === null
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{locale === 'ar' ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
-            : moneySeries.rows.length ? <SpendRevenueAreaChart data={moneySeries.rows} height={190} currency={moneySeries.currency ?? cur} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
+            : moneySeries.rows.length ? <SpendRevenueAreaChart data={moneySeries.rows} height={190} currency={moneySeries.currency ?? cur ?? undefined} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
         </ChartCard>
       </div>
 
@@ -592,7 +604,8 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
 /** CMC-10 — Conversion funnel (objective-aware) for the campaign. */
 export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: UnifiedCampaign; projectId: string; range: Range }) {
   const funnel = useCampaignFunnel(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the funnel's costs are platform money in the REPORTING currency, never the budget's.
+  const cur = useCampaignSummary(projectId, campaign.id, range).data?.currency ?? undefined
   const stages = funnel.data ?? []
 
   const bottleneck = useMemo(() => {
@@ -1009,7 +1022,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
    * screen behind it, which is the comparison the reader was in the middle of.
    */
   const [open, setOpen] = useState<CampaignCreative | null>(null)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — an ad's spend is platform money in the REPORTING currency, never the campaign budget's.
+  const cur = useCampaignSummary(projectId, campaign.id, range).data?.currency ?? null
   const rows = creatives.data ?? []
   /*
    * This tab was written in Arabic only — the toggle, the header, both empty states and every table
@@ -1147,7 +1161,7 @@ function AdPreviewPanel({
 }: {
   creative: CampaignCreative
   objective: string | null
-  currency: string
+  currency: string | null
   locale: 'ar' | 'en'
   onClose: () => void
 }) {

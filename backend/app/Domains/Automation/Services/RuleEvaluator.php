@@ -14,6 +14,7 @@ use App\Domains\Automation\Support\RuleReadings;
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
 use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Metrics\Services\DisplayCurrencyAdapter;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -162,14 +163,14 @@ final class RuleEvaluator
             $metric = (string) $c['metric'];
             $w = (int) ($c['window_days'] ?? 7);
             $maxWindow = max($maxWindow, $w);
-            $value = $this->value($rule, $metric, $w, $t, $figures, $today);
+            $value = $this->inRuleCurrency($rule, $metric, $this->value($rule, $metric, $w, $t, $figures, $today), $today);
             $read["{$metric}@{$w}d"] = $value;
             $readings[] = $this->reading($rule, $metric, $w, $value, $t, $figures);
             $results[] = $value === null ? null : $this->compare($value, (string) $c['operator'], $c['value']);
         }
 
-        // Data sufficiency: below the rule's minimum spend nothing is judged — too little to act on.
-        $spend = $figures["cur:{$maxWindow}"][$t['id']]['spend'] ?? null;
+        // Data sufficiency: below the rule's minimum spend nothing is judged — too little to act on (both in the rule's currency).
+        $spend = $this->inRuleCurrency($rule, 'spend', $figures["cur:{$maxWindow}"][$t['id']]['spend'] ?? null, $today);
         if ($rule->min_spend !== null && ($spend === null || $spend < (float) $rule->min_spend)) {
             return [false, $read, 'below_min_spend', $readings];
         }
@@ -188,6 +189,36 @@ final class RuleEvaluator
         }
 
         return [$matched, $read, null, $readings];
+    }
+
+    /**
+     * FX-APPLY-001 — the currency the rule's money limits are stated in: its own, else the workspace's display currency.
+     */
+    public function ruleCurrency(AutomationRule $rule): string
+    {
+        $own = is_string($rule->currency ?? null) && preg_match('/^[A-Z]{3}$/', strtoupper((string) $rule->currency)) === 1 ? strtoupper((string) $rule->currency) : null;
+
+        return $own ?? $this->display->displayCurrency((string) $rule->project_id);
+    }
+
+    /**
+     * FX-APPLY-001 — every object's money figure is converted INTO the rule's currency BEFORE it is compared with the limit.
+     *
+     * The figures are the reporting basis (`ReportingCurrency::DEFAULT`, USD): each platform row was converted from its own
+     * currency (a EUR account's 12 EUR at 1.12 is 13.44 USD) at ingest by the same engine. A rule in another currency (SAR)
+     * converts that figure through FxEngine; no rate → null («no_rate»), never the raw number compared with the limit.
+     */
+    private function inRuleCurrency(AutomationRule $rule, string $metric, float|string|null $value, Carbon $today): float|string|null
+    {
+        if (! is_float($value) || (RuleCatalog::METRICS[$metric][2] ?? null) !== 'money') {
+            return $value;
+        }
+        $to = $this->ruleCurrency($rule);
+        if ($to === ReportingCurrency::DEFAULT) {
+            return $value;
+        }
+
+        return $this->display->to($to, $value, ReportingCurrency::DEFAULT, $today)['amount'];
     }
 
     /** @param array<string, mixed> $t */
@@ -220,7 +251,8 @@ final class RuleEvaluator
         if ($budget <= 0 || $spend === null) {
             return null;
         }
-        $converted = $this->display->toDisplay((string) $rule->tenant_id, (string) $rule->project_id, $budget, $t['currency'] ?? null);
+        // Both figures in the reporting basis before the division: the budget is in the account's own currency.
+        $converted = $this->display->to(ReportingCurrency::DEFAULT, $budget, $t['currency'] ?? null);
 
         return $converted['amount'] !== null && $converted['amount'] > 0 ? $spend / $converted['amount'] * 100 : null;
     }
@@ -241,7 +273,10 @@ final class RuleEvaluator
                 default => 'no_rate',
             },
             'spend_change_pct', 'cpa_change_pct', 'roas_change_pct' => 'no_comparison',
-            default => 'not_reported',
+            // FX-APPLY-001 — money with a withheld (unconverted) part, or no rate into the rule's currency: never compared raw.
+            default => (RuleCatalog::METRICS[$metric][2] ?? null) === 'money'
+                && (($figures["cur:{$w}"][$t['id']]['money_withheld'] ?? null) !== null || ($figures["cur:{$w}"][$t['id']][$metric] ?? null) !== null)
+                ? 'no_rate_money' : 'not_reported',
         };
     }
 
@@ -257,7 +292,7 @@ final class RuleEvaluator
         $def = RuleCatalog::METRICS[$metric] ?? [$metric, $metric, 'count'];
         $kind = $def[2];
         $code = $value === null ? $this->unavailable($rule, $metric, $t, $figures, $w) : null;
-        $currency = $kind === 'money' ? $this->display->displayCurrency((string) $rule->project_id) : null;
+        $currency = $kind === 'money' ? $this->ruleCurrency($rule) : null;
 
         return [
             'metric' => $metric, 'window_days' => $w,
@@ -265,7 +300,7 @@ final class RuleEvaluator
             'name_en' => $def[1].($this->windowless($metric) ? '' : " (last {$w} d)"),
             'kind' => $kind, 'value' => is_float($value) ? round($value, 2) : $value, 'currency' => $currency,
             'text_ar' => RuleReadings::valueText($value, $kind, $currency, $code),
-            'reason_code' => $code, 'reason_ar' => $code === null ? null : RuleReadings::reasonAr($code, $this->display->displayCurrency((string) $rule->project_id)),
+            'reason_code' => $code, 'reason_ar' => $code === null ? null : RuleReadings::reasonAr($code, $this->ruleCurrency($rule)),
         ];
     }
 
@@ -287,8 +322,8 @@ final class RuleEvaluator
             foreach ((array) $rule->conditions as $c) {
                 $w = max($w, (int) ($c['window_days'] ?? 7));
             }
-            $spend = $figures["cur:{$w}"][$t['id']]['spend'] ?? null;
-            $cur = $this->display->displayCurrency((string) $rule->project_id);
+            $spend = $this->inRuleCurrency($rule, 'spend', $figures["cur:{$w}"][$t['id']]['spend'] ?? null, Carbon::today());
+            $cur = $this->ruleCurrency($rule);
             $has = $spend === null ? 'ما فيه إنفاق مسجّل' : 'الإنفاق '.FundingMoney::withMark(number_format((float) $spend, 2), $cur);
 
             return ['code' => 'below_min_spend', 'ar' => 'بيانات غير كافية: '.$has.' والحد الأدنى '.FundingMoney::withMark(number_format((float) $rule->min_spend, 2), $cur)];

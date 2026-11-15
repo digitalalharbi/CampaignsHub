@@ -1,5 +1,6 @@
 import type { Proposal, ProposalStatus } from './api'
-import { currencyMark } from '@/lib/money/mark'
+import { withMark } from '@/lib/money/mark'
+import { formatConversion, formatOriginal, isConverted, pendingRateLabel } from '@/lib/money/fx'
 
 /**
  * The words for the gateway's codes. The server sends codes, never sentences, so the same refusal reads
@@ -49,12 +50,23 @@ export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'> 
  */
 export function budgetFigure(p: Pick<Proposal, 'currency'> & { display?: Proposal['display'] }, raw: number | null | undefined, converted: number | null | undefined, ar: boolean): string {
   if (raw === undefined || raw === null) return ''
-  const own = `${raw}${p.currency ? ` ${currencyMark(p.currency)}` : ''}`
   const d = p.display
+  /*
+   * FX-APPLY-001 — through the ONE renderer. A withheld budget (no rate) was shown raw: «ميزانية يومية 36 €» on a USD workspace.
+   * Now: the converted figure and the platform's own in brackets, or «— ⚠ بانتظار سعر صرف (EUR)» — never the raw number alone.
+   */
+  const c = d?.conversion ?? null
+  if (c) {
+    const f = formatConversion(c, ar)
+    if (f.withheld) return ` — ⚠ ${f.text}`
+    return isConverted(c) ? ` ${f.text} (${formatOriginal(c)})` : ` ${f.text}`
+  }
+  const own = withMark(String(raw), p.currency)
   if (d && converted !== null && converted !== undefined) {
-    const shown = `${converted} ${currencyMark(d.currency)}`
+    const shown = withMark(String(converted), d.currency)
     return d.converted ? ` ${shown} (${own})` : ` ${shown}`
   }
+  if (d && d.reason) return ` — ⚠ ${pendingRateLabel(p.currency, ar)}`
 
-  return ` ${own}${d && d.reason ? (ar ? ' — بدون تحويل: ما فيه سعر صرف' : ' — not converted: no rate') : ''}`
+  return ` ${own}`
 }

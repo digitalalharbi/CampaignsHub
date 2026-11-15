@@ -10,7 +10,7 @@ import { ModeBadges, PeriodChip, PlatformSplit, Ring, Sar } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
 import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
-import { Money, currencyMark, moneyNumber } from './money'
+import { Money } from './money'
 
 type Lang = { ar: string; en: string }
 
@@ -265,7 +265,7 @@ export function PlatformFigure({ item, ar }: { item: BudgetDetail['by_platform']
     <span className="inline-flex flex-wrap items-center gap-1">
       {item.spent_usd !== null && item.spent_usd !== undefined && <Money n={item.spent_usd} currency="USD" className="font-semibold text-text-primary" />}
       {(item.unconverted ?? []).map((u) => (
-        <span key={u.currency} className="font-semibold text-text-primary"><bdi dir="ltr" className="tnum">{moneyNumber(u.amount)}</bdi> {currencyMark(u.currency)}</span>
+        <Money key={u.currency} n={u.amount} currency={u.currency} className="font-semibold text-text-primary" />
       ))}
       {!!item.unconverted_days && <Badge tone="warning">{ar ? L.noRate.ar : L.noRate.en}</Badge>}
     </span>

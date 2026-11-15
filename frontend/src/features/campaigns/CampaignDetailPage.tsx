@@ -1,3 +1,4 @@
+import { FxAmount } from '@/components/money/FxAmount'
 import { moneyExact } from '@/features/analytics/format'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -319,7 +320,7 @@ export function CampaignDetailPage() {
             <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
           </HeaderFact>
           <HeaderFact label={t('budget_label')}>
-            <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>
+            {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
           </HeaderFact>
           <HeaderFact label={t('owner_label')}>{c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? <span className="tnum">#{c.owner_id}</span>) : '—'}</HeaderFact>
           <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
@@ -356,7 +357,7 @@ export function CampaignDetailPage() {
                 <Row label={t('cmc_stage')}>{c.stage ? stageLabel(c.stage, locale) : '—'}</Row>
                 <Row label={t('cmc_priority')}>{c.priority ? priorityLabel(c.priority, locale) : '—'}</Row>
                 <Row label={t('budget_label')}>
-                  <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>
+                  {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
                 </Row>
                 <Row label={t('period_label')}>
                   <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>

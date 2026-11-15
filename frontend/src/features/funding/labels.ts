@@ -1,5 +1,6 @@
 import type { BudgetStatus, PaymentMode } from './fundingApi'
 import { moneyNumber } from './money'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * FIN-LOOP-001 — every word on the budgets surfaces, from the style guide (Owner 2026-11-13):
@@ -22,7 +23,8 @@ export const L = {
   amount: { ar: 'المبلغ', en: 'Amount' },
   date: { ar: 'التاريخ', en: 'Date' },
   reference: { ar: 'المرجع', en: 'Reference' },
-  addAmount: { ar: (n: string) => `أضف ${n} ر.س`, en: (n: string) => `Add SAR ${n}` },
+  // FX-APPLY-001 — a budget amount is entered in SAR (the ledger's currency); the mark comes from the one mark module.
+  addAmount: { ar: (amount_sar: string) => `أضف ${withMark(amount_sar, 'SAR')}`, en: (amount_sar: string) => `Add ${withMark(amount_sar, 'SAR')}` },
   history: { ar: 'الدفعات', en: 'Payments' },
   platforms: { ar: 'المنصات', en: 'Platforms' },
   month: { ar: 'ملخص الشهر', en: 'Month summary' },

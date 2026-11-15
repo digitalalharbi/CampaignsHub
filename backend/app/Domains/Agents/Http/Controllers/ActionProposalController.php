@@ -193,6 +193,10 @@ final class ActionProposalController extends Controller
             'converted' => ($any['converted'] ?? false) === true,
             'source_currency' => $any['source_currency'] ?? null,
             'reason' => $any['reason'] ?? null,
+            // FX-APPLY-001 — the FxConversion of each figure (rendered only by formatConversion; withheld → «—» + rates link).
+            'conversion' => $after['conversion'] ?? null,
+            'current_conversion' => $before['conversion'] ?? null,
+            'stale' => ($any['stale'] ?? false) === true,
         ];
     }
 }
