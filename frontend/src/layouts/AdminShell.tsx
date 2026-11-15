@@ -25,7 +25,6 @@ import {
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
-import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
@@ -312,7 +311,11 @@ export function AdminShell() {
           </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
-            <NotificationCenter />
+            {/*
+              No workspace bell here: the platform console has no workspace, and every bell call (`/notifications`,
+              `/notifications/summary`) is a membership-portal route that answers the admin portal 403 — a request
+              that failed on every page load and every 30 s. The platform's own notices live in «الوارد» (/admin/inbox).
+            */}
             <button
               onClick={toggleLocale}
               aria-label="Toggle language"
