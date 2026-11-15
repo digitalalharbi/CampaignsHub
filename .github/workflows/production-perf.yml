@@ -90,5 +90,30 @@ jobs:
             q "select distinct on (r.provider) r.provider,r.status,r.window_start||'..'||r.window_end,r.finished_at,left(regexp_replace(coalesce(r.error,'-'),'\s+',' ','g'),140) from metric_sync_runs r where r.project_id in $P order by r.provider,r.created_at desc;"
             echo "## Q8b. google: external_campaigns | ad sets | daily_metrics rows ever"
             q "select (select count(*) from external_campaigns where project_id in $P and provider='google'),(select count(*) from external_ad_sets where project_id in $P and provider='google'),(select count(*) from daily_metrics where project_id in $P and provider='google');"
+            echo "## G1. audience_breakdown_rows 2026-11-12 (stored): provider | dimension | rows | impressions sum | clicks sum | ad sets"
+            q "select provider,dimension,count(*),round(sum(impressions)),round(sum(clicks)),count(distinct external_ad_set_id) from audience_breakdown_rows where project_id in $P and metric_date='2026-11-12' group by 1,2 order by 1,2;"
+            echo "## G2. same, regions bucketed: provider | bucket | rows | impressions sum | clicks sum"
+            q "select provider, case when value ~* '(najran|نجران)' then 'najran' when value ~* '(mecca|makkah|مكة)' then 'makkah' else 'other' end, count(*), round(sum(impressions)), round(sum(clicks)) from audience_breakdown_rows where project_id in $P and dimension='region' and metric_date='2026-11-12' group by 1,2 order by 1,2;"
+            echo "## G3. stored entity-level ad set impressions 2026-11-12 (for comparison): provider | ad sets | impressions sum"
+            q "select s.provider,count(distinct s.id),round(sum(e.impressions)) from external_ad_sets s join entity_daily_metrics e on e.entity_id=s.id where s.project_id in $P and e.metric_date='2026-11-12' and e.impressions>0 group by 1 order by 1;"
+            echo "## G4. all audience_breakdown_rows for the project (any date): provider | dimension | rows | min date | max date"
+            q "select provider,dimension,count(*),min(metric_date),max(metric_date) from audience_breakdown_rows where project_id in $P group by 1,2 order by 1,2;"
+            echo "## G5. PROVIDER PROBE 2026-11-12 (audience:breakdown-probe, read-only, writes no breakdown): per bound ad account, regions bucketed"
+            PID=$(q "select id from projects where id::text like '57f56cce%' and deleted_at is null;" | grep -Eo '^[0-9a-f-]{36}$' | head -1)
+            q "select b.provider||'|'||b.external_account_id from project_integration_bindings b join external_accounts ea on ea.id=b.external_account_id where b.project_id='$PID' and b.is_active and ea.account_type='ad_account' order by 1;" | grep -E '\|[0-9a-f-]{36}$' > /tmp/geo_accts.txt
+            N=0
+            while IFS='|' read -r PROV ACC; do
+              N=$((N+1))
+              echo "-- account #$N platform=$PROV"
+              $DC exec -T backend php artisan audience:breakdown-probe "$ACC" --project="$PID" --from=2026-11-12 --to=2026-11-12 --dimension=region 2>&1 | awk -F' [|] ' '
+                /^UNAVAILABLE|^BLOCKED|^FAILED/ {print substr($0,1,60); next}
+                /^rows:/ {print "summary: " $0; next}
+                / [|] ad sets [0-9]+ [|] impressions / {
+                  b="other"; if (tolower($1) ~ /najran|نجران/) b="najran"; else if (tolower($1) ~ /mecca|makkah|مكة/) b="makkah";
+                  n[b]++; split($3,i," "); split($4,c," "); if (i[2] ~ /^[0-9]+$/) imp[b]+=i[2]; if (c[2] ~ /^[0-9]+$/) clk[b]+=c[2] }
+                END {for (b in n) printf "bucket %s | regions %d | impressions %d | clicks %d\n", b, n[b], imp[b], clk[b]}'
+            done < /tmp/geo_accts.txt
+            echo "probed accounts: $N"
+            rm -f /tmp/geo_accts.txt
             echo "== END FACTS-GEO2"
             exit 0
