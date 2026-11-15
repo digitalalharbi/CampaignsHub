@@ -135,18 +135,25 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     if (phone) return
     const place = () => {
       const a = anchor.current?.getBoundingClientRect()
-      const w = panelRef.current?.offsetWidth ?? 760
-      if (!a) return
+      const panel = panelRef.current
+      if (!a || !panel) return
+      const w = panel.offsetWidth || 760
       const rtl = document.documentElement.dir === 'rtl'
       const wanted = rtl ? a.right - w : a.left
       const left = Math.max(8, Math.min(wanted, window.innerWidth - w - 8))
-      setPos({ top: a.bottom + 8, left, maxH: Math.max(320, window.innerHeight - a.bottom - 16) })
+      // Never taller than the screen; slide up when the button sits low, so every control stays reachable.
+      const maxH = window.innerHeight - 16
+      const h = Math.min(panel.scrollHeight, maxH)
+      const top = Math.max(8, Math.min(a.bottom + 8, window.innerHeight - 8 - h))
+      setPos((cur) => (cur && cur.top === top && cur.left === left && cur.maxH === maxH ? cur : { top, left, maxH }))
     }
     place()
     window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true)
+    window.addEventListener('scroll', place) // the page's own scroll only: an inner scroll does not bubble
+    const ro = typeof ResizeObserver === 'function' && panelRef.current ? new ResizeObserver(place) : null
+    if (ro && panelRef.current) ro.observe(panelRef.current)
 
-    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place); ro?.disconnect() }
   }, [phone, anchor])
 
   /* Escape closes; Tab stays inside; a press outside closes (never on the button that opened it). */
