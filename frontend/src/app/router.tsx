@@ -17,6 +17,7 @@ const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPassword
 const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPage'), 'ResetPasswordPage')
 const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
 const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
+const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
 const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
 const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
@@ -356,7 +357,9 @@ export const router = createBrowserRouter(withErrorBoundary([
            * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
            * the advertiser portal simply never got one.
            */
-          { index: true, element: <Navigate to="/app/dashboard" replace /> },
+          { index: true, element: <Navigate to="/app/home" replace /> },
+          // ROLE-DASHBOARD-001 — the landing page per role. `dashboard` below stays the detailed board it always was.
+          { path: 'home', element: <RoleDashboardPage portal="app" /> },
           { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
@@ -605,7 +608,8 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
-            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
+            { index: true, element: <Navigate to="/agency/home" replace /> },
+            { path: 'home', element: <RoleDashboardPage portal="agency" /> },
             { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
