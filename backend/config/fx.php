@@ -44,13 +44,13 @@ return [
         'driver' => env('FX_RATE_DRIVER'),
 
         /*
-         * How stale a rate may be before the coverage surface calls it out.
+         * How stale a rate may be before it is flagged ⚠ (Owner order, FX-ENGINE-001: 7 days).
          *
          * Not an expiry: an old rate is still the best evidence available for its own date, and the
          * lookup is nearest-on-or-before by design. This is the age at which an operator should be
          * told the feed has stopped arriving.
          */
-        'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 3),
+        'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 7),
     ],
 
 ];

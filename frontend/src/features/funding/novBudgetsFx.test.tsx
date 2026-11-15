@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { BudgetsPage } from './BudgetsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 
@@ -16,7 +16,7 @@ vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn().mockResolvedVa
 
 import { getData, getEnvelope, putData } from '@/lib/api/client'
 
-/** Nov overhaul, task 6 — the default dollar rate is visible and editable, and the panel never covers «أضف ميزانية». */
+/** Nov overhaul, task 6 as superseded by FX-ENGINE-001 — the dollar rate is visible, READ-ONLY (platform-managed), and the panel never covers «أضف ميزانية». */
 const row = {
   project_id: 'p1', client_workspace_id: 'c1', project_name: 'Launch', client_name: 'Club', payment_method: 'prepaid', payment_mode: 'direct',
   counts_from: '2026-10-01', period_start: '2026-10-01', period_end: null, period_start_stated: false, voided_at: null, void_reason: null,
@@ -25,7 +25,7 @@ const row = {
   ceiling: null, ceiling_ratio: null, to_invoice: null, planned: false, platform_plan: null, plan: null, plan_alerts: 0,
 }
 
-function serve(rate = { usd_sar: 3.75, custom: false, peg: 3.75, can_manage: true }) {
+function serve(rate: Record<string, unknown> = { usd_sar: 3.75, custom: false, peg: 3.75, can_manage: false, managed_by: 'platform', rates_page: '/admin/settings/currency-rates', kind: 'pegged', source: 'official-peg:SAMA', rate_date: '1986-06-01', stale: false, withheld: false }) {
   vi.mocked(getEnvelope).mockResolvedValue({ data: [row], meta: { totals: { approved: 1000, spent: 0, remaining: 1000, needs_attention: 0, currency: 'SAR' }, can_manage: true, deleted_count: 0 } } as never)
   vi.mocked(getData).mockImplementation(async (url: string) => {
     if (url === '/funding/rate') return rate as never
@@ -39,41 +39,25 @@ describe('budgets: default dollar rate', () => {
   beforeEach(() => { vi.clearAllMocks(); signInWith(['funding.manage']) })
   afterEach(() => signOut())
 
-  it('shows the default rate on the page and lets finance change it', async () => {
+  it('shows the platform rate read-only, with where it comes from — even to finance', async () => {
     serve()
-    vi.mocked(putData).mockResolvedValue({ usd_sar: 3.8, custom: true, peg: 3.75, can_manage: true } as never)
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
 
     const bar = await screen.findByTestId('fx-rate-bar')
     expect(within(bar).getByTestId('fx-rate-value')).toHaveTextContent('3.75 ر.س')
-    expect(within(bar).getByTestId('fx-rate-default')).toHaveTextContent('سعر افتراضي')
-
-    fireEvent.click(within(bar).getByTestId('fx-rate-edit'))
-    fireEvent.change(within(bar).getByTestId('fx-rate-input'), { target: { value: '3.8' } })
-    fireEvent.click(within(bar).getByTestId('fx-rate-save'))
-
-    await waitFor(() => expect(putData).toHaveBeenCalledWith('/funding/rate', { usd_sar: 3.8 }))
-  })
-
-  it('refuses a rate outside 1 to 10 without calling the server', async () => {
-    serve()
-    renderWithProviders(<BudgetsPage />, { locale: 'ar' })
-
-    const bar = await screen.findByTestId('fx-rate-bar')
-    fireEvent.click(within(bar).getByTestId('fx-rate-edit'))
-    fireEvent.change(within(bar).getByTestId('fx-rate-input'), { target: { value: '0' } })
-    fireEvent.click(within(bar).getByTestId('fx-rate-save'))
-
-    expect(await within(bar).findByRole('status')).toHaveTextContent('أدخل رقمًا بين 1 و10')
+    expect(within(bar).getByTestId('fx-rate-managed')).toHaveTextContent('من إعدادات المنصة')
+    expect(within(bar).queryByRole('button')).toBeNull()
+    expect(within(bar).queryByRole('textbox')).toBeNull()
     expect(putData).not.toHaveBeenCalled()
   })
 
-  it('a viewer sees the rate but has no edit button', async () => {
-    serve({ usd_sar: 3.75, custom: false, peg: 3.75, can_manage: false })
+  it('a stale or missing platform rate is said, never filled in', async () => {
+    serve({ usd_sar: null, custom: false, peg: 3.75, can_manage: false, managed_by: 'platform', rates_page: '/admin/settings/currency-rates', kind: null, source: null, rate_date: null, stale: false, withheld: true })
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
 
     const bar = await screen.findByTestId('fx-rate-bar')
-    expect(within(bar).queryByTestId('fx-rate-edit')).toBeNull()
+    expect(within(bar).getByTestId('fx-rate-value')).toHaveTextContent('بانتظار سعر صرف')
+    expect(within(bar).getByTestId('fx-rate-value').textContent).not.toMatch(/\d/)
   })
 
   it('the side panel starts below the page header, so «أضف ميزانية» is never covered', async () => {

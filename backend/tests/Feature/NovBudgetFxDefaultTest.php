@@ -11,7 +11,11 @@ use Illuminate\Support\Carbon;
 use Tests\Support\FundingFixtures;
 use Tests\TestCase;
 
-/** Nov overhaul, task 6 — the workspace default USD→SAR rate resolves «ناقص سعر صرف» and lets a limit in another currency be measured. */
+/**
+ * Nov overhaul, task 6, as superseded by FX-ENGINE-001: the USD→SAR rate is the PLATFORM's (the SAR peg, a pegged row managed
+ * at /admin/settings/currency-rates). It still resolves «ناقص سعر صرف» and lets a limit in another currency be measured; a
+ * workspace can read it and can no longer override it.
+ */
 final class NovBudgetFxDefaultTest extends TestCase
 {
     use FundingFixtures;
@@ -44,26 +48,27 @@ final class NovBudgetFxDefaultTest extends TestCase
         $this->assertSame(3.75, (float) $f['usd_rate']);
     }
 
-    public function test_the_default_is_editable_by_finance_and_recomputes_the_budget(): void
+    public function test_a_workspace_can_no_longer_override_the_rate_it_is_managed_by_the_platform(): void
     {
         $project = $this->newProject('Palm');
         $this->limitSpend($project, 3, 100, 'USD', 'SAR', value: 375);
         $this->addBudget($project, 10_000);
 
-        $this->actingAs($this->finance, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 3.8])->assertOk()
-            ->assertJsonPath('data.usd_sar', 3.8)->assertJsonPath('data.custom', true);
+        $this->actingAs($this->finance, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 3.8])->assertStatus(410);
 
-        $this->assertSame(380.0, (float) $this->figures($project->id)['spent']);
-        $this->actingAs($this->finance, 'sanctum')->getJson('/api/v1/funding/rate')->assertOk()->assertJsonPath('data.usd_sar', 3.8);
+        $this->assertSame(375.0, (float) $this->figures($project->id)['spent'], 'nothing a workspace sends moves its own figures');
+        $this->actingAs($this->finance, 'sanctum')->getJson('/api/v1/funding/rate')->assertOk()
+            ->assertJsonPath('data.usd_sar', 3.75)
+            ->assertJsonPath('data.can_manage', false)
+            ->assertJsonPath('data.managed_by', 'platform')
+            ->assertJsonPath('data.kind', 'pegged')
+            ->assertJsonPath('data.rates_page', '/admin/settings/currency-rates');
     }
 
-    public function test_the_rate_is_validated_and_needs_the_finance_permission(): void
+    public function test_any_reader_of_budgets_sees_the_platform_rate_and_nobody_in_a_workspace_can_set_it(): void
     {
-        $this->actingAs($this->finance, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 0])->assertStatus(422);
-        $this->actingAs($this->finance, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 'abc'])->assertStatus(422);
-
         $viewer = $this->userWith(['funding.view']);
-        $this->actingAs($viewer, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 3.9])->assertForbidden();
+        $this->actingAs($viewer, 'sanctum')->putJson('/api/v1/funding/rate', ['usd_sar' => 3.9])->assertStatus(410);
         $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/funding/rate')->assertOk()->assertJsonPath('data.usd_sar', 3.75)->assertJsonPath('data.custom', false);
     }
 
@@ -79,7 +84,8 @@ final class NovBudgetFxDefaultTest extends TestCase
         $this->assertSame('USD', $row['consumed_currency']);
         $this->assertSame(200.0, $row['consumed']);
         $this->assertSame(0.2, $row['utilisation']);
-        $this->assertSame('workspace_default', $row['converted']['source']);
+        $this->assertSame('pegged', $row['converted']['kind']);
+        $this->assertSame('official-peg:SAMA', $row['converted']['source']);
     }
 
     public function test_a_limit_in_a_floating_currency_without_a_rate_is_still_refused(): void

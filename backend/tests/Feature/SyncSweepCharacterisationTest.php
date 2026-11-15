@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsLiveReportWorld;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -47,6 +48,7 @@ final class SyncSweepCharacterisationTest extends TestCase
 {
     use BuildsLiveReportWorld;
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private const BASELINE = __DIR__.'/../Fixtures/sync_sweep_characterisation_baseline.json';
 

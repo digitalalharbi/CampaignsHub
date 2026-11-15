@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Rates;
 
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Metrics\Models\CurrencyRate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -61,7 +62,7 @@ final class CurrencyRateFeed
             'state' => $state,
             'driver' => $driver,
             'label' => $this->source?->label(),
-            'stale_after_days' => (int) config('fx.rates.stale_after_days', 3),
+            'stale_after_days' => (int) config('fx.rates.stale_after_days', 7),
             'last_rate_date' => CurrencyRate::query()->max('rate_date') === null
                 ? null
                 : Carbon::parse((string) CurrencyRate::query()->max('rate_date'))->toDateString(),
@@ -282,22 +283,15 @@ final class CurrencyRateFeed
     }
 
     /**
-     * Write one rate, replacing any earlier answer for the same pair and date.
-     *
-     * `updateOrCreate` on the natural key rather than an insert: a source restating a day's rate
-     * (a correction, a late fixing) must not leave two rows that the nearest-on-or-before lookup
-     * would choose between arbitrarily.
+     * Write one rate through the ONE writer (FX-ENGINE-001 {@see RateLedger}): a new version for the pair and day,
+     * audited, never an overwrite of history. A legal peg is recorded as `pegged`, anything a feed publishes as
+     * `automatic` — and an automatic quote never replaces a manual rate an operator recorded for the same day.
      */
     public function record(string $base, string $quote, float $rate, Carbon $date, string $source): CurrencyRate
     {
-        return CurrencyRate::updateOrCreate(
-            [
-                'base_currency' => strtoupper($base),
-                'quote_currency' => strtoupper($quote),
-                'rate_date' => $date->toDateString(),
-            ],
-            ['rate' => $rate, 'source' => $source],
-        );
+        $kind = CurrencyRate::kindOf($source);
+
+        return app(RateLedger::class)->record($base, $quote, $rate, $date, $kind, $source)['rate'];
     }
 
     private function earlier(?string $current, mixed $candidate): ?string

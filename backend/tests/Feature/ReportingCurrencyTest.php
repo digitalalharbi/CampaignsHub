@@ -25,6 +25,7 @@ use Database\Seeders\MetricDefinitionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -52,6 +53,7 @@ use Tests\TestCase;
 final class ReportingCurrencyTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     /** 1/3.75 — the riyal's peg read the way this codebase converts, SAR into the canonical USD. */
     private const SAR_USD = 0.2666666667;
