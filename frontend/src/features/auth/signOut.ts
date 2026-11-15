@@ -112,6 +112,11 @@ export async function signOutCompletely(
 
   clearOwnedStorage()
 
+  // NOTIF-PWA-001 — the worker never holds data, but sign-out empties its caches anyway: belt and braces on a shared device.
+  try {
+    navigator.serviceWorker?.controller?.postMessage('CLEAR_CACHES')
+  } catch { /* no worker, or not allowed — nothing to clear */ }
+
   window.location.assign(destination)
 }
 

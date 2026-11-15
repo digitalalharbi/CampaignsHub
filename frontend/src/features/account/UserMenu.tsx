@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, ChevronDown, KeyRound, LogOut, Palette, Shield, User as UserIcon } from 'lucide-react'
 import { signOutCompletely } from '@/features/auth/signOut'
+import { InstallAppItem } from './InstallAppItem'
 import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
@@ -46,7 +47,7 @@ function StatusBadge({ status }: { status?: AuthUser['status'] }) {
 }
 
 /** The shared menu body — identical whether opened from the topbar avatar or the sidebar card. */
-function MenuBody({ onNavigate, workspace }: { onNavigate: (to: string, absolute?: boolean) => void; workspace?: NavLeaf[] }) {
+function MenuBody({ onNavigate, onClose, workspace }: { onNavigate: (to: string, absolute?: boolean) => void; onClose: () => void; workspace?: NavLeaf[] }) {
   const t = useT()
   const ar = useUi((s) => s.locale) === 'ar'
   const { user } = useAuth()
@@ -111,6 +112,11 @@ function MenuBody({ onNavigate, workspace }: { onNavigate: (to: string, absolute
             {t(key)}
           </button>
         ))}
+      </div>
+
+      {/* NOTIF-PWA-001 — only where the browser can install it; empty otherwise. */}
+      <div className="border-t border-border p-1.5 empty:hidden" role="menu">
+        <InstallAppItem onDone={onClose} />
       </div>
 
       {/* Logout — last, calm danger, clearly separated. */}
@@ -195,7 +201,7 @@ export function AccountMenu({ variant, collapsed, workspace }: {
           id={menuId}
           className={`absolute z-50 ${variant === 'topbar' ? 'end-0 top-11' : 'bottom-full start-0 mb-2'}`}
         >
-          <MenuBody onNavigate={go} workspace={workspaceLeaves} />
+          <MenuBody onNavigate={go} onClose={() => setOpen(false)} workspace={workspaceLeaves} />
         </div>
       )}
     </div>
