@@ -6,6 +6,7 @@ namespace Tests\Feature\NotificationsV2\External;
 
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Entitlements\PlanEntitlementGate;
+use App\Domains\Notifications\External\Recipients\ExternalSettings;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -87,7 +88,7 @@ final class ExternalMessageTest extends TestCase
 
         $this->assertStringContainsString('تنبيه المنصة من Alpha Agency للاطلاع.', $html);
         $this->assertStringContainsString('جرّب المنصة لفريقك', $html);
-        $this->assertContains('كلمةمحظورةللاختبار', app(\App\Domains\Notifications\External\Recipients\ExternalSettings::class)->forbiddenWords($this->tenant->id));
+        $this->assertContains('كلمةمحظورةللاختبار', app(ExternalSettings::class)->forbiddenWords($this->tenant->id));
     }
 
     public function test_a_long_custom_subject_is_cut_in_its_custom_part_only(): void
