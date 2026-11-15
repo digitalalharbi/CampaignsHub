@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domains\Notifications\External;
+
+use App\Domains\Notifications\Engine\Contracts\MessageComposer;
+use App\Domains\Notifications\External\Charts\ChartImages;
+use App\Domains\Notifications\External\Charts\TableOnlyCharts;
+use App\Domains\Notifications\External\Content\ExternalMessageComposer;
+use App\Domains\Notifications\External\Digest\DigestDataSource;
+use App\Domains\Notifications\External\Digest\MetricsDigestDataSource;
+use App\Domains\Notifications\External\Mail\ExternalMailer;
+use App\Domains\Notifications\External\Mail\ExternalTransport;
+use Illuminate\Support\ServiceProvider;
+
+/**
+ * NOTIF-V2-EXTERNAL-001 — plugs the external pipeline into builder M's engine through its extension points: the
+ * `MessageComposer` contract (external scope), the email channel (`MailSender` hands external deliveries to
+ * `ExternalMailer`), and the `notifications.presend` tag. Registered after the engine's provider.
+ */
+final class ExternalNotificationsServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->scoped(DigestDataSource::class, MetricsDigestDataSource::class);
+        $this->app->scoped(ChartImages::class, TableOnlyCharts::class);
+        $this->app->scoped(ExternalMessageComposer::class);
+        $this->app->bind(MessageComposer::class, fn ($app) => $app->make(ExternalMessageComposer::class));
+        $this->app->bind(ExternalTransport::class);
+        $this->app->bind(ExternalMailer::class);
+    }
+}

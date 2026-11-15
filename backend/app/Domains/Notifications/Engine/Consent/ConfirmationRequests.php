@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Engine\Consent;
 
-use App\Domains\Notifications\Engine\Content\ComposedMessage;
 use App\Domains\Notifications\Engine\Contracts\SubscriptionLog;
 use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
 use App\Domains\Notifications\Engine\Data\DeliveryIntent;
 use App\Domains\Notifications\Engine\Enums\SubscriptionLogAction;
 use App\Domains\Notifications\Engine\NotificationEngine;
 use App\Domains\Notifications\Engine\Sending\EngineMail;
-use App\Domains\Notifications\Engine\Sending\MailSender;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
+use App\Domains\Notifications\External\Consent\ConsentMessage;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MailFailure;
 use Illuminate\Support\Carbon;
@@ -67,17 +66,9 @@ final class ConfirmationRequests
                 ->where('s.recipient_id', $recipient->id)->where('s.tenant_id', $tenantId)->where('projects.status', '!=', 'archived')
                 ->whereNull('projects.deleted_at')->orderBy('projects.name')->pluck('projects.name')->unique()->values()->all();
             $ar = $recipient->language !== 'en';
-            $names = implode('، ', $projects);
-            $link = url('/n/confirm/'.$token);
-            $title = $ar ? "{$ws->workspaceName} تدعوك لاستلام تقارير مشروع {$names}" : "{$ws->workspaceName} invites you to receive reports for {$names}";
-            $body = $ar ? 'لن تصلك أي رسالة قبل تأكيدك. للتأكيد افتح الرابط واضغط زر التأكيد.' : 'Nothing is sent before you confirm. Open the link and press the confirm button.';
-            $e = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
-            $message = new ComposedMessage(
-                subject: mb_substr($title.' · CampaignsHub', 0, 150), title: $title, body: $body,
-                html: '<div dir="'.($ar ? 'rtl' : 'ltr').'"><p><strong>'.$e($title).'</strong></p><p>'.$e($body).'</p><p><a href="'.$e($link).'">'.$e($link).'</a></p></div>',
-                text: $title."\n\n".$body."\n\n".$link, externalReady: true,
-                senderName: MailSender::externalSenderName($ws->workspaceName, $ar ? 'ar' : 'en'),
-            );
+            $link = url('/n/confirm/'.$token).($ar ? '' : '?lang=en');
+            // The invitation's words and design: builder Q's ConsentMessage (shared design tokens, §9 wording).
+            $message = ConsentMessage::compose($ws->workspaceName, $projects, $link, $ar ? 'ar' : 'en', ConsentMessage::footprintRemoved($tenantId), ConsentMessage::term($tenantId, $ar ? 'ar' : 'en'));
 
             try {
                 Mail::to((string) $recipient->email)->send(new EngineMail($message, 'consent-'.substr((string) $recipient->id, 0, 8), $ar ? 'ar' : 'en'));
