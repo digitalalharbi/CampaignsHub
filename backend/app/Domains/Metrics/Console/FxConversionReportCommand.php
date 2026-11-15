@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Console;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use Illuminate\Console\Command;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -62,7 +64,7 @@ final class FxConversionReportCommand extends Command
             $to = $from->copy()->endOfMonth();
 
             // Per account: raw originals, converted value, and the diagnostics — all in one grouped query.
-            $rows = $accountIndex === [] ? collect() : DB::table('daily_metrics')
+            $rows = $accountIndex === [] ? collect() : $this->visibleSpend()
                 ->where('metric_key', 'spend')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                 ->whereIn('external_account_id', array_keys($accountIndex))
@@ -84,7 +86,7 @@ final class FxConversionReportCommand extends Command
                     continue;
                 }
                 $stored = array_values(array_filter(explode(',', (string) $r->stored_currencies)));
-                $drift = (int) DB::table('daily_metrics')
+                $drift = (int) $this->visibleSpend()
                     ->where('metric_key', 'spend')->where('external_account_id', $id)
                     ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                     ->where(static fn ($q) => $q->whereNull('original_currency')->orWhereRaw('UPPER(original_currency) <> ?', [$meta['currency']]))
@@ -107,7 +109,7 @@ final class FxConversionReportCommand extends Command
             }
 
             // Per project: before (originals added across currencies) and after (converted), over EVERY account (USD too).
-            $projects = DB::table('daily_metrics')
+            $projects = $this->visibleSpend()
                 ->where('metric_key', 'spend')
                 ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
                 ->groupBy('project_id')
@@ -158,12 +160,21 @@ final class FxConversionReportCommand extends Command
     }
 
     /**
+     * ACCOUNT-SCOPE-ISOLATION-001 — the rows a project SHOWS (its actively bound accounts), so «after» is the total the screen
+     * carries and a deselected account's history does not move a project's before/after.
+     */
+    private function visibleSpend(): Builder
+    {
+        return BoundAccountVisibility::apply(DB::table('daily_metrics'), 'daily_metrics');
+    }
+
+    /**
      * How many converted rows carry a stored rate different from the one the engine chooses TODAY for the row's own date — what
      * «إعادة حساب» on the rates page would change. One engine lookup per currency and day (bounded by the month).
      */
     private function rateDrift(FxEngine $fx, string $accountId, Carbon $from, Carbon $to): int
     {
-        $pairs = DB::table('daily_metrics')
+        $pairs = $this->visibleSpend()
             ->where('metric_key', 'spend')->where('external_account_id', $accountId)
             ->whereBetween('metric_date', [$from->toDateString(), $to->toDateString()])
             ->whereNotNull('value')->whereNotNull('exchange_rate')->whereNotNull('original_currency')

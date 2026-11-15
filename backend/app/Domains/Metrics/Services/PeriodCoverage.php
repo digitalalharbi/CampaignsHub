@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -95,7 +96,9 @@ final class PeriodCoverage
             'timezone_differs' => $tz !== null && ! $this->sameOffset($tz, $from),
         ];
 
-        $first = DB::table('daily_metrics')
+        // ACCOUNT-SCOPE-ISOLATION-001 — the account comes from this project's active bindings, and the rows are read through the one
+        // visibility rule all the same, so a later change to the account list above cannot widen what coverage counts.
+        $first = BoundAccountVisibility::apply(DB::table('daily_metrics'), 'daily_metrics')
             ->where('project_id', $projectId)->where('external_account_id', $acc->id)
             ->min('metric_date');
 
@@ -109,7 +112,7 @@ final class PeriodCoverage
             return $base + ['never_synced' => false, 'missing_count' => 0, 'failed_count' => 0, 'missing_days' => [], 'failed_days' => [], 'truncated' => false];
         }
 
-        $have = DB::table('daily_metrics')
+        $have = BoundAccountVisibility::apply(DB::table('daily_metrics'), 'daily_metrics')
             ->where('project_id', $projectId)->where('external_account_id', $acc->id)
             ->whereBetween('metric_date', [$start->toDateString(), $owedEnd->toDateString()])
             ->distinct()->pluck('metric_date')

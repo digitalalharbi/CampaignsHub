@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Support;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Reports\Models\Report;
@@ -31,7 +32,8 @@ final class ReportFxFacts
         $to ??= optional($report->period_end)->toDateString();
         $staleDays = CurrencyConverter::staleAfterDays();
 
-        $q = static fn () => DB::table('daily_metrics')
+        // ACCOUNT-SCOPE-ISOLATION-001 — the facts describe the figures the report shows, so they read the same visible rows.
+        $q = static fn () => BoundAccountVisibility::apply(DB::table('daily_metrics'), 'daily_metrics')
             ->where('tenant_id', $report->tenant_id)
             ->when($report->project_id !== null, static fn ($w) => $w->where('project_id', $report->project_id))
             ->when($from !== null && $to !== null, static fn ($w) => $w->whereBetween('metric_date', [$from, $to]))
