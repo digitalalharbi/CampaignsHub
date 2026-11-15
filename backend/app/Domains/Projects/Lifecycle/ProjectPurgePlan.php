@@ -103,6 +103,12 @@ final class ProjectPurgePlan
         'short_links' => self::PURGE,
         'lead_form_submissions' => self::PURGE,
         'lead_forms' => self::PURGE,
+        // Notifications v2 working state of the project (RELEASE-INTEGRATION): unsent outbox rows and held reviews about a purged
+        // project must never go out; a person's mute and a subscription's project link mean nothing without the project.
+        'notification_outbox' => self::PURGE,
+        'notification_external_reviews' => self::PURGE,
+        'notification_mutes' => self::PURGE,
+        'notification_subscription_projects' => self::PURGE,
 
         // Client/tenant-level records that outlive the project (NULL = «no project»).
         'invoices' => self::DETACH,
@@ -119,6 +125,8 @@ final class ProjectPurgePlan
         'funding_notices' => self::KEEP_LOG,
         'conversion_deliveries' => self::KEEP_LOG,
         'conversion_destinations' => self::KEEP_LOG,    // → conversion_deliveries (CASCADE); switched off by the soft delete
+        'notification_delivery_log' => self::KEEP_LOG,  // immutable proof of notice (a trigger refuses UPDATE/DELETE); no FK
+        'followup_tasks' => self::KEEP_LOG,             // → followup_task_events (CASCADE, append-only history); closed by AutoCloser
 
         // Shared / ad-platform side — never touched (a connection cascades into the ad-account inventory).
         'integration_credentials' => self::NEVER,
@@ -148,7 +156,7 @@ final class ProjectPurgePlan
     public const LOGS = [
         'audit_logs', 'project_status_transitions', 'client_status_transitions', 'project_archive_effects',
         'app_notifications', 'notification_deliveries', 'mail_deliveries', 'report_deliveries', 'funding_notices',
-        'conversion_deliveries', 'report_share_access_logs', 'action_log',
+        'conversion_deliveries', 'report_share_access_logs', 'action_log', 'notification_delivery_log', 'followup_task_events',
     ];
 
     /** @return list<string> */
