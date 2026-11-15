@@ -16,8 +16,10 @@ import { InfoTip } from './InfoTip'
  * or a detail panel.
  */
 export function FitPage({
-  title, info, actions, kpis, toolbar, children, testid,
+  title, info, actions, kpis, toolbar, children, testid, introTestid, fit = true,
 }: {
+  /** `false` lets the page flow — for a tab whose content is a long form of its own and cannot be budgeted. */
+  fit?: boolean
   title: string
   info?: string
   actions?: ReactNode
@@ -25,12 +27,14 @@ export function FitPage({
   toolbar?: ReactNode
   children: ReactNode
   testid?: string
+  /** The header's own test id — the one the pre-conversion page's `PageIntro` carried, so its tests keep their handle. */
+  introTestid?: string
 }) {
-  useFitLock()
+  useFitLock(fit)
 
   return (
     <section data-testid={testid} className={`flex min-h-0 flex-1 flex-col ${FIT_GAP}`}>
-      <header data-testid={testid ? `${testid}-header` : undefined} className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <header data-testid={introTestid ?? (testid ? `${testid}-header` : undefined)} className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className={`${FIT_TITLE} min-w-0 truncate text-text-primary`}>{title}</h1>
         {info && <InfoTip text={info} label={info} />}
         {actions && <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div>}
