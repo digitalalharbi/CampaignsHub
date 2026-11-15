@@ -95,7 +95,7 @@ final class FundingBalance
         // BUDGET-CURRENCY-001 — a platform's own spend is shown in USD (one unit for platforms), totals stay in SAR. The unit is the SAR
         // figure over the latest USD→SAR rate; with no rate there is no USD figure, never a guessed one. Days with no dated rate keep
         // their OWN currency and amount, so the page can say «بدون سعر صرف» next to them.
-        $usdRate = $this->fx->resolve('USD', 'SAR', $today)['rate'] ?? null;
+        $usdRate = $this->fx->resolveForWorkspace((string) $funding->tenant_id, 'USD', 'SAR', $today)['rate'] ?? null;
         $toUsd = static fn (?float $sar): ?float => ($sar === null || $usdRate === null || $usdRate <= 0) ? null : round($sar / $usdRate, 2);
         $unconverted = $spendQuery()->whereNull('amount_sar')->where('original_amount', '>', 0)
             ->selectRaw('provider, original_currency AS currency, SUM(original_amount) AS amount')->groupBy('provider', 'original_currency')->get()

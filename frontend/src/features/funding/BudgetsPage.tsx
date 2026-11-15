@@ -9,6 +9,7 @@ import { useUi } from '@/stores/ui'
 import { AddBudgetDialog } from './AddBudgetDialog'
 import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
+import { FxRateBar } from './FxRateBar'
 import { BudgetDrawer } from './BudgetDrawer'
 import { DeleteBudgetDialog, EditBudgetDialog } from './EditBudgetDialog'
 import { UndoToast } from './UndoToast'
@@ -68,7 +69,7 @@ export function BudgetsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] min-w-0 flex-col gap-2" data-testid="budgets-page">
-      <div className="sticky top-0 z-10 rounded-[var(--radius-card)] border border-border bg-surface px-3 py-2">
+      <div className="sticky top-0 z-10 rounded-[var(--radius-card)] border border-border bg-surface px-3 py-2" data-slideover-avoid>
         <PageIntro
           title={tx(showDeleted ? L.deleted : L.title)}
           testid="budgets-intro"
@@ -89,6 +90,7 @@ export function BudgetsPage() {
           }
         />
       </div>
+      <FxRateBar />
 
       {error ? (
         toApiError(error).status === 403 ? <NoPermission /> : <ErrorState error={error} onRetry={() => void refetch()} ar={ar} title={tx(L.title)} />

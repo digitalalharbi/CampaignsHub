@@ -50,7 +50,10 @@ final class SpendLimitGovernor
      */
     private const MIN_DAYS_FOR_PROJECTION = 3;
 
-    public function __construct(private readonly MetricsAggregator $metrics) {}
+    public function __construct(
+        private readonly MetricsAggregator $metrics,
+        private readonly CurrencyConverter $fx,
+    ) {}
 
     /**
      * One limit, read against today.
@@ -83,6 +86,21 @@ final class SpendLimitGovernor
          */
         if ($scope->state === MoneyState::Zero && $currency === null) {
             $currency = $limit->currency;
+        }
+
+        /*
+         * BUDGET-FX-DEFAULT-001 — a limit in another currency than the spend's is MEASURED, not refused: the spend is
+         * converted into the limit's currency at the dated rate, else the workspace default (USD↔SAR only). With no rate
+         * the old «currency_mismatch» answer stands — a floating currency is never given an invented rate.
+         */
+        $conversion = null;
+        if ($consumed !== null && is_string($currency) && strtoupper($currency) !== strtoupper((string) $limit->currency)) {
+            $r = $this->fx->resolveForWorkspace((string) $limit->tenant_id, $currency, (string) $limit->currency, $today);
+            if ($r !== null) {
+                $conversion = ['from' => strtoupper($currency), 'to' => strtoupper((string) $limit->currency), 'rate' => round($r['rate'], 6), 'source' => $r['source']];
+                $consumed *= $r['rate'];
+                $currency = strtoupper((string) $limit->currency);
+            }
         }
 
         $comparable = $consumed !== null
@@ -123,6 +141,7 @@ final class SpendLimitGovernor
             'paced_through' => $pacedThrough,
             'consumed' => $consumed !== null ? round($consumed, 2) : null,
             'consumed_currency' => $currency,
+            'converted' => $conversion,
             'remaining' => $remaining !== null ? round($remaining, 2) : null,
             'utilisation' => $utilisation !== null ? round($utilisation, 4) : null,
             // >1 is ahead of plan. Against the ELAPSED share of the limit, not against the whole of it.

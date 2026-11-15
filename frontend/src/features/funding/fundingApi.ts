@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
+import { api, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 
 /**
  * FIN-LOOP-001 — a project's approved budget, read from the endpoints that compute it.
@@ -246,6 +246,25 @@ export function useFinancialDisclaimer() {
     staleTime: Infinity,
     retry: 1,
     queryFn: () => getData<{ ar: string; en: string }>('/funding/disclaimer'),
+  })
+}
+
+/** BUDGET-FX-DEFAULT-001 — the workspace's default USD→SAR rate, used where no dated rate exists. */
+export interface FundingRate { usd_sar: number; custom: boolean; peg: number; can_manage: boolean }
+
+export function useFundingRate() {
+  return useQuery({ queryKey: ['funding', 'rate'], retry: 1, queryFn: () => getData<FundingRate>('/funding/rate') })
+}
+
+export function useSetFundingRate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (usdSar: number) => {
+      await ensureCsrfCookie()
+      return putData<FundingRate>('/funding/rate', { usd_sar: usdSar })
+    },
+    // A new rate re-reads every budget and every limit of the workspace, so all of them are refetched.
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['funding'] }); void qc.invalidateQueries({ queryKey: ['spend-limits'] }) },
   })
 }
 
