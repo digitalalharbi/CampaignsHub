@@ -60,31 +60,18 @@ jobs:
             ROLLBACK;
             EOF
             }
-            # SNAP-COVERS-RESYNC-001 (Owner-approved 2026-11-13). Counts only: no names, no ids, no URLs, no tokens.
-            # hours=apply-snap-covers queues cover captures for SNAPCHAT only (creatives:backfill-covers --provider=snapchat --execute);
-            # anything else is a read-only dry run.
-            SNAP_Q="provider='snapchat' and is_demo=false"
-            echo "== SNAP-COVERS $(date -u +%FT%TZ) mode=${HOURS}"
-            echo "## A. Snapchat creatives: total | with cover | without cover | without cover but https source | without cover, no source"
-            q "select count(*), count(*) filter (where cover_path is not null), count(*) filter (where cover_path is null), count(*) filter (where cover_path is null and (coalesce(thumbnail_url,'') like 'https://%' or coalesce(asset_url,'') like 'https://%')), count(*) filter (where cover_path is null and coalesce(thumbnail_url,'') not like 'https://%' and coalesce(asset_url,'') not like 'https://%') from external_creatives where $SNAP_Q;"
-            echo "## A2. Snapchat without cover: cover_error | backing off now | n"
-            q "select coalesce(cover_error,'(none)'), coalesce(cover_next_attempt_at > now(),false), count(*) from external_creatives where $SNAP_Q and cover_path is null group by 1,2 order by 3 desc;"
-            echo "## A3. Snapchat without cover by format (images vs film): format | has video_url | n"
-            q "select coalesce(format,'-'), coalesce(video_url,'')<>'', count(*) from external_creatives where $SNAP_Q and cover_path is null group by 1,2 order by 3 desc;"
-            echo "## A4. Snapchat without cover, on a project with an active binding: n"
-            q "select count(*) from external_creatives c where c.$SNAP_Q and c.cover_path is null and exists (select 1 from project_integration_bindings b where b.external_account_id=c.external_account_id and b.is_active);"
-            echo "## A5. other providers without cover (baseline, must not change): provider | n"
-            q "select provider, count(*) from external_creatives where provider<>'snapchat' and is_demo=false and cover_path is null group by 1 order by 1;"
-            echo "## B. DRY RUN (command, snapchat only)"
-            $DC exec -T backend php artisan creatives:backfill-covers --provider=snapchat --limit=2000 2>&1
-            if [ "${HOURS}" = "apply-snap-covers" ]; then
-              echo "## C. RUN (queues snapchat captures only)"
-              $DC exec -T backend php artisan creatives:backfill-covers --provider=snapchat --limit=2000 --execute 2>&1
+            # PAY-WEBHOOK-SECRET-REDACT-001 (Owner-approved 2026-11-13). Counts only: the command prints row counts per provider/status, never a value.
+            # hours=apply-redact runs --apply after the dry run, then a second dry run as the after-count; anything else is dry run only.
+            echo "== REDACT $(date -u +%FT%TZ) mode=${HOURS}"
+            echo "## A. BEFORE (dry run)"
+            $DC exec -T backend php artisan billing:redact-webhook-secrets 2>&1
+            if [ "${HOURS}" = "apply-redact" ]; then
+              echo "## B. APPLY"
+              $DC exec -T backend php artisan billing:redact-webhook-secrets --apply 2>&1
+              echo "## C. AFTER (dry run, carrying must be 0)"
+              $DC exec -T backend php artisan billing:redact-webhook-secrets 2>&1
             else
-              echo "## C. RUN skipped (dry run only)"
+              echo "## B. APPLY skipped (dry run only)"
             fi
-            echo "## D. AFTER: same as A and A5"
-            q "select count(*), count(*) filter (where cover_path is not null), count(*) filter (where cover_path is null) from external_creatives where $SNAP_Q;"
-            q "select provider, count(*) from external_creatives where provider<>'snapchat' and is_demo=false and cover_path is null group by 1 order by 1;"
-            echo "== END SNAP-COVERS"
+            echo "== END REDACT"
             exit 0
