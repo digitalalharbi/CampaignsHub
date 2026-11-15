@@ -27,13 +27,13 @@ use Illuminate\Support\Facades\DB;
  */
 final class NotificationCenterController extends Controller
 {
-    public function __construct(private readonly NotificationInbox $inbox, private readonly TenantContext $tenants, private readonly WorkspaceSettingsRepository $settings) {}
+    public function __construct(private readonly NotificationInbox $inbox, private readonly WorkspaceSettingsRepository $settings) {}
 
     public function snooze(Request $request, string $notification): JsonResponse
     {
         $data = $request->validate(['preset' => ['required', 'in:1h,tomorrow']]);
         $row = $this->visible($request, $notification);
-        $tenantId = (string) $this->tenants->tenantId();
+        $tenantId = (string) app(TenantContext::class)->tenantId();
 
         $until = $data['preset'] === '1h'
             ? Carbon::now()->addHour()
@@ -54,7 +54,7 @@ final class NotificationCenterController extends Controller
     {
         $row = $this->visible($request, $notification);
         abort_if($row->project_id === null || $row->kind === null, 422, 'This notification has no project and type to mute.');
-        $tenantId = (string) $this->tenants->tenantId();
+        $tenantId = (string) app(TenantContext::class)->tenantId();
 
         // Every name the same fact goes by, so the bell's older kind and the engine's event key are muted together.
         foreach (EngineKinds::aliases((string) $row->kind) as $kind) {
@@ -70,7 +70,7 @@ final class NotificationCenterController extends Controller
     public function mutes(Request $request): JsonResponse
     {
         $ar = ($request->user()->locale ?? 'ar') !== 'en';
-        $rows = NotificationMute::withoutGlobalScopes()->where('tenant_id', $this->tenants->tenantId())->where('user_id', $request->user()->id)
+        $rows = NotificationMute::withoutGlobalScopes()->where('tenant_id', app(TenantContext::class)->tenantId())->where('user_id', $request->user()->id)
             ->orderBy('created_at')->get();
         $names = DB::table('projects')->whereIn('id', $rows->pluck('project_id')->all())->pluck('name', 'id');
 
@@ -98,7 +98,7 @@ final class NotificationCenterController extends Controller
     public function unmute(Request $request): JsonResponse
     {
         $data = $request->validate(['ids' => ['required', 'array', 'max:20'], 'ids.*' => ['uuid']]);
-        $n = NotificationMute::withoutGlobalScopes()->where('tenant_id', $this->tenants->tenantId())->where('user_id', $request->user()->id)
+        $n = NotificationMute::withoutGlobalScopes()->where('tenant_id', app(TenantContext::class)->tenantId())->where('user_id', $request->user()->id)
             ->whereIn('id', $data['ids'])->delete();
 
         return ApiResponse::success(['removed' => $n, 'unread' => $this->inbox->unreadCount($request->user())], 'Mute removed.');

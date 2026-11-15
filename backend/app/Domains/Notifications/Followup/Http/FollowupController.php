@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Followup\Http;
 
 use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
+use App\Domains\Notifications\Engine\Exceptions\EntitlementBlocked;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Notifications\Followup\FollowupTasks;
 use App\Domains\Notifications\Followup\FollowupText;
@@ -38,7 +39,6 @@ final class FollowupController extends Controller
 {
     public function __construct(
         private readonly FollowupTasks $tasks,
-        private readonly TenantContext $tenants,
         private readonly WorkspaceSettingsRepository $settings,
         private readonly WorkspaceTypes $types,
         private readonly DigestScope $scope,
@@ -61,6 +61,9 @@ final class FollowupController extends Controller
         };
         if ($project = $request->string('project_id')->toString()) {
             $query->where('project_id', $project);
+        }
+        if ($request->boolean('mine')) {
+            $query->where('assigned_user_id', $user->getKey());
         }
 
         $counts = $this->tasks->visibleTo($user, $tenantId)->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status');
@@ -197,14 +200,19 @@ final class FollowupController extends Controller
     {
         $data = $request->validate(['notification_id' => ['required', 'uuid'], 'recipient_id' => ['required', 'uuid']]);
         $row = $this->notification($request, $data['notification_id']);
-        $out = $rerouter->reroute($request->user(), $row, $data['recipient_id'], $this->tenantId());
+        try {
+            $out = $rerouter->reroute($request->user(), $row, $data['recipient_id'], $this->tenantId());
+        } catch (EntitlementBlocked $e) {
+            return ApiResponse::error(__('notifications_v2.upgrade'), ['entitlement' => [$e->state->key->value]], ['entitlement' => $e->state->toArray(), 'upgrade' => true], 403);
+        }
 
         return ApiResponse::success($out + ['message' => __('notifications_v2.followup.reroute.queued')], 'Report queued for the recipient.', status: 202);
     }
 
     private function tenantId(): string
     {
-        return (string) $this->tenants->tenantId();
+        // Resolved per call: a controller object may outlive one request (a test, a worker), and the tenant is the request's.
+        return (string) app(TenantContext::class)->tenantId();
     }
 
     private function ar(User $user): bool
