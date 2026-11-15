@@ -10,6 +10,7 @@ use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
+use App\Domains\Notifications\Http\Controllers\AlertSettingsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
@@ -45,6 +46,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers,portal'])->group(function (): void {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/alert-settings', [AlertSettingsController::class, 'show'])->name('notifications.alert-settings.show');
+    Route::match(['put', 'patch'], 'notifications/alert-settings', [AlertSettingsController::class, 'update'])->name('notifications.alert-settings.update');
+    Route::get('notifications/summary', [NotificationController::class, 'summary'])->name('notifications.summary');
     Route::get('notifications/deliveries', [NotificationController::class, 'deliveries'])->name('notifications.deliveries');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');

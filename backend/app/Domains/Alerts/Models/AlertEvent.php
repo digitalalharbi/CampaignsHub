@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Alerts\Models;
 
+use App\Domains\Notifications\Services\NotificationInbox;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,21 @@ final class AlertEvent extends Model
         'last_triggered_at', 'snoozed_until', 'resolved_at',
         'priority', 'evidence', 'anatomy', 'decision_status', 'decision_reason', 'action_tag', 'owner_id', 'decided_at', 'impact_baseline',
     ];
+
+    /**
+     * NOTIF-BELL-001 — a notification closes with the alert that raised it.
+     *
+     * Hooked on the model rather than on one caller: an alert closes from the evaluator's own sweep (the condition
+     * cleared), from a person pressing «حُلّ», and in bulk when a rule is removed — and the bell must follow all three.
+     */
+    protected static function booted(): void
+    {
+        self::updated(static function (self $event): void {
+            if ($event->wasChanged('status') && $event->status === 'resolved') {
+                app(NotificationInbox::class)->closeForAlert($event);
+            }
+        });
+    }
 
     protected $casts = [
         'context' => 'array',

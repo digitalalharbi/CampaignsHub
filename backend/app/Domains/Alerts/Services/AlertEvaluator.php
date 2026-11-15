@@ -38,6 +38,7 @@ use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
+use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -573,6 +574,7 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $event->entity_type,
             'entity_id' => $event->entity_id,
+            'kind' => 'recovered',
             'action_url' => '/alerts',
             // The alert itself was notified on this type+entity minutes ago; its recovery is a different
             // message, not a repeat of it, so it carries its own key past the dispatcher's dedup window.
@@ -751,6 +753,9 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
+            // NOTIF-BELL-001 — the finding itself (what the bell names it by) and one notification per finding per day.
+            'kind' => BellKind::forAlert((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? [])),
+            'upsert_daily' => true,
             /*
              * PORTAL-RELATIVE (REG-011). An alert is tenant-wide and its recipients are not all in
              * the same portal, so a fixed `/app/alerts` sent an agency operator into the advertiser
