@@ -62,3 +62,22 @@ contract) and the role dashboard is reached at `/…/home`.
 
 Pre-existing skip worth a look (not changed here): `agency-portal` «a client budget names the projects the money is in» skips
 when `/agency` has no `client-budgets` table — skipped on CI before this change too.
+
+## Round 2 — CI run 43754848913 (HEAD `0692fbfa7`, full gate)
+
+| # | Failure | Root cause | Class | Fix | Commit |
+|---|---|---|---|---|---|
+| 11 | chromium `ga4-print-fit` «marketing only»: `__ga4_overview` 0.84 < 0.85 | My own #3 (`608137af7`): with `min-h-6` on the label, a WRAPPED movement pill added 24 + 2 + pill instead of the old row's 15 + 2 + pill, so every GA4 tile with a wide pill grew 9px. Reproduced locally with wider glyphs on the report whose pill reads «15.1%»: main's card 0.851, `608137af7` 0.84 | a (regression from round 1) | movement box trimmed `-my-[4.5px]` (½ × (24 − 15)): centred in 24px on the label line, and a wrapped pill adds exactly what the old row added; `empty:hidden` for a trailing that renders nothing. Same case now 0.851 (= main); floor unchanged. Unit test pins both | `16bacfb40` |
+| 12 | firefox `analytics-normalization` ×2: the «جودة البيانات والإسناد» tab stays `aria-selected=false` | React Router's functional `setSearchParams` receives the params of the render that made the setter. `usePeriod`'s mount write (K) and the tab click (`useUrlState`) issued before the next render each started from the same stale address; the second navigation dropped the first (which one loses depends on how the browser orders the effect and the event) | a | `useLatestSearchParams` (`lib/url/latestSearchParams.ts`): writes chain through the pending address until the router commits it (path-scoped, 1.5 s expiry). Used by `usePeriod`, `useUrlState`/`useUrlWriter`/`useUrlList`, `useProjectFromUrl` (the on-mount writers and the tab/filter writers). Vitest reproduces both orders (failed before: tab or period lost) | `721952a52` |
+| 13 | firefox `live-link-builder` ×1, `live-link-creation` ×4: the first account checkbox never stays checked | Same mechanism, triggered by the dialog: the live-link and report builders call `usePeriod` only to seed their own dates, but its mount effect navigated the PAGE (`/reports?from=…&to=…`) as the dialog opened, under the person's first click | a | `usePeriod({ writeUrl: false })` for both builders — they read the period and leave the page address alone (third vitest case) | `721952a52` |
+| 14 | firefox `notifications-bell` «the ping»: `pings` stays 0 | `alertSound` unlocked audio on `pointerdown`/`keydown`/`touchstart` only and dropped a ping when the context was not yet `running`. Firefox under automation delivers the first click as mouse events, and reports a context resumed inside a gesture as `suspended` until its audio thread starts | a | `mousedown` and `click` also unlock; after a real gesture a suspended context is resumed and the tone starts once it is running (still nothing before the first gesture, nothing logged). The spec's stub is unchanged (it counts `osc.stop`, which now happens after the start). Unit test models Firefox's order and failed on the old code | `446d551ee` |
+
+**Not verified in Firefox.** Firefox does not launch on this Mac (`firefox.launch()` 0 ms per test, also from the
+coordinator's shell), so #12–#14 rest on the CI logs, the code, and unit tests that reproduce the mechanism (the URL race
+in jsdom with a real router; Firefox's audio order with a modelled AudioContext). Which of the two event orders Firefox
+actually hit for #12/#13 could not be observed; the fix covers both. CI's Firefox shards are the evidence still owed.
+
+Round 2 local evidence: chromium — ga4-print-fit, analytics-normalization, live-link-builder, live-link-creation,
+notifications-bell, period-picker, entity-workspace, campaigns, report-pdf/tabular-download, owner-acceptance-content,
+first-viewport-detail, settings-ia, notification-depth: **92/92**. Webkit, same set: **92/92**. Vitest 775 files /
+5363 tests; `tsc -b`, oxlint (touched) clean; pint, phpstan clean (no PHP changed).
