@@ -81,10 +81,19 @@ trait ExternalFixtures
     /** @return list<array{email: Email, rcpt: list<string>}> */
     protected function sent(): array
     {
-        return app('mailer')->getSymfonyTransport()->messages()->map(static fn (SentMessage $m): array => [
-            'email' => $m->getOriginalMessage(),
-            'rcpt' => array_map(static fn ($a): string => $a->getAddress(), $m->getEnvelope()->getRecipients()),
-        ])->values()->all();
+        return app('mailer')->getSymfonyTransport()->messages()
+            ->filter(static fn (SentMessage $m): bool => $m->getOriginalMessage() instanceof Email && $m->getOriginalMessage()->getHeaders()->has('X-CH-Reference'))
+            ->map(static fn (SentMessage $m): array => [
+                'email' => $m->getOriginalMessage(),
+                'rcpt' => array_map(static fn ($a): string => $a->getAddress(), $m->getEnvelope()->getRecipients()),
+            ])->values()->all();
+    }
+
+    /** A new command run: the composer's per-run memo starts empty (the fake figures may have changed). */
+    protected function freshRun(): void
+    {
+        $this->app->forgetScopedInstances();
+        $this->app->instance(DigestDataSource::class, $this->data);
     }
 
     protected function disable(string $key): void

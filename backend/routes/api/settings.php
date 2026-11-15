@@ -8,6 +8,7 @@ use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
 use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
 use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
 use App\Domains\Notifications\External\Http\ExternalRecipientsController;
+use App\Domains\Notifications\External\Http\ExternalReviewsController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\AccessCenterController;
@@ -155,6 +156,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
         Route::post('recipients/{recipient}/subscriptions', [ExternalRecipientsController::class, 'storeSubscription'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('subscriptions.store');
         Route::patch('subscriptions/{subscription}', [ExternalRecipientsController::class, 'updateSubscription'])->whereUuid('subscription')->middleware('plan.feature:notifications.external')->name('subscriptions.update');
         Route::post('subscriptions/{subscription}/{action}', [ExternalRecipientsController::class, 'subscriptionAction'])->whereUuid('subscription')->whereIn('action', ['pause', 'resume', 'cancel', 'duplicate'])->middleware('plan.feature:notifications.external')->name('subscriptions.action');
+        Route::get('reviews', [ExternalReviewsController::class, 'index'])->name('reviews.index');
+        Route::post('reviews/{review}/send', [ExternalReviewsController::class, 'send'])->whereUuid('review')->middleware('plan.feature:notifications.external')->name('reviews.send');
+        Route::post('reviews/{review}/skip', [ExternalReviewsController::class, 'skip'])->whereUuid('review')->name('reviews.skip');
     });
 
     // Security (account + org policy).

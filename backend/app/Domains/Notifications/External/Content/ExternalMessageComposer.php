@@ -51,7 +51,7 @@ final class ExternalMessageComposer implements MessageComposer
             return $this->internal->compose($delivery);
         }
 
-        return $this->memo[$delivery->id.'|'.$delivery->attempts.'|'.($delivery->payload['_copy'] ?? '-')] ??= $this->external($delivery, 'auto');
+        return $this->memo[$delivery->id.'|'.$delivery->attempts.'|'.md5((string) json_encode($delivery->payload))] ??= $this->external($delivery, 'auto');
     }
 
     /** The same message in a forced theme (previews: «dark»), without memo. */

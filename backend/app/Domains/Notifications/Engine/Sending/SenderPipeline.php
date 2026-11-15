@@ -144,6 +144,9 @@ final class SenderPipeline
 
         foreach ($this->checks as $check) {
             $verdict = $check->check($d);
+            if ($verdict !== null && $verdict[0] === DeliveryStatus::Deferred) {
+                return $this->deferForCheck($d, $verdict[1], (int) ($verdict[2] ?? 120), $now);
+            }
             if ($verdict !== null) {
                 return $this->finish($d, $verdict[0], $verdict[1], null, $verdict[0] === DeliveryStatus::Skipped ? 'skipped' : 'held');
             }
@@ -170,6 +173,24 @@ final class SenderPipeline
         }
 
         return $this->finishFailure($d, $result, $now);
+    }
+
+    /**
+     * A pre-send check asked to try later (spec §7 incomplete data: 2 h, once). The log gets the non-terminal `deferred`
+     * row; the outbox row waits with `_data_retry` in its payload so the second pass never defers again.
+     *
+     * @return 'retried'
+     */
+    private function deferForCheck(Delivery $d, string $reason, int $minutes, Carbon $now): string
+    {
+        $this->log->record($d, DeliveryStatus::Deferred, $reason);
+        $payload = $d->payload + ['_data_retry' => $now->toIso8601String()];
+        DB::table('notification_outbox')->where('id', $d->id)->where('state', 'claimed')->update([
+            'state' => 'pending', 'attempts' => 0, 'not_before' => $now->copy()->addMinutes(max(1, $minutes)), 'deferred_reason' => mb_substr($reason, 0, 40),
+            'payload' => json_encode($payload), 'updated_at' => $now,
+        ]);
+
+        return 'retried';
     }
 
     /** @return 'failed'|'retried' */

@@ -8,6 +8,8 @@ use App\Domains\Notifications\Engine\Contracts\MessageComposer;
 use App\Domains\Notifications\External\Charts\ChartImages;
 use App\Domains\Notifications\External\Charts\ResvgCharts;
 use App\Domains\Notifications\External\Charts\TableOnlyCharts;
+use App\Domains\Notifications\External\Checks\ExternalPreSendChecks;
+use App\Domains\Notifications\External\Console\ReviewSweepCommand;
 use App\Domains\Notifications\External\Content\ExternalMessageComposer;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
 use App\Domains\Notifications\External\Digest\MetricsDigestDataSource;
@@ -31,5 +33,13 @@ final class ExternalNotificationsServiceProvider extends ServiceProvider
         $this->app->bind(MessageComposer::class, fn ($app) => $app->make(ExternalMessageComposer::class));
         $this->app->bind(ExternalTransport::class);
         $this->app->bind(ExternalMailer::class);
+        $this->app->tag([ExternalPreSendChecks::class], 'notifications.presend');
+    }
+
+    public function boot(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([ReviewSweepCommand::class]);
+        }
     }
 }

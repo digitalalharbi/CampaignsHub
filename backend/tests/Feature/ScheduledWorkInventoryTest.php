@@ -63,6 +63,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'notifications:v2-send',
         'notifications:v2-consent-sweep',
         'notifications:v2-grace-heads-up',
+        // NOTIF-V2-EXTERNAL-001 — the review window of held external messages (15 min).
+        'notifications:v2-review-sweep',
         'fx:rates',
         // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
         'fx:monitor',
