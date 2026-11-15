@@ -22,6 +22,7 @@ final class ChartSvg
             'donut' => self::donut($spec, $theme),
             'trend' => self::trend($spec, $theme),
             'ring' => self::ring($spec, $theme),
+            'icon' => self::icon($spec, $theme),
             default => null,
         };
     }
@@ -34,11 +35,11 @@ final class ChartSvg
         if ($total <= 0) {
             return null;
         }
-        $w = self::WIDTH;
-        $h = 200;
+        $w = 220;
+        $h = 190;
         $cx = $w / 2;
-        $cy = 100;
-        $r = 72;
+        $cy = 95;
+        $r = 68;
         $circ = 2 * M_PI * $r;
         $offset = 0.0;
         $arcs = '';
@@ -51,7 +52,7 @@ final class ChartSvg
         $center = self::e((string) ($spec['center'] ?? ''));
 
         return ['svg' => self::wrap($w, $h, '<circle cx="'.$cx.'" cy="'.$cy.'" r="'.$r.'" fill="none" stroke="'.T::color('surface-secondary', $theme).'" stroke-width="26"/>'.$arcs
-            .'<text x="'.$cx.'" y="'.($cy + 6).'" text-anchor="middle" font-size="17" font-weight="700" fill="'.T::color('text-primary', $theme).'">'.$center.'</text>'), 'width' => $w, 'height' => $h];
+            .'<text x="'.$cx.'" y="'.($cy + 6).'" text-anchor="middle" font-size="20" font-weight="800" fill="'.T::color('text-primary', $theme).'">'.$center.'</text>'), 'width' => $w, 'height' => $h];
     }
 
     /** @param array<string, mixed> $spec */
@@ -64,8 +65,8 @@ final class ChartSvg
         }
         $previous = array_values((array) ($spec['previous'] ?? []));
         $w = self::WIDTH;
-        $h = 170;
-        $pad = 14;
+        $h = 150;
+        $pad = 12;
         $max = max(array_merge($present, array_filter($previous, 'is_numeric'), [1]));
         $n = count($values);
         $x = static fn (int $i, int $count): float => $pad + ($count <= 1 ? 0 : $i * ($w - 2 * $pad) / ($count - 1));
@@ -110,6 +111,18 @@ final class ChartSvg
             '<circle cx="'.$c.'" cy="'.$c.'" r="'.$r.'" fill="none" stroke="'.T::color('surface-secondary', $theme).'" stroke-width="12"/>'
             .sprintf('<circle cx="%s" cy="%s" r="%s" fill="none" stroke="%s" stroke-width="12" stroke-linecap="round" stroke-dasharray="%.3f %.3f" transform="rotate(-90 %s %s)"/>', $c, $c, $r, T::color('brand-600', $theme), $circ * $ratio, $circ, $c, $c)
             .'<text x="'.$c.'" y="'.($c + 6).'" text-anchor="middle" font-size="18" font-weight="700" fill="'.T::color('text-primary', $theme).'">'.self::e((string) $spec['label']).'</text>'), 'width' => $s, 'height' => $s];
+    }
+
+    /** A 16px stroke glyph from the product's icon set (`Icons`), drawn in a token colour. @param array<string, mixed> $spec */
+    private static function icon(array $spec, string $theme): ?array
+    {
+        $paths = Icons::PATHS[(string) ($spec['name'] ?? '')] ?? null;
+        if ($paths === null) {
+            return null;
+        }
+        $color = T::color((string) ($spec['color'] ?? 'text-muted'), $theme);
+
+        return ['svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'.$color.'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'.$paths.'</svg>', 'width' => 16, 'height' => 16];
     }
 
     private static function wrap(int $w, int $h, string $body): string

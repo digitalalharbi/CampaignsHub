@@ -47,14 +47,15 @@ final class ExternalMessageTest extends TestCase
         $this->assertSame('Launch — Alpha Agency | ملخص 2026-11-01 – 2026-11-14 · CampaignsHub', $mail->getSubject());
         $this->assertSame('Alpha Agency عبر CampaignsHub', $mail->getFrom()[0]->getName());
         $this->assertSame('info@campaignshub.io', $mail->getFrom()[0]->getAddress());
-        $this->assertStringContainsString('تقرير مشروع: Launch', $html);
-        $this->assertStringContainsString('تديره: Alpha Agency', $html);
+        $this->assertStringContainsString('مشروع: Launch', $html); // the project badge chip (Q2: a chip, not a sentence)
+        $this->assertStringContainsString('Alpha Agency', $html);          // the workspace lockup in the header band
+        $this->assertStringContainsString('تديره: Alpha Agency', $text);
         $this->assertStringContainsString('مرحبًا أستاذة سارة،', $html); // shown literally, no title added
-        $this->assertStringContainsString('هذه الرسالة مخصصة لك بصفتك المالية في مشروع Launch لدى Alpha Agency، وتشمل بيانات Launch فقط.', $text);
-        $this->assertStringContainsString('لماذا وصلتك هذه الرسالة؟ أنت مشترك في تقارير مشروع Launch من Alpha Agency منذ 2026-10-01.', $text);
-        $this->assertStringContainsString('تم إنشاء هذا التقرير تلقائيًا بواسطة CampaignsHub', $text);
-        $this->assertStringContainsString('ولا يتطلب أي إجراء منك', $text);
-        $this->assertMatchesRegularExpression('/الرقم المرجعي: N-[0-9]{6}-[A-Z0-9]{8}/u', $text);
+        $this->assertStringContainsString('مخصصة لك بصفتك المالية — بيانات Launch فقط', $text);
+        $this->assertStringContainsString('سبب وصولها: اشتراكك في تقارير Launch منذ 2026-10-01', $text);
+        $this->assertStringContainsString('تقرير آلي من CampaignsHub', $text);
+        $this->assertStringContainsString('ولا يتطلب إجراءً', $text);
+        $this->assertMatchesRegularExpression('/المرجع: N-[0-9]{6}-[A-Z0-9]{8}/u', $text);
         $this->assertStringContainsString('List-Unsubscribe', $mail->getHeaders()->toString());
 
         // Only allowed links: unsubscribe/manage and the footprint. No platform page, no id route.
@@ -65,11 +66,28 @@ final class ExternalMessageTest extends TestCase
         foreach (['مطلوب منك', 'أقر بالاستلام', 'آخر موعد', 'فشل', 'خسارة', 'عاجل', 'إنذار'] as $forbidden) {
             $this->assertStringNotContainsString($forbidden, $html);
         }
-        // Per-objective KPIs: the sales cost per order and the awareness figures stand apart.
-        $this->assertStringContainsString('المبيعات', $html);
-        $this->assertStringContainsString('الوعي والوصول', $html);
         $this->assertLessThan(100 * 1024, strlen($html));
         $this->assertSame(1, DB::table('usage_counters')->where('tenant_id', $this->tenant->id)->where('metric', 'notif.external_messages')->value('count'));
+    }
+
+    public function test_a_project_manager_sees_each_objective_apart_and_finance_sees_the_money(): void
+    {
+        [, $pm] = $this->subscribe('pm@client.test', 'project_manager', [$this->project->id]);
+        [, $fin] = $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
+        $this->raise('digest.periodic', $this->project->id, $pm);
+        $this->raise('digest.periodic', $this->project->id, $fin);
+        $this->assertSame(2, $this->drain()['sent']);
+        $html = [];
+        foreach ($this->sent() as $mail) {
+            $html[(string) $mail['email']->getTo()[0]->getAddress()] = (string) $mail['email']->getHtmlBody();
+        }
+        // Per-objective figures: the sales cost per order and the awareness figures stand apart (the digest's own group card).
+        $this->assertStringContainsString('المبيعات', $html['pm@client.test']);
+        $this->assertStringContainsString('الوعي والوصول', $html['pm@client.test']);
+        // Finance: the weekly spend summary's blocks — the period's spend, what is left, the project card.
+        $this->assertStringContainsString('data-block="spend-total"', $html['finance@client.test']);
+        $this->assertStringContainsString('data-block="spend-project"', $html['finance@client.test']);
+        $this->assertStringNotContainsString('data-block="group"', $html['finance@client.test']);
     }
 
     public function test_a_long_custom_subject_is_cut_in_its_custom_part_only(): void

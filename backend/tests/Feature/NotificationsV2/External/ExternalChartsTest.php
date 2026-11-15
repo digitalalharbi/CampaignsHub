@@ -37,11 +37,11 @@ final class ExternalChartsTest extends TestCase
 
     public function test_chart_svg_uses_the_shared_tokens_and_the_message_figures(): void
     {
-        $donut = ChartSvg::for(['kind' => 'donut', 'center' => '4,200.00 $', 'segments' => [['provider' => 'meta', 'label' => 'Meta', 'value' => 2500.0], ['provider' => 'snapchat', 'label' => 'Snapchat', 'value' => 1200.0]]], 'light');
+        $donut = ChartSvg::for(['kind' => 'donut', 'center' => '4,200 $', 'segments' => [['provider' => 'meta', 'label' => 'Meta', 'value' => 2500.0], ['provider' => 'snapchat', 'label' => 'Snapchat', 'value' => 1200.0]]], 'light');
         $this->assertNotNull($donut);
         $this->assertStringContainsString(DesignTokens::platform('meta'), $donut['svg']);
         $this->assertStringContainsString(DesignTokens::platform('snapchat'), $donut['svg']);
-        $this->assertStringContainsString('4,200.00 $', $donut['svg']);
+        $this->assertStringContainsString('4,200 $', $donut['svg']);
         $dark = ChartSvg::for(['kind' => 'ring', 'ratio' => 0.42, 'label' => '42%'], 'dark');
         $this->assertStringContainsString(DesignTokens::color('brand-600', 'dark'), (string) $dark['svg']);
         $this->assertNull(ChartSvg::for(['kind' => 'trend', 'values' => [5.0]], 'light')); // one point is not a trend
@@ -67,7 +67,7 @@ final class ExternalChartsTest extends TestCase
         }
         $this->assertStringContainsString('alt="توزيع الإنفاق حسب المنصة: Meta 2,500.00 $', $html); // alt text with the numbers
         $parts = $mail->getAttachments();
-        $this->assertCount(6, $parts);
+        $this->assertCount(8, $parts); // donut, trend, ring and the lock glyph, each light + dark
         $bytes = 0;
         foreach ($parts as $part) {
             $png = $part->getBody();
@@ -76,8 +76,9 @@ final class ExternalChartsTest extends TestCase
         }
         $this->assertLessThan(400 * 1024, $bytes);
         $this->assertLessThan(100 * 1024, strlen($html));
-        $size = getimagesizefromstring($parts[0]->getBody());
-        $this->assertSame(ChartSvg::WIDTH * 2, $size[0]); // 2x
+        $widths = array_map(static fn ($p): int => (int) getimagesizefromstring($p->getBody())[0], $parts);
+        $this->assertContains(ChartSvg::WIDTH * 2, $widths); // the trend at 2x
+        $this->assertContains(32, $widths);                  // the 16px lock at 2x
         $this->assertSame(3, DB::table('usage_counters')->where('tenant_id', $this->tenant->id)->where('metric', 'notif.charts_generated')->value('count'));
 
         // Cached per project + period + type + theme: the second recipient's identical charts render nothing new.

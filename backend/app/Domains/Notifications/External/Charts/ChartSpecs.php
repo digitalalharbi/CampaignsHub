@@ -34,9 +34,10 @@ final class ChartSpecs
                 'first' => (string) (($data['series'][0]['date'] ?? '') ?: ''), 'last' => (string) ((end($data['series']) ?: [])['date'] ?? ''),
             ];
         }
-        if (is_array($model['opening']['ring'] ?? null)) {
-            $specs[] = ['key' => 'ring', 'kind' => 'ring', 'rtl' => $rtl, 'ratio' => (float) $model['opening']['ring']['ratio'], 'label' => (string) round((float) $model['opening']['ring']['ratio'] * 100).'%'];
+        if (is_array($model['spend_card']['ring'] ?? null)) {
+            $specs[] = ['key' => 'ring', 'kind' => 'ring', 'rtl' => $rtl, 'ratio' => (float) $model['spend_card']['ring']['ratio'], 'label' => (string) round((float) $model['spend_card']['ring']['ratio'] * 100).'%'];
         }
+        $specs[] = ['key' => 'lock', 'kind' => 'icon', 'rtl' => $rtl, 'name' => 'lock', 'color' => 'text-muted'];
 
         return $specs;
     }

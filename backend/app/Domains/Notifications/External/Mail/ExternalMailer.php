@@ -166,7 +166,7 @@ final class ExternalMailer
 
     private function countCharts(Delivery $d, ComposedMessage $m): void
     {
-        $charts = count(array_filter(array_keys($m->inline), static fn (string $cid): bool => ! str_ends_with($cid, '-dark')));
+        $charts = count(array_filter(array_keys($m->inline), static fn (string $cid): bool => ! str_ends_with($cid, '-dark') && $cid !== 'lock'));
         if ($charts > 0) {
             $this->usage->increment($d->tenantId, UsageCounter::CHARTS_GENERATED, $charts);
         }

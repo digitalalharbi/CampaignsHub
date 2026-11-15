@@ -16,21 +16,7 @@
     @include('mail.digest._head', ['title' => \App\Domains\Notifications\Support\DigestSchedule::title('project', $kind, $ar), 'sub' => $periodLabel])
 
     {{-- Verdict + the ONE figure the project is judged on. --}}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="project-head" data-state="{{ $m['state'] }}" style="background-color:{{ $S::SOFT[$m['state']] }}; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:10px;">
-        <tr>
-            <td style="padding:12px 14px; vertical-align:middle;">
-                <div>@include('mail.digest._chip', ['state' => $m['state'], 'size' => 24, 'label' => true])</div>
-                <div style="font-size:18px; font-weight:800; color:#0b1a16; padding-top:6px;">{{ $m['name'] }}</div>
-                <div style="font-size:12px; color:#5b6b68; padding-top:2px;">{{ $m['mixed'] ? ($ar ? 'كل الأهداف' : 'All objectives') : $m['objective_label'] }} · {{ $t['kind_note'] }}</div>
-                @if ($m['state'] === 'none')<div data-block="no-data-reason" style="font-size:12px; color:#3d4742; padding-top:4px;">{{ $m['status']['reason'] }}</div>@endif
-            </td>
-            <td width="116" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:{{ $S::CELL[$m['state']] }}; border-radius:{{ $startSide === 'right' ? '12px 0 0 12px' : '0 12px 12px 0' }};">
-                <div class="ch-kpi-lead" style="font-size:24px; line-height:1.15; font-weight:800; color:{{ $h['missing'] ? '#8b9a97' : $S::INK[$m['state']] }};" dir="ltr">{{ $h['value'] }}</div>
-                <div style="font-size:11px; color:#5b6b68;">{{ $h['label'] }}</div>
-                @if ($h['change'])<div style="font-size:12px; font-weight:800; color:{{ $h['colour'] }};" dir="ltr">{{ $h['change'] }}</div>@endif
-            </td>
-        </tr>
-    </table>
+    @include('mail.blocks.verdict', ['state' => $m['state'], 'name' => $m['name'], 'sub' => ($m['mixed'] ? ($ar ? 'كل الأهداف' : 'All objectives') : $m['objective_label']).' · '.$t['kind_note'], 'kpi' => $h, 'reason' => $m['state'] === 'none' ? $m['status']['reason'] : ''])
 
     {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the project's TOTAL first, across all its accounts and objectives. --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:6px 0 10px;">
@@ -114,18 +100,7 @@
     @endif
 
     {{-- The platform strip: every platform of the project, one chip each. --}}
-    @if ($m['cells'])
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="platform-strip" style="margin-bottom:12px; table-layout:fixed;">
-            <tr>
-                @foreach ($m['cells'] as $c)
-                    <td align="center" data-provider="{{ $c['provider'] }}" data-state="{{ $c['state'] }}" style="padding:0 2px;">
-                        <div style="font-size:10px; font-weight:700; color:#5b6b68; padding-bottom:3px; white-space:nowrap; overflow:hidden;">{{ $c['short'] }}</div>
-                        <span style="display:block; height:26px; line-height:26px; border-radius:8px; text-align:center; font-size:14px; font-weight:800; background-color:{{ $S::CELL[$c['state']] }}; color:{{ $S::INK[$c['state']] }};">{{ $S::GLYPH[$c['state']] }}</span>
-                    </td>
-                @endforeach
-            </tr>
-        </table>
-    @endif
+    @include('mail.blocks.strip', ['cells' => $m['cells']])
 
     @if ($m['content'] && ($m['content']['top'] || $m['content']['weak']))
         <div style="font-size:12px; font-weight:700; color:#5b6b68; letter-spacing:0.4px; margin:14px 0 6px;">{{ $t['content'] }}</div>

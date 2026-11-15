@@ -101,6 +101,7 @@ final class MetricsDigestDataSource implements DigestDataSource
             'campaigns' => array_map(fn (array $c): array => [
                 'name' => (string) ($c['client_display_name'] ?? '') !== '' ? (string) $c['client_display_name'] : (string) ($c['campaign_name'] ?? ''),
                 'objective' => (string) ($c['result_family'] ?? 'unknown'),
+                'provider' => (string) ($c['provider'] ?? ''),
                 'spend' => $money($c['spend'] ?? null),
                 'result' => is_numeric($c['result'] ?? null) ? (float) $c['result'] : null,
                 'result_key' => $c['result_key'] ?? null,

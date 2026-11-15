@@ -105,6 +105,7 @@ final class ExternalPreviewsTest extends TestCase
                     $this->assertLessThan(100 * 1024, strlen($m->html), $name);
                     $this->assertLessThan(400 * 1024, array_sum(array_map('strlen', $m->inline)), $name);
                     $this->assertSame(0, preg_match(ExternalPreSendChecks::EMOJI, $m->subject.$m->text.$m->html), $name);
+                    $this->assertVisualFirst($name.'.'.$locale.'.'.$theme, $m->html, $m->text, $m->inline, $theme);
                     $this->assertStringContainsString('Al-Waha Store', $m->subject);
                     $this->assertLessThanOrEqual(90, mb_strlen($m->subject));
                     if ($theme === 'light') {
@@ -136,5 +137,58 @@ final class ExternalPreviewsTest extends TestCase
                 'mean_image_bytes' => $mean($metrics['image_bytes']), 'max_image_bytes' => max($metrics['image_bytes']),
             ], JSON_PRETTY_PRINT));
         }
+    }
+
+    /** The Q2 budget: the words OUTSIDE the small print, any language (a word = a token with a letter in it; numbers are the content). */
+    public const WORD_BUDGET = 90;
+
+    /**
+     * Visual first (Owner, 2026-11-15): a word budget on the body, alt text with the numbers on every chart, the dark alternate
+     * of every light image, the text part carrying the figures the charts draw, and the calm palette only (no alarm red).
+     *
+     * @param  array<string, string>  $inline
+     */
+    private function assertVisualFirst(string $label, string $html, string $text, array $inline, string $theme): void
+    {
+        $body = (string) preg_replace('#<(style|head|title)[\s\S]*?</\1>|<!--[\s\S]*?-->|<td[^>]*data-external-footer[\s\S]*?</td>#u', '', $html);
+        $words = array_filter(preg_split('/\s+/u', html_entity_decode(strip_tags((string) preg_replace('/<[^>]+>/', ' ', $body)))) ?: [], static fn (string $w): bool => preg_match('/\p{L}/u', $w) === 1);
+        $this->assertLessThanOrEqual(self::WORD_BUDGET, count($words), "{$label}: the body has ".count($words).' words');
+
+        // Every image has alt text; a chart's alt carries its numbers.
+        preg_match_all('/<img\b[^>]*>/u', $html, $imgs);
+        foreach ($imgs[0] as $img) {
+            $this->assertStringContainsString(' alt="', $img, $label);
+            if (preg_match('/src="cid:(donut|trend|ring)/', $img) === 1) {
+                $this->assertMatchesRegularExpression('/alt="[^"]*\d[^"]*"/u', $img, "{$label}: a chart image needs numbers in its alt");
+            }
+        }
+        // Dark alternates: every light cid has its `-dark` twin; a dark message carries only the dark one.
+        foreach (array_keys($inline) as $cid) {
+            if (! str_ends_with($cid, '-dark')) {
+                $this->assertArrayHasKey($cid.'-dark', $inline, $label);
+            }
+        }
+        if ($theme === 'dark') {
+            $this->assertSame(0, preg_match('/src="cid:[a-z]+"/', $html), "{$label}: a dark message references no light image");
+        }
+        // Text parity: the figures the charts draw are written out in the text part.
+        preg_match_all('/alt="((?:[^"]*\d[^"]*))"/u', $html, $alts);
+        foreach ($alts[1] as $alt) {
+            foreach (['donut', 'trend'] as $k) {
+                if (str_contains($html, 'cid:'.$k)) {
+                    $this->assertNotSame('', $text, $label);
+                }
+            }
+        }
+        $this->assertMatchesRegularExpression('/\d,?\d*\.\d\d/', $text, "{$label}: the exact figures are in the text part");
+        // The calm palette: the digests' alarm states never appear on an external message.
+        foreach (['#f5bcbc', '#a31616', '#fef2f2', '✕'] as $alarm) {
+            $this->assertStringNotContainsString($alarm, $html, "{$label}: alarm colour or glyph {$alarm}");
+        }
+        $this->assertStringNotContainsString('<script', $html, $label);
+        $this->assertStringNotContainsString('display:flex', $html, $label);
+        $this->assertStringNotContainsString('var(--', $html, $label);
+        $this->assertStringContainsString('name="color-scheme"', $html, $label);
+        $this->assertStringContainsString('dir="', $html, $label);
     }
 }

@@ -124,12 +124,12 @@ final class ExternalChecksAndReviewTest extends TestCase
         $this->assertSame(['deferred', 'sent'], $this->statuses());
         $html = (string) $this->sent()[0]['email']->getHtmlBody();
         $this->assertStringContainsString('قيد التحديث — يصلك في الملخص القادم', $html);
-        $this->assertStringNotContainsString('المؤشرات حسب الهدف', $html);
+        $this->assertStringNotContainsString('data-block="report-verdict"', $html); // no figures while the data is updating
     }
 
     public function test_currency_without_rate_illogical_numbers_and_forbidden_wording_go_to_review(): void
     {
-        $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
+        [, $sid] = $this->subscribe('finance@client.test', 'admin', [$this->project->id]); // the role whose report carries suggestions
         $cases = [
             ['fx' => [['from' => 'EUR', 'to' => 'USD', 'rate' => null, 'rate_date' => null, 'kind' => null, 'withheld' => true]]],
             ['spend' => -5.0],
@@ -140,7 +140,8 @@ final class ExternalChecksAndReviewTest extends TestCase
         foreach ($cases as $i => $override) {
             $this->data->override = $override;
             $this->freshRun();
-            $this->raise('target.reached', $this->project->id, null, ['case' => $i]);
+            // The suggestion cases need an event that carries suggestions (the digest); the others ride a target event.
+            $i >= 3 ? $this->raise('digest.periodic', $this->project->id, $sid, ['case' => $i]) : $this->raise('target.reached', $this->project->id, null, ['case' => $i]);
             $this->drain();
         }
         $this->assertSame([

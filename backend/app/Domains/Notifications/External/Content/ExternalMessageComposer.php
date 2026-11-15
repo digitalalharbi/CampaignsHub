@@ -14,8 +14,11 @@ use App\Domains\Notifications\Engine\Enums\EntitlementKey;
 use App\Domains\Notifications\Engine\Enums\Scope;
 use App\Domains\Notifications\External\Charts\ChartImages;
 use App\Domains\Notifications\External\Charts\ChartSpecs;
+use App\Domains\Notifications\External\Design\ExternalDark;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
 use App\Domains\Notifications\External\Recipients\ExternalSettings;
+use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailShell;
 use Illuminate\Support\Carbon;
 
 /**
@@ -67,6 +70,30 @@ final class ExternalMessageComposer implements MessageComposer
             ??= $this->data->project($c->tenantId, $c->projectId, $c->from, $c->to, $c->currency);
     }
 
+    /**
+     * The message through the product's own shell (`mail.layout`, standalone: no link into the platform) with the workspace's
+     * identity band and the small print as its footer; dark composes the same markup through the dark palette.
+     *
+     * @param  array<string, mixed>  $model
+     */
+    private function render(array $model, string $theme): string
+    {
+        $ar = $model['locale'] === 'ar';
+        $vars = ['m' => $model, 'dir' => $model['dir'], 'startSide' => $ar ? 'right' : 'left', 'endSide' => $ar ? 'left' : 'right', 'font' => MailDesign::font($ar)];
+        $shell = MailShell::build(lang: $model['locale'], subject: (string) $model['subject'], preheader: (string) $model['preheader'], preferences: false);
+        $html = view('mail.layout', $shell + [
+            'standalone' => true,
+            'unsubscribeUrl' => $model['manage_url'],
+            'identityBand' => view('mail.external.identity', $vars)->render(),
+            'externalFooter' => view('mail.external.footer', $vars)->render(),
+            'extraHead' => $theme === 'dark' ? '' : ExternalDark::mediaCss(),
+            'testSendNotice' => $model['test_banner'] === null ? null : ['title' => $model['test_banner'], 'detail' => ''],
+            'slot' => view('mail.external.body', $vars)->render(),
+        ])->render();
+
+        return $theme === 'dark' ? ExternalDark::apply($html) : $html;
+    }
+
     private function external(Delivery $delivery, string $theme, ?Carbon $now = null): ComposedMessage
     {
         $c = ExternalContext::load($delivery, $this->settings, $this->types->profileFor($delivery->tenantId), $now)->withTheme($theme);
@@ -92,7 +119,7 @@ final class ExternalMessageComposer implements MessageComposer
             }
         }
 
-        $html = view('mail.external.report', ['m' => $model])->render();
+        $html = $this->render($model, $theme);
         $text = TextVersion::of($model);
         $sender = $footprintRemoved ? $c->workspaceName : $c->t('sender_via', ['workspace' => $c->workspaceName]);
         $replyTo = $c->settings['sender']['reply_to'] ?? null;
@@ -100,7 +127,7 @@ final class ExternalMessageComposer implements MessageComposer
         return new ComposedMessage(
             subject: (string) $model['subject'],
             title: (string) $model['subject'],
-            body: (string) ($model['event_line'] ?? $model['tone']),
+            body: (string) $model['preheader'],
             html: $html,
             text: $text,
             url: null,
