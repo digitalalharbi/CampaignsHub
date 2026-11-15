@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, API_HEADERS, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
+import { AUTH, API_HEADERS, csrfHeaders, E2E_ORIGIN, switchToEnglish, openRail } from './helpers'
 
 /**
  * Milestone acceptance (browser-observable slice) against the LIVE server, on Chromium/Firefox/WebKit:
@@ -56,6 +56,7 @@ test.describe('milestone acceptance', () => {
   test('owner entitlement nav renders and survives a reload', async ({ page }) => {
     await page.goto('/dashboard')
     await switchToEnglish(page)
+    await openRail(page, { optional: true })
     // The personal (agency) workspace shows the full operational menu — assert an entitled item is present.
     await expect(page.getByRole('link', { name: /Reports|التقارير/ }).first()).toBeVisible()
 

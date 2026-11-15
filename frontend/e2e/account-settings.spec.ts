@@ -30,6 +30,8 @@ test('change display name → persists and reflects in the shell; then reset', a
   await expect(page.getByText(/تم الحفظ|Saved successfully/)).toBeVisible()
 
   // Reflected immediately in the sidebar user card (and topbar avatar exists).
+  // NOV-SIDEBAR-001 — the rail is an icon strip until opened (and stays open for this person afterwards).
+  await page.getByTestId('rail-toggle').click()
   await expect(page.locator('aside').getByText(renamed).first()).toBeVisible()
 
   // Persists across a full reload (comes back from the /auth/me probe).

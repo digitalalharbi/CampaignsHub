@@ -58,6 +58,12 @@ test.describe('the agency rail', () => {
     const nav = page.getByRole('navigation').first()
     await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
+    /*
+     * NOV-SIDEBAR-001 — the rail is a 64px strip of icons until it is opened, so the group names are text only in
+     * the open rail. Open it with its own button, exactly as a reader does; the strip's names are asserted in shell.spec.ts.
+     */
+    await page.getByTestId('rail-toggle').click()
+    await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true')
     const text = await nav.innerText()
     /*
      * NAV-IA-001 split «العملاء والمشاريع» and renamed «الحملات».

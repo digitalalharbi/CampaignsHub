@@ -6,6 +6,7 @@ import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useClientProjectAutoSelect } from './clientProject'
 import { useUi } from '@/stores/ui'
+import { RailPopover } from '@/layouts/SidebarNav'
 
 /**
  * Client first, then project — the agency portal's own scope control (AGENCY-006).
@@ -92,9 +93,18 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
   // After the reconcile above, so a project it drops for belonging to another client is replaced in the same pass.
   useClientProjectAutoSelect()
 
-  // Collapsed rail: the control needs its labels to be usable, so it steps aside rather than
-  // rendering two unlabelled dropdowns.
-  if (collapsed) return null
+  /*
+   * Collapsed rail (NOV-SIDEBAR-001): the control needs its labels to be usable, so it is not squeezed into 64px as two
+   * unlabelled dropdowns. It opens in a popover beside one icon instead — it used to «step aside» altogether, which was
+   * harmless while the rail opened wide by default and would now hide the scope everything is read through.
+   */
+  if (collapsed) {
+    return (
+      <RailPopover icon={Building2} label={ar ? 'العميل والمشروع' : 'Client and project'} testid="agency-scope-collapsed">
+        <AgencyScopeSwitcher />
+      </RailPopover>
+    )
+  }
 
   if (clients.isLoading) {
     return <div className="h-[76px] w-full animate-pulse rounded-xl bg-surface-secondary" />

@@ -31,6 +31,11 @@ function member(over: Partial<AgencyTeamMember> = {}): AgencyTeamMember {
   }
 }
 
+/** The member's access lives in a panel, one press from its row — the row itself stays one line (NOV-FIT-001). */
+async function openMember(name = 'Sam Rahal') {
+  fireEvent.click(await screen.findByRole('button', { name: `Access: ${name}` }))
+}
+
 function team(over: Partial<AgencyTeam> = {}): AgencyTeam {
   return {
     members: [member()],
@@ -76,6 +81,7 @@ describe('AgencyTeamPage', () => {
     vi.mocked(grantClientScopes).mockResolvedValue({ member: member() })
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'en' })
 
+    await openMember()
     await waitFor(() => expect(screen.getByText('Add a client')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Add a client'))
 
@@ -92,6 +98,7 @@ describe('AgencyTeamPage', () => {
     vi.mocked(fetchAgencyTeam).mockResolvedValue(team())
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'en' })
 
+    await openMember()
     await waitFor(() => expect(screen.getByText('Add a client')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Add a client'))
     fireEvent.click(screen.getByRole('combobox'))
@@ -108,6 +115,7 @@ describe('AgencyTeamPage', () => {
     vi.mocked(withdrawClientScope).mockResolvedValue({ member: member() })
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'en' })
 
+    await openMember()
     await waitFor(() => expect(screen.getByLabelText('Remove Alpha')).toBeInTheDocument())
     fireEvent.click(screen.getByLabelText('Remove Alpha'))
 
@@ -121,7 +129,8 @@ describe('AgencyTeamPage', () => {
     )
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'en' })
 
-    await waitFor(() => expect(screen.getByText('A client outside your access')).toBeInTheDocument())
+    await openMember()
+    await waitFor(() => expect(screen.getAllByText('A client outside your access').length).toBeGreaterThan(0))
     expect(screen.queryByLabelText(/^Remove /)).not.toBeInTheDocument()
   })
 
@@ -130,6 +139,7 @@ describe('AgencyTeamPage', () => {
     vi.mocked(fetchAgencyTeam).mockResolvedValue(team({ members: [member({ is_self: true })] }))
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'en' })
 
+    await openMember()
     await waitFor(() => expect(screen.getByTestId('scope-self')).toBeInTheDocument())
     expect(screen.queryByText('Add a client')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Remove Alpha')).not.toBeInTheDocument()
