@@ -136,3 +136,64 @@ self.addEventListener('fetch', (event) => {
     })(),
   )
 })
+
+/*
+ * NOTIF-PUSH-001 — Web Push.
+ *
+ * Every push is shown (browsers require it: a silent push can get the subscription revoked), with the system's own sound and
+ * vibration — no `silent`, no `vibrate` pattern, no custom tone. The payload is the short message the server composed
+ * («[client] — الميزانية 90%») and a path; nothing else is read from it, and the path is only ever followed when it is a path
+ * on this origin. Open windows are told, so the bell's number moves at once.
+ */
+function safePath(value) {
+  const path = typeof value === 'string' ? value : ''
+  // A same-origin path only: not `//host`, not `https://…`, not `javascript:`.
+  return path.startsWith('/') && !path.startsWith('//') ? path : '/'
+}
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = {}
+  }
+
+  const title = typeof data.title === 'string' && data.title !== '' ? data.title : 'كمبينز هب'
+  const options = {
+    body: typeof data.body === 'string' ? data.body : '',
+    icon: '/icon-192.png',
+    badge: '/icons/icon-96.png',
+    dir: 'rtl',
+    lang: 'ar',
+    data: { url: safePath(data.url) },
+  }
+  // One notification per finding per object: a newer one replaces the older instead of stacking.
+  if (typeof data.tag === 'string' && data.tag !== '') options.tag = data.tag
+
+  event.waitUntil(
+    (async () => {
+      await self.registration.showNotification(title, options)
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      windows.forEach((w) => w.postMessage({ type: 'push' }))
+    })(),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = safePath(event.notification.data && event.notification.data.url)
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin)
+      if (open) {
+        await open.focus()
+        if (typeof open.navigate === 'function') await open.navigate(target)
+        return
+      }
+      await self.clients.openWindow(target)
+    })(),
+  )
+})

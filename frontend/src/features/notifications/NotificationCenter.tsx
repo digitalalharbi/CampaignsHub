@@ -7,6 +7,7 @@ import { BellVisual } from './BellVisual'
 import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification, type BellFilter } from './api'
 import { badgeText, FILTERS } from './bellFormat'
 import { useBellSound } from './useBellSound'
+import { usePushRefresh } from './pushRefresh'
 import {
   bucketLabel,
   groupByTime,
@@ -97,6 +98,7 @@ export function NotificationCenter() {
    */
   const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true })
   useBellSound(summary.data)
+  usePushRefresh()
   const q = useQuery({ queryKey: ['notifications', 'list', filter], queryFn: () => listNotifications(filter), enabled: open, refetchInterval: open ? 30_000 : false })
   const refresh = () => qc.invalidateQueries({ queryKey: ['notifications'] })
   const markRead = useMutation({ meta: { feedback: 'none' }, mutationFn: markNotificationRead, onSuccess: refresh })

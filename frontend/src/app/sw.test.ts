@@ -36,8 +36,18 @@ function boot() {
     }
   }
   const caches = { open, keys: async () => [...stores.keys()], delete: async (n: string) => stores.delete(n) }
+  const shown: Array<{ title: string; options: Record<string, unknown> }> = []
+  const posted: unknown[] = []
+  const opened: string[] = []
+  const state2: { windows: Array<{ url: string; focus: () => Promise<void>; navigate?: (u: string) => Promise<void>; postMessage: (m: unknown) => void }> } = { windows: [] }
   const self = {
-    location: { origin: 'https://app.test' }, clients: { claim: async () => undefined }, skipWaiting: vi.fn(),
+    location: { origin: 'https://app.test' }, skipWaiting: vi.fn(),
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () => state2.windows,
+      openWindow: async (u: string) => { opened.push(u) },
+    },
+    registration: { showNotification: async (title: string, options: Record<string, unknown>) => { shown.push({ title, options }) } },
     addEventListener: (t: string, h: (e: unknown) => void) => handlers.set(t, h),
   }
   const netCalls: string[] = []
@@ -57,7 +67,7 @@ function boot() {
     return responded === undefined ? undefined : await responded
   }
 
-  return { handlers, stores, writes, netCalls, state, request, fetchEvent, self }
+  return { handlers, stores, writes, netCalls, state, request, fetchEvent, self, shown, posted, opened, windows: state2.windows }
 }
 
 describe('public/sw.js', () => {
@@ -157,5 +167,64 @@ describe('public/sw.js', () => {
     const outsideList = code.replace(/const NETWORK_ONLY = \[[^\]]*\]/, '')
     expect(outsideList).not.toMatch(/\/api\//)
     expect(swSource).not.toMatch(/caches\.open\([^)]*api/i)
+  })
+})
+
+describe('public/sw.js — push', () => {
+  let sw: ReturnType<typeof boot>
+  beforeEach(() => { sw = boot() })
+
+  const push = async (data: unknown) => {
+    let pending: Promise<unknown> = Promise.resolve()
+    sw.handlers.get('push')!({ data: { json: () => data }, waitUntil: (p: Promise<unknown>) => { pending = p } })
+    await pending
+  }
+
+  it('shows the short message with the system sound and vibration, and tells open windows', async () => {
+    const seen: unknown[] = []
+    sw.windows.push({ url: 'https://app.test/agency/home', focus: async () => undefined, postMessage: (m) => seen.push(m) })
+
+    await push({ title: 'قهوة الصباح', body: 'الميزانية 90%', url: '/agency/budgets?project=p1', tag: 'ch-budget_90-L1' })
+
+    expect(sw.shown).toHaveLength(1)
+    expect(sw.shown[0]!.title).toBe('قهوة الصباح')
+    expect(sw.shown[0]!.options).toMatchObject({ body: 'الميزانية 90%', tag: 'ch-budget_90-L1', dir: 'rtl', data: { url: '/agency/budgets?project=p1' } })
+    // No custom sound or vibration: the phone's own default applies.
+    expect(sw.shown[0]!.options).not.toHaveProperty('silent')
+    expect(sw.shown[0]!.options).not.toHaveProperty('vibrate')
+    expect(sw.shown[0]!.options).not.toHaveProperty('sound')
+    expect(seen).toEqual([{ type: 'push' }])
+  })
+
+  it('still shows something for an empty or broken payload (a silent push can get the subscription revoked)', async () => {
+    sw.handlers.get('push')!({ data: { json: () => { throw new SyntaxError('x') } }, waitUntil: () => undefined })
+    await push({})
+    expect(sw.shown.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it.each(['https://evil.example/x', '//evil.example', 'javascript:alert(1)', 5, null])('never follows a URL that is not a path on this origin: %s', async (url) => {
+    await push({ title: 't', body: 'b', url })
+
+    expect(sw.shown[0]!.options.data).toEqual({ url: '/' })
+  })
+
+  const click = async (url: string) => {
+    let pending: Promise<unknown> = Promise.resolve()
+    sw.handlers.get('notificationclick')!({ notification: { close: vi.fn(), data: { url } }, waitUntil: (p: Promise<unknown>) => { pending = p } })
+    await pending
+  }
+
+  it('focuses an open window and navigates it; with none open it opens one', async () => {
+    await click('/agency/budgets')
+    expect(sw.opened).toEqual(['/agency/budgets'])
+
+    const focus = vi.fn(async () => undefined)
+    const navigate = vi.fn(async () => undefined)
+    sw.windows.push({ url: 'https://app.test/agency/home', focus, navigate, postMessage: () => undefined })
+    await click('/agency/alerts')
+
+    expect(focus).toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledWith('/agency/alerts')
+    expect(sw.opened).toEqual(['/agency/budgets'])
   })
 })

@@ -1,4 +1,5 @@
 import { Bell } from 'lucide-react'
+import { MobileAndSoundCard } from '@/features/notifications/MobileAndSoundCard'
 import { NotificationsTab } from '@/features/settings/tabs/NotificationsTab'
 import { useUi } from '@/stores/ui'
 
@@ -34,6 +35,9 @@ export function PersonalNotificationsPage() {
       </header>
 
       <NotificationsTab />
+
+      {/* NOTIF-PUSH-001 — sound, quiet hours, mobile notifications and the person's devices. */}
+      <MobileAndSoundCard />
 
       <p className="text-xs text-text-muted">
         {ar
