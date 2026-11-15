@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SYNC_STATUSES, syncStatusLabel, syncStatusMeaning, syncStatusNeedsAttention } from './syncStatus'
+import { SYNC_STATUSES, syncStatusLabel, syncStatusMeaning, syncRunLabel, syncStatusNeedsAttention } from './syncStatus'
 
 /**
  * INTEG-RUNTIME §8 — the colours are the argument, so the colours are what is asserted.
@@ -82,5 +82,15 @@ describe('syncStatus', () => {
     expect(syncStatusLabel('failed', true)).toBe('فشلت')
     expect(syncStatusLabel('failed', false)).toBe('Failed')
     expect(syncStatusLabel(null, true)).toBe('—')
+  })
+})
+
+
+
+describe('syncRunLabel (X-NO-ACTIVITY-001)', () => {
+  it('reads success with no activity as one phrase, and keeps failed for failures', () => {
+    expect(syncRunLabel('success', true, true)).toBe('ناجحة — لا نشاط')
+    expect(syncRunLabel('success', false, true)).toBe('ناجحة')
+    expect(syncRunLabel('failed', true, true)).toBe('فشلت')
   })
 })

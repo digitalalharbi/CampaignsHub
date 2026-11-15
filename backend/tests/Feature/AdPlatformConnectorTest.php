@@ -1413,6 +1413,78 @@ final class AdPlatformConnectorTest extends TestCase
     }
 
     /**
+     * X-NO-ACTIVITY-001 — a known campaign whose metrics are all null or empty is zero, not «could not read».
+     *
+     * X answers a campaign that did not deliver with `"metrics": {"impressions": null, ...}` (or an empty object).
+     * That used to yield no rows, so the run read `provider_raw_rows > 0, parsed 0` and was filed as an unread-rows
+     * failure. The campaign id is one we asked about, so the honest reading is zero for every day of the window.
+     */
+    public function test_x_stores_zero_for_a_known_campaign_whose_metrics_are_all_null(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE', 'currency' => 'SAR'],
+                ['id' => 'cy', 'name' => 'D', 'entity_status' => 'ACTIVE', 'currency' => 'SAR'],
+            ]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [
+                ['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => null, 'impressions' => null, 'clicks' => [null, null]]]]],
+                ['id' => 'cy', 'id_data' => [['metrics' => []]]],
+            ]]),
+        ]);
+
+        $out = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-02');
+
+        $this->assertTrue($out->success);
+        $this->assertCount(4, $out->records, 'two campaigns x two days, each stored as zero');
+        foreach ($out->records as $row) {
+            $this->assertSame(0.0, (float) $row['spend']);
+            $this->assertSame(0.0, (float) $row['impressions']);
+            $this->assertSame(0.0, (float) $row['clicks']);
+            $this->assertSame('SAR', $row['currency']);
+        }
+        $this->assertSame(['2026-08-01', '2026-08-02'], array_values(array_unique(array_column($out->records, 'date'))));
+    }
+
+    /** Real numbers are still stored as they came, and money is converted from micros exactly once. */
+    public function test_x_converts_micros_for_real_numbers(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [[
+                'id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [12_500_000], 'impressions' => [40], 'clicks' => [3]]]],
+            ]]]),
+        ]);
+
+        $rows = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01')->records;
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(12.5, $rows[0]['spend'], 0.0001);
+        $this->assertSame(40.0, (float) $rows[0]['impressions']);
+    }
+
+    /** A wrong shape or a number we cannot parse is a real error: the sync fails and says so. */
+    public function test_x_fails_on_an_unexpected_shape_or_an_unparseable_number(): void
+    {
+        $this->configure('x');
+        $campaigns = ['ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]])];
+
+        foreach ([
+            'data not a list' => ['data' => 'oops'],
+            'id_data not a list' => ['data' => [['id' => 'cx', 'id_data' => 'oops']]],
+            'metrics not an object' => ['data' => [['id' => 'cx', 'id_data' => [['metrics' => 'oops']]]]],
+            'non-numeric spend' => ['data' => [['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => ['abc']]]]]]],
+        ] as $label => $body) {
+            Http::fake($campaigns + ['ads-api.x.com/*/stats/*' => Http::response($body)]);
+
+            $out = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01');
+
+            $this->assertFalse($out->success, $label);
+        }
+    }
+
+    /**
      * MONEY-CURRENCY-NEVER-ASSUMED-001 — an X row carries the currency its CAMPAIGN states.
      *
      * The X account object has no currency at all (docs.x.com/x-ads-api/campaign-management: `name`,
