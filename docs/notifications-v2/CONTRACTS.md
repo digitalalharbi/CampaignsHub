@@ -18,8 +18,31 @@ Branch `feature/notifications-v2-m`. Change a contract only by editing this file
 | Strings (AR / EN) | `backend/lang/{ar,en}/notifications_v2.php` |
 | TS mirror | `frontend/src/lib/notifications/` — `types.ts`, `entitlements.ts`, `index.ts` |
 
-Implementations (step 2) live beside them under `Engine/` and are bound in `NotificationsEngineServiceProvider`.
-Nothing is under `/agency`: the engine is workspace-level.
+Implementations (step 2) live beside them under `backend/app/Domains/Notifications/Engine/` and are bound in
+`Engine/NotificationsEngineServiceProvider.php` (registered in `bootstrap/providers.php`). Nothing is under `/agency`:
+the engine is workspace-level.
+
+| Implementation | File (under `Engine/`) |
+|---|---|
+| EventRegistry | `Catalog/ConfigEventRegistry.php` |
+| WorkspaceTypes, settings | `Workspace/ConfigWorkspaceTypes.php`, `Workspace/WorkspaceSettingsRepository.php`, `Workspace/WorkspaceSettings.php` |
+| EntitlementGate, heads-up | `Entitlements/PlanEntitlementGate.php`, `Entitlements/GraceHeadsUp.php`, middleware `Http/Middleware/EnsurePlanFeature.php` (alias `plan.feature:<key>`) |
+| UsageCounter | `Usage/MonthlyUsageCounter.php` |
+| Router, QuietHoursPolicy | `Routing/EngineRouter.php`, `Routing/WorkspaceQuietHours.php` |
+| Engine entry point | `NotificationEngine.php` — `raise(DeliveryIntent)` |
+| Scheduler | `Scheduling/SubscriptionScheduler.php`, `Scheduling/DigestPeriods.php`, `Scheduling/DigestRunner.php` |
+| Senders + pipeline | `Sending/SenderPipeline.php`, `Sending/InAppSender.php`, `Sending/MailSender.php`, `Sending/PushSender.php`, `Sending/EngineMail.php` |
+| Extension points | `Contracts/MessageComposer.php` (default `Content/CatalogMessageComposer.php`), `Contracts/PreSendCheck.php` (container tag `notifications.presend`), senders tag `notifications.senders` |
+| Logs | `Log/ImmutableDeliveryLog.php`, `Log/ImmutableSubscriptionLog.php`; API `Http/Controllers/DeliveryLogController.php` |
+| Consent, migration | `Consent/ConfirmationRequests.php`, `Http/Controllers/ConsentController.php`, `Migration/LegacyNotificationImporter.php` |
+| Models | `Models/ExternalRecipient.php`, `Models/NotificationSubscription.php` |
+| Mail fix | `Mail/AlignEnvelopeSender.php`, `Mail/MailDnsReport.php`, `Mail/DnsResolver.php`, `Mail/SystemDnsResolver.php` |
+| Commands | `notifications:v2-send` (1 min), `notifications:v2-digests` (5 min), `notifications:v2-consent-sweep` (daily), `notifications:v2-grace-heads-up` (daily), `notifications:v2-import-legacy [--dry-run]` (by hand), `mail:dns-check` (by hand) |
+
+API (all under `/api/v1/settings/`, tenant from the membership): `GET workspace/notifications/entitlements`,
+`GET …/usage`, `GET …/log`, `GET …/log/export` (CSV), `GET …/subscription-log`, `GET …/confirmation-requests`
+(preview), `POST …/confirmation-requests {expected}` (owner only), `POST …/recipients/{id}/approve-internally`.
+Public: `GET|POST /n/confirm/{token}` (web).
 
 ## 1. Tenant isolation («RLS»)
 
@@ -117,15 +140,17 @@ cron   → Scheduler::due() → DeliveryIntent per subscription with the complet
 Channel senders implement `Sender`: `in_app` (writes `app_notifications`), `email` (Laravel mail through the
 configured provider; `accepted` only when the transport returned), `push` (adapter to builder L's `PushDispatcher`).
 
-## 7. Absorbing builder L (`feature/notifications-pwa-l`)
+## 7. Absorbing builder L (`feature/notifications-pwa-l`, merged)
 
 L's tables are reused, not duplicated: `notification_reads`, `notification_alert_settings` (sound, volume,
 push_types), `push_subscriptions`, `push_deferred`, `push_ledger`, and the `kind`/`repeat_count`/`last_seen_at`
-columns of `app_notifications`. On merge:
+columns of `app_notifications`. Done in this batch:
 
-- the `push` channel `Sender` wraps `PushDispatcher` (its quiet-hours hold and expiry cleanup stay; the engine logs
-  the outcome), and the device count is checked against `devices_per_user`;
+- the `push` channel `Sender` (`PushSender`) calls `PushDispatcher::deliver` (made public) — L's device handling,
+  404/410 cleanup and SSRF checks; the engine logs the outcome. `PushSubscriptions::register` reads the plan's
+  `devices_per_user`; `PushDispatcher::wants` and `SoundPreferences::forReader` check `notifications.push` / `.sound`;
 - `AlertQuietHours` (personal 22:00–08:00 default for sound/push) is the personal layer under `QuietHoursPolicy`;
 - `SoundPreferences` / `PushTypes` stay the personal-preference layer; the engine adds the plan check
   (`notifications.sound`, `notifications.push`);
-- `BellKind` keeps naming in-app rows; the in-app `Sender` writes `kind` when L's column exists.
+- `BellKind` keeps naming legacy rows; the in-app `Sender` writes `app_notifications` with `kind` = the event key,
+  so L's bell, unread count, read-all and filters serve engine rows unchanged.
