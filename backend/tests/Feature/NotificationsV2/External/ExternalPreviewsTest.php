@@ -74,6 +74,32 @@ final class ExternalPreviewsTest extends TestCase
         $this->assertSame($this->owner->email, $last->getTo()[0]->getAddress());
     }
 
+    public function test_the_wizard_draft_previews_and_test_sends_without_a_saved_subscription_and_never_reaches_the_log(): void
+    {
+        // RELEASE-INTEGRATION — builder R's wizard previews a recipient before it is saved; builder Q renders the draft.
+        $base = '/api/v1/settings/workspace/notifications/external';
+        $draft = ['email' => 'new@client.test', 'role_key' => 'finance', 'language' => 'ar', 'subscription' => ['period_key' => 'this_month_to_yesterday']];
+
+        $res = $this->actingAs($this->owner)->postJson("{$base}/preview", ['draft' => $draft, 'project_id' => $this->project->id, 'theme' => 'light', 'locale' => 'ar'])->assertOk();
+        $this->assertStringStartsWith('Al-Waha Store — Nour Agency | ', (string) $res->json('data.subject'));
+        $this->assertStringContainsString('Al-Waha Store', (string) $res->json('data.html'));
+
+        $this->actingAs($this->owner)->postJson("{$base}/test-send", ['draft' => $draft, 'project_id' => $this->project->id])->assertOk()->assertJsonPath('data.sent_to', $this->owner->email);
+        $last = app('mailer')->getSymfonyTransport()->messages()->last()->getOriginalMessage();
+        $this->assertSame($this->owner->email, $last->getTo()[0]->getAddress(), 'a draft test copy goes to me only, never to the typed address');
+
+        // Neither touches the engine: no outbox row, no log row, no recipient saved.
+        $this->assertSame(0, DB::table('notification_outbox')->count());
+        $this->assertSame(0, DB::table('notification_delivery_log')->count());
+        $this->assertSame(0, DB::table('notification_external_recipients')->where('email', 'new@client.test')->count());
+
+        // A draft cannot be sent to the recipient, and only this workspace's live projects render.
+        $this->actingAs($this->owner)->postJson("{$base}/send-now", ['draft' => $draft, 'project_id' => $this->project->id, 'confirm' => true])->assertStatus(422);
+        $foreign = $this->project($this->tenant('Beta', 'agency'), 'Theirs');
+        $this->actingAs($this->owner)->postJson("{$base}/preview", ['draft' => $draft, 'project_id' => $foreign->id])->assertStatus(422);
+        $this->actingAs($this->owner)->postJson("{$base}/preview", ['project_id' => $this->project->id])->assertStatus(422);
+    }
+
     public function test_the_seven_templates_render_in_both_themes_and_languages_within_budget(): void
     {
         $out = getenv('NOTIF_PREVIEW_OUT') ?: null;

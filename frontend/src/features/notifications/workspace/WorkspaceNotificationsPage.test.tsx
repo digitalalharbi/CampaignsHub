@@ -4,7 +4,7 @@ import { renderWithProviders, signInWith } from '@/test/utils'
 import type { EntitlementState } from '@/lib/notifications'
 import type { WorkspaceSettingsData } from './api'
 
-const fixtures = vi.hoisted(() => ({ settings: null as unknown, entitlements: [] as unknown[], recipients: [] as unknown[] }))
+const fixtures = vi.hoisted(() => ({ settings: null as unknown, entitlements: [] as unknown[], recipients: [] as unknown[], testSend: null as unknown as ReturnType<typeof import('vitest').vi.fn> }))
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -29,7 +29,8 @@ vi.mock('./api', async (orig) => {
     useSendConfirmations: m,
     useBindableProjects: () => q([{ id: 'p1', name: 'Alpha' }]),
     usePreviewMessage: m,
-    useTestSend: m,
+    useTestSend: () => ({ ...m(), mutate: fixtures.testSend }),
+    useSendNow: m,
     useDeliveryLogPage: () => q({ rows: [], total: 0, lastPage: 1 }),
     useSubscriptionLogPage: () => q({ rows: [], total: 0, lastPage: 1 }),
   }
@@ -141,6 +142,22 @@ describe('WorkspaceNotificationsPage — one page for every workspace type', () 
     fireEvent.click(screen.getByTestId('wiz-next'))
     fireEvent.click(screen.getByTestId('wiz-next'))
     expect(document.body.textContent).toContain(projectTerm)
+  })
+
+  it('a new recipient can be previewed and test-sent as a draft, but «أرسل للمستلم الآن» waits for the save', () => {
+    fixtures.settings = settings('agency')
+    fixtures.testSend = vi.fn()
+    renderWithProviders(<WorkspaceNotificationsPage />, { route: '/settings/workspace?tab=notifications&section=external', locale: 'ar' })
+    fireEvent.click(screen.getByTestId('add-recipient'))
+    fireEvent.change(screen.getByTestId('wiz-email'), { target: { value: 'a@b.test' } })
+    fireEvent.click(screen.getByTestId('wiz-next'))
+    fireEvent.click(screen.getByTestId('wiz-next'))
+    fireEvent.click(screen.getByTestId('wiz-next'))
+    fireEvent.click(screen.getByTestId('proj-p1'))
+    expect((screen.getByTestId('wiz-send-recipient') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByTestId('wiz-save-first')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('wiz-send-me'))
+    expect(fixtures.testSend).toHaveBeenCalledWith(expect.objectContaining({ subscriptionId: null, project_id: 'p1', draft: expect.objectContaining({ email: 'a@b.test' }) }))
   })
 
   it('a feature the plan removed shows the lock and «ترقية», and the controls are disabled', () => {

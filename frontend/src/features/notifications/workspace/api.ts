@@ -289,16 +289,33 @@ export function useExternalKpis() {
 
 export interface PreviewResult { subject: string; sender_name: string; html: string }
 
+/**
+ * RELEASE-INTEGRATION — builder Q's preview and send endpoints. A saved subscription is previewed by its id; the wizard's
+ * unsaved draft is sent as `draft` (Q renders it with the same composer, outside the engine and the log).
+ */
+type PreviewTarget = { draft: RecipientInput; subscriptionId?: string | null; project_id: string }
+const target = ({ draft, subscriptionId, project_id }: PreviewTarget) =>
+  subscriptionId ? { subscription_id: subscriptionId, project_id } : { draft, project_id }
+
 export function usePreviewMessage() {
   return useMutation({
-    mutationFn: (b: { draft: RecipientInput; project_id: string; locale: 'ar' | 'en'; theme: 'light' | 'dark' }) =>
-      postData<PreviewResult>(`${BASE}/preview`, b),
+    mutationFn: (b: PreviewTarget & { locale: 'ar' | 'en'; theme: 'light' | 'dark' }) =>
+      postData<PreviewResult>(`${EXT}/preview`, { ...target(b), locale: b.locale, theme: b.theme }),
   })
 }
 
+/** «أرسل نسخة لي» — to the signed-in user only, marked «[تجربة]», outside the log. */
 export function useTestSend() {
   return useMutation({
-    mutationFn: (b: { draft: RecipientInput; project_id: string; to: 'self' | 'recipient' }) => postData<{ state: string }>(`${BASE}/test-send`, b),
+    mutationFn: (b: PreviewTarget) => postData<{ sent_to: string }>(`${EXT}/test-send`, target(b)),
+  })
+}
+
+/** «أرسل للمستلم الآن» — a SAVED subscription only, through the engine (checks, review, log). */
+export function useSendNow() {
+  return useMutation({
+    mutationFn: (b: { subscriptionId: string; project_id: string }) =>
+      postData<{ queued: number }>(`${EXT}/send-now`, { subscription_id: b.subscriptionId, project_id: b.project_id, confirm: true }),
   })
 }
 

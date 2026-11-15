@@ -12,10 +12,13 @@ use App\Domains\Notifications\Engine\Enums\Priority;
 use App\Domains\Notifications\Engine\Enums\RecipientKind;
 use App\Domains\Notifications\Engine\Enums\Scope;
 use App\Domains\Notifications\Engine\NotificationEngine;
+use App\Domains\Notifications\Engine\Scheduling\DigestPeriods;
 use App\Domains\Notifications\Engine\Scheduling\SubscriptionScheduler;
+use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Notifications\External\Content\ExternalMessageComposer;
 use App\Domains\Notifications\External\Mail\ExternalTransport;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -41,10 +44,7 @@ final class ExternalPreviewController extends Controller
     public function preview(Request $request): JsonResponse
     {
         $tenant = $this->authorize($request);
-        $data = $request->validate([
-            'subscription_id' => ['required', 'uuid'], 'project_id' => ['nullable', 'uuid'], 'event_key' => ['nullable', 'string', 'max:80'],
-            'theme' => ['nullable', 'in:light,dark'], 'locale' => ['nullable', 'in:ar,en'],
-        ]);
+        $data = $request->validate(self::rules() + ['theme' => ['nullable', 'in:light,dark'], 'locale' => ['nullable', 'in:ar,en']]);
         $delivery = $this->delivery($tenant, $data, 'PREVIEW');
         $m = $this->composer->preview($delivery, ($data['theme'] ?? 'light') === 'dark' ? 'dark' : 'auto');
         $html = $m->html;
@@ -61,7 +61,7 @@ final class ExternalPreviewController extends Controller
     public function testSend(Request $request, ExternalTransport $transport): JsonResponse
     {
         $tenant = $this->authorize($request);
-        $data = $request->validate(['subscription_id' => ['required', 'uuid'], 'project_id' => ['nullable', 'uuid'], 'event_key' => ['nullable', 'string', 'max:80']]);
+        $data = $request->validate(self::rules());
         $to = (string) $request->user()->email;
         $m = $this->composer->preview($this->delivery($tenant, $data, 'TEST'));
         $prefix = $request->query('lang') === 'en' ? '[Test] ' : '[تجربة] ';
@@ -100,9 +100,29 @@ final class ExternalPreviewController extends Controller
         return ApiResponse::success(['queued' => $out]);
     }
 
+    /**
+     * A saved subscription, or (RELEASE-INTEGRATION) the wizard's unsaved DRAFT — builder R's wizard previews and test-sends a
+     * recipient before it exists. A draft renders the same composer over the same data; it never reaches the engine or the log
+     * («أرسل للمستلم الآن» needs a saved subscription).
+     *
+     * @return array<string, list<string>>
+     */
+    private static function rules(): array
+    {
+        return [
+            'subscription_id' => ['required_without:draft', 'nullable', 'uuid'], 'project_id' => ['nullable', 'uuid'], 'event_key' => ['nullable', 'string', 'max:80'],
+            'draft' => ['required_without:subscription_id', 'nullable', 'array'],
+            'draft.role_key' => ['required_with:draft', 'string', 'max:40'], 'draft.language' => ['nullable', 'in:ar,en'],
+            'draft.email' => ['nullable', 'string', 'max:190'], 'draft.subscription.period_key' => ['nullable', 'string', 'max:40'],
+        ];
+    }
+
     /** @param array<string, mixed> $data */
     private function delivery(string $tenant, array $data, string $mark): Delivery
     {
+        if (empty($data['subscription_id'])) {
+            return $this->draftDelivery($tenant, $data, $mark);
+        }
         $sub = DB::table('notification_subscriptions')->where('tenant_id', $tenant)->where('id', $data['subscription_id'])->first();
         abort_if($sub === null, 404);
         $r = DB::table('notification_external_recipients')->where('tenant_id', $tenant)->where('id', $sub->recipient_id)->first();
@@ -123,6 +143,33 @@ final class ExternalPreviewController extends Controller
             (string) Str::uuid(), $mark.'-'.strtoupper(Str::random(6)), $tenant, $event, Scope::External, Channel::Email, Priority::Info,
             new Recipient(RecipientKind::External, null, (string) $r->id, (string) $r->email, (string) ($data['locale'] ?? $r->language), (string) $r->role_key),
             $project, (string) $sub->id, $payload, 1, 0,
+        );
+    }
+
+    /** @param array<string, mixed> $data */
+    private function draftDelivery(string $tenant, array $data, string $mark): Delivery
+    {
+        $draft = (array) $data['draft'];
+        $project = (string) ($data['project_id'] ?? '');
+        // Only this workspace's live projects: the same rule the save applies (archived projects are excluded there too).
+        abort_unless($project !== '' && LiveProjects::idsQuery($tenant)->where('projects.id', $project)->exists(), 422);
+        $locale = ($data['locale'] ?? $draft['language'] ?? 'ar') === 'en' ? 'en' : 'ar';
+        $event = (string) ($data['event_key'] ?? 'digest.periodic');
+        $payload = ['_locale' => $locale, '_role' => (string) $draft['role_key']];
+        $periodKey = $draft['subscription']['period_key'] ?? null;
+        if ($event === 'digest.periodic' && is_string($periodKey) && $periodKey !== '') {
+            $local = Carbon::now()->setTimezone(app(WorkspaceSettingsRepository::class)->for($tenant)->timezone)->toDateString();
+            $period = DigestPeriods::resolve($periodKey, $local);
+            if ($period !== null) {
+                $payload['period'] = $period;
+            }
+        }
+        $address = is_string($draft['email'] ?? null) && filter_var($draft['email'], FILTER_VALIDATE_EMAIL) ? strtolower((string) $draft['email']) : 'preview@invalid.test';
+
+        return new Delivery(
+            (string) Str::uuid(), $mark.'-'.strtoupper(Str::random(6)), $tenant, $event, Scope::External, Channel::Email, Priority::Info,
+            new Recipient(RecipientKind::External, null, null, $address, $locale, (string) $draft['role_key']),
+            $project, null, $payload, 1, 0,
         );
     }
 

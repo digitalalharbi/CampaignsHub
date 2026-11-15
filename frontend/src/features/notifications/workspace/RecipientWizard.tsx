@@ -5,7 +5,7 @@ import { Alert } from '@/components/ui/Alert'
 import { checkPeriod, DIGEST_FREQUENCIES, DIGEST_PERIOD_KEYS, DIGEST_TYPE_KEYS, type DigestFrequency, type DigestPeriodKey } from '@/lib/notifications'
 import { toApiError } from '@/lib/api/client'
 import {
-  useBindableProjects, usePreviewMessage, useRecipientActions, useTestSend, type RecipientInput, type RecipientRow, type SaveRemarks, type WorkspaceSettingsData,
+  useBindableProjects, usePreviewMessage, useRecipientActions, useSendNow, useTestSend, type RecipientInput, type RecipientRow, type SaveRemarks, type WorkspaceSettingsData,
 } from './api'
 import { PhonePreview } from './PhonePreview'
 import { fill, type WordKey } from './strings'
@@ -75,6 +75,10 @@ export function RecipientWizard({ open, onClose, data, editing, editingSubscript
   const actions = useRecipientActions()
   const previewM = usePreviewMessage()
   const testM = useTestSend()
+  const sendNowM = useSendNow()
+  // RELEASE-INTEGRATION — a saved subscription is previewed and sent by its id; a new recipient's draft can be previewed and
+  // test-sent, but «أرسل للمستلم الآن» needs the saved subscription (it goes through the engine's checks, review and log).
+  const savedSubscriptionId = editing ? (editingSubscriptionId ?? editing.subscriptions[0]?.id ?? null) : null
   const cc = useGate('notifications.external.cc_bcc')
   const subj = useGate('notifications.external.custom_subject')
   const sub = draft.subscription
@@ -219,16 +223,19 @@ export function RecipientWizard({ open, onClose, data, editing, editingSubscript
                 </div>
               )}
               <div className="flex flex-wrap gap-2 pt-2">
-                <Button size="sm" variant="secondary" disabled={!previewProject} loading={testM.isPending} data-testid="wiz-send-me" onClick={() => testM.mutate({ draft, project_id: previewProject, to: 'self' })}>{t('sendMe')}</Button>
-                <Button size="sm" variant="secondary" disabled={!previewProject} data-testid="wiz-send-recipient" onClick={() => setConfirmSend(true)}>{t('sendRecipient')}</Button>
+                <Button size="sm" variant="secondary" disabled={!previewProject} loading={testM.isPending} data-testid="wiz-send-me" onClick={() => testM.mutate({ draft, subscriptionId: savedSubscriptionId, project_id: previewProject })}>{t('sendMe')}</Button>
+                <Button size="sm" variant="secondary" disabled={!previewProject || savedSubscriptionId === null} title={savedSubscriptionId === null ? t('sendRecipientSaveFirst') : undefined} data-testid="wiz-send-recipient" onClick={() => setConfirmSend(true)}>{t('sendRecipient')}</Button>
               </div>
-              {testM.isSuccess && <p data-testid="wiz-test-state" className="text-xs text-success">{testM.data?.state}</p>}
+              {savedSubscriptionId === null && <p data-testid="wiz-save-first" className="text-xs text-text-muted">{t('sendRecipientSaveFirst')}</p>}
+              {testM.isSuccess && <p data-testid="wiz-test-state" className="text-xs text-success">{t('sentToMe')}</p>}
               {testM.isError && <p role="alert" className="text-xs text-danger">{toApiError(testM.error).message}</p>}
+              {sendNowM.isSuccess && <p data-testid="wiz-send-state" className="text-xs text-success">{t('sendQueued')}</p>}
+              {sendNowM.isError && <p role="alert" className="text-xs text-danger">{toApiError(sendNowM.error).message}</p>}
               {previewM.isError && <p role="alert" className="text-xs text-danger">{toApiError(previewM.error).message}</p>}
               {confirmSend && (
                 <div role="alertdialog" className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning-soft p-2 text-sm" data-testid="wiz-send-confirm">
                   <span className="min-w-0 flex-1">{t('sendRecipientConfirm')}</span>
-                  <Button size="sm" onClick={() => { testM.mutate({ draft, project_id: previewProject, to: 'recipient' }); setConfirmSend(false) }} data-testid="wiz-send-confirm-yes">{t('confirmSend')}</Button>
+                  <Button size="sm" onClick={() => { if (savedSubscriptionId) sendNowM.mutate({ subscriptionId: savedSubscriptionId, project_id: previewProject }); setConfirmSend(false) }} data-testid="wiz-send-confirm-yes">{t('confirmSend')}</Button>
                   <Button size="sm" variant="ghost" onClick={() => setConfirmSend(false)}>{t('cancel')}</Button>
                 </div>
               )}
@@ -236,7 +243,7 @@ export function RecipientWizard({ open, onClose, data, editing, editingSubscript
             <PhonePreview
               result={previewM.data ?? null} loading={previewM.isPending} theme={theme} setTheme={setTheme} lang={plang} setLang={setPlang}
               canRender={previewProject !== ''} emptyText={t('previewEmpty')}
-              onRender={() => previewM.mutate({ draft, project_id: previewProject, locale: plang, theme })}
+              onRender={() => previewM.mutate({ draft, subscriptionId: savedSubscriptionId, project_id: previewProject, locale: plang, theme })}
             />
           </div>
         )}
