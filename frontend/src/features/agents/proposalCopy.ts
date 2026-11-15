@@ -1,4 +1,5 @@
 import type { Proposal, ProposalStatus } from './api'
+import { currencyMark } from '@/lib/money/mark'
 
 /**
  * The words for the gateway's codes. The server sends codes, never sentences, so the same refusal reads
@@ -40,7 +41,7 @@ export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'>,
   if (p.action === 'resume') return ar ? 'تشغيل' : 'Resume'
   if (p.action === 'set_daily_budget') {
     const amount = p.payload?.daily_budget
-    const money = amount === undefined ? '' : ` ${amount}${p.currency ? ` ${p.currency}` : ''}`
+    const money = amount === undefined ? '' : ` ${amount}${p.currency ? ` ${currencyMark(p.currency)}` : ''}`
     return `${ar ? 'ميزانية يومية' : 'Daily budget'}${money}`
   }
   return p.action

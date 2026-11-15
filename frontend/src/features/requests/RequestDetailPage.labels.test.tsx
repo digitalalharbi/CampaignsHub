@@ -14,7 +14,7 @@ import { getRequest } from './internalApi'
 /**
  * REQ-DETAIL-LABELS-001 — the live review of /agency/requests/:requestId (2026-10-09) read «المسمى
  * الوظيفي» over the objective, «Email» in English on an Arabic page, «تنسيق الأرقام» over the
- * budget with the raw «45000.00 SAR» beside it, raw priority tokens in the priority select,
+ * budget with the raw «45000.00 ر.س» beside it, raw priority tokens in the priority select,
  * Arabic-only statuses for an English reader, and «paid» as the invoice status. Each is pinned here.
  */
 function detail(): RequestDetail {
@@ -48,11 +48,11 @@ describe('request detail labels', () => {
     expect(screen.getByText('الهدف')).toBeTruthy()
     expect(screen.getByText('البريد الإلكتروني')).toBeTruthy()
     expect(screen.getByText('الميزانية')).toBeTruthy()
-    expect(screen.getByText('45,000 SAR')).toBeTruthy()
+    expect(screen.getByText('45,000 ر.س')).toBeTruthy()
     expect(screen.queryByText('المسمى الوظيفي')).toBeNull()
     expect(screen.queryByText('تنسيق الأرقام')).toBeNull()
     expect(screen.queryByText('Email')).toBeNull()
-    expect(screen.queryByText('45000.00 SAR')).toBeNull()
+    expect(screen.queryByText('45000.00 ر.س')).toBeNull()
 
     // The priority choices and the invoice status are words, not stored tokens.
     expect(screen.getByRole('option', { name: 'حرجة' })).toBeTruthy()

@@ -60,7 +60,7 @@ class User extends Authenticatable
     ];
 
     protected $hidden = [
-        'password', 'remember_token',
+        'password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_totp_last_step',
     ];
 
     /**
@@ -86,6 +86,11 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'two_factor_secret' => 'encrypted',
             'two_factor_enabled' => 'bool',
+            'two_factor_totp_confirmed_at' => 'datetime',
+            'two_factor_totp_last_step' => 'integer',
+            'two_factor_email_enabled_at' => 'datetime',
+            'two_factor_sms_enabled_at' => 'datetime',
+            'two_factor_recovery_codes' => 'array',
             'sessions_valid_after' => 'datetime',
         ];
     }

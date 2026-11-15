@@ -42,7 +42,7 @@ describe('metricState', () => {
     // The platform reported revenue and it really was zero. Rendering «No data» here would hide a
     // campaign that spent 900 and earned nothing — the single most important thing on the card.
     expect(metricState(metrics(), 'revenue')).toEqual({ kind: 'value', value: 0 })
-    expect(formatMetric(metricState(metrics(), 'revenue'), 'revenue', 'en', 'SAR')).toBe('0 SAR')
+    expect(formatMetric(metricState(metrics(), 'revenue'), 'revenue', 'en', 'SAR')).toBe('0 ر.س')
   })
 
   it('reads a metric the platform never sent as Not provided, not as zero', () => {
@@ -68,7 +68,7 @@ describe('metricState', () => {
 
   it('formats rates, money and multiples in Latin digits in both languages', () => {
     expect(formatMetric(metricState(metrics(), 'ctr'), 'ctr', 'ar', 'SAR')).toBe('0.50%')
-    expect(formatMetric(metricState(metrics(), 'spend'), 'spend', 'ar', 'SAR')).toBe('900 SAR')
+    expect(formatMetric(metricState(metrics(), 'spend'), 'spend', 'ar', 'SAR')).toBe('900 ر.س')
     expect(formatMetric({ kind: 'value', value: 3.5 }, 'roas', 'ar', 'SAR')).toBe('3.50×')
   })
 })

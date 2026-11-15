@@ -25,7 +25,7 @@ test.describe('a client opens their live report', () => {
     // A real figure, not a zero and not a placeholder: the seeded store has spend in every window.
     const spend = report.locator('.tnum').first()
     await expect(spend).not.toHaveText(/^0$|^—$/)
-    await expect(spend).toContainText(/SAR/)
+    await expect(spend).toContainText(/SAR|ر\.س/)
   })
 
   // REPORT-FOOTER-FRESHNESS-001 (#938) — one time, at the end: no sync clock above the figures, none beside the refresh button.

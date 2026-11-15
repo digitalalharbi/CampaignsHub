@@ -24,11 +24,13 @@ use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
+use App\Domains\Metrics\Audience\AudienceCenter;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Mail\CredentialMail;
@@ -314,9 +316,9 @@ final class ClientPortalController
             // path and any non-browser client. Those keep the token engine and lose nothing — the
             // shared session is an ADDITION for browsers, not a new requirement.
             if ($holdsPortalMembership && $request->hasSession()) {
-                // Regenerated so an OTP login cannot be fixed to a session id an attacker planted.
-                $request->session()->regenerate();
-                Auth::guard('web')->login($user);
+                // TWO-STEP-001 — through the one place a session opens (it regenerates the id). An account with a second step
+                // on is NOT given the shared session by a contact code: it is held at the second step like every other door.
+                app(EstablishSession::class)->open($request, $user);
             }
         }
 
@@ -2028,6 +2030,52 @@ final class ClientPortalController
         abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
         return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay(), $this->restrictedProjectIds($token))]);
+    }
+
+    /**
+     * GET /client/audience — AUDIENCE-001: the audience of this space's projects, under the performance dashboard.
+     *
+     * Two switches, both the agency's: the dashboard and the audience (off until switched on). The reading is the
+     * client-facing one — no money, no campaign or ad-set names, no internal ids — for the projects this contact may
+     * reach (a project-restricted user reads only theirs). Each project is its own reading: projects are never added.
+     */
+    public function audience(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $models = $this->ownedWorkspaceModels($token);
+        abort_if($models === [], 404);
+        abort_if(count($models) > 1, 422, 'Choose a client space first.');
+
+        /** @var ClientWorkspace $workspace */
+        $workspace = array_values($models)[0];
+        abort_unless(PortalVisibility::allows($workspace, 'dashboard') && PortalVisibility::allows($workspace, 'audience'), 403, 'The audience is not available for this space.');
+        $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
+
+        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
+        $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
+        abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $only = $this->restrictedProjectIds($token);
+        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())
+            ->when($only !== null, fn ($q) => $q->whereIn('id', $only))
+            ->orderBy('name')->get(['id', 'name', 'tenant_id']);
+
+        $out = [];
+        foreach ($projects as $project) {
+            $reading = app(AudienceCenter::class)->build((string) $project->tenant_id, (string) $project->getKey(), $from->copy()->startOfDay(), $to->copy()->startOfDay(), clientFacing: true, hideMoney: true);
+            unset($reading['capabilities']);
+            // No internal identifiers on a client's screen.
+            $reading['targeting']['items'] = array_map(static function (array $i): array {
+                unset($i['ad_set_id']);
+
+                return $i;
+            }, $reading['targeting']['items']);
+            $out[] = ['project' => ['id' => (string) $project->getKey(), 'name' => (string) $project->name], 'reading' => $reading];
+        }
+
+        return response()->json(['data' => ['period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'projects' => $out]]);
     }
 
     /**

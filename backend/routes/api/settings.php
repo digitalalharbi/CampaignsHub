@@ -126,9 +126,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');
     Route::post('security/password', [SecurityController::class, 'changePassword'])->name('security.password');
-    Route::post('security/mfa/setup', [SecurityController::class, 'mfaSetup'])->name('security.mfa.setup');
-    Route::post('security/mfa/confirm', [SecurityController::class, 'mfaConfirm'])->name('security.mfa.confirm');
-    Route::post('security/mfa/disable', [SecurityController::class, 'mfaDisable'])->name('security.mfa.disable');
+    // TWO-STEP-001 — the second step moved to `/me/two-factor/*` (three methods, recovery codes, enforced at sign-in).
     Route::get('security/policy', [SecurityController::class, 'showPolicy'])->name('security.policy.show');
     Route::match(['put', 'patch'], 'security/policy', [SecurityController::class, 'updatePolicy'])->name('security.policy.update');
 

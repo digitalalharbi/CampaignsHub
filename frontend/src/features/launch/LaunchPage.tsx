@@ -21,6 +21,7 @@ import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 import { localStill } from '@/features/content/providerMedia'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * LAUNCH-001 — «حملة جديدة»: a real launch on the platforms' own APIs, not an internal draft.
@@ -370,7 +371,7 @@ export function LaunchPage() {
                 <p className="font-semibold">{ar ? 'حدود الإنفاق اليومي التي ستُشغَّل' : 'The daily spend that will run'}</p>
                 <ul className="space-y-0.5 text-xs">
                   {plan.spend.lines.map((l) => (
-                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : `${l.daily_budget} ${l.currency}`}</span></li>
+                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : withMark(String(l.daily_budget), l.currency)}</span></li>
                   ))}
                 </ul>
                 {plan.spend.limit_checks.length > 0 && (
@@ -378,7 +379,7 @@ export function LaunchPage() {
                     {plan.spend.limit_checks.map((c) => (
                       <li key={c.limit_id} data-testid={`launch-limit-${c.status}`} className={c.status === 'exceeds' ? 'text-warning' : 'text-text-secondary'}>
                         {c.status === 'exceeds'
-                          ? (ar ? `يتجاوز حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) بمقدار ${c.over_by} ${c.currency} حتى ${c.period_ends_on}.` : `Exceeds the ${LIMIT_SCOPE[c.scope].en} spend limit by ${c.over_by} ${c.currency} until ${c.period_ends_on}.`)
+                          ? (ar ? `يتجاوز حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) بمقدار ${withMark(String(c.over_by), c.currency)} حتى ${c.period_ends_on}.` : `Exceeds the ${LIMIT_SCOPE[c.scope].en} spend limit by ${withMark(String(c.over_by), c.currency)} until ${c.period_ends_on}.`)
                           : c.status === 'within'
                             ? (ar ? `ضمن حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) حتى ${c.period_ends_on}.` : `Within the ${LIMIT_SCOPE[c.scope].en} spend limit until ${c.period_ends_on}.`)
                             : (ar ? `لا يمكن مقارنته بحدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) — عملة أو أرقام غير قابلة للمقارنة.` : `Cannot be compared with the ${LIMIT_SCOPE[c.scope].en} spend limit — different currency or no comparable spend yet.`)}
@@ -704,7 +705,7 @@ function BudgetPanel({ projectId, spec, accounts, ar, onChange, onApply }: {
               </Field>
               {slot && (
                 <p data-testid={`launch-split-${a.external_account_id}`} className="text-text-secondary">
-                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency ?? '—'} {slot.account_currency}</span>
+                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency === null || slot.amount_in_account_currency === undefined ? '—' : withMark(String(slot.amount_in_account_currency), slot.account_currency)}</span>
                 </p>
               )}
               {bad.map((v) => <p key={v.kind} className="text-warning">{(VIOLATION[v.kind] ?? VIOLATION.missing_rate!)[ar ? 'ar' : 'en']}</p>)}

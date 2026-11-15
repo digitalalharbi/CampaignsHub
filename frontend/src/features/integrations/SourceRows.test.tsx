@@ -65,7 +65,7 @@ describe('a source row in the project space', () => {
     expect(row).not.toHaveTextContent('واجهة سناب شات الإعلانية')
     expect(within(row).getByTestId('hub-accounts-c-1')).toHaveTextContent('حسابان مربوطان')
     expect(within(row).getByTestId('hub-campaigns-c-1')).toHaveTextContent('7')
-    expect(within(row).getByTestId('hub-spend-c-1')).toHaveTextContent('1.5K USD')
+    expect(within(row).getByTestId('hub-spend-c-1')).toHaveTextContent('1.5K $')
     // A healthy own row has a state chip and no button beside it.
     expect(within(row).getByTestId('hub-state-c-1')).toBeInTheDocument()
     expect(within(row).queryByTestId('hub-relink-c-1')).toBeNull()
@@ -85,7 +85,7 @@ describe('a source row in the project space', () => {
     // The long platform number is shown by its end; the whole of it is behind the copy icon.
     expect(lines[0]).toHaveTextContent('…90123456')
     expect(within(lines[0]!).getByTestId('hub-account-id-a-1')).toHaveAttribute('title', '1234567890123456')
-    expect(within(lines[0]!).getByTestId('hub-account-spend-a-1')).toHaveTextContent('1.2K USD')
+    expect(within(lines[0]!).getByTestId('hub-account-spend-a-1')).toHaveTextContent('1.2K $')
   })
 
   it('unlinks an account through the existing endpoint only after a two-button confirmation with one short line', async () => {
@@ -115,7 +115,7 @@ describe('a source row in the project space', () => {
     renderHub()
 
     const chip = await screen.findByTestId('hub-spend-c-1')
-    expect(chip).toHaveTextContent('4,500.00 SAR')
+    expect(chip).toHaveTextContent('4,500.00 ر.س')
     expect(chip).not.toHaveTextContent(/^0/)
   })
 
@@ -128,11 +128,11 @@ describe('a source row in the project space', () => {
     renderHub()
 
     const chip = await screen.findByTestId('hub-spend-c-1')
-    expect(chip).toHaveTextContent('1.2K USD')
-    expect(chip).not.toHaveTextContent('SAR')
+    expect(chip).toHaveTextContent('1.2K $')
+    expect(chip).not.toHaveTextContent(/SAR|ر\.س/)
     expect(chip).toHaveAttribute('data-withheld', 'false')
     fireEvent.click(screen.getByTestId('hub-expand-c-1'))
-    expect(screen.getByTestId('hub-account-spend-a-2')).toHaveTextContent('1.2K USD')
+    expect(screen.getByTestId('hub-account-spend-a-2')).toHaveTextContent('1.2K $')
   })
 
   it('marks an account with no rate as withheld in its own currency and leaves it out of the row\'s USD total, visibly', async () => {
@@ -143,14 +143,14 @@ describe('a source row in the project space', () => {
     renderHub()
 
     const chip = await screen.findByTestId('hub-spend-c-1')
-    // 1,200 USD — not 5,700 of anything, and not a dash that hides the dollars that are known.
-    expect(chip).toHaveTextContent('1.2K USD')
+    // 1,200 $ — not 5,700 of anything, and not a dash that hides the dollars that are known.
+    expect(chip).toHaveTextContent('1.2K $')
     expect(chip).not.toHaveTextContent('5.7K')
     expect(within(chip).getByTestId('hub-spend-c-1-excluded')).toHaveTextContent('+1 محجوب')
 
     fireEvent.click(screen.getByTestId('hub-expand-c-1'))
     const withheld = screen.getByTestId('hub-account-spend-a-2')
-    expect(withheld).toHaveTextContent('4,500.00 SAR')
+    expect(withheld).toHaveTextContent('4,500.00 ر.س')
     expect(withheld).toHaveAttribute('data-withheld', 'true')
     expect(within(withheld).getByTestId('hub-account-spend-a-2-withheld')).toHaveTextContent('محجوب')
     expect(screen.getByTestId('hub-account-spend-a-1')).toHaveAttribute('data-withheld', 'false')
@@ -185,7 +185,7 @@ describe('the four figures of the project space', () => {
 
     expect(screen.getByTestId('hub-kpi-accounts')).toHaveTextContent('2')
     expect(screen.getByTestId('hub-kpi-campaigns')).toHaveTextContent('7')
-    expect(screen.getByTestId('hub-kpi-spend')).toHaveTextContent('1.5K USD')
+    expect(screen.getByTestId('hub-kpi-spend')).toHaveTextContent('1.5K $')
     expect(screen.getByTestId('hub-kpi-attention')).toHaveTextContent('1')
   })
 
@@ -199,7 +199,7 @@ describe('the four figures of the project space', () => {
     renderWithProviders(<HubSummary projectId="p-1" connections={[connection()]} />, { locale: 'ar' })
 
     const tile = screen.getByTestId('hub-kpi-spend')
-    expect(tile).toHaveTextContent('1.2K USD')
+    expect(tile).toHaveTextContent('1.2K $')
     expect(tile).not.toHaveTextContent('5.7K')
     expect(tile).toHaveTextContent(/خارج الإجمالي \(محجوب\): .*حساب/)
     expect(screen.getByTestId('hub-kpi-spend-figure')).toHaveAttribute('data-excluded', '1')
@@ -234,6 +234,6 @@ describe('the four figures of the project space', () => {
     metrics.summary = { current: { spend: 0, spend_withheld_rows: 2, spend_original: 900, money_original_currency: 'SAR', money_original_currencies: 1 }, currency: 'USD' }
     renderWithProviders(<HubSummary projectId="p-1" connections={[connection()]} />, { locale: 'ar' })
 
-    expect(screen.getByTestId('hub-kpi-spend')).toHaveTextContent('900.00 SAR')
+    expect(screen.getByTestId('hub-kpi-spend')).toHaveTextContent('900.00 ر.س')
   })
 })

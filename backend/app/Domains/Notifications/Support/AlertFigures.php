@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Funding\Support\FundingMoney;
+
 /**
  * EMAIL-PERF-DASHBOARDS-001 — the figures an alert carries, as one lead and a compact strip.
  *
@@ -95,7 +97,7 @@ final class AlertFigures
     {
         $n = number_format((float) $value, 2);
 
-        return $currency === null || $currency === '' ? $n : $n.' '.$currency;
+        return FundingMoney::withMark($n, $currency);
     }
 
     private static function metric(string $metric, float $value): string

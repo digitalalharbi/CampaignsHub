@@ -20,6 +20,7 @@ use App\Domains\CRM\Enums\LeadStage;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Forms\Models\LeadForm;
 use App\Domains\Forms\Services\TrackingHealth;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -1458,7 +1459,7 @@ final class AlertEvaluator
                     'project_id' => (string) $limit->project_id,
                     'title' => 'Internal spend limit at '.$crossed.'%',
                     'message' => 'This workspace’s own '.$limit->scope->value.' limit of '
-                        .round((float) $reading['amount'], 2).' '.$limit->currency.' is '.$crossed
+                        .FundingMoney::withMark((string) round((float) $reading['amount'], 2), $limit->currency).' is '.$crossed
                         .'% used. CampaignsHub does not stop delivery — pause on the platform if that is the intent.',
                     'context' => [
                         'enforcement' => SpendLimit::ENFORCEMENT,

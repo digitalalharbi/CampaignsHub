@@ -146,7 +146,7 @@ describe('the printed drill-down trend reads through the one sparkline rule', ()
     )
     const label = screen.getByTestId('print-drilldown-trend-label')
     expect(label).toHaveTextContent('Daily trend — Clicks')
-    expect(label).not.toHaveTextContent('SAR')
+    expect(label).not.toHaveTextContent(/SAR|ر\.س/)
   })
 
   it('draws nothing for one day, a flat series, or a series more than a third unreported', () => {

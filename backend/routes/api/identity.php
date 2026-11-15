@@ -12,6 +12,8 @@ use App\Domains\Identity\Http\Controllers\OAuthPendingLinkController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
+use App\Domains\Identity\Http\Controllers\TwoFactorChallengeController;
+use App\Domains\Identity\Http\Controllers\TwoFactorSettingsController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
@@ -75,6 +77,18 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         ->middleware('throttle:otp-request');
     Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
         ->middleware('throttle:otp-check');
+
+    /*
+     * TWO-STEP-001 — answering the second step. Public, because the person is not signed in yet; the authorisation is the
+     * pending state the first step left in THIS browser's session. `otp-check` bounds an address; the controller bounds the
+     * pending step (five wrong answers) and the account (ten per fifteen minutes). Sending a code spends `otp-request`.
+     */
+    Route::prefix('/two-factor')->name('two-factor.')->group(function (): void {
+        Route::get('/', [TwoFactorChallengeController::class, 'show'])->name('show')->middleware('throttle:60,1');
+        Route::post('/send', [TwoFactorChallengeController::class, 'send'])->name('send')->middleware('throttle:otp-request');
+        Route::post('/verify', [TwoFactorChallengeController::class, 'verify'])->name('verify')->middleware('throttle:otp-check');
+        Route::delete('/', [TwoFactorChallengeController::class, 'cancel'])->name('cancel');
+    });
 
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
@@ -198,6 +212,26 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
         ->middleware('throttle:otp-check');
     Route::delete('/phone', [PhoneConfirmationController::class, 'revoke'])->name('phone.revoke')
         ->middleware('throttle:6,1');
+
+    /*
+     * TWO-STEP-001 — the person's own second-step methods. Codes are sent under `otp-request` and checked under `otp-check`,
+     * like every other code; removing a method or turning the step off needs the password or a valid code again.
+     */
+    Route::prefix('two-factor')->name('two-factor.')->group(function (): void {
+        Route::get('/', [TwoFactorSettingsController::class, 'show'])->name('show');
+        Route::post('/totp/setup', [TwoFactorSettingsController::class, 'totpSetup'])->name('totp.setup')->middleware('throttle:10,1');
+        Route::post('/totp/confirm', [TwoFactorSettingsController::class, 'totpConfirm'])->name('totp.confirm')->middleware('throttle:otp-check');
+        Route::post('/{method}/start', [TwoFactorSettingsController::class, 'channelStart'])->name('channel.start')
+            ->whereIn('method', ['email', 'sms'])->middleware('throttle:otp-request');
+        Route::post('/{method}/confirm', [TwoFactorSettingsController::class, 'channelConfirm'])->name('channel.confirm')
+            ->whereIn('method', ['email', 'sms'])->middleware('throttle:otp-check');
+        Route::post('/default', [TwoFactorSettingsController::class, 'setDefault'])->name('default')->middleware('throttle:30,1');
+        Route::delete('/methods/{method}', [TwoFactorSettingsController::class, 'removeMethod'])->name('methods.remove')
+            ->whereIn('method', ['totp', 'email', 'sms'])->middleware('throttle:6,1');
+        Route::post('/disable', [TwoFactorSettingsController::class, 'disable'])->name('disable')->middleware('throttle:6,1');
+        Route::post('/recovery-codes', [TwoFactorSettingsController::class, 'regenerateRecoveryCodes'])->name('recovery-codes')
+            ->middleware('throttle:6,1');
+    });
 
     // Credential-changing actions are rate limited independently of login.
     Route::patch('/password', [MeController::class, 'updatePassword'])->name('password.update')
