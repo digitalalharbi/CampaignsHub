@@ -91,32 +91,35 @@
     @php($cols = count($hm['columns']))
     @php($cw = $cols > 6 ? 32 : 36)
     <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:14px 0 6px;">{{ $ar ? 'كل المشاريع × المنصات' : 'Every project × platform' }}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="heatmap" style="table-layout:fixed;">
+    {{-- EMAIL-CLIENT-COMPAT-001 — every chip IS its cell: fixed width × height, its own bgcolor, the glyph at a fixed px size and
+         line-height, 2px cellspacing for the gutters. A span stretched inside a padded cell (the old way) is what Gmail drew at
+         different sizes, and it was 75 KB of a 30-project message that Gmail clips at ~102 KB. --}}
+    @php($chip = $cw - 2)
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="2" border="0" data-block="heatmap" style="width:100%; table-layout:fixed;">
         <tr data-block="heatmap-head">
-            <td style="font-size:10px; color:#8b9a97; padding:0 0 3px;">&nbsp;</td>
+            <td style="font-size:10px; line-height:14px; color:#8b9a97;">&nbsp;</td>
             @foreach ($hm['columns'] as $col)
-                <td width="{{ $cw }}" align="center" data-provider="{{ $col['provider'] }}" style="width:{{ $cw }}px; font-size:9px; font-weight:700; color:#5b6b68; padding:0 1px 3px; text-align:center; overflow:hidden; white-space:nowrap;">{{ $col['short'] }}</td>
+                <td width="{{ $chip }}" align="center" data-provider="{{ $col['provider'] }}" style="width:{{ $chip }}px; font-size:9px; line-height:14px; font-weight:700; color:#5b6b68; text-align:center; overflow:hidden; white-space:nowrap;">{{ $col['short'] }}</td>
             @endforeach
         </tr>
         @foreach ($hm['rows'] as $row)
-            <tr data-block="portfolio-row" data-state="{{ $row['state'] }}" data-project="{{ $row['id'] }}">
-                <td style="padding:1px 0; font-size:12px; font-weight:{{ in_array($row['state'], ['bad', 'watch'], true) ? 800 : 600 }}; color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $row['url'] }}" style="color:inherit; text-decoration:none;">{{ \Illuminate\Support\Str::limit($row['name'], 18, '…') }}</a></td>
+            <tr data-block="portfolio-row" data-state="{{ $row['state'] }}" data-project="{{ $row['id'] }}" height="20" style="height:20px; font-size:12px; line-height:20px; font-weight:800; text-align:center;">
+                <td style="font-weight:{{ in_array($row['state'], ['bad', 'watch'], true) ? 800 : 600 }}; color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-align:{{ $startSide }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $row['url'] }}" style="color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-decoration:none;">{{ \Illuminate\Support\Str::limit($row['name'], 18, '…') }}</a></td>
                 @foreach ($row['cells'] as $cell)
-                    <td width="{{ $cw }}" align="center" style="width:{{ $cw }}px; padding:1px 1px;">
-                        @if ($cell === null)
-                            <span style="display:block; height:22px; line-height:22px; font-size:11px; color:#c9c4b6; text-align:center;">·</span>
-                        @else
-                            <span data-state="{{ $cell['state'] }}" style="display:block; height:20px; line-height:20px; border-radius:6px; text-align:center; font-size:12px; font-weight:800; background-color:{{ $S::CELL[$cell['state']] }}; color:{{ $S::INK[$cell['state']] }};">{{ $S::GLYPH[$cell['state']] }}</span>
-                        @endif
-                    </td>
+                    @if ($cell === null)
+                        <td align="center" style="font-size:11px; font-weight:400; color:#c9c4b6;">·</td>
+                    @else
+                        <td align="center" bgcolor="{{ $S::CELL[$cell['state']] }}" data-state="{{ $cell['state'] }}" style="background-color:{{ $S::CELL[$cell['state']] }}; color:{{ $S::INK[$cell['state']] }}; border-radius:6px;">{{ $S::GLYPH[$cell['state']] }}</td>
+                    @endif
                 @endforeach
             </tr>
         @endforeach
     </table>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="legend" style="margin:8px 0 12px;"><tr>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="legend" style="width:100%; margin:8px 0 12px;"><tr>
         @foreach (['ok', 'watch', 'bad', 'none'] as $k)
-            <td style="padding-{{ $endSide }}:10px; font-size:11px; color:#5b6b68;">@include('mail.digest._chip', ['state' => $k, 'size' => 16]) {{ $S::label($k, $ar) }}</td>
+            <td style="padding-{{ $endSide }}:10px; font-size:11px; color:#5b6b68; white-space:nowrap;">@include('mail.digest._chip', ['state' => $k, 'size' => 16]) {{ $S::label($k, $ar) }}</td>
         @endforeach
+        <td width="100%" style="font-size:1px; line-height:1px;">&nbsp;</td>
     </tr></table>
 
     {{-- 7. DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص الربط»: linking and data freshness, apart from performance, short, at the end. --}}
