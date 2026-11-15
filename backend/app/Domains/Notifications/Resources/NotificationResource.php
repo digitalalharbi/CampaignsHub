@@ -8,6 +8,7 @@ use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\AlertVisual;
+use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Models\User;
@@ -23,16 +24,27 @@ final class NotificationResource extends JsonResource
         // An Arabic reader gets the Arabic wording where there is one; everyone else, and every older row, reads what was stored.
         $ar = ($request->user()->locale ?? 'ar') !== 'en';
 
+        $event = $this->relationLoaded('alertEvent') ? $this->getRelation('alertEvent') : null;
+        $kind = $this->kind ?? ($event instanceof AlertEvent ? BellKind::forAlert((string) $event->type, (array) ($event->context ?? [])) : BellKind::forType((string) $this->type));
+        // A budget_risk row written before `kind` existed and with no alert behind it is NOT known to be an overrun: it says «alert», not «exceeded».
+        $kind ??= $this->type === 'budget_risk' ? 'budget_risk' : null;
+
         return [
             'id' => $this->id,
             'type' => $this->type,
-            'severity' => $this->severity,
+            // NOTIF-BELL-001 — the finding itself, and its name: the bell never names a row by its preference category.
+            'kind' => $kind,
+            'kind_label' => BellKind::label($kind, $ar),
+            'group' => BellKind::group($kind),
+            'repeat_count' => (int) ($this->repeat_count ?? 1),
+            'severity' => $this->severity === 'error' ? 'critical' : $this->severity,
             'title' => $ar && $this->title_ar ? $this->title_ar : $this->title,
             'message' => $ar && $this->message_ar ? $this->message_ar : $this->message,
             'project_id' => $this->project_id,
             'client_workspace_id' => $this->client_workspace_id,
             'action_url' => $this->action_url,
-            'status' => $this->status,
+            // A team-wide row is read PER PERSON (notification_reads); the row's own status is for its addressee.
+            'status' => $this->status === 'unread' && $this->getAttribute('read_by_me') === true ? 'read' : $this->status,
             'read_at' => optional($this->read_at)->toIso8601String(),
             'created_at' => optional($this->created_at)->toIso8601String(),
             // DIGESTS-CADENCE-BUDGETS-001 — the same grammar as the email: chip state, the problem drawn, the next steps.

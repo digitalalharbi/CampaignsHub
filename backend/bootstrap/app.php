@@ -64,6 +64,7 @@ use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Notifications\Console\BackfillBellKind;
 use App\Domains\Notifications\Console\SendSpendSummaries;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
@@ -146,6 +147,8 @@ return Application::configure(basePath: dirname(__DIR__))
         RetryFailedDigests::class,
         // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
         SendSpendSummaries::class,
+        // NOTIF-BELL-001 — names the old bell rows; manual, run once after the migration.
+        BackfillBellKind::class,
         // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
         EnrolMembers::class,
         ConfirmMailDelivery::class,

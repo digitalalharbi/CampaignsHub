@@ -8,6 +8,7 @@ use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\NotificationChannelPolicy;
 use App\Models\User;
@@ -67,6 +68,28 @@ final class NotificationDispatcher
         // The catalogue type a person's per-type switch is filed under: `request.assigned` → `request`.
         $switchKey = NotificationChannelPolicy::switchKey($type);
         $dedupKey = $this->dedupKey($tenantId, $userId, $type, $p);
+        // NOTIF-BELL-001 — the finding itself, named once: from the producer, else from the type when the type says it all.
+        $kind = isset($p['kind']) && is_string($p['kind']) && $p['kind'] !== '' ? $p['kind'] : BellKind::forType($type);
+
+        /*
+         * NOTIF-BELL-001 — a finding is ONE notification per day, and a repeat UPDATES it.
+         *
+         * Keyed by kind + object + the day on the Riyadh calendar (+ recipient). Until now a repeat inside the
+         * 60-minute window was dropped and one after it was a brand-new row, so a campaign stuck at 90% for a week
+         * filled the bell with the same line. Now the second sweep of the day refreshes the row's wording and figures,
+         * counts the repeat, and — only when the finding got worse — brings it back as unread. No second email,
+         * no second push: a repeat is not a new event.
+         */
+        if (($p['upsert_daily'] ?? false) === true && $kind !== null) {
+            $dayKey = $this->dayKey($tenantId, $userId, $kind, $p);
+            $existing = AppNotification::query()->where('tenant_id', $tenantId)->where('type', '!=', 'suppressed')
+                ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id'))
+                ->where('dedup_key', $dayKey)->first();
+            if ($existing !== null) {
+                return $this->refresh($existing, $p);
+            }
+            $dedupKey = $dayKey;
+        }
 
         // 1) Dedup — an identical notification within the window is collapsed.
         if ($this->isDuplicate($tenantId, $userId, $dedupKey)) {
@@ -112,6 +135,9 @@ final class NotificationDispatcher
             'action_url' => $p['action_url'] ?? null,
             'status' => 'unread',
             'dedup_key' => $dedupKey,
+            'kind' => $kind,
+            'repeat_count' => 1,
+            'last_seen_at' => Carbon::now(),
             // DIGESTS-VISUAL-V2-001 — the Arabic wording, when the producer wrote it, so the bell is not English under an Arabic title.
             'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : null,
             'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : null,
@@ -246,6 +272,45 @@ final class NotificationDispatcher
 
             return 'failed';
         }
+    }
+
+    /**
+     * Update the day's row for a finding that came round again.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function refresh(AppNotification $n, array $p): AppNotification
+    {
+        $rank = ['info' => 0, 'success' => 0, 'warning' => 1, 'error' => 2, 'critical' => 2];
+        $new = (string) ($p['severity'] ?? $n->severity);
+        $worse = ($rank[$new] ?? 0) > ($rank[(string) $n->severity] ?? 0);
+
+        $fields = [
+            'severity' => $worse ? $new : $n->severity,
+            'title' => $p['title'] ?? $n->title,
+            'message' => $p['message'] ?? $n->message,
+            'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : $n->title_ar,
+            'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : $n->message_ar,
+            'repeat_count' => ((int) $n->repeat_count) + 1,
+            'last_seen_at' => Carbon::now(),
+        ];
+        if ($worse) {
+            $fields += ['status' => 'unread', 'read_at' => null];
+            DB::table('notification_reads')->where('notification_id', $n->id)->delete();
+        }
+        $n->forceFill($fields)->save();
+
+        return $n;
+    }
+
+    /** @param  array<string,mixed>  $p */
+    private function dayKey(string $tenantId, ?int $userId, string $kind, array $p): string
+    {
+        return hash('sha256', implode('|', [
+            'day', $tenantId, $userId ?? 'tenant', $kind,
+            $p['entity_type'] ?? '', $p['entity_id'] ?? '', $p['dedup_extra'] ?? '',
+            Carbon::now('Asia/Riyadh')->toDateString(),
+        ]));
     }
 
     /** @param  array<string,mixed>  $p */
