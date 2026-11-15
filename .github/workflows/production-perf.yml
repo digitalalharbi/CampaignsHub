@@ -100,7 +100,7 @@ jobs:
             q "select provider,dimension,count(*),min(metric_date),max(metric_date) from audience_breakdown_rows where project_id in $P group by 1,2 order by 1,2;"
             echo "## G5. PROVIDER PROBE 2026-11-12 (audience:breakdown-probe, read-only, writes no breakdown): per bound ad account, regions bucketed"
             PID=$(q "select id from projects where id::text like '57f56cce%' and deleted_at is null;" | grep -Eo '^[0-9a-f-]{36}$' | head -1)
-            q "select b.provider||'|'||b.external_account_id from project_integration_bindings b join external_accounts ea on ea.id=b.external_account_id where b.project_id='$PID' and b.is_active and ea.account_type='ad_account' order by 1;" | grep -E '\|[0-9a-f-]{36}$' > /tmp/geo_accts.txt
+            q "select b.provider||'|'||b.external_account_id from project_integration_bindings b join external_accounts ea on ea.id=b.external_account_id where b.project_id='$PID' and b.is_active order by 1;" | grep -E '\|[0-9a-f-]{36}$' > /tmp/geo_accts.txt
             N=0
             while IFS='|' read -r PROV ACC; do
               N=$((N+1))
@@ -114,6 +114,8 @@ jobs:
                 END {for (b in n) printf "bucket %s | regions %d | impressions %d | clicks %d\n", b, n[b], imp[b], clk[b]}'
             done < /tmp/geo_accts.txt
             echo "probed accounts: $N"
+            echo "## G6. bound account types: provider | account_type | n"
+            q "select b.provider,ea.account_type,count(*) from project_integration_bindings b join external_accounts ea on ea.id=b.external_account_id where b.project_id='$PID' and b.is_active group by 1,2 order by 1,2;"
             rm -f /tmp/geo_accts.txt
             echo "== END FACTS-GEO2"
             exit 0
