@@ -155,6 +155,9 @@ describe('the agency headline', () => {
     resetPeriodSession()
     window.localStorage.clear()
     try {
+      // RIYADH-DAY-001 — calls[0] must be THIS render's: the earlier tests run on the real clock, and from 00:00 to 03:00
+      // Riyadh their window is a day later than this frozen one, which is how this read another test's call.
+      vi.mocked(fetchAgencyOverview).mockClear()
       vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
       renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
       await screen.findByTestId('agency-kpi-spend')
