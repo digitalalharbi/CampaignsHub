@@ -176,8 +176,9 @@ export interface AgencyOverview {
   freshness: { last_synced_at: string | null }
 }
 
-export function fetchAgencyOverview(range?: { from: string; to: string }): Promise<AgencyOverview> {
-  const qs = range ? `?from=${range.from}&to=${range.to}` : ''
+export function fetchAgencyOverview(range?: { from: string; to: string }, compare?: { from: string; to: string } | null): Promise<AgencyOverview> {
+  // DATE-RANGE-001 — a chosen comparison (last year, or two dates) replaces the default «same length before».
+  const qs = range ? `?from=${range.from}&to=${range.to}${compare ? `&compare_from=${compare.from}&compare_to=${compare.to}` : ''}` : ''
 
   return getData<AgencyOverview>(`/agency/overview${qs}`)
 }

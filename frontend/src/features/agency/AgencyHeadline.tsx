@@ -6,10 +6,8 @@ import { fetchAgencyOverview } from './api'
 import { listAlertEvents, type AlertEvent } from '@/features/alerts/api'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { DataFreshness } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
-import { FilterChips } from '@/components/ui/FilterBar'
-import { useUrlNumber } from '@/features/analytics/filterUrlState'
-import { lastNDays } from '@/features/analytics/api'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
@@ -47,15 +45,19 @@ const STALE_AFTER_HOURS = 36
 const SEVERITY_ORDER: Record<AlertEvent['severity'], number> = { critical: 0, warning: 1, info: 2 }
 
 /**
- * The window is part of the ADDRESS (`?days=7|30|90`), as on Analytics, so a reload, Back and a
- * shared link show the same figures; the three components read the same key and share one cached read.
+ * DATE-RANGE-001 — the window is the system's one period (`from`, `to`, `compare` in the ADDRESS), so a reload,
+ * Back and a shared link show the same figures and the same days as every other page; the three components
+ * read the same key and share one cached read. Rolling presets end YESTERDAY, as the ad platforms' do.
  */
 function useOverview() {
-  const [days, setDays] = useUrlNumber('days', 30)
-  const range = useMemo(() => lastNDays(days), [days])
-  const query = useQuery({ queryKey: ['agency', 'overview', days], queryFn: () => fetchAgencyOverview(range), retry: false })
+  const { range, compareRange, period } = usePeriod()
+  const query = useQuery({
+    queryKey: ['agency', 'overview', range.from, range.to, compareRange?.from ?? null, compareRange?.to ?? null],
+    queryFn: () => fetchAgencyOverview(range, compareRange),
+    retry: false,
+  })
 
-  return { ...query, days, setDays }
+  return { ...query, period }
 }
 
 function alertPath(a: AlertEvent): string {
@@ -120,18 +122,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   return (
     <section data-testid="agency-headline" className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(overview.days)}
-          testid="agency-days"
-          options={[
-            { value: '7', label: ar ? '7 أيام' : '7 days' },
-            { value: '30', label: ar ? '30 يوم' : '30 days' },
-            { value: '90', label: ar ? '90 يوم' : '90 days' },
-          ]}
-          onChange={(v) => overview.setDays(Number(v))}
-        />
-        <PeriodLabel from={d.period.from} to={d.period.to} testId="agency-period" />
+        <DateRangePicker testId="agency-period-picker" />
         <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
         {/*
           The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
