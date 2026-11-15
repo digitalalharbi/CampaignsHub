@@ -154,3 +154,13 @@ columns of `app_notifications`. Done in this batch:
   (`notifications.sound`, `notifications.push`);
 - `BellKind` keeps naming legacy rows; the in-app `Sender` writes `app_notifications` with `kind` = the event key,
   so L's bell, unread count, read-all and filters serve engine rows unchanged.
+
+## 8. Builder P additions (internal notifications, centre, follow-up — see `P-notes.md`)
+
+- Catalog: `report.rerouted` (external, `notifications.external`, not groupable) for «أعد التوجيه»; `creates_task` is now true for `budget.threshold_100` and `budget.overrun`.
+- Payload keys with meaning: `variant` (`created|edited|renewed|deleted`: the composer prefers `<textKey>_<variant>`), `channels_only` (internal router: narrows channels, never widens), `addressee_user_id` (one person), `url` (portal-relative page).
+- Domains raise internal facts through `Internal\InternalEvents::raise()` (active-projects rule + follow-up task), never `NotificationEngine::raise` directly.
+- Follow-up tables (`followup_tasks`, `followup_task_events`, `followup_briefs`, `followup_user_settings`) and centre tables (`notification_user_snoozes`, `notification_mutes`) follow §1 (tenant + `BelongsToTenant`).
+- Extension points used: tag `notifications.presend` (`ReroutedReportCheck`), `MessageComposer` (variants). Routes: `routes/api/followup.php` — `/api/v1/followup/*` (`plan.feature:followup.tasks|followup.morning_brief`) and `/api/v1/notifications/{id}/snooze|mute`, `/notifications/mutes` (`plan.feature:notifications.internal`).
+- Commands: `notifications:v2-internal-scan` (10 min), `notifications:v2-morning-brief` (5 min).
+
