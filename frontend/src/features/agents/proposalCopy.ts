@@ -36,13 +36,25 @@ export const STATUS_WORDS: Record<ProposalStatus, { ar: string; en: string; tone
   expired: { ar: 'انتهت مهلته', en: 'Expired', tone: 'neutral' },
 }
 
-export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'>, ar: boolean): string {
+export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'> & { display?: Proposal['display'] }, ar: boolean): string {
   if (p.action === 'pause') return ar ? 'إيقاف' : 'Pause'
   if (p.action === 'resume') return ar ? 'تشغيل' : 'Resume'
-  if (p.action === 'set_daily_budget') {
-    const amount = p.payload?.daily_budget
-    const money = amount === undefined ? '' : ` ${amount}${p.currency ? ` ${currencyMark(p.currency)}` : ''}`
-    return `${ar ? 'ميزانية يومية' : 'Daily budget'}${money}`
-  }
+  if (p.action === 'set_daily_budget') return `${ar ? 'ميزانية يومية' : 'Daily budget'}${budgetFigure(p, p.payload?.daily_budget, p.display?.daily_budget, ar)}`
   return p.action
+}
+
+/**
+ * CONS-I-APPROVAL — a budget figure in the currency the reader reads: «36 € → 39.5 $» was shown raw as «36 €». The converted
+ * figure leads and the platform's own follows in brackets; with no rate the platform figure is shown alone and says why.
+ */
+export function budgetFigure(p: Pick<Proposal, 'currency'> & { display?: Proposal['display'] }, raw: number | null | undefined, converted: number | null | undefined, ar: boolean): string {
+  if (raw === undefined || raw === null) return ''
+  const own = `${raw}${p.currency ? ` ${currencyMark(p.currency)}` : ''}`
+  const d = p.display
+  if (d && converted !== null && converted !== undefined) {
+    const shown = `${converted} ${currencyMark(d.currency)}`
+    return d.converted ? ` ${shown} (${own})` : ` ${shown}`
+  }
+
+  return ` ${own}${d && d.reason ? (ar ? ' — بدون تحويل: ما فيه سعر صرف' : ' — not converted: no rate') : ''}`
 }
