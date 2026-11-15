@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -88,6 +89,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                     ? (float) $c['total_budget_amount_local_micro'] / self::MICRO
                     : null,
                 'currency' => isset($c['currency']) ? (string) $c['currency'] : null,
+                'platform_created_at' => PlatformCreatedAt::from($c['created_at'] ?? null), // CONS-I-AGE
                 'raw' => (array) $c,
             ];
         }

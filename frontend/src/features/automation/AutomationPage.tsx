@@ -8,7 +8,7 @@ import {
   type AutomationRule, type DryRunResult,
 } from './api'
 import { RuleBuilder } from './RuleBuilder'
-import { LEVEL_WORDS, MODE_WORDS, RESULT_WORDS, STATUS_WORDS, actionWord, conditionsSentence, statusWord } from './ruleCopy'
+import { LEVEL_WORDS, MODE_WORDS, RESULT_WORDS, STATUS_WORDS, actionWord, conditionsSentence, readingText, statusWord } from './ruleCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Num } from '@/components/ui/Num'
 import { Button } from '@/components/ui/Button'
@@ -179,8 +179,17 @@ export function AutomationPage() {
                   {dry.results.map((x) => (
                     <li key={`${x.provider}-${x.external_id}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-testid="automation-dry-row">
                       <span className="min-w-0 truncate font-semibold text-text-primary">{platformLabel(x.provider, ar)} · {x.name ?? x.external_id}</span>
-                      <span className="text-text-secondary" dir="ltr">{Object.entries(x.metrics).map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 100) / 100 : v ?? '—'}`).join(' · ')}</span>
+                      {x.readings && x.readings.length > 0 ? (
+                        <span className="flex flex-wrap gap-x-3 text-text-secondary" data-testid="automation-dry-readings">
+                          {x.readings.map((r) => (
+                            <span key={`${r.metric}-${r.window_days}`}>{ar ? r.name_ar : r.name_en}: <bdi dir={ar ? 'rtl' : 'ltr'} className="font-semibold text-text-primary">{readingText(r, ar)}</bdi></span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-text-secondary" dir="ltr">{Object.entries(x.metrics).map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 100) / 100 : v ?? '—'}`).join(' · ')}</span>
+                      )}
                       <Badge tone={x.matched ? 'warning' : 'neutral'}>{statusWord(x.status, ar)}</Badge>
+                      {x.reason && <p className="basis-full text-text-muted" data-testid="automation-dry-reason">{x.reason.ar}</p>}
                     </li>
                   ))}
                 </ul>

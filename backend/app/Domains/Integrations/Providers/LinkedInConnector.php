@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Providers;
 
 use App\Domains\Integrations\OAuth\GrantedScopes;
 use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 
@@ -189,6 +190,8 @@ final class LinkedInConnector extends ApiAdvertisingConnector implements Reports
                 'currency' => is_array($c['dailyBudget'] ?? null) && isset($c['dailyBudget']['currencyCode'])
                     ? (string) $c['dailyBudget']['currencyCode']
                     : null,
+                // CONS-I-AGE — `changeAuditStamps.created.time` is epoch milliseconds.
+                'platform_created_at' => PlatformCreatedAt::from($c['changeAuditStamps']['created']['time'] ?? null),
                 'raw' => (array) $c,
             ];
         }

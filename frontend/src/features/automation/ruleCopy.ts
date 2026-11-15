@@ -1,4 +1,5 @@
-import type { AutomationRule, Catalog, RuleCondition } from './api'
+import type { AutomationRule, Catalog, DryRunReading, RuleCondition } from './api'
+import { formatMoney } from '@/features/funding/money'
 import { days } from '@/lib/counted'
 
 /** AUTO-RULES-UI-010 — every word the Automated Rules screen says, in both languages. */
@@ -76,4 +77,19 @@ export function conditionsSentence(catalog: Catalog | undefined, rule: Pick<Auto
     return `${metricWord(catalog, c.metric, ar)} (${window}) ${OP[c.operator] ?? c.operator} ${c.value}`
   }
   return (ar ? 'إذا ' : 'If ') + rule.conditions.map(one).join(join)
+}
+
+/**
+ * CONS-I-DRYRUN — a reading as a person meets it. Arabic uses the server's sentence (mark placement, plain wording); English
+ * formats the same value. A missing figure is «غير متوفرة» / «Not available», never a dash or the technical key.
+ */
+export function readingText(r: DryRunReading, ar: boolean): string {
+  if (ar) return r.text_ar
+  if (r.value === null) return 'Not available'
+  if (typeof r.value === 'string') return r.value
+  if (r.kind === 'money') return r.currency ? formatMoney(r.value, r.currency, 2) : String(r.value)
+  if (r.kind === 'percent') return `${r.value}%`
+  if (r.kind === 'ratio') return `${r.value}×`
+
+  return String(r.value)
 }
