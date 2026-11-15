@@ -6,6 +6,7 @@ import { useUi } from '@/stores/ui'
 import { useRoleDashboard, type DashboardView, type RoleDashboard } from './api'
 import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
+import { MarketerView } from './MarketerView'
 import { PmView } from './PmView'
 import { useFitViewport } from './parts'
 
@@ -38,6 +39,8 @@ function Body({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
       return <PmView d={d} portal={portal} />
     case 'finance':
       return <FinanceView d={d} portal={portal} />
+    case 'marketer':
+      return <MarketerView d={d} portal={portal} />
     case 'manager':
     default:
       return <ManagerView d={d} portal={portal} />

@@ -458,9 +458,12 @@ final class RoleDashboardBuilder
 
         $scoped = $agg->forCampaigns($ids);
         $rows = $scoped->byCampaign($from, $to);
+        // The detail page of a campaign is addressed by its project as well.
+        $projectOf = UnifiedCampaign::query()->whereIn('id', $ids)->pluck('project_id', 'id')->map(fn ($v): string => (string) $v)->all();
 
         $out['campaign_rows'] = array_map(static fn (array $r): array => [
             'id' => (string) $r['campaign_id'],
+            'project_id' => $projectOf[(string) $r['campaign_id']] ?? null,
             'name' => (string) $r['campaign_name'],
             'status' => $r['status'],
             'family' => (string) ($r['result_family'] ?? 'unknown'),
@@ -497,7 +500,7 @@ final class RoleDashboardBuilder
                 ? (float) ($b['roas'] ?? 0) <=> (float) ($a['roas'] ?? 0)
                 : (float) $a['cost_per_result'] <=> (float) $b['cost_per_result']);
             $shape = static fn (array $r): array => [
-                'id' => (string) $r['campaign_id'], 'name' => (string) $r['campaign_name'], 'family' => $top,
+                'id' => (string) $r['campaign_id'], 'project_id' => $projectOf[(string) $r['campaign_id']] ?? null, 'name' => (string) $r['campaign_name'], 'family' => $top,
                 'cost_per_result' => $r['cost_per_result'], 'cost_label' => $r['cost_per_result_label'] ?? null,
                 'result' => $r['result'], 'result_label' => $r['result_label'] ?? null, 'roas' => $sales ? ($r['roas'] ?? null) : null,
             ];
