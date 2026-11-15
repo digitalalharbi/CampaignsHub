@@ -76,8 +76,12 @@ final class MorningBriefRunner
                 continue;
             }
             $prefs = FollowupUserSettings::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('user_id', $user->getKey())->first();
-            $enabled = $prefs->brief_enabled ?? true;
-            $time = (string) ($prefs->brief_time ?? '08:00');
+            // RELEASE-INTEGRATION — until a person chooses, the workspace defaults on builder R's settings page apply
+            // (`settings.followup.morning_brief`, `.morning_time`; defaults on / 08:00). A person's own row always wins.
+            $wsFollow = (array) ($ws->settings['followup'] ?? []);
+            $enabled = $prefs->brief_enabled ?? (bool) ($wsFollow['morning_brief'] ?? true);
+            $wsTime = is_string($wsFollow['morning_time'] ?? null) && preg_match('/^\d{2}:\d{2}$/', $wsFollow['morning_time']) === 1 ? $wsFollow['morning_time'] : '08:00';
+            $time = (string) ($prefs->brief_time ?? $wsTime);
             if (! $enabled || $local->format('H:i') < $time) {
                 continue;
             }

@@ -16,6 +16,7 @@ use App\Domains\Notifications\Engine\Data\RoutingDecision;
 use App\Domains\Notifications\Engine\Enums\Channel;
 use App\Domains\Notifications\Engine\Enums\DeliveryStatus;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
+use App\Domains\Notifications\Engine\Enums\Priority;
 use App\Domains\Notifications\Engine\Enums\Scope;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettings;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
@@ -196,13 +197,28 @@ final class EngineRouter implements Router
 
     private function decide(DeliveryIntent $intent, Recipient $recipient, Scope $scope, EventDefinition $event, Channel $channel, bool $allowed, ?string $subscriptionId = null): RoutingDecision
     {
+        $priority = $this->priorityFor($intent->tenantId, $scope, $event);
         if (! $allowed) {
-            return new RoutingDecision($recipient, $scope, $channel, $event->priority, DeliveryStatus::BlockedByPlan, 'plan:'.($event->entitlement->value ?? $scope->value), subscriptionId: $subscriptionId);
+            return new RoutingDecision($recipient, $scope, $channel, $priority, DeliveryStatus::BlockedByPlan, 'plan:'.($event->entitlement->value ?? $scope->value), subscriptionId: $subscriptionId);
         }
 
-        $until = $this->quiet->deferUntil($intent->tenantId, $recipient, $scope, $event->priority, $channel, $intent->at());
+        $until = $this->quiet->deferUntil($intent->tenantId, $recipient, $scope, $priority, $channel, $intent->at());
 
-        return new RoutingDecision($recipient, $scope, $channel, $event->priority, notBefore: $until, deferredReason: $until === null ? null : 'quiet_hours', subscriptionId: $subscriptionId);
+        return new RoutingDecision($recipient, $scope, $channel, $priority, notBefore: $until, deferredReason: $until === null ? null : 'quiet_hours', subscriptionId: $subscriptionId);
+    }
+
+    /**
+     * RELEASE-INTEGRATION — the workspace's own priority for an INTERNAL event (builder R's routing matrix saves
+     * `settings.priorities[event]`); the catalog priority stays the default and external messages keep the catalog's.
+     */
+    private function priorityFor(string $tenantId, Scope $scope, EventDefinition $event): Priority
+    {
+        if ($scope !== Scope::Internal) {
+            return $event->priority;
+        }
+        $override = $this->settings->for($tenantId)->settings['priorities'][$event->key] ?? null;
+
+        return is_string($override) ? (Priority::tryFrom($override) ?? $event->priority) : $event->priority;
     }
 
     /**

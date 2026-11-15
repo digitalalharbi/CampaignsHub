@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Followup;
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
+use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Notifications\Followup\Models\FollowupTask;
 use App\Domains\Notifications\Followup\Models\FollowupTaskEvent;
 use App\Domains\Notifications\Services\DigestScope;
@@ -108,6 +109,11 @@ final class FollowupTasks
             throw new InvalidArgumentException("Unknown follow-up kind {$kind}");
         }
         if (! $this->enabled($tenantId)) {
+            return null;
+        }
+        // RELEASE-INTEGRATION — the workspace switch on builder R's settings page (`settings.followup.tasks`, default on): off opens
+        // nothing new; existing tasks stay and can still be closed.
+        if ((app(WorkspaceSettingsRepository::class)->for($tenantId)->settings['followup']['tasks'] ?? true) === false) {
             return null;
         }
         if ($projectId !== null && ! ActiveProjectsGate::allows($tenantId, $projectId)) {

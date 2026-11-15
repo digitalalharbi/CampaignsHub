@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
+use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Notifications\Push\PushTypes;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
@@ -29,9 +30,24 @@ final class SoundPreferences
         $row = DB::table('notification_alert_settings')->where('user_id', $user->id)->first();
 
         return [
-            'enabled' => $row === null ? true : (bool) $row->sound_enabled,
+            'enabled' => $row === null ? $this->workspaceDefault() : (bool) $row->sound_enabled,
             'volume' => $row === null ? self::DEFAULT_VOLUME : (int) $row->sound_volume,
         ];
+    }
+
+    /**
+     * RELEASE-INTEGRATION — until a person chooses, the bell follows the workspace's «default sound» (builder R's settings page,
+     * `settings.default_sound`, default on). A person's own choice always wins.
+     */
+    private function workspaceDefault(): bool
+    {
+        $tenantId = $this->tenant->tenantId();
+        if ($tenantId === null) {
+            return true;
+        }
+        $value = app(WorkspaceSettingsRepository::class)->for((string) $tenantId)->settings['default_sound'] ?? true;
+
+        return (bool) $value;
     }
 
     /** @return array{enabled: bool, volume: int, quiet: bool} */
