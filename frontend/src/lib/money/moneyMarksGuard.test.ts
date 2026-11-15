@@ -48,7 +48,7 @@ describe('money marks', () => {
   it('every team-facing money screen carries the one disclaimer; a client report never does', () => {
     for (const page of [
       'campaigns/CampaignsPage', 'analytics/AnalyticsPage', 'alerts/AlertsPage', 'recommendations/RecommendationsPage',
-      'agency/AgencyDashboardPage', 'projects/PortfolioPage', 'budget/SpendLimitsPage', 'funding/BudgetsPage',
+      'agency/AgencyDashboardPage', 'projects/PortfolioPage', 'budget/SpendLimitsPage', 'funding/BudgetsPage', 'roleDashboard/RoleDashboardPage',
     ]) {
       expect(sources[`/src/features/${page}.tsx`], page).toContain('<FinancialDisclaimer')
     }

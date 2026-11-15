@@ -34,6 +34,7 @@ const EXEMPT = {
   'src/features/reports/InteractiveReport.tsx': 'the deck on screen, which must match the printed one exactly',
   'src/components/ui/StatCard.tsx': 'the shared card itself',
   'src/components/ui/MetricStrip.tsx': 'the strip, which is the shared card in its multi-metric form',
+  'src/features/roleDashboard/parts.tsx': 'the role dashboards are ONE fixed-size screen (no scroll at 1366x768): every figure is a link that opens its page and the card must be compact, which the shared card — four reserved rows, not a link — cannot be',
 }
 
 /**
