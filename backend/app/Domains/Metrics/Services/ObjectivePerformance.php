@@ -700,6 +700,81 @@ final class ObjectivePerformance
     }
 
     /**
+     * DASH-KPI-OBJECTIVE-001 — the dashboard's results, one block per objective FAMILY, never one blend.
+     *
+     * «Platform conversions 85,150» and «cost per result 0.27 $» summed views, clicks and orders into
+     * one figure: a cost per result across different objectives answers no question. Each family here
+     * carries ITS OWN result (orders for sales, leads for leads, visits or clicks for traffic, …) and
+     * ITS OWN cost per result, derived from that family's spend and result alone. A family whose
+     * platform sent nothing reports `result: null` — «no data», never 0.
+     *
+     * ROAS exists for the sales family only, and only over the sales campaigns that have both revenue
+     * and spend: `roas_campaigns` of `sales_campaigns` entered it, so the reader sees how much of the
+     * sales spend the figure speaks for. Withheld money (no FX rate) refuses the ratio.
+     *
+     * @return list<array<string, mixed>> one entry per family that spent or reported, in a fixed order
+     */
+    public function byFamily(Carbon $from, Carbon $to): array
+    {
+        /** @var array<string, array{rows: list<array<string, mixed>>, campaigns: array<string, true>}> $groups */
+        $groups = [];
+        /** @var array<string, array{spend: float, revenue: float, held: int}> $salesByCampaign */
+        $salesByCampaign = [];
+
+        foreach ($this->rows($from, $to) as $row) {
+            $objective = CampaignObjective::tryFrom((string) $row->objective) ?? CampaignObjective::Other;
+            $family = $objective->family()->value;
+            $groups[$family]['rows'][] = ['conversions' => (float) ($row->orders ?? 0), 'reach' => null] + (array) $row;
+            $groups[$family]['campaigns'][(string) $row->unified_campaign_id] = true;
+
+            if ($family === ObjectiveFamily::Sales->value) {
+                $id = (string) $row->unified_campaign_id;
+                $salesByCampaign[$id] ??= ['spend' => 0.0, 'revenue' => 0.0, 'held' => 0];
+                $salesByCampaign[$id]['spend'] += (float) ($row->spend ?? 0);
+                $salesByCampaign[$id]['revenue'] += (float) ($row->revenue ?? 0);
+                $salesByCampaign[$id]['held'] += (int) ($row->spend_withheld_rows ?? 0) + (int) ($row->revenue_withheld_rows ?? 0);
+            }
+        }
+
+        $out = [];
+        foreach (ObjectiveFamily::cases() as $case) {
+            $family = $case->value;
+            if (! isset($groups[$family])) {
+                continue;
+            }
+            $rows = $groups[$family]['rows'];
+            $combined = ObjectiveResult::combine($family, $rows, array_map(self::rowReported(...), $rows));
+            $spend = array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows));
+
+            $entry = [
+                'family' => $family,
+                'campaigns' => count($groups[$family]['campaigns']),
+                'spend' => round($spend, 2),
+                'result' => $combined['result'],
+                'result_key' => $combined['result_key'],
+                'result_label' => $combined['result_label'],
+                'cost_per_result' => $combined['cost_per_result'],
+                'cost_per_result_label' => $combined['cost_per_result_label'],
+                'missing_reason' => $combined['result_missing_reason'],
+                'missing_label' => $combined['result_missing_label'],
+                'roas' => null, 'roas_campaigns' => null, 'sales_campaigns' => null,
+            ];
+
+            if ($family === ObjectiveFamily::Sales->value) {
+                $entered = array_filter($salesByCampaign, static fn (array $c): bool => $c['revenue'] > 0 && $c['spend'] > 0 && $c['held'] === 0);
+                $spendIn = array_sum(array_column($entered, 'spend'));
+                $entry['sales_campaigns'] = count($salesByCampaign);
+                $entry['roas_campaigns'] = count($entered);
+                $entry['roas'] = $spendIn > 0 ? round(array_sum(array_column($entered, 'revenue')) / $spendIn, 2) : null;
+            }
+
+            $out[] = $entry;
+        }
+
+        return $out;
+    }
+
+    /**
      * OBJECTIVE-ANALYTICS-DEPTH-001 — the strongest and weakest campaign INSIDE each path.
      *
      * The same rule as `byPlatform()`, one level down. A leads campaign and an awareness campaign

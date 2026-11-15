@@ -67,6 +67,30 @@ final class ReportReadyNotificationTest extends TestCase
         $this->assertDatabaseHas('notification_deliveries', ['notification_id' => $n->id, 'channel' => 'email', 'status' => 'awaiting_credentials']);
     }
 
+    /**
+     * CONS-REPORT-READY-ONCE — «Report ready» was raised 24 times for one report and version: every rebuild carried a new
+     * `generated_at` into the dedup key, and the dispatcher only collapses repeats inside one hour. The key is now the
+     * report and its version, held on the report itself, so no rebuild, retry or later sweep can say it twice.
+     */
+    public function test_report_ready_is_said_exactly_once_per_report_and_version(): void
+    {
+        $report = $this->report();
+
+        for ($i = 0; $i < 24; $i++) {
+            $this->travel(2)->hours(); // well past the dispatcher's one-hour window
+            (new GenerateReportJob((string) $report->id))->handle(app(ReportGenerator::class));
+        }
+
+        $this->assertSame(1, AppNotification::query()->where('type', 'report_ready')->where('entity_id', $report->id)->count());
+        $this->assertSame(1, (int) $report->refresh()->ready_notified_version);
+
+        // A new version of the same report is news again — once.
+        $report->forceFill(['version' => 2])->save();
+        (new GenerateReportJob((string) $report->id))->handle(app(ReportGenerator::class));
+        (new GenerateReportJob((string) $report->id))->handle(app(ReportGenerator::class));
+        $this->assertSame(2, AppNotification::query()->where('type', 'report_ready')->where('entity_id', $report->id)->count());
+    }
+
     public function test_a_failed_generation_tells_its_author_why(): void
     {
         $report = $this->report();

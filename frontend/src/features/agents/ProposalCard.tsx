@@ -35,9 +35,13 @@ export function ProposalCard({ projectId, proposal, ar, canDecide, selectable, s
   const pending = proposal.status === 'pending'
   const isBudget = proposal.action === 'set_daily_budget'
   const currency = proposal.currency
-  const before = proposal.current_daily_budget ?? null
-  const after = proposal.payload?.daily_budget ?? null
-  const moneyText = (n: number | null) => (n === null ? '—' : currency ? formatMoney(n, currency, 2) : String(n))
+  // CONS-I-APPROVAL — shown in the display currency; the platform's own figure stays beside it when a conversion happened.
+  const d = proposal.display ?? null
+  const before = d ? d.current_daily_budget : (proposal.current_daily_budget ?? null)
+  const after = d ? d.daily_budget : (proposal.payload?.daily_budget ?? null)
+  const shownCurrency = d && (d.daily_budget !== null || d.current_daily_budget !== null) ? d.currency : currency
+  const moneyText = (n: number | null) => (n === null ? '—' : shownCurrency ? formatMoney(n, shownCurrency, 2) : String(n))
+  const ownText = d?.converted && currency && proposal.payload?.daily_budget != null ? formatMoney(proposal.payload.daily_budget, currency, 2) : null
   const Arrow = ar ? ArrowLeft : ArrowRight
   const n = Number(amount)
   const error = decide.error ?? amend.error
@@ -60,6 +64,7 @@ export function ProposalCard({ projectId, proposal, ar, canDecide, selectable, s
                 <bdi dir="ltr" className="tnum text-text-muted">{moneyText(before)}</bdi>
                 <Arrow size={13} aria-hidden className="text-text-muted" />
                 <bdi dir="ltr" className="tnum font-bold text-text-primary">{moneyText(after)}</bdi>
+                {ownText && <bdi dir="ltr" className="tnum text-xs text-text-muted" data-testid="proposal-original">({ownText})</bdi>}
               </p>
             )}
             {proposal.reason && <p className="mt-1 text-xs text-text-secondary" dir="auto">{proposal.reason}</p>}

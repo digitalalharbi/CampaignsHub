@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\ClientBillingProfile;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Support\IncompleteFeeBasis;
 use App\Domains\Billing\Support\TaxTreatment;
+use App\Domains\Funding\Services\WalletTopUp;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\OfficialPegs;
 use App\Domains\Metrics\Services\CurrencyConverter;
@@ -17,6 +18,8 @@ use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -203,6 +206,47 @@ final class ClientInvoiceService
         return $invoice;
     }
 
+    /**
+     * FIN-WALLET-001 — a draft invoice of type «شحن رصيد إعلاني» for one of the client's projects: the amount to add to its
+     * ad balance, taxed as the client's profile says. A confirmed payment of it is appended to that project's budget.
+     */
+    public function draftWalletTopUp(ClientBillingProfile $profile, Project $project, float $amount): Invoice
+    {
+        if ($amount <= 0) {
+            throw new InvalidArgumentException('A top-up must be a positive amount.');
+        }
+        $subtotal = round($amount, 2);
+        $tax = TaxTreatment::taxFor($profile->tax_treatment, $subtotal);
+
+        $invoice = Invoice::create([
+            'tenant_id' => $profile->tenant_id,
+            'client_workspace_id' => $profile->client_workspace_id,
+            'number' => $this->billing->generateNumber('INV'),
+            'currency' => $profile->currency,
+            'subtotal' => $subtotal,
+            'tax' => $tax,
+            'tax_treatment' => $profile->tax_treatment,
+            'discount' => 0,
+            'total' => round($subtotal + $tax, 2),
+            'line_items' => [[
+                'description' => 'Advertising balance top-up',
+                'description_ar' => 'شحن رصيد إعلاني',
+                'quantity' => 1,
+                'unit_price' => $subtotal,
+                'total' => $subtotal,
+            ]],
+            'amount_paid' => 0,
+            'status' => 'draft',
+            'source' => WalletTopUp::PURPOSE,
+            'purpose' => WalletTopUp::PURPOSE,
+            'project_id' => $project->id,
+            'profile_snapshot' => ['profile' => $profile->only(['currency', 'tax_treatment', 'due_days', 'issuer', 'bill_to', 'payment_details', 'notes']), 'basis' => ['type' => 'wallet_top_up', 'project_id' => (string) $project->id]],
+        ]);
+        $this->audit->log('invoice.drafted', 'invoice', (string) $invoice->getKey(), null, ['number' => $invoice->number, 'total' => $invoice->total, 'purpose' => WalletTopUp::PURPOSE, 'project_id' => (string) $project->id]);
+
+        return $invoice;
+    }
+
     /** Record a payment received outside the gateway (a bank transfer confirmed over WhatsApp). */
     public function recordPayment(Invoice $invoice, float $amount, User $by): Invoice
     {
@@ -211,12 +255,16 @@ final class ClientInvoiceService
             throw new InvalidArgumentException('A payment must be a positive amount.');
         }
 
-        $paid = round((float) $invoice->amount_paid + $amount, 2);
-        $whole = $paid >= (float) $invoice->total;
-        $invoice->update(['amount_paid' => min($paid, (float) $invoice->total), 'status' => $whole ? 'paid' : 'partially_paid', 'paid_at' => $whole ? Carbon::now() : null]);
-        $this->audit->log('invoice.payment_recorded', 'invoice', (string) $invoice->getKey(), null, ['amount' => $amount, 'by' => $by->id]);
+        // FIN-WALLET-001 — the payment and, for a top-up invoice, its deposit in the project's budget: both or neither.
+        return DB::transaction(function () use ($invoice, $amount, $by): Invoice {
+            $paid = round((float) $invoice->amount_paid + $amount, 2);
+            $whole = $paid >= (float) $invoice->total;
+            $invoice->update(['amount_paid' => min($paid, (float) $invoice->total), 'status' => $whole ? 'paid' : 'partially_paid', 'paid_at' => $whole ? Carbon::now() : null]);
+            $this->audit->log('invoice.payment_recorded', 'invoice', (string) $invoice->getKey(), null, ['amount' => $amount, 'by' => $by->id]);
+            app(WalletTopUp::class)->fromInvoicePayment($invoice, $amount, 'manual:'.Str::uuid()->toString(), $by);
 
-        return $invoice;
+            return $invoice;
+        });
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Domains\Integrations\MetaCandidate\MetaUsageHeader;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\Support\MetaGraphRefusal;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Http\Client\Response;
@@ -405,7 +406,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
         $campaigns = [];
 
         foreach ($this->readAll($tokens, "{$adAccountId}/campaigns", 'campaigns', [
-            'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time',
+            'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,created_time',
             'limit' => 500,
         ]) as $c) {
             if (($c['id'] ?? null) === null) {
@@ -421,6 +422,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
                 'daily_budget' => isset($c['daily_budget']) ? (float) $c['daily_budget'] / 100 : null,
                 'lifetime_budget' => isset($c['lifetime_budget']) ? (float) $c['lifetime_budget'] / 100 : null,
                 'currency' => null,
+                // CONS-I-AGE — when the campaign was CREATED on the platform, not when we first synced it.
+                'platform_created_at' => PlatformCreatedAt::from($c['created_time'] ?? null),
                 'raw' => (array) $c,
             ];
         }

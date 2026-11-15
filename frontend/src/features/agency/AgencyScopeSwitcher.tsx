@@ -4,6 +4,7 @@ import { Building2, ChevronsUpDown, FolderKanban, Search } from 'lucide-react'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
+import { useClientProjectAutoSelect } from './clientProject'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -48,9 +49,9 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
    *      never leave the previous client's data on screen;
    *   3. a project id that is not in the authorised list at all — dropped.
    *
-   * Nothing is auto-selected. An agency operator who has not chosen sees the choice, not a guess:
+   * No CLIENT is auto-selected. An agency operator who has not chosen sees the choice, not a guess:
    * defaulting to "whichever client came first" is how someone ends up editing the wrong client's
-   * campaign believing it is theirs.
+   * campaign believing it is theirs. Only the project inside a chosen client follows (CONS-CLIENT-PROJECT).
    */
   useEffect(() => {
     if (clients.isLoading || projects.isLoading) return
@@ -65,19 +66,9 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
     }
 
     /*
-     * CLIENT-UNIT-001 — the client is the visible unit; its project is not.
-     *
-     * A client with exactly ONE project has nothing to choose between, so that project is the working scope the moment
-     * the client is picked. The client was chosen by the person, never guessed: only the project step is skipped, and
-     * only when it has one possible answer. Two or more projects bring the project step back (see below).
+     * CLIENT-UNIT-001 / CONS-CLIENT-PROJECT — the chosen client's project is selected by `useClientProjectAutoSelect`
+     * below (one project: that one; several: the most recently active, picker kept). The client itself is never guessed.
      */
-    if (clientIsReachable) {
-      const owned = authorisedProjects.filter((p) => p.client_workspace_id === currentClientId)
-      if (owned.length === 1 && currentProjectId !== owned[0].id) {
-        setCurrentProjectId(owned[0].id)
-        return
-      }
-    }
 
     if (currentProjectId === null) return
 
@@ -97,6 +88,9 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
     clients.isLoading, projects.isLoading, authorisedClients, authorisedProjects,
     currentClientId, currentProjectId, setCurrentClientId, setCurrentProjectId,
   ])
+
+  // After the reconcile above, so a project it drops for belonging to another client is replaced in the same pass.
+  useClientProjectAutoSelect()
 
   // Collapsed rail: the control needs its labels to be usable, so it steps aside rather than
   // rendering two unlabelled dropdowns.

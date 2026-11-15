@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -39,7 +39,10 @@ export function BudgetsPage() {
   const open = params.get('project')
   const canManage = data?.canManage === true
 
-  const [adding, setAdding] = useState(false)
+  // ONE-BUDGET-001 — «أضف ميزانية» from a project with no budget lands here with `?add=1`; the names travel in router state.
+  const location = useLocation()
+  const [adding, setAdding] = useState(() => params.get('add') === '1')
+  const handed = (location.state ?? null) as { clientName?: string; projectName?: string } | null
   const [renewing, setRenewing] = useState<BudgetDetail | null>(null)
   const [editing, setEditing] = useState<BudgetDetail | null>(null)
   const [deleting, setDeleting] = useState<BudgetDetail | null>(null)
@@ -127,8 +130,8 @@ export function BudgetsPage() {
 
       <AddBudgetDialog
         open={adding}
-        onClose={() => setAdding(false)}
-        defaults={defaults}
+        onClose={() => { setAdding(false); if (params.get('add')) setParams((p) => { p.delete('add'); return p }, { replace: true }) }}
+        defaults={defaults ?? (handed?.projectName ? { clientName: handed.clientName ?? '', projectName: handed.projectName } : undefined)}
         onAdded={(projectId, entryId) => { choose(projectId); if (entryId) announce(projectId, entryId, L.addDone) }}
       />
       {renewing && (

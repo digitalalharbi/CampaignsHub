@@ -9,6 +9,7 @@ import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import type { AuthUser } from '@/lib/api/types'
 import type { NavGroup, NavLeaf } from '@/layouts/SidebarNav'
+import { WorkspaceHop } from './WorkspaceHop'
 
 /**
  * PERSONAL settings, plus — when a shell passes it — the workspace's «الإعدادات» group (NAV-HOME-PLANS-001: the
@@ -81,6 +82,9 @@ function MenuBody({ onNavigate, workspace }: { onNavigate: (to: string, absolute
           {user?.workspace_name && <div className="mt-1 truncate text-[11px] text-text-muted">{user.workspace_name}</div>}
         </div>
       </div>
+
+      {/* CONS-ADMIN-SWITCH — admin panel ⇄ own workspaces, for an account that holds both. Renders nothing otherwise. */}
+      <WorkspaceHop onNavigate={onNavigate} />
 
       {workspace !== undefined && workspace.length > 0 && (
         <div className="border-b border-border p-1.5" role="menu" aria-label={ar ? 'الإعدادات' : 'Settings'} data-testid="account-menu-workspace">

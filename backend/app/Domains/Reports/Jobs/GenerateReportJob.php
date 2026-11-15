@@ -54,7 +54,9 @@ final class GenerateReportJob implements ShouldQueue
                 app(ReportVersions::class)->keep($report);
                 $report->update(['data' => $data, 'status' => 'completed', 'generated_at' => now(), 'error' => null]);
             });
-            $this->tell($report, 'report_ready');
+            if ($this->claimReadyNotice($report)) {
+                $this->tell($report, 'report_ready');
+            }
         } catch (Throwable $e) {
             // Retries stay quiet; the terminal failure speaks once, from failed().
             $report->update(['status' => $report->hasStoredCopy() ? 'completed' : 'failed', 'error' => $e->getMessage()]);
@@ -92,8 +94,26 @@ final class GenerateReportJob implements ShouldQueue
             'entity_id' => (string) $report->id,
             // NOTIF-LINK-001 — portal-relative: the reader's own portal mounts the reports page.
             'action_url' => '/reports',
-            'dedup_extra' => $ready ? (string) $report->generated_at?->toIso8601String() : 'failed',
+            'dedup_extra' => $ready ? 'v'.(int) ($report->version ?? 1) : 'failed',
         ]);
+    }
+
+    /**
+     * CONS-REPORT-READY-ONCE — «Report ready» is said once per report and version, whatever rebuilds it.
+     *
+     * Every rebuild (a note, a section switch, a pack refresh, a retry) moved `generated_at`, which was the dedup extra, and
+     * the dispatcher only collapses repeats inside one hour, so the same report and version was announced 24 times. The key
+     * is claimed in one conditional UPDATE: of two jobs finishing together exactly one wins, and a later rebuild of the same
+     * version finds it taken. A new version is news again.
+     */
+    private function claimReadyNotice(Report $report): bool
+    {
+        $version = (int) ($report->version ?? 1);
+
+        return Report::withoutGlobalScopes()
+            ->whereKey($report->getKey())
+            ->where(fn ($q) => $q->whereNull('ready_notified_version')->orWhere('ready_notified_version', '<>', $version))
+            ->update(['ready_notified_version' => $version]) === 1;
     }
 
     public function failed(Throwable $e): void

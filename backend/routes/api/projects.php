@@ -19,6 +19,7 @@ use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
 use App\Domains\Forms\Http\Controllers\FormDataController;
 use App\Domains\Forms\Http\Controllers\FormFunnelController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
+use App\Domains\Funding\Http\Controllers\ProjectBudgetController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\AudienceController;
@@ -283,6 +284,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `budget.view` and `budget.manage` say so on the route, so the refusal happens on the server
      * for every caller, ours or otherwise.
      */
+    // ONE-BUDGET-001 — the approved budget (one source, the budget's own period) for the project-scoped pages.
+    Route::get('approved-budget', ProjectBudgetController::class)->middleware('project.can:budget.view')->name('approved-budget');
     Route::get('spend-limits', [SpendLimitController::class, 'index'])->middleware('project.can:budget.view')->name('spend-limits.index');
     Route::post('spend-limits', [SpendLimitController::class, 'store'])->middleware('project.can:budget.manage')->name('spend-limits.store');
     Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->middleware('project.can:budget.manage')->name('spend-limits.update');
