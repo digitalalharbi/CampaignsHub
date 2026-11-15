@@ -231,7 +231,7 @@ final class SenderPipelineTest extends TestCase
         $this->raise('target.reached', ['object' => 'c-9']);
         $this->assertSame(1, $this->drain()['sent']);
         Mail::assertSent(EngineMail::class, fn (EngineMail $m) => $m->hasTo('finance@client.test')
-            && $m->hasFrom('info@campaignshub.io', 'Alpha عبر CampaignsHub'));
+            && $m->hasFrom('info@campaignshub.io', 'Alpha عبر كامبينز هَب'));
         $this->assertSame(1, app(UsageCounter::class)->current($this->tenant->id, UsageCounter::EXTERNAL_MESSAGES));
 
         DB::table('tenant_limit_overrides')->insert(['tenant_id' => $this->tenant->id, 'metric' => 'notif.monthly_messages', 'limit_value' => 1, 'reason' => 'test', 'created_at' => now(), 'updated_at' => now()]);

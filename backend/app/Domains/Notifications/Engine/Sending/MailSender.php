@@ -16,6 +16,7 @@ use App\Domains\Notifications\External\Mail\ExternalMailer;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MailShell;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -76,7 +77,7 @@ final class MailSender implements Sender
         return SendResult::accepted(TransactionalMailer::messageId($sent));
     }
 
-    /** «[اسم المساحة] عبر CampaignsHub» — mandatory, not removable by the workspace (spec §8, §12). */
+    /** «[اسم المساحة] عبر كامبينز هَب» / «[workspace] via CampaignsHub» — mandatory, not removable by the workspace (spec §8, §12; brand per BRAND-LANG-001). */
     public static function externalSenderName(string $workspace, string $locale): string
     {
         $workspace = trim($workspace);
@@ -84,6 +85,7 @@ final class MailSender implements Sender
             return 'CampaignsHub';
         }
 
-        return $locale === 'en' ? "{$workspace} via CampaignsHub" : "{$workspace} عبر CampaignsHub";
+        // BRAND-LANG-001 — an Arabic line names the product in Arabic (`MailShell::wordmark`), an English one in Latin.
+        return $locale === 'en' ? "{$workspace} via ".MailShell::wordmark(false) : "{$workspace} عبر ".MailShell::wordmark(true);
     }
 }

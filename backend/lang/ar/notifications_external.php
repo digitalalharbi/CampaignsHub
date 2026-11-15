@@ -7,7 +7,7 @@ declare(strict_types=1);
  * first; no request, no deadline, none of the forbidden words. A workspace overrides texts through its settings.
  */
 return [
-    'sender_via' => ':workspace عبر CampaignsHub',
+    'sender_via' => ':workspace عبر كامبينز هَب',
     'subject' => [
         'structure' => ':project — :workspace | :custom · CampaignsHub',
         'digest_periodic' => 'ملخص :period',

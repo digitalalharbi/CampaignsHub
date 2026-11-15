@@ -45,7 +45,7 @@ final class ExternalMessageTest extends TestCase
         $html = (string) $mail->getHtmlBody();
         $text = (string) $mail->getTextBody();
         $this->assertSame('Launch — Alpha Agency | ملخص 2026-11-01 – 2026-11-14 · CampaignsHub', $mail->getSubject());
-        $this->assertSame('Alpha Agency عبر CampaignsHub', $mail->getFrom()[0]->getName());
+        $this->assertSame('Alpha Agency عبر كامبينز هَب', $mail->getFrom()[0]->getName());
         $this->assertSame('info@campaignshub.io', $mail->getFrom()[0]->getAddress());
         $this->assertStringContainsString('تقرير مشروع: Launch', $html);
         $this->assertStringContainsString('تديره: Alpha Agency', $html);
