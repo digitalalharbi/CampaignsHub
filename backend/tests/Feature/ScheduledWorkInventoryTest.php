@@ -56,6 +56,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
         'notifications:retry-failed',
         'fx:rates',
+        // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
+        'fx:monitor',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
          * vanished, so a structure run had been «running» since 2026-08-26 — twelve days, on a job
@@ -184,6 +186,7 @@ final class ScheduledWorkInventoryTest extends TestCase
              */
             'measurement:sync',
             'fx:rates',
+            'fx:monitor',
             'subscriptions:lifecycle',
             'subscriptions:reconcile-payments',
             'platform:payment-alerts',

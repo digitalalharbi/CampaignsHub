@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Console;
 
 use App\Domains\Metrics\Fx\FxMonitor;
 use App\Domains\Metrics\Fx\MoneyGuard;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use Illuminate\Console\Command;
 
 /**
@@ -22,6 +23,8 @@ final class FxMonitorCommand extends Command
     public function handle(FxMonitor $monitor, MoneyGuard $guard): int
     {
         $alerts = $monitor->sweep();
+        // The rows this run touched: alerts raised and cleared (the guard only reads).
+        app(ScheduledRunRows::class)->report($alerts['raised'] + $alerts['cleared']);
         $this->info("FX alerts: raised {$alerts['raised']}, cleared {$alerts['cleared']}, open {$alerts['open']}.");
 
         $check = $guard->check();

@@ -53,4 +53,10 @@ return [
         'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 7),
     ],
 
+    /*
+     * FX-ENGINE-001 — raise the in-app «currency with no rate» alert the moment an ad account is linked in it (the daily
+     * fx:monitor sweep raises it regardless). On by default.
+     */
+    'alert_on_link' => (bool) env('FX_ALERT_ON_LINK', true),
+
 ];

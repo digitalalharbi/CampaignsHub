@@ -205,17 +205,23 @@ class AppServiceProvider extends ServiceProvider
          * the app at once, not at the next daily sweep. One rate lookup; never allowed to break a sync.
          */
         ExternalAccount::saved(static function (ExternalAccount $account): void {
-            if (! $account->wasChanged('currency') && ! $account->wasRecentlyCreated) {
+            if (! config('fx.alert_on_link', true) || (! $account->wasChanged('currency') && ! $account->wasRecentlyCreated)) {
                 return;
             }
             if ($account->account_type !== 'ad_account' || ! is_string($account->currency) || $account->currency === '') {
                 return;
             }
-            try {
-                app(FxMonitor::class)->accountLinked($account->currency, (string) $account->provider, (string) $account->tenant_id);
-            } catch (Throwable $e) {
-                report($e);
-            }
+            $currency = $account->currency;
+            $provider = (string) $account->provider;
+            $tenant = (string) $account->tenant_id;
+            // After the sync's own transaction commits, so an alert write can never touch the figures being stored.
+            DB::afterCommit(static function () use ($currency, $provider, $tenant): void {
+                try {
+                    app(FxMonitor::class)->accountLinked($currency, $provider, $tenant);
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            });
         });
 
         // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.

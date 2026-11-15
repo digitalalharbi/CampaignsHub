@@ -78,6 +78,9 @@ final class SyncSweepCharacterisationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // FX-ENGINE-001's link-time alert writes a platform_alerts row, which takes a UUID from this test's deterministic
+        // sequence and would shift every stored id away from the recorded baseline. The figures are what is held here.
+        config()->set('fx.alert_on_link', false);
         config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         // Without the definitions no metric is money, and the currency path would not be held at all.
         $this->seed(MetricDefinitionSeeder::class);
