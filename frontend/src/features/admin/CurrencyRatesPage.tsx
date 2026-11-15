@@ -162,12 +162,12 @@ export function CurrencyRatesPage() {
               {currencies.map((c) => (
                 <tr key={c.currency} className="border-t border-border" data-testid={`fx-cur-${c.currency}`}>
                   <td className="px-2 py-1.5 font-bold"><bdi dir="ltr">{c.currency}</bdi></td>
-                  <td className="px-2 tnum"><Num>{c.accounts}</Num></td>
-                  <td className="px-2 tnum" dir="ltr">{c.rate === null ? '—' : c.rate.toPrecision(6)}</td>
-                  <td className="px-2 tnum"><Num>{c.rate_date ?? '—'}</Num></td>
+                  <td className="px-2"><Num className="tnum">{c.accounts}</Num></td>
+                  <td className="px-2"><bdi dir="ltr" className="tnum">{c.rate === null ? '—' : c.rate.toPrecision(6)}</bdi></td>
+                  <td className="px-2"><Num className="tnum">{c.rate_date ?? '—'}</Num></td>
                   <td className="px-2">{rateKindLabel(c.kind as RateKind | null, ar)}</td>
                   <td className="px-2"><StatusChip status={c.status} t={t} /></td>
-                  <td className="px-2 tnum"><Num>{c.withheld}</Num></td>
+                  <td className="px-2"><Num className="tnum">{c.withheld}</Num></td>
                   <td className="px-2">{c.status !== 'base' && <Button size="sm" variant="ghost" onClick={() => pick(c)} data-testid={`fx-pick-${c.currency}`}><Plus size={12} aria-hidden /> {t.record}</Button>}</td>
                 </tr>
               ))}
@@ -259,9 +259,9 @@ function RateRow({ r, t, ar }: { r: { base: string; quote: string; rate: number;
       {open && h.data && (
         <ol className="mt-1 grid gap-0.5 border-s-2 border-border ps-2" data-testid="fx-history">
           {h.data.versions.map((v) => (
-            <li key={v.id} className="tnum text-text-secondary" dir="ltr">
+            <li key={v.id} className="text-text-secondary"><bdi dir="ltr" className="tnum">
               {t.version}{v.version} · {v.previous_rate ?? '—'} → {v.rate} · {v.rate_date} · {v.kind}{v.outcome === 'shadowed' ? ` · ${t.shadowed}` : ''}{v.recorded_by ? ` · ${v.recorded_by}` : ''} · {v.recorded_at.slice(0, 16).replace('T', ' ')}
-            </li>
+            </bdi></li>
           ))}
         </ol>
       )}
@@ -330,7 +330,7 @@ function RecomputeCard({ t, onDone }: { t: T; onDone: () => void }) {
             <table className="w-full max-w-md">
               <thead><tr className="text-text-secondary"><th className="text-start">{t.currency}</th><th className="text-start">{t.changed}</th><th className="text-start">{t.before}</th><th className="text-start">{t.after}</th></tr></thead>
               <tbody>{s.by_currency.map((b) => (
-                <tr key={b.currency} className="border-t border-border tnum"><td><bdi dir="ltr">{b.currency}</bdi></td><td><Num>{b.changed}</Num></td><td dir="ltr">{b.before}</td><td dir="ltr">{b.after}</td></tr>
+                <tr key={b.currency} className="border-t border-border"><td><bdi dir="ltr">{b.currency}</bdi></td><td><Num className="tnum">{b.changed}</Num></td><td><bdi dir="ltr" className="tnum">{b.before}</bdi></td><td><bdi dir="ltr" className="tnum">{b.after}</bdi></td></tr>
               ))}</tbody>
             </table>
           )}
