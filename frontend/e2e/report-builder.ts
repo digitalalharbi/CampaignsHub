@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { API_HEADERS } from './helpers'
+import { API_HEADERS, openRail } from './helpers'
 
 /**
  * Create a CLIENT report through the real reports builder and wait until it has generated.
@@ -17,6 +17,9 @@ export async function buildGeneratedClientReport(
   options: { project?: RegExp } = {},
 ): Promise<{ projectId: string; reportId: string }> {
   await page.goto('/reports')
+  // NOV-SIDEBAR-001 (builder D) — the client/project control lives in the agency rail, which now starts collapsed to a
+  // strip; open it first, as every other spec that drives the switcher does. The walk below is unchanged.
+  await openRail(page, { optional: true })
 
   const clientSelect = page.getByLabel(/^العميل$|^Client$/)
   await expect(clientSelect).toBeVisible({ timeout: 20_000 })
