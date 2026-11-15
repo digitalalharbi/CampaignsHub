@@ -296,6 +296,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/webhooks/*',
             // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
             'mail/unsubscribe/*',
+            'n/confirm/*',
         ]);
 
         /*

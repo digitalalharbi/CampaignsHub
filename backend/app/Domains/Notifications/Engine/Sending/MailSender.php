@@ -60,7 +60,7 @@ final class MailSender implements Sender
         }
 
         try {
-            $sent = Mail::to($address)->send(new EngineMail($message, $delivery->reference));
+            $sent = Mail::to($address)->send(new EngineMail($message, $delivery->reference, $delivery->recipient->locale));
         } catch (Throwable $e) {
             $failure = MailFailure::from($e);
 

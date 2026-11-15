@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
+use App\Domains\Notifications\Engine\Console\ConsentSweepCommand;
+use App\Domains\Notifications\Engine\Console\ImportLegacyCommand;
 use App\Domains\Notifications\Engine\Console\MailDnsCheckCommand;
 use App\Domains\Notifications\Engine\Console\RunDigestsCommand;
 use App\Domains\Notifications\Engine\Console\SendOutboxCommand;
@@ -87,6 +89,8 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
                 RunDigestsCommand::class,
                 SendOutboxCommand::class,
                 MailDnsCheckCommand::class,
+                ImportLegacyCommand::class,
+                ConsentSweepCommand::class,
             ]);
         }
     }
