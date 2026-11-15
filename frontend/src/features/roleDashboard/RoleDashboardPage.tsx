@@ -5,6 +5,7 @@ import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
 import { useRoleDashboard, type DashboardView, type RoleDashboard } from './api'
 import { ManagerView } from './ManagerView'
+import { PmView } from './PmView'
 import { useFitViewport } from './parts'
 
 /**
@@ -32,6 +33,8 @@ const HOME = { ar: 'الرئيسية', en: 'Home' }
 
 function Body({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
   switch (d.view) {
+    case 'pm':
+      return <PmView d={d} portal={portal} />
     case 'manager':
     default:
       return <ManagerView d={d} portal={portal} />
