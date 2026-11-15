@@ -14,9 +14,26 @@
 @php($h = $m['headline'])
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
     @include('mail.digest._head', ['title' => \App\Domains\Notifications\Support\DigestSchedule::title('project', $kind, $ar), 'sub' => $periodLabel])
+@if (! empty($privacyLine ?? ''))
+    <div data-block="privacy-line" style="font-size:12px; color:#5b6b68; margin:-6px 0 10px;">{{ $privacyLine }}</div>
+@endif
 
     {{-- Verdict + the ONE figure the project is judged on. --}}
-    @include('mail.blocks.verdict', ['state' => $m['state'], 'name' => $m['name'], 'sub' => ($m['mixed'] ? ($ar ? 'كل الأهداف' : 'All objectives') : $m['objective_label']).' · '.$t['kind_note'], 'kpi' => $h, 'reason' => $m['state'] === 'none' ? $m['status']['reason'] : ''])
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="project-head" data-state="{{ $m['state'] }}" style="background-color:{{ $S::SOFT[$m['state']] }}; border:1px solid #e4e0d6; border-radius:12px; margin-bottom:10px;">
+        <tr>
+            <td style="padding:12px 14px; vertical-align:middle;">
+                <div>@include('mail.digest._chip', ['state' => $m['state'], 'size' => 24, 'label' => true])</div>
+                <div style="font-size:18px; font-weight:800; color:#0b1a16; padding-top:6px;">{{ $m['name'] }}</div>
+                <div style="font-size:12px; color:#5b6b68; padding-top:2px;">{{ $m['mixed'] ? ($ar ? 'كل الأهداف' : 'All objectives') : $m['objective_label'] }} · {{ $t['kind_note'] }}</div>
+                @if ($m['state'] === 'none')<div data-block="no-data-reason" style="font-size:12px; color:#3d4742; padding-top:4px;">{{ $m['status']['reason'] }}</div>@endif
+            </td>
+            <td width="116" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:{{ $S::CELL[$m['state']] }}; border-radius:{{ $startSide === 'right' ? '12px 0 0 12px' : '0 12px 12px 0' }};">
+                <div class="ch-kpi-lead" style="font-size:24px; line-height:1.15; font-weight:800; color:{{ $h['missing'] ? '#8b9a97' : $S::INK[$m['state']] }};" dir="ltr">{{ $h['value'] }}</div>
+                <div style="font-size:11px; color:#5b6b68;">{{ $h['label'] }}</div>
+                @if ($h['change'])<div style="font-size:12px; font-weight:800; color:{{ $h['colour'] }};" dir="ltr">{{ $h['change'] }}</div>@endif
+            </td>
+        </tr>
+    </table>
 
     {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the project's TOTAL first, across all its accounts and objectives. --}}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="kpis" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; margin:6px 0 10px;">
@@ -82,6 +99,7 @@
         @endforelse
     @endif
 
+@unless ($external ?? false)
     {{-- What needs a decision: ranked, the problem drawn, one button each. --}}
     @if ($m['issues'])
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
@@ -93,6 +111,7 @@
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;"><tr><td bgcolor="{{ $S::CELL['ok'] }}" style="background-color:{{ $S::CELL['ok'] }}; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:700; color:{{ $S::INK['ok'] }};">✓ {{ $ar ? 'لا شيء يحتاج قرارك' : 'Nothing needs your decision' }}</td></tr></table>
     @endif
 
+@endunless
     {{-- DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace: one bar, three numbers, one chip. --}}
     @if (! empty($m['budget']))
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:2px 0 6px;">{{ $ar ? 'ميزانية الشهر' : 'This month’s budget' }}@if ($m['budget']['band']) <span data-chip="pace" style="display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$m['budget']['tone']] }}; color:{{ $S::INK[$m['budget']['tone']] }};">{{ $S::GLYPH[$m['budget']['tone']] }} {{ $m['budget']['band_label'] }}</span>@endif</div>
@@ -100,7 +119,18 @@
     @endif
 
     {{-- The platform strip: every platform of the project, one chip each. --}}
-    @include('mail.blocks.strip', ['cells' => $m['cells']])
+    @if ($m['cells'])
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="platform-strip" style="margin-bottom:12px; table-layout:fixed;">
+            <tr>
+                @foreach ($m['cells'] as $c)
+                    <td align="center" data-provider="{{ $c['provider'] }}" data-state="{{ $c['state'] }}" style="padding:0 2px;">
+                        <div style="font-size:10px; font-weight:700; color:#5b6b68; padding-bottom:3px; white-space:nowrap; overflow:hidden;">{{ $c['short'] }}</div>
+                        <span style="display:block; height:26px; line-height:26px; border-radius:8px; text-align:center; font-size:14px; font-weight:800; background-color:{{ $S::CELL[$c['state']] }}; color:{{ $S::INK[$c['state']] }};">{{ $S::GLYPH[$c['state']] }}</span>
+                    </td>
+                @endforeach
+            </tr>
+        </table>
+    @endif
 
     @if ($m['content'] && ($m['content']['top'] || $m['content']['weak']))
         <div style="font-size:12px; font-weight:700; color:#5b6b68; letter-spacing:0.4px; margin:14px 0 6px;">{{ $t['content'] }}</div>
@@ -124,9 +154,12 @@
                 </table>
             @endforeach
         @endforeach
+@unless ($external ?? false)
         <div style="text-align:center; margin:4px 0 10px;"><a href="{{ $m['links']['content'] }}" style="font-size:13px; font-weight:700; color:#0b7a62; text-decoration:underline;">{{ $t['open_content'] }}</a></div>
+@endunless
     @endif
 
+@unless ($external ?? false)
     @if (! empty($m['follow_up']))
         @php($f = $m['follow_up'])
         <div data-block="follow-up" style="font-size:13px; color:#3d4742; line-height:1.8; margin:10px 0;">
@@ -135,6 +168,8 @@
         </div>
     @endif
 
+@endunless
+@unless ($external ?? false)
     @if ($m['linking'])
         {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص الربط»: linking health, apart from performance, short, at the end. --}}
         <div data-block="linking" style="border-top:1px solid #e4e0d6; margin-top:12px; padding-top:8px;">
@@ -149,5 +184,6 @@
     @endif
 
     @include('mail.partials.button', ['href' => $m['links']['report'], 'label' => $t['open_report']])
+@endunless
 
 </div>

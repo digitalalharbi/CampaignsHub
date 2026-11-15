@@ -1,3 +1,0 @@
-{{-- A pill: the state's glyph and a short text on its cell colour — the digests' chip language for any short label. Needs $tone (ok|watch|info|none), $text; optional $size (px, default 11), $plain (no glyph). --}}
-@php($S = \App\Domains\Notifications\Support\DigestStatus::class)
-<span data-pill="{{ $tone }}" style="display:inline-block; padding:2px 9px; border-radius:999px; font-size:{{ $size ?? 11 }}px; line-height:16px; font-weight:800; white-space:nowrap; background-color:{{ $S::CELL[$tone] }}; color:{{ $S::INK[$tone] }};" dir="auto">@if (! ($plain ?? false)){{ $S::GLYPH[$tone] }} @endif{{ $text }}</span>

@@ -1,1 +1,0 @@
-@include('mail.blocks.spend-total', ['fmt' => ['total_spend' => $m['spend_total']['spend'], 'total_remaining' => $m['spend_total']['remaining']], 'tot' => $m['spend_total']['tot'], 'calm' => true, 'leftLabel' => $m['spend_total']['left_label']])

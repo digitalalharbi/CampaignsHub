@@ -69,13 +69,13 @@ final class DigestStatus
     ];
 
     /** The chip: glyph, ink and a strong background (heatmap cells) and a soft one (cards). Explicit colours, so a dark-mode client cannot invert them into black-on-black. */
-    public const GLYPH = ['ok' => '✓', 'watch' => '!', 'bad' => '✕', 'none' => '–', 'info' => '◆'];
+    public const GLYPH = ['ok' => '✓', 'watch' => '!', 'bad' => '✕', 'none' => '–'];
 
-    public const INK = ['ok' => '#0a6b57', 'watch' => '#8a4a07', 'bad' => '#a31616', 'none' => '#5b6b68', 'info' => '#1d4ed8'];
+    public const INK = ['ok' => '#0a6b57', 'watch' => '#8a4a07', 'bad' => '#a31616', 'none' => '#5b6b68'];
 
-    public const CELL = ['ok' => '#cfeee3', 'watch' => '#fbe2ae', 'bad' => '#f5bcbc', 'none' => '#e6e2d6', 'info' => '#dbeafe'];
+    public const CELL = ['ok' => '#cfeee3', 'watch' => '#fbe2ae', 'bad' => '#f5bcbc', 'none' => '#e6e2d6'];
 
-    public const SOFT = ['ok' => '#e8f5f1', 'watch' => '#fffbeb', 'bad' => '#fef2f2', 'none' => '#faf8f3', 'info' => '#eff6ff'];
+    public const SOFT = ['ok' => '#e8f5f1', 'watch' => '#fffbeb', 'bad' => '#fef2f2', 'none' => '#faf8f3'];
 
     /** @var array<string,int> */
     public const STATE_RANK = ['bad' => 0, 'watch' => 1, 'ok' => 2, 'none' => 3];

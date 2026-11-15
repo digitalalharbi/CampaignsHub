@@ -12,6 +12,7 @@ use App\Domains\Notifications\Engine\Enums\RecipientKind;
 use App\Domains\Notifications\Engine\Enums\Scope;
 use App\Domains\Notifications\External\Checks\ExternalPreSendChecks;
 use App\Domains\Notifications\External\Content\ExternalMessageComposer;
+use App\Domains\Notifications\Support\MailGallery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -105,17 +106,18 @@ final class ExternalPreviewsTest extends TestCase
                     $this->assertLessThan(100 * 1024, strlen($m->html), $name);
                     $this->assertLessThan(400 * 1024, array_sum(array_map('strlen', $m->inline)), $name);
                     $this->assertSame(0, preg_match(ExternalPreSendChecks::EMOJI, $m->subject.$m->text.$m->html), $name);
-                    $this->assertVisualFirst($name.'.'.$locale.'.'.$theme, $m->html, $m->text, $m->inline, $theme);
                     $this->assertStringContainsString('Al-Waha Store', $m->subject);
                     $this->assertLessThanOrEqual(90, mb_strlen($m->subject));
                     if ($theme === 'light') {
                         $inbox[$locale][] = ['sender' => (string) $m->senderName, 'subject' => $m->subject, 'preheader' => mb_substr($m->body, 0, 90), 'template' => $name];
                     }
                     if ($out !== null) {
-                        $html = $m->html;
-                        foreach ($m->inline as $cid => $png) {
-                            $html = str_replace('cid:'.$cid.'"', 'data:image/png;base64,'.base64_encode($png).'"', $html);
-                        }
+                        // The preview file shows the approved template in its external mode on FIXTURE figures (the composed message above is
+                        // built from the project's own figures, which this test database does not hold); light and dark are the same file — the
+                        // approved templates have no dark variant beyond the header band.
+                        $html = (string) MailGallery::externalDemo($name, $locale)?->render();
+                        // The brand banner is served from the app origin in a real mail; a file preview inlines the same asset.
+                        $html = (string) preg_replace_callback('#src="[^"]*/brand/email/(banner-(?:ar|en))\.png"#', static fn (array $b): string => 'src="data:image/png;base64,'.base64_encode((string) file_get_contents(base_path('../frontend/public/brand/email/'.$b[1].'.png'))).'"', $html);
                         @mkdir($out, 0775, true);
                         file_put_contents("{$out}/{$name}.{$locale}.{$theme}.html", $html);
                     }
@@ -139,56 +141,32 @@ final class ExternalPreviewsTest extends TestCase
         }
     }
 
-    /** The Q2 budget: the words OUTSIDE the small print, any language (a word = a token with a letter in it; numbers are the content). */
-    public const WORD_BUDGET = 90;
-
     /**
-     * Visual first (Owner, 2026-11-15): a word budget on the body, alt text with the numbers on every chart, the dark alternate
-     * of every light image, the text part carrying the figures the charts draw, and the calm palette only (no alarm red).
-     *
-     * @param  array<string, string>  $inline
+     * Owner, 2026-11-15: the external message is the approved template with EVERY route back to the platform removed — a summary only.
+     * No button, no link into the app, no decision list, no connection prompt; only the signed one-click unsubscribe.
      */
-    private function assertVisualFirst(string $label, string $html, string $text, array $inline, string $theme): void
+    public function test_an_external_message_has_no_route_back_to_the_platform(): void
     {
-        $body = (string) preg_replace('#<(style|head|title)[\s\S]*?</\1>|<!--[\s\S]*?-->|<td[^>]*data-external-footer[\s\S]*?</td>#u', '', $html);
-        $words = array_filter(preg_split('/\s+/u', html_entity_decode(strip_tags((string) preg_replace('/<[^>]+>/', ' ', $body)))) ?: [], static fn (string $w): bool => preg_match('/\p{L}/u', $w) === 1);
-        $this->assertLessThanOrEqual(self::WORD_BUDGET, count($words), "{$label}: the body has ".count($words).' words');
-
-        // Every image has alt text; a chart's alt carries its numbers.
-        preg_match_all('/<img\b[^>]*>/u', $html, $imgs);
-        foreach ($imgs[0] as $img) {
-            $this->assertStringContainsString(' alt="', $img, $label);
-            if (preg_match('/src="cid:(donut|trend|ring)/', $img) === 1) {
-                $this->assertMatchesRegularExpression('/alt="[^"]*\d[^"]*"/u', $img, "{$label}: a chart image needs numbers in its alt");
-            }
-        }
-        // Dark alternates: every light cid has its `-dark` twin; a dark message carries only the dark one.
-        foreach (array_keys($inline) as $cid) {
-            if (! str_ends_with($cid, '-dark')) {
-                $this->assertArrayHasKey($cid.'-dark', $inline, $label);
-            }
-        }
-        if ($theme === 'dark') {
-            $this->assertSame(0, preg_match('/src="cid:[a-z]+"/', $html), "{$label}: a dark message references no light image");
-        }
-        // Text parity: the figures the charts draw are written out in the text part.
-        preg_match_all('/alt="((?:[^"]*\d[^"]*))"/u', $html, $alts);
-        foreach ($alts[1] as $alt) {
-            foreach (['donut', 'trend'] as $k) {
-                if (str_contains($html, 'cid:'.$k)) {
-                    $this->assertNotSame('', $text, $label);
+        foreach (['finance', 'project_manager', 'admin_owner', 'client', 'achievement', 'continuity_planning', 'month_end'] as $template) {
+            foreach (['ar', 'en'] as $locale) {
+                $html = (string) MailGallery::externalDemo($template, $locale)?->render();
+                $this->assertNotSame('', $html, $template);
+                preg_match_all('/href="([^"]+)"/', $html, $m);
+                $this->assertSame(1, count($m[1]), "{$template}.{$locale}: only the unsubscribe link may remain, found ".implode(' ', $m[1]));
+                $this->assertStringContainsString('data-unsubscribe="1"', $html);
+                $this->assertStringNotContainsString('class="ch-btn', $html, "{$template}.{$locale}: a CTA button");
+                $this->assertDoesNotMatchRegularExpression('#/app/|/agency/|/login#', $html, "{$template}.{$locale}: a platform path");
+                foreach (['افتح', 'Open the', 'Open budgets', 'يحتاج قرارك', 'Needs your decision', 'إعدادات الإشعارات', 'Notification settings'] as $internal) {
+                    $this->assertStringNotContainsString($internal, $html, "{$template}.{$locale}: «{$internal}»");
+                }
+                $this->assertStringContainsString($locale === 'ar' ? 'المرجع المالي: فواتير المنصات والمحاسبة المالية.' : 'Financial reference: platform invoices and accounting records.', $html);
+                $this->assertStringContainsString('Nour Agency', $html);            // the workspace identity under the header
+                $this->assertStringContainsString($locale === 'ar' ? 'مخصصة لك بصفتك' : 'For you as', $html); // the one-line privacy notice
+                $this->assertSame(0, preg_match(ExternalPreSendChecks::EMOJI, $html), $template);
+                foreach (['تجاوزت', 'فشل', 'خسارة', 'قصور', 'إنذار', 'عاجل', 'مشكلة'] as $alarm) {
+                    $this->assertStringNotContainsString($alarm, $html, "{$template}.{$locale}: alarm wording «{$alarm}»");
                 }
             }
         }
-        $this->assertMatchesRegularExpression('/\d,?\d*\.\d\d/', $text, "{$label}: the exact figures are in the text part");
-        // The calm palette: the digests' alarm states never appear on an external message.
-        foreach (['#f5bcbc', '#a31616', '#fef2f2', '✕'] as $alarm) {
-            $this->assertStringNotContainsString($alarm, $html, "{$label}: alarm colour or glyph {$alarm}");
-        }
-        $this->assertStringNotContainsString('<script', $html, $label);
-        $this->assertStringNotContainsString('display:flex', $html, $label);
-        $this->assertStringNotContainsString('var(--', $html, $label);
-        $this->assertStringContainsString('name="color-scheme"', $html, $label);
-        $this->assertStringContainsString('dir="', $html, $label);
     }
 }

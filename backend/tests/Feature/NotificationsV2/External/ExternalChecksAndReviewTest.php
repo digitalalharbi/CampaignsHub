@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\NotificationsV2\External;
 
+use App\Domains\Notifications\External\Recipients\ExternalSettings;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -124,24 +125,30 @@ final class ExternalChecksAndReviewTest extends TestCase
         $this->assertSame(['deferred', 'sent'], $this->statuses());
         $html = (string) $this->sent()[0]['email']->getHtmlBody();
         $this->assertStringContainsString('قيد التحديث — يصلك في الملخص القادم', $html);
-        $this->assertStringNotContainsString('data-block="report-verdict"', $html); // no figures while the data is updating
+        $this->assertStringNotContainsString('المؤشرات حسب الهدف', $html);
     }
 
     public function test_currency_without_rate_illogical_numbers_and_forbidden_wording_go_to_review(): void
     {
-        [, $sid] = $this->subscribe('finance@client.test', 'admin', [$this->project->id]); // the role whose report carries suggestions
+        $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
+        $settings = app(ExternalSettings::class);
         $cases = [
             ['fx' => [['from' => 'EUR', 'to' => 'USD', 'rate' => null, 'rate_date' => null, 'kind' => null, 'withheld' => true]]],
             ['spend' => -5.0],
             ['spend' => 9999.0],                                                   // platforms do not add up to the total
-            ['suggestions' => [['text' => 'هذا عاجل ومطلوب منك الرد', 'approved' => true]]],
-            ['suggestions' => [['text' => 'Great week 🎉', 'approved' => true]]],
+            ['forbidden_words' => ['ملخص']],                                      // the workspace's own list meets the rendered text
+            ['disclaimer' => ['ar' => 'أسبوع رائع 🎉']],                          // an emoji in an editable text
         ];
         foreach ($cases as $i => $override) {
-            $this->data->override = $override;
+            $this->data->override = array_key_exists('forbidden_words', $override) || array_key_exists('disclaimer', $override) ? [] : $override;
+            if ($i === 3) {
+                $settings->update($this->tenant->id, ['external' => ['forbidden_words' => ['ملخص']]]);
+            }
+            if ($i === 4) {
+                $settings->update($this->tenant->id, ['external' => ['forbidden_words' => [], 'disclaimer' => $override['disclaimer']]]);
+            }
             $this->freshRun();
-            // The suggestion cases need an event that carries suggestions (the digest); the others ride a target event.
-            $i >= 3 ? $this->raise('digest.periodic', $this->project->id, $sid, ['case' => $i]) : $this->raise('target.reached', $this->project->id, null, ['case' => $i]);
+            $this->raise('target.reached', $this->project->id, null, ['case' => $i]);
             $this->drain();
         }
         $this->assertSame([

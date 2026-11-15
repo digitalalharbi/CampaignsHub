@@ -4,7 +4,7 @@
     <tr><td style="padding:10px 12px 8px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
             <td><span data-chip="objective" style="display:inline-block; padding:2px 10px; border-radius:999px; font-size:11px; font-weight:800; background-color:#e8f5f1; color:#0a6b57;">{{ $g['label'] }}</span>
-                @if (($g['campaigns'] ?? '') !== '')<span style="font-size:11px; color:#8b9a97;" dir="ltr">· {{ $g['campaigns'] }}</span>@endif</td>
+                <span style="font-size:11px; color:#8b9a97;" dir="ltr">· {{ $g['campaigns'] }}</span></td>
             <td style="text-align:{{ $endSide }};">@include('mail.digest._chip', ['state' => $g['state'], 'size' => 18])</td>
         </tr></table>
         @include('mail.digest._figures', ['figures' => $g['kpis'], 'per' => 3, 'big' => false])
@@ -31,7 +31,7 @@
             </table>
         @endif
 
-        @if (! empty($g['funnel']))
+        @if ($g['funnel'])
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="funnel" style="font-size:11px; margin-top:6px;">
                 @foreach ($g['funnel'] as $st)
                     <tr>

@@ -71,8 +71,6 @@
             .ch-btn { display: block !important; text-align: center !important; }
         }
     </style>
-    {{-- NOTIF-V2 external report — extra rules (dark-mode palette) written by the message itself; empty for every other mail. --}}
-    @if (! empty($extraHead ?? ''))<style>{!! $extraHead !!}</style>@endif
 </head>
 @php($align = $dir === 'rtl' ? 'right' : 'left')
 <body dir="{{ $dir }}" style="margin:0; padding:0; background-color:#f7f5f0; -webkit-text-size-adjust:100%; direction:{{ $dir }};">
@@ -98,16 +96,11 @@
                     --}}
                     <tr>
                         <td class="ch-hdr" align="{{ $align }}" dir="{{ $dir }}" bgcolor="#0b1a16" style="background-color:#0b1a16; background-image:linear-gradient(#0b1a16,#0b1a16); padding:0; border-bottom:3px solid #0b7a62; text-align:{{ $align }}; font-family:{!! $font !!}; font-size:20px; line-height:1.4; font-weight:700; color:#f7f5f0;">
-                            @if (! empty($identityBand ?? ''))
-                                {{-- NOTIF-V2 external report — the WORKSPACE's identity in the same dark band (spec §8); built by the message, never user HTML. --}}
-                                {!! $identityBand !!}
-                            @else
                             {{-- The banner IS the band: as wide as the card on every screen, with the mark on the reader's side (Owner, 2026-11-05). Blocked images show the alt text on the same ground. --}}
                             {{-- SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — a standalone message (to someone outside the platform) carries no link into it. --}}
                             @if (! ($standalone ?? false))<a href="{{ $urls['home'] }}" style="text-decoration:none; display:block; color:#f7f5f0;">@endif
                                 <img src="{{ $logoUrl }}" width="{{ \App\Domains\Notifications\Support\MailShell::LOGO_WIDTH }}" height="{{ \App\Domains\Notifications\Support\MailShell::LOGO_HEIGHT }}" alt="{{ $wordmark }}" style="display:block; width:100%; max-width:600px; height:auto; border:0; outline:none; text-decoration:none; color:#f7f5f0;" />
                             @if (! ($standalone ?? false))</a>@endif
-                            @endif
                             @if (!empty($scopeNote ?? ''))
                                 <div class="ch-hdr-tag" style="font-family:{!! $font !!}; font-size:12px; font-weight:400; color:#b7c9c2; padding:0 24px 12px; text-align:{{ $align }};">{{ $scopeNote }}</div>
                             @endif
@@ -151,12 +144,6 @@
                         $ftrLink = 'color:#5b6b68; text-decoration:underline; white-space:nowrap;';
                         $ltr = 'direction:ltr; unicode-bidi:embed; display:inline-block;';
                     ?>
-                    @if (! empty($externalFooter ?? ''))
-                    {{-- NOTIF-V2 external report — the quiet small print (why, manage, footprint, disclaimer, reference), built by the message. --}}
-                    <tr>
-                        <td class="ch-pad ch-ftr" data-external-footer="1" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:16px 24px 18px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">{!! $externalFooter !!}</td>
-                    </tr>
-                    @else
                     <tr>
                         <td class="ch-pad ch-ftr" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#faf8f3" style="padding:22px 24px 24px; background-color:#faf8f3; border-top:1px solid #e4e0d6; text-align:{{ $align }}; direction:{{ $dir }};">
                             <table role="presentation" data-mail-footer="1" dir="{{ $dir }}" align="{{ $align }}" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; direction:{{ $dir }};">
@@ -193,9 +180,10 @@
                                         </td>
                                     </tr>
                                 @endif
+@if (empty($hideFootprint ?? null))
                                 <tr>
                                     <td data-footer-line="copyright" {!! $ftrCell !!} style="{!! $ftrBase !!} font-size:12px; line-height:1.8; padding:0 0 4px;">
-                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub @if (! ($standalone ?? false))· <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a>@endif</span>
+                                        <span dir="ltr" style="{!! $ltr !!}">© {{ $year }} CampaignsHub @if (! ($standalone ?? false))· <a href="{{ $urls['home'] }}" style="{!! $ftrLink !!}">{{ $urls['host'] }}</a>@elseif (! empty($footprintUrl ?? ''))· <a href="{{ $footprintUrl }}" style="{!! $ftrLink !!}">campaignshub.io</a>@endif</span>
                                     </td>
                                 </tr>
                                 <tr>
@@ -203,10 +191,10 @@
                                         {{ $t['sender'] }}
                                     </td>
                                 </tr>
+@endif
                             </table>
                         </td>
                     </tr>
-                    @endif
                 </table>
                 <!--[if mso]></td></tr></table><![endif]-->
             </td>
