@@ -122,8 +122,7 @@ final class StoreAssignment
 
         $candidates = Project::withoutGlobalScopes()
             ->where('tenant_id', $store->tenant_id)
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
+            ->running() // PROJECT-LIFECYCLE-001
             ->when($store->client_workspace_id !== null, fn ($q) => $q->where('client_workspace_id', $store->client_workspace_id))
             ->limit(2)
             ->get();

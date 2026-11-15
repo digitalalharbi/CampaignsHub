@@ -18,6 +18,14 @@ import { usePortalPath } from '@/app/portalPath'
 import { proposeChange } from '@/features/agents/api'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { NewSpendLimitDialog } from './NewSpendLimitDialog'
+import { EditSpendLimitDialog } from './EditSpendLimitDialog'
+import { FreshnessChip } from '@/features/funding/FreshnessChip'
+import { FxRateBar } from '@/features/funding/FxRateBar'
+import { ApprovedBudgetBar, NoBudget } from '@/features/funding/ApprovedBudget'
+import type { ApprovedBudget } from '@/features/funding/fundingApi'
+import { useAuth } from '@/stores/auth'
+import { RenewAllButton } from '@/features/funding/RenewAllDialog'
+import { useState } from 'react'
 import { withMark } from '@/lib/money/mark'
 
 /**
@@ -73,8 +81,8 @@ const BASIS: Record<string, { ar: string; en: string }> = {
     en: 'The withheld spend is in more than one currency, so it cannot be added into one figure.',
   },
   currency_mismatch: {
-    ar: 'الحد بعملة والإنفاق بأخرى — القسمة بينهما ليست نسبة إنفاق.',
-    en: 'The limit is in one currency and the spend in another — dividing them is not a utilisation.',
+    ar: 'الحد بعملة والإنفاق بأخرى ولا يوجد سعر صرف بينهما — أضف السعر ليُقاس.',
+    en: 'The limit and the spend are in different currencies and there is no exchange rate between them — add a rate so it can be measured.',
   },
   absent: { ar: 'لا يوجد إنفاق في هذه الفترة.', en: 'There is no spend in this period.' },
   nothing_measured_in_window: {
@@ -105,7 +113,7 @@ export function SpendLimitsPage() {
    * that already watches SAR is not about to set a USD cap, and a limit in a currency the project
    * does not report reads «unknown» by design.
    */
-  const suggestedCurrency = limits[0]?.currency ?? 'SAR'
+  const suggestedCurrency = q.data?.project_currency ?? limits[0]?.currency ?? 'SAR'
 
   /*
    * PRODUCT-VISUAL-001 §4 §19 — how many limits, and how many of them are a problem.
@@ -151,7 +159,7 @@ export function SpendLimitsPage() {
           ? 'حدود تضعها مساحة العمل لنفسها عبر المنصات — للمراقبة والتنبيه، لا للإيقاف.'
           : 'Limits this workspace sets for itself across platforms — for watching and warning, never for stopping.'}
         /* The page's one action, in the head — where every other surface puts its primary action. */
-        actions={<NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} />}
+        actions={<><RenewAllButton /><NewSpendLimitDialog projectId={projectId} locale={locale} currency={suggestedCurrency} /></>}
         kpis={limits.length === 0 ? undefined : (
           <>
             <StatCard label={ar ? 'حدود مفعّلة' : 'Active limits'} value={counts.total.toLocaleString('en-US')} tone="brand" dot testid="spend-limits-kpi-total" />
@@ -165,6 +173,11 @@ export function SpendLimitsPage() {
           </>
         )}
       />
+
+      <FxRateBar />
+
+      {/* ONE-BUDGET-001 — the limits are part of the project's approved budget: the budget first, with its alert steps. */}
+      {q.data?.budget && <BudgetOfLimits budget={q.data.budget} ar={ar} />}
 
       {/*
         The same sentence was on screen three times.
@@ -257,6 +270,42 @@ export function SpendLimitsPage() {
   )
 }
 
+/**
+ * ONE-BUDGET-001 — the approved budget these limits belong to (the same reading as /agency/budgets) and its alert steps.
+ * A project with no budget says so and offers to add one; its limits are then measured on their own until it has one.
+ */
+function BudgetOfLimits({ budget, ar }: { budget: ApprovedBudget; ar: boolean }) {
+  const canAdd = useAuth((s) => s.hasPermission('funding.manage'))
+  if (!budget.has_budget) {
+    if (budget.withheld) return null
+
+    return (
+      <section data-testid="limits-budget" className="rounded-xl border border-border bg-surface p-3">
+        <h2 className="mb-1 text-sm font-bold text-text-primary">{ar ? 'ميزانية المشروع' : 'Project budget'}</h2>
+        <NoBudget ar={ar} canAdd={canAdd} />
+      </section>
+    )
+  }
+
+  return (
+    <section data-testid="limits-budget" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+      <h2 className="text-sm font-bold text-text-primary">{ar ? 'ميزانية المشروع' : 'Project budget'}</h2>
+      <ApprovedBudgetBar ar={ar} approved={budget.approved} spent={budget.spent} remaining={budget.remaining} ratio={budget.used_ratio} coverDays={budget.cover_days} testid="limits-budget-bar" />
+      <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="limits-budget-steps">
+        <span className="text-text-muted">{ar ? 'تنبيه عند' : 'Alert at'}</span>
+        {budget.thresholds.map((step) => {
+          const reached = budget.crossed_threshold !== null && step <= budget.crossed_threshold
+          return (
+            <span key={step} className={`tnum rounded-full px-2 py-0.5 font-semibold ${reached ? 'bg-[var(--warning-background)] text-warning' : 'bg-surface-secondary text-text-secondary'}`}>
+              {step}%
+            </span>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function LimitCard({
   limit,
   ar,
@@ -269,6 +318,7 @@ function LimitCard({
   projectId: string | null
 }) {
   const remove = useRemoveSpendLimit(projectId)
+  const [editing, setEditing] = useState(false)
   const scope = SCOPE_LABEL[limit.scope] ?? SCOPE_LABEL.project!
   const name = limit.scope === 'platform' && limit.scope_id
     ? providerLabel(limit.scope_id, locale)
@@ -292,6 +342,7 @@ function LimitCard({
         <span className="text-[11px] text-text-muted" dir="ltr">
           {limit.period.from} → {limit.period.to}
         </span>
+        <FreshnessChip freshness={limit.freshness} testid={`spend-limit-${limit.id}-freshness`} />
 
         {/*
           «Remove» deactivates: the events written against this limit are its audit trail, and the
@@ -299,10 +350,18 @@ function LimitCard({
         */}
         <button
           type="button"
+          data-testid={`spend-limit-${limit.id}-edit`}
+          onClick={() => setEditing(true)}
+          className="ms-auto rounded-lg px-2 py-1 text-xs font-semibold text-text-secondary transition-colors hover:bg-surface-hover"
+        >
+          {ar ? 'تعديل' : 'Edit'}
+        </button>
+        <button
+          type="button"
           data-testid={`spend-limit-${limit.id}-remove`}
           disabled={remove.isPending}
           onClick={() => remove.mutate(limit.id)}
-          className="ms-auto rounded-lg px-2 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-60"
+          className="rounded-lg px-2 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-60"
         >
           {ar ? 'إزالة' : 'Remove'}
         </button>
@@ -360,6 +419,19 @@ function LimitCard({
       {(limit.state === 'approaching' || limit.state === 'over') && (limit.actions?.length ?? 0) > 0 && (
         <LimitActions limit={limit} ar={ar} locale={locale} projectId={projectId} />
       )}
+      {limit.converted && (
+        <p data-testid={`spend-limit-${limit.id}-converted`} className="mt-2 text-xs text-text-secondary">
+          {ar
+            ? `الإنفاق محوَّل من ${limit.converted.from} إلى ${limit.converted.to} بسعر ${limit.converted.rate}`
+            : `Spend converted from ${limit.converted.from} to ${limit.converted.to} at ${limit.converted.rate}`}
+        </p>
+      )}
+      {limit.run_out?.date && (
+        <p data-testid={`spend-limit-${limit.id}-run-out`} className="mt-2 text-xs font-semibold text-text-secondary" title={ar ? 'من متوسط إنفاق آخر 3 أيام' : 'From the average spend of the last 3 days'}>
+          {ar ? 'يخلص الحد تقريبًا في ' : 'The limit runs out about '}
+          <bdi dir="ltr" className="tnum">{limit.run_out.date}</bdi>
+        </p>
+      )}
       <p data-testid={`spend-limit-${limit.id}-projection`} className="mt-2 text-xs text-text-muted">
         {limit.projected_exhaustion.date !== null
           ? (ar
@@ -375,6 +447,7 @@ function LimitCard({
           {(ar ? 'تنبيه عند: ' : 'Warn at: ') + limit.thresholds.map((t) => `${t}%`).join(' · ')}
         </p>
       )}
+      {editing && <EditSpendLimitDialog limit={limit} projectId={projectId} ar={ar} onClose={() => setEditing(false)} />}
     </li>
   )
 }

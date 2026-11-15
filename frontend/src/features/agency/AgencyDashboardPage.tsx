@@ -601,9 +601,17 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
 
   return (
     <section className="mt-6" data-testid="client-budgets">
-      <h2 className="mb-2 font-heading text-lg font-bold text-text-primary">
-        {ar ? 'ميزانيات العملاء' : 'Client budgets'}
+      {/*
+        ONE-BUDGET-001 — this table sums the campaign budgets set INSIDE the platforms over the dashboard window. It is
+        informational and named for what it is; «the budget» of a client is its approved project budget (the cards above,
+        /agency/budgets), which this window never changes.
+      */}
+      <h2 className="mb-1 font-heading text-lg font-bold text-text-primary">
+        {ar ? 'ميزانيات الحملات في المنصات' : 'Campaign budgets in the platforms'}
       </h2>
+      <p className="mb-2 text-xs text-text-muted" data-testid="client-budgets-note">
+        {ar ? 'للاطلاع فقط — ميزانية المشروع المعتمدة في صفحة الميزانيات.' : 'For reference only — the approved project budget is on the budgets page.'}
+      </p>
       <MetricTable
         head={ar
           ? ['العميل', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']

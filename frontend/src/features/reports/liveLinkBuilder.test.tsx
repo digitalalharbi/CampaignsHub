@@ -202,9 +202,9 @@ describe('building a live client link', () => {
   it('sends the period kind, and shows free date fields only for a custom range', async () => {
     await build()
 
-    expect(await screen.findByText('From')).toBeInTheDocument()
+    expect(await screen.findByTestId('live-link-range-button')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('live-link-period-weekly'))
-    expect(screen.queryByText('From')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('live-link-range-button')).not.toBeInTheDocument()
     expect(screen.getByTestId('live-link-period')).toHaveTextContent('previous week')
     fireEvent.click(screen.getByTestId('live-link-create'))
 

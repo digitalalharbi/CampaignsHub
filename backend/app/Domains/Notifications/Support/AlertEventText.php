@@ -38,7 +38,8 @@ final class AlertEventText
         $ctx = (array) ($item['context'] ?? []);
         $type = (string) ($item['rule_type'] ?? '');
         $projectId = isset($item['project_id']) && $item['project_id'] !== '' ? (string) $item['project_id'] : null;
-        $project = (string) ($item['project_name'] ?? '');
+        // LIFECYCLE-6 — the name the rule recorded with the finding when the caller did not resolve one: never the bare «المشروع».
+        $project = (string) ($item['project_name'] ?? '') !== '' ? (string) $item['project_name'] : (string) ($ctx['project_name'] ?? '');
         $campaign = ($item['entity_type'] ?? '') === UnifiedCampaign::class && ($item['entity_id'] ?? '') !== ''
             ? UnifiedCampaign::withoutGlobalScopes()->find((string) $item['entity_id'])
             : null;
@@ -268,6 +269,10 @@ final class AlertEventText
          * data did not arrive (state 1), with the day missing and the last day that arrived. A refused grant asks for a reconnect.
          */
         if (in_array($type, LinkHealth::TYPES, true) && ($ctx['link_state'] ?? null) === 'not_synced') {
+            // LIFECYCLE-6 — the account-day verdict: the account and its id, the last successful sync and its period, the reason.
+            if (isset($ctx['verdict'], $ctx['reason_ar']) && ($ctx['coverage_rule'] ?? null) === 'account_day') {
+                return self::arrivalSay($ctx, $ar, $platform);
+            }
             $refused = $type === 'token_expiry' && ! isset($ctx['expires_at']);
 
             return [
@@ -478,6 +483,44 @@ final class AlertEventText
         $label = PlainFindings::metricLabel((string) ($p['metric'] ?? ''), $ar);
 
         return $label.': '.number_format((float) $p['baseline'], 2).' ← '.number_format((float) $p['value'], 2).(isset($p['date']) ? ' ('.self::ltr((string) $p['date']).')' : '');
+    }
+
+    /**
+     * LIFECYCLE-6 — «بيانات أمس ما وصلت» in the account-day rule's own words; no cause the record does not show.
+     *
+     * @param  array<string,mixed>  $ctx
+     * @return array{headline: string, text: string, numbers: string, action: string, link: string}
+     */
+    private static function arrivalSay(array $ctx, bool $ar, string $platform): array
+    {
+        $verdict = (string) $ctx['verdict'];
+        $who = $platform !== '' ? $platform : ($ar ? 'المنصة' : 'the platform');
+        $headline = match ($verdict) {
+            'last_sync_failed' => $ar ? "آخر مزامنة {$who} فشلت" : "The latest {$who} sync failed",
+            'link_expired' => $ar ? "ربط {$who} متوقف" : "The {$who} connection has stopped",
+            default => $platform !== '' ? ($ar ? "بيانات أمس ما وصلت من {$platform}" : "Yesterday's data did not arrive from {$platform}") : LinkHealth::text('not_synced', $ar),
+        };
+        $account = trim((string) ($ctx['account_name'] ?? '').(($ctx['account_external_id'] ?? '') !== '' ? ' '.self::ltr('('.(string) $ctx['account_external_id'].')') : ''));
+        $success = is_array($ctx['last_success'] ?? null) ? (array) $ctx['last_success'] : null;
+        $parts = [];
+        if ($account !== '') {
+            $parts[] = ($ar ? 'الحساب ' : 'Account ').$account;
+        }
+        if (isset($ctx['required_day']) && $verdict === 'no_coverage') {
+            $parts[] = ($ar ? 'اليوم الناقص ' : 'Missing day ').self::ltr((string) $ctx['required_day']);
+        }
+        $parts[] = $success !== null
+            ? ($ar ? 'آخر مزامنة ناجحة ' : 'Last successful sync ').self::ltr(Carbon::parse((string) $success['finished_at'])->setTimezone('Asia/Riyadh')->format('Y-m-d H:i'))
+                .($ar ? ' للفترة ' : ' for ').self::ltr($success['window_start'].' → '.$success['window_end'])
+            : ($ar ? 'لا مزامنة ناجحة مسجلة' : 'No successful sync on record');
+
+        return [
+            'headline' => $headline,
+            'text' => (string) ($ar ? $ctx['reason_ar'] : ($ctx['reason_en'] ?? $ctx['reason_ar'])),
+            'numbers' => implode(' · ', $parts),
+            'action' => $verdict === 'link_expired' ? ($ar ? 'أعد ربط المنصة.' : 'Reconnect the platform.') : ($ar ? 'افحص المزامنة ← أعد الربط إن استمر.' : 'Check the sync, then reconnect if it persists.'),
+            'link' => 'integrations',
+        ];
     }
 
     private static function platformOf(array $ctx, ?UnifiedCampaign $campaign, bool $ar): string

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domains\Funding\Http\Controllers\FundingController;
+use App\Domains\Funding\Http\Controllers\FundingRateController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('funding')->name('funding.')->group(function (): void {
     Route::get('disclaimer', [FundingController::class, 'disclaimer'])->name('disclaimer');
+    Route::get('rate', [FundingRateController::class, 'show'])->name('rate.show');
+    Route::put('rate', [FundingRateController::class, 'update'])->middleware('throttle:30,1')->name('rate.update');
+    Route::get('renew-next-month', [FundingRateController::class, 'renewPreview'])->name('renew.preview');
+    Route::post('renew-next-month', [FundingRateController::class, 'renewApply'])->middleware('throttle:10,1')->name('renew.apply');
     Route::get('/', [FundingController::class, 'index'])->name('index');
     Route::post('payments', [FundingController::class, 'store'])->middleware('throttle:30,1')->name('payments.store');
     Route::get('projects/{funded}', [FundingController::class, 'show'])->whereUuid('funded')->name('projects.show');

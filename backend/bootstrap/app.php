@@ -6,11 +6,13 @@ use App\Console\Commands\MailDiagnoseCommand;
 use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Console\Commands\SallaReviewCommand;
+use App\Domains\Access\Middleware\EnforceSectionAccess;
 use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Alerts\Console\ReevaluateDataArrivalAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Billing\Console\RedactWebhookSecretsCommand;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
@@ -23,6 +25,7 @@ use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
 use App\Domains\Delivery\Console\RemindDeliveryReviewers;
+use App\Domains\Funding\Console\ConvertSpendLimitsCommand;
 use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
 use App\Domains\Identity\Middleware\EnsureTwoFactorPassed;
@@ -53,26 +56,36 @@ use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\AudienceBreakdownProbeCommand;
+use App\Domains\Metrics\Console\FxConversionReportCommand;
+use App\Domains\Metrics\Console\FxMonitorCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\BackfillBellKind;
 use App\Domains\Notifications\Console\ConfirmMailDelivery;
 use App\Domains\Notifications\Console\EnrolMembers;
+use App\Domains\Notifications\Console\FlushDeferredPush;
+use App\Domains\Notifications\Console\GenerateVapidKeys;
 use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Notifications\Console\SendSpendSummaries;
+use App\Domains\Notifications\Engine\Http\Middleware\EnsurePlanFeature;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
 use App\Domains\Ops\Console\ProfileLiveReportCommand;
 use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
 use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
+use App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand;
+use App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand;
+use App\Domains\Projects\Lifecycle\Console\PurgeExpiredProjectsCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
+use App\Domains\Reports\Console\DedupeReportSchedulesCommand;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\DownloadCheckCommand;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -126,6 +139,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        // PROJECT-LIFECYCLE-001 — ops: id-scoped, dry-run by default, never delete.
+        ApplyArchiveEffectsCommand::class,
+        ProjectSnapshotCommand::class,
+        // N2 — the trash's retention job (dry run by default; the scheduler passes --apply).
+        PurgeExpiredProjectsCommand::class,
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,
@@ -135,9 +153,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ReportsHealthCommand::class,
         ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
+        DedupeReportSchedulesCommand::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        ReevaluateDataArrivalAlerts::class,
         EvaluateAutomationRules::class,
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
@@ -145,6 +165,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RetryFailedDigests::class,
         // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
         SendSpendSummaries::class,
+        // NOTIF-BELL-001 — names the old bell rows; manual, run once after the migration.
+        BackfillBellKind::class,
+        // NOTIF-PUSH-001 — a VAPID pair printed to the console (nothing written), and the quiet-hours summary sweep.
+        GenerateVapidKeys::class,
+        FlushDeferredPush::class,
         // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
         EnrolMembers::class,
         ConfirmMailDelivery::class,
@@ -223,6 +248,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,
+        FxMonitorCommand::class,
+        // FX-APPLY-001 — read-only, count-only post-deploy check: raw vs converted spend per non-USD account (anonymous indexes).
+        FxConversionReportCommand::class,
         // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
         // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
         MoneyCurrencyAuditCommand::class,
@@ -242,6 +270,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileSubscriptionPayments::class,
         // PAY-WEBHOOK-SECRET-REDACT-001 — dry run by default; `--apply` on Production only with the Owner's approval.
         RedactWebhookSecretsCommand::class,
+        // ONE-BUDGET-001 — spend limits become thresholds of the approved budget; dry run unless --apply.
+        ConvertSpendLimitsCommand::class,
         // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
         SweepPlatformPaymentAlerts::class,
     ])
@@ -279,6 +309,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/webhooks/*',
             // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
             'mail/unsubscribe/*',
+            'n/confirm/*',
+            'n/u/*', // NOTIF-V2-EXTERNAL-001: one-click unsubscribe (RFC 8058 POST from the mail client)
         ]);
 
         /*
@@ -334,6 +366,8 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureAccountActive::class,
             // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
             WithholdMoneyForMember::class,
+            // ACCESS-SECTIONS-001 — a section switched off for this member answers 403 on every one of its routes.
+            EnforceSectionAccess::class,
         ]);
 
         /*
@@ -374,6 +408,8 @@ return Application::configure(basePath: dirname(__DIR__))
              */
             'project.can' => RequireProjectCapability::class,
             'entitlement' => EnsureEntitlement::class,
+            // NOTIF-V2-ENGINE-001 — a notifications plan key (spec §1): reads pass unless off, writes need a usable key.
+            'plan.feature' => EnsurePlanFeature::class,
             'throttle' => ConditionalThrottle::class,
         ]);
 
@@ -391,6 +427,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveProject::class,
             // The capability check needs the project context `ResolveProject` sets, so it follows it.
             RequireProjectCapability::class,
+            // After the tenant is bound, before any model is bound: a closed section reveals nothing about a record.
+            EnforceSectionAccess::class,
             SubstituteBindings::class,
             Authorize::class,
         ]);

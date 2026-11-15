@@ -29,6 +29,13 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  * that.
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
+
+/*
+ * PROJECT-LIFECYCLE-001 §4 (N2) — the trash's retention. Purges ONLY projects in «المحذوفات» whose `purge_after` has
+ * passed (set by a delete from the UI; rows soft-deleted before the lifecycle have none and are never purged), and sends
+ * the workspace owner the notice 3 days before. Idempotent; keeps audit + notice logs; never calls an ad platform.
+ */
+Schedule::command('lifecycle:purge-expired --apply')->dailyAt('02:30')->withoutOverlapping();
 // PRICING-SEATS-001 — released ad-account seats stamped within the hour, so the 30-day replacement window starts on time.
 Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 
@@ -166,6 +173,19 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
 Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh')->withoutOverlapping();
 // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق»: hourly, acting from 08:00 in the reader's timezone; idempotent per period. At :10, after the digests.
 Schedule::command('notifications:send-spend-summaries')->hourlyAt(10)->timezone('Asia/Riyadh')->withoutOverlapping();
+// NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person, once their window has ended.
+Schedule::command('notifications:flush-deferred-push')->everyTenMinutes()->withoutOverlapping();
+// NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox, then the sender drains it in spread batches.
+Schedule::command('notifications:v2-digests')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-send')->everyMinute()->withoutOverlapping();
+Schedule::command('notifications:v2-internal-scan')->everyTenMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-morning-brief')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-grace-heads-up')->dailyAt('09:05')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('notifications:v2-consent-sweep')->dailyAt('09:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+// NOTIF-V2-EXTERNAL-001 — held external messages with no decision in the review window are skipped with a notice.
+Schedule::command('notifications:v2-review-sweep')->everyFifteenMinutes()->withoutOverlapping();
+// NOTIF-V2-EXTERNAL-001 — the default external events (continuity planning, improvement, new campaign, month end/start), once a day.
+Schedule::command('notifications:v2-external-events')->dailyAt('07:30')->timezone('Asia/Riyadh')->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
@@ -236,6 +256,12 @@ Schedule::command('integrations:prune-raw')->dailyAt('03:30');
  * today's rate already on file rather than being withheld until tomorrow.
  */
 Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
+
+/*
+ * FX-ENGINE-001 — after the rates have arrived: in-app alerts for a used currency with no rate or one older than 7 days,
+ * and the money guard's cheap scan (the last 3 days of stored figures) for any money that bypassed convert().
+ */
+Schedule::command('fx:monitor')->dailyAt('03:00')->withoutOverlapping();
 
 /*
  * The periodic delivery packs (WD-SCHEDULE-001, DELIVERY-SETTINGS-001) — every morning, Riyadh time; each client is prepared on its own day.

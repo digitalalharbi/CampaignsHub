@@ -25,7 +25,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { ErrorSummary, MultiSelectField, SelectField, type FieldError, type Option } from '@/components/forms'
 import { useTaxonomyOptions } from '@/features/taxonomy/taxonomyApi'
 import { toApiError } from '@/lib/api/client'
-import { currencyMark } from '@/lib/money/mark'
+import { withMark } from '@/lib/money/mark'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
@@ -222,6 +222,11 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? null
+  // LIFECYCLE-6 — a project outside the list (e.g. archived) is named from what the rule recorded, never the bare «المشروع».
+  const recordedProjectName = (e: AlertEvent): string | null => {
+    const n = e.context?.project_name
+    return typeof n === 'string' && n !== '' ? n : null
+  }
   const scope = project === 'all' ? null : project
   const [filter, setFilter] = useState<EventFilter>('open')
   /* OPERATIONAL-INTELLIGENCE-P1-001 — the alert whose decision drawer is open. */
@@ -530,7 +535,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                       row on the page that is deliberately not about this client.
                     */}
                     <span data-testid={`alert-scope-${e.id}`} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-muted">
-                      {e.project_id === null ? c.account_wide : (projectName(e.project_id) ?? c.project)}
+                      {e.project_id === null ? c.account_wide : (projectName(e.project_id) ?? recordedProjectName(e) ?? c.project)}
                     </span>
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
@@ -660,10 +665,11 @@ function ContextChips({ e, c }: { e: AlertEvent; c: Copy }) {
     beside the figure. On a screen whose whole subject is how much of a budget is gone, a number
     with no unit is the shape the budget-pacing surfaces refuse everywhere else.
   */
-  const unit = typeof ctx.budget_currency === 'string' ? ` ${currencyMark(ctx.budget_currency)}` : ''
+  // FX-APPLY-001 — the figure takes its own currency's mark through the one mark module.
+  const unitCurrency = typeof ctx.budget_currency === 'string' ? ctx.budget_currency : null
   /* Named for what it does, not `money` — that name belongs to the shared formatter the
      MONEY-CURRENCY guard scans for, and a local one wearing it defeats the scan. */
-  const withUnit = (v: unknown) => `${num(v)}${unit}`
+  const withUnit = (v: unknown) => withMark(String(num(v)), unitCurrency)
 
   if ('spend' in ctx) chips.push(`${c.value}: ${withUnit(ctx.spend)}`)
   if ('ratio' in ctx) chips.push(`${c.value}: ${Math.round(Number(ctx.ratio) * 100)}%`)

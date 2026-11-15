@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsLiveReportWorld;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -47,6 +48,7 @@ final class SyncSweepCharacterisationTest extends TestCase
 {
     use BuildsLiveReportWorld;
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private const BASELINE = __DIR__.'/../Fixtures/sync_sweep_characterisation_baseline.json';
 
@@ -76,6 +78,9 @@ final class SyncSweepCharacterisationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // FX-ENGINE-001's link-time alert writes a platform_alerts row, which takes a UUID from this test's deterministic
+        // sequence and would shift every stored id away from the recorded baseline. The figures are what is held here.
+        config()->set('fx.alert_on_link', false);
         config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
         // Without the definitions no metric is money, and the currency path would not be held at all.
         $this->seed(MetricDefinitionSeeder::class);

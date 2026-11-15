@@ -23,4 +23,24 @@ final class FundingReach
         return ProjectMembership::withoutGlobalScopes()->where('project_id', $projectId)->where('user_id', $user->id)->exists()
             && ! $this->abilities->allows($user, $projectId, ProjectCapability::MONEY_VIEW);
     }
+
+    /**
+     * ONE-BUDGET-001 — the same rule over many projects in ONE membership query: the ids whose money is NOT withheld.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<string>
+     */
+    public function moneyVisible(User $user, array $projectIds): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+        $member = ProjectMembership::withoutGlobalScopes()->whereIn('project_id', $projectIds)->where('user_id', $user->id)
+            ->pluck('project_id')->map(static fn (mixed $id): string => (string) $id)->flip();
+
+        return array_values(array_filter(
+            array_map('strval', $projectIds),
+            fn (string $id): bool => ! $member->has($id) || $this->abilities->allows($user, $id, ProjectCapability::MONEY_VIEW),
+        ));
+    }
 }

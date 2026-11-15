@@ -7,6 +7,7 @@ use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
+use App\Domains\Notifications\Engine\Http\Controllers\AdminNotificationsController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
 use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
@@ -61,6 +62,14 @@ Route::middleware(['auth:sanctum', 'platform'])
     ->prefix('admin')->name('admin.')
     ->group(function (): void {
         Route::get('/overview', PlatformOverviewController::class)->name('overview');
+
+        // NOTIF-V2-SETTINGS-UI-001 — the notifications console: event catalog, plan features, platform texts, statistics (counts only).
+        Route::get('/notifications-v2', [AdminNotificationsController::class, 'show'])->name('notifications-v2.show');
+        Route::get('/notifications-v2/stats', [AdminNotificationsController::class, 'stats'])->name('notifications-v2.stats');
+        Route::put('/notifications-v2/events/{eventKey}', [AdminNotificationsController::class, 'updateEvent'])->middleware('throttle:60,1')->name('notifications-v2.events.update');
+        Route::put('/notifications-v2/plan-features', [AdminNotificationsController::class, 'upsertPlanFeature'])->middleware('throttle:60,1')->name('notifications-v2.plan-features.upsert');
+        Route::delete('/notifications-v2/plan-features/{id}', [AdminNotificationsController::class, 'deletePlanFeature'])->whereUuid('id')->middleware('throttle:60,1')->name('notifications-v2.plan-features.delete');
+        Route::put('/notifications-v2/texts/{key}', [AdminNotificationsController::class, 'updateText'])->where('key', '[a-z_.]+')->middleware('throttle:60,1')->name('notifications-v2.texts.update');
 
         /*
          * PLATFORM-SERVICE-INBOX-001 — «الطلبات»: services ordered from the official CampaignsHub site.
@@ -321,6 +330,13 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/fx/rates', [PlatformCurrencyRateController::class, 'index'])->name('fx.rates.index');
         Route::post('/fx/rates', [PlatformCurrencyRateController::class, 'store'])
             ->middleware('throttle:30,1')->name('fx.rates.store');
+        // FX-ENGINE-001 — history, preview, recompute (bounded, dry run first), display currency and the free auto source.
+        Route::get('/fx/rates/history', [PlatformCurrencyRateController::class, 'history'])->name('fx.rates.history');
+        Route::post('/fx/preview', [PlatformCurrencyRateController::class, 'preview'])->middleware('throttle:120,1')->name('fx.preview');
+        Route::post('/fx/recompute', [PlatformCurrencyRateController::class, 'recompute'])->middleware('throttle:10,1')->name('fx.recompute');
+        Route::put('/fx/policy', [PlatformCurrencyRateController::class, 'policy'])->middleware('throttle:30,1')->name('fx.policy');
+        Route::put('/fx/workspaces/{tenant}/display-currency', [PlatformCurrencyRateController::class, 'workspaceDisplay'])
+            ->whereUuid('tenant')->middleware('throttle:60,1')->name('fx.workspace-display');
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
         // integration view counts what tenants have connected, and the status check is the SAME one

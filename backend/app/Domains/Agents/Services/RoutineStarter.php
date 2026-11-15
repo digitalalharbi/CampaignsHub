@@ -11,6 +11,7 @@ use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Support\AgentRoles;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -32,7 +33,7 @@ final class RoutineStarter
         $routine = AgentRoutineCatalog::all()[$row->routine] ?? null;
         $role = $routine === null ? null : AgentRoles::get($routine['agent']);
         $project = Project::withoutGlobalScopes()->find($row->project_id);
-        if ($routine === null || $project === null || $project->status !== 'active' || $role === null || ! $role['enabled']) {
+        if ($routine === null || $project === null || ! LiveProjects::isRunning((string) $project->getKey()) || $role === null || ! $role['enabled']) {
             return 'unavailable';
         }
 

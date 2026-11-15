@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Launch;
 
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Metrics\Fx\FxEngine;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
@@ -27,7 +27,7 @@ final class BudgetSplit
 {
     public const MODES = ['manual', 'assisted', 'automated'];
 
-    public function __construct(private readonly CurrencyConverter $rates) {}
+    public function __construct(private readonly FxEngine $rates) {}
 
     /**
      * @param  list<array{id:string, currency:string, share?:float|int|string|null, min?:float|int|null, max?:float|int|null}>  $slots
@@ -49,7 +49,7 @@ final class BudgetSplit
         foreach ($slots as $i => $slot) {
             $amount = round($cents[$i] / 100, 2);
             $accountCurrency = strtoupper((string) $slot['currency']);
-            $rate = $this->rates->resolve($currency, $accountCurrency, $on);
+            $rate = $this->rates->rate($currency, $accountCurrency, $on);
             $inAccount = $rate === null ? null : round($amount * $rate['rate'], 2);
 
             if ($rate === null) {

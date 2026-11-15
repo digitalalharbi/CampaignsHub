@@ -214,7 +214,7 @@ final class PaidRegistrationTest extends TestCase
         $this->assertSame((string) $plan->price_monthly, (string) $subscription->unit_amount);
 
         // A first project exists, so the workspace is not an empty room.
-        $this->assertDatabaseHas('projects', ['tenant_id' => $tenant->getKey(), 'status' => 'setup']);
+        $this->assertDatabaseHas('projects', ['tenant_id' => $tenant->getKey(), 'status' => 'active']); // PROJECT-LIFECYCLE-001: legacy «setup» starts active
 
         // …and the owner can actually operate.
         $me = $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/me')->assertOk();

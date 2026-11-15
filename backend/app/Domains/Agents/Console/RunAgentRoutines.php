@@ -8,6 +8,7 @@ use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Services\RoutineStarter;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Console\Command;
 
@@ -34,7 +35,7 @@ final class RunAgentRoutines extends Command
         }
 
         $started = 0;
-        foreach (AgentRoutine::withoutGlobalScopes()->where('routine', $key)->where('enabled', true)->cursor() as $row) {
+        foreach (AgentRoutine::withoutGlobalScopes()->where('routine', $key)->where('enabled', true)->whereIn('project_id', LiveProjects::runningIdsQuery())->cursor() as $row) {
             $tenant->setTenantId((string) $row->tenant_id);
             if ($starter->start($row) === 'queued') {
                 $started++;

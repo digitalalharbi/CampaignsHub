@@ -1,14 +1,10 @@
+import { lazy, Suspense } from 'react'
 import { UsageMeterPanel } from '@/features/subscriptions/UsageMeterPanel'
 import { useSearchParams } from 'react-router-dom'
 import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell, Blocks, LayoutDashboard } from 'lucide-react'
 import { GeneralTab } from './tabs/GeneralTab'
 import { DisclaimerTab } from './tabs/DisclaimerTab'
 import { TeamTab } from './tabs/TeamTab'
-import { NotificationsTab } from './tabs/NotificationsTab'
-import { NotificationRecipients } from './tabs/NotificationRecipients'
-import { TeamNotifications } from './tabs/TeamNotifications'
-import { DeliveryLog } from './tabs/DeliveryLog'
-import { NotificationTemplates } from './tabs/NotificationTemplates'
 import { SecurityTab } from './tabs/SecurityTab'
 import { BrandingTab } from './tabs/BrandingTab'
 import { ClientsTab } from './tabs/ClientsTab'
@@ -43,6 +39,9 @@ export const SETTINGS_TABS = [
 ] as const
 
 const TABS = SETTINGS_TABS
+
+/** NOTIF-V2-SETTINGS-UI-001 — the one shared notification settings page, for every workspace type. */
+const WorkspaceNotificationsPage = lazy(() => import('@/features/notifications/workspace/WorkspaceNotificationsPage').then((m) => ({ default: m.WorkspaceNotificationsPage })))
 
 export type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']
 type TabId = SettingsTabId
@@ -91,6 +90,14 @@ export function SettingsPage({ only, title, subtitle, navigation = true }: Props
     out.set('tab', next)
     /* Replace, so a tab walk does not bury the page the reader came from under ten history entries. */
     setParams(out, { replace: true })
+  }
+  /*
+   * NOTIF-V2-SETTINGS-UI-001 — the notifications tab is its own fitted page (internal / external sections, KPI strip,
+   * plan usage). The old stack of five panels moved into it, nothing was dropped: the team arrangement, the team board,
+   * the send log and the templates are in its «الفريق» tab; personal preferences are at /account/notifications.
+   */
+  if (tab === 'notifications') {
+    return <Suspense fallback={null}><WorkspaceNotificationsPage /></Suspense>
   }
   /* No inner nav, and no column reserved for one, whenever something else is listing the sections. */
   const single = shown.length === 1 || !navigation
@@ -145,35 +152,6 @@ export function SettingsPage({ only, title, subtitle, navigation = true }: Props
           {tab === 'disclaimer' && <DisclaimerTab />}
           {tab === 'clients' && <ClientsTab />}
           {tab === 'team' && <TeamTab />}
-          {/*
-            Two things, in this order — MAIL-010.
-
-            «My own inbox» first, because everyone who opens this tab has one; «who else is told»
-            below it, because only an administrator can act on it and it is the longer read. Both on
-            one tab rather than two: they are the same question asked about different people, and a
-            manager who arranges a colleague usually wants to check their own settings in the same
-            visit.
-          */}
-          {tab === 'notifications' && (
-            <div className="space-y-6">
-              <NotificationsTab />
-              <NotificationRecipients />
-              {/*
-                Third, and last — MAIL-012. «What everyone actually receives» is the read a manager
-                does when something has already gone wrong, so it sits below the two screens that
-                change things rather than above them.
-              */}
-              <TeamNotifications />
-              {/*
-                EMAIL-SETTINGS-DEPTH-001 — last, because it is read after the two boards above have
-                failed to explain something. «Who is subscribed» is checked first; «what actually
-                left» is what somebody opens when the subscription looks right and the mail is not
-                arriving.
-              */}
-              <DeliveryLog />
-              <NotificationTemplates />
-            </div>
-          )}
           {tab === 'security' && <SecurityTab />}
           {tab === 'branding' && <BrandingTab />}
           {tab === 'projects' && <ProjectsTab />}

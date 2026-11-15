@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
+  Bell,
   ClipboardCheck,
   CreditCard,
   PackagePlus,
@@ -24,7 +25,6 @@ import {
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
-import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { useUi } from '@/stores/ui'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
@@ -78,6 +78,7 @@ const adminNav = [
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
   { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
+  { to: '/admin/notifications', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
   { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
   /*
    * PROVCFG-001 — a daily entry, not an advanced one.
@@ -310,7 +311,11 @@ export function AdminShell() {
           </Link>
 
           <div className="ms-auto flex items-center gap-1.5">
-            <NotificationCenter />
+            {/*
+              No workspace bell here: the platform console has no workspace, and every bell call (`/notifications`,
+              `/notifications/summary`) is a membership-portal route that answers the admin portal 403 — a request
+              that failed on every page load and every 30 s. The platform's own notices live in «الوارد» (/admin/inbox).
+            */}
             <button
               onClick={toggleLocale}
               aria-label="Toggle language"

@@ -21,6 +21,7 @@ use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Funding\Services\FundingStatement;
 use App\Domains\Funding\Support\FundingDisclaimer;
 use App\Domains\Funding\Support\FundingMoney;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -111,6 +112,8 @@ final class FundingController extends Controller
             'remaining_after' => $p->remaining_after === null ? null : (float) $p->remaining_after,
             'added_by' => $p->author?->name, 'added_at' => $p->created_at->toIso8601String(),
             'plan_before' => $p->meta['plan_before'] ?? null, 'plan_after' => $p->meta['plan_after'] ?? null,
+            // FIN-WALLET-001 — every deposit says where it came from: a payment in the system, or a manual entry with its reference.
+            'source' => in_array($p->kind, ['initial', 'top_up'], true) ? ($p->meta['source'] ?? ['type' => 'manual', 'reference' => $p->reference]) : null,
         ])->values()->all();
 
         return ApiResponse::success(['project_name' => $funding->project?->name] + $this->balance->of($funding) + [
@@ -393,13 +396,15 @@ final class FundingController extends Controller
      */
     private function reachable(User $user, bool $deleted = false): array
     {
-        $clients = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 — budgets of LIVE projects only (rule 5); the client's own state never hides one (rule 4).
+        $clients = ClientWorkspace::query();
         $this->access->restrictQuery($clients, $user);
         $names = $clients->pluck('name', 'id');
 
         $ceilings = $this->access->projectCeilings($user);
         $fundings = ProjectFunding::query()->with('project:id,name,client_workspace_id')
             ->whereIn('client_workspace_id', $names->keys()->all())
+            ->whereIn('project_id', LiveProjects::idsQuery())
             ->when($deleted, static fn ($q) => $q->whereNotNull('voided_at'), static fn ($q) => $q->whereNull('voided_at'))->get()
             ->filter(fn (ProjectFunding $f): bool => $this->access->projectAllowed($ceilings, $f->client_workspace_id, $f->project_id)
                 && ! $this->reach->moneyWithheld($user, $f->project_id))

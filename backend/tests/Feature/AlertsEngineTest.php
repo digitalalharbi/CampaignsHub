@@ -9,6 +9,10 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
@@ -94,10 +98,17 @@ final class AlertsEngineTest extends TestCase
 
     private function failedSync(): string
     {
-        $connId = (string) Str::uuid();
+        // LIFECYCLE-6 — the data-arrival rule judges a live project's bound ad account by that account's runs.
+        $connection = app(TokenVault::class)->open(tenantId: (string) $this->tenant->id, provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addHour()), connectionName: 'meta'.uniqid());
+        $connId = (string) $connection->getKey();
+        $account = ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connId, 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act-'.uniqid(), 'name' => 'A', 'status' => 'active']);
+        ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'purpose' => 'ads', 'is_active' => true]);
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'connection_id' => $connId, 'provider' => 'meta', 'status' => 'failed',
+            'connection_id' => $connId, 'external_account_id' => $account->id, 'provider' => 'meta', 'status' => 'failed',
             'window_start' => Carbon::now()->subDay()->toDateString(), 'window_end' => Carbon::now()->toDateString(),
             'error' => 'token expired', 'started_at' => Carbon::now()->subMinutes(5),
             'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),

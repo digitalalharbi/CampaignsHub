@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { fmtDate } from '@/lib/datetime'
-import { canAssign, diffLevels, levelsOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level } from './accessApi'
+import { canAssign, diffLevels, diffSections, levelsOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level, type SectionStates } from './accessApi'
 import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
 import { ACTION_LABEL, PORTAL_ROLE_LABEL } from './labels'
+import { SectionToggles } from './SectionToggles'
 
 export type DrawerSubject = { kind: 'member'; row: AccessMember } | { kind: 'invitation'; row: AccessInvitation }
 
@@ -38,6 +39,10 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
   // A person's current areas are their category plus their overrides; the toggles start from there.
   const [levels, setLevels] = useState<Record<string, Level>>(() => levelsOf(row.areas))
   const [clients, setClients] = useState<string[]>(row.scope.clients.map((c) => c.id))
+  // ACCESS-SECTIONS-001 — layer three, pre-filled with the person's current sections; only changed ones are sent.
+  const startSections: SectionStates = row.sections ?? {}
+  const [sections, setSections] = useState<SectionStates>(startSections)
+  const sectionChanges = diffSections(startSections, sections)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [err, setErr] = useState('')
   const [ok, setOk] = useState('')
@@ -54,12 +59,18 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
 
   const save = () => run((async () => {
     if (isMember) {
-      if (changedCategory) await a.setCategory.mutateAsync({ id: row.id, role: category })
-      await a.setOverrides.mutateAsync({ id: row.id, areas: overrides })
+      // One save, one audit row: category, areas, sections and clients together (applies on the member's next request).
       const before = row.scope.clients.map((c) => c.id).sort().join()
-      if (data.agency && member && before !== [...clients].sort().join()) await a.setScope.mutateAsync({ membership: member.membership_id, client_ids: clients })
+      const clientsChanged = data.agency && before !== [...clients].sort().join()
+      await a.updateMember.mutateAsync({
+        id: row.id,
+        ...(changedCategory ? { category } : {}),
+        areas: overrides,
+        sections: sectionChanges,
+        ...(clientsChanged ? { client_ids: clients } : {}),
+      })
     } else {
-      await a.updateInvitation.mutateAsync({ id: row.id, category, areas: overrides, client_ids: clients })
+      await a.updateInvitation.mutateAsync({ id: row.id, category, areas: overrides, sections: sectionChanges, client_ids: clients })
     }
   })(), ar ? 'حُفظ' : 'Saved')
 
@@ -92,6 +103,13 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
             <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
               options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en, disabled: c.slug !== row.category && !canAssign(c, data.me) }))} />
           </section>
+          {(data.sections ?? []).length > 0 && (
+            <section>
+              <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'الأقسام' : 'Sections'}</h3>
+              <SectionToggles sections={data.sections ?? []} states={sections} base={startSections} ar={ar} testId="drawer-sections"
+                onChange={(k, on) => setSections((x) => ({ ...x, [k]: on }))} />
+            </section>
+          )}
           <section>
             <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'تخصيص له فقط' : 'For this person only'}</h3>
             <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}

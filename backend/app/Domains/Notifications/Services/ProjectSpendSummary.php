@@ -42,7 +42,7 @@ final class ProjectSpendSummary
     {
         $days = (int) max(1, $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
         $projects = $projectIds === [] ? collect() : Project::query()->withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']);
+            ->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->live()->orderBy('name')->get(['id', 'name']); // PROJECT-LIFECYCLE-001
 
         $rows = [];
         foreach ($projects as $project) {

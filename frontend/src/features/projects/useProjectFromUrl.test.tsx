@@ -47,8 +47,8 @@ describe('a campaigns link that names its project', () => {
 
   it('leaves the choice alone for a project outside the reader’s reach', async () => {
     renderWithProviders(<><CampaignsPage /><Address /></>, { route: '/agency/campaigns?project=p-stranger', locale: 'en' })
-    await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(''))
-    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(''))
+    // DATE-RANGE-001 — the address now carries the period (from/to); the project key is what must be gone.
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toMatch(/^\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/))
     expect(useProject.getState().currentProjectId).toBe('p1')
     expect(await screen.findByTestId('view-table')).toBeInTheDocument()
   })

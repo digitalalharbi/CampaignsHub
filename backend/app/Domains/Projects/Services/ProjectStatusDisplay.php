@@ -26,9 +26,13 @@ namespace App\Domains\Projects\Services;
  * Three facts, each a thing that either happened or did not: a source is linked, its data has arrived,
  * campaigns were found. A number an operator typed in is kept when it is higher.
  */
-final class ProjectLifecycle
+final class ProjectStatusDisplay
 {
-    private const STARTING = ['draft', 'onboarding'];
+    /*
+     * PROJECT-LIFECYCLE-001 — a draft is promoted to `active` by its first linked account (ProjectStateMachine), so a stored
+     * `active` whose linked source has not delivered yet still reads «onboarding» on screen. Display only; never written.
+     */
+    private const STARTING = ['draft', 'onboarding', 'active'];
 
     /** @param  array<string,mixed>|null  $summary */
     public static function status(string $stored, ?array $summary): string

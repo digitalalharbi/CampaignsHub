@@ -7,8 +7,10 @@ namespace App\Domains\Campaigns\Resources;
 use App\Domains\Campaigns\Enums\CampaignPerformanceLabel;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
+use App\Domains\Metrics\Fx\FxDisplay;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 
 /** @mixin UnifiedCampaign */
 final class UnifiedCampaignResource extends JsonResource
@@ -43,6 +45,16 @@ final class UnifiedCampaignResource extends JsonResource
             'needs_attention' => in_array($this->performance_label, CampaignPerformanceLabel::needsAttention(), true),
             'total_budget' => $this->total_budget !== null ? (float) $this->total_budget : null,
             'budget_currency' => $this->budget_currency,
+            /*
+             * FX-APPLY-001 — the budget in the reader's display currency, through FxEngine (the original stays above, untouched).
+             * The «253 € here, 253 $ there» defect was the same amount printed with two marks; every screen renders THIS object
+             * through formatConversion, so the converted figure, the rate and its date travel together. Withheld → null amount.
+             */
+            'budget_fx' => $this->total_budget === null ? null : (function (): ?array {
+                $fx = FxDisplay::forRequest();
+
+                return $fx->one((float) $this->total_budget, $this->budget_currency, Carbon::today(), $fx->currencyFor($this->tenant_id === null ? null : (string) $this->tenant_id), 'campaign.budget');
+            })(),
             'starts_on' => optional($this->starts_on)->toDateString(),
             'ends_on' => optional($this->ends_on)->toDateString(),
             'primary_conversion_purpose' => $this->primary_conversion_purpose,

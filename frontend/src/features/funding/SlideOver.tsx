@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
 /**
@@ -15,12 +15,17 @@ export function SlideOver({ open, onClose, title, closeLabel, children, testid }
   testid?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  // The page's own header (marked `data-slideover-avoid`) stays clickable: the panel and its scrim start BELOW it,
+  // so «أضف ميزانية» is never under the panel.
+  const [top, setTop] = useState(0)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
     const opener = document.activeElement as HTMLElement | null
+    const avoid = document.querySelector('[data-slideover-avoid]')
+    setTop(avoid ? Math.max(0, Math.ceil(avoid.getBoundingClientRect().bottom) + 8) : 0)
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', onKey)
     ref.current?.focus()
@@ -34,7 +39,7 @@ export function SlideOver({ open, onClose, title, closeLabel, children, testid }
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" data-testid={testid}>
+    <div className="fixed inset-x-0 bottom-0 z-40 flex justify-end" style={{ top }} data-testid={testid}>
       <div className="absolute inset-0 bg-black/30" onMouseDown={onClose} aria-hidden />
       <aside
         ref={ref}

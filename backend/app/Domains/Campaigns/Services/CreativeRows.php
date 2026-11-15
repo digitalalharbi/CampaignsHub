@@ -17,6 +17,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
@@ -102,6 +103,8 @@ final class CreativeRows
          * `campaigns.manage`, exactly as the project route does.
          */
         app(ReachableProjects::class)->constrain($query, $user, 'project_id', $capability);
+        // PROJECT-LIFECYCLE-001 — the cross-project library reads LIVE projects only (archived/deleted never aggregated).
+        LiveProjects::whereProjectLive($query, 'project_id');
 
         $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
 

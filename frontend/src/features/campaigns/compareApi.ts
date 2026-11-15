@@ -1,3 +1,4 @@
+import type { FxConversion, FxCoverage } from '@/lib/money/fx'
 import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 
@@ -24,6 +25,8 @@ export interface CompareCampaign {
   client_display_name: string | null
   total_budget: number | null
   budget_currency: string | null
+  /** FX-APPLY-001 — the plan in the display currency, through FxEngine. */
+  budget_fx?: FxConversion | null
   totals: Record<string, number | null>
   series: Array<Record<string, number | null | string>>
   /**
@@ -54,6 +57,9 @@ export interface CompareCampaign {
 
 export interface ComparePayload {
   campaigns: CompareCampaign[]
+  /** FX-APPLY-001 — the currency the totals (spend, costs) are in: the reporting basis. */
+  currency?: string | null
+  fx?: FxCoverage
   /** Server-side verdict: the picked campaigns do not share one objective. */
   mixed_objectives: boolean
   objectives: string[]

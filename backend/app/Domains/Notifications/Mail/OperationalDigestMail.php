@@ -49,6 +49,14 @@ final class OperationalDigestMail extends Mailable
         public readonly string $kind = 'daily',
         public readonly string $scope = 'portfolio',
         public readonly ?string $periodLabel = null,
+        /** NOTIF-V2 — a recipient OUTSIDE the platform: the same template with every route back removed (standalone shell, no button, no link). */
+        public readonly bool $external = false,
+        public readonly ?string $scopeNote = null,
+        public readonly ?string $privacyLine = null,
+        public readonly ?string $disclaimer = null,
+        /** The click-counted footprint link (UTM) of the © line, or the removal of the footprint (branding.remove_platform_footprint). */
+        public readonly ?string $footprintUrl = null,
+        public readonly bool $hideFootprint = false,
     ) {}
 
     private function cadence(bool $ar): string
@@ -86,13 +94,19 @@ final class OperationalDigestMail extends Mailable
             $project ? (string) ($m['status']['reason'] ?? '') : '',
         ])));
 
-        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader, footerNote: MailDisclaimer::note($this->lang, $this->copy($ar)['unit_note']));
+        $shell = MailShell::build(lang: $this->lang, subject: $this->envelope()->subject, preheader: $preheader, preferences: ! $this->external, footerNote: $this->external ? (string) $this->disclaimer : MailDisclaimer::note($this->lang, $this->copy($ar)['unit_note']));
         $t = $this->copy($ar);
         $shell['t'] = array_merge($shell['t'], $t);
 
         return new Content(view: 'mail.layout', with: $shell + [
             'unsubscribeUrl' => $this->unsubscribeUrl,
+            'standalone' => $this->external,
+            'scopeNote' => $this->scopeNote,
+            'footprintUrl' => $this->footprintUrl,
+            'hideFootprint' => $this->hideFootprint,
             'slot' => view($project ? 'mail.digest.project' : 'mail.digest.portfolio', [
+                'external' => $this->external,
+                'privacyLine' => $this->privacyLine,
                 'm' => $m,
                 'kind' => $this->kind,
                 'cadence' => $this->cadence($ar),

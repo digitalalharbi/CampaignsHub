@@ -22,7 +22,7 @@ test('add → edit → delete → undo → export', async ({ page }) => {
   await page.getByTestId('budgets-add').click()
   await page.locator('#budget-client').fill(client)
   await page.locator('#budget-project').fill(project)
-  await page.getByRole('button', { name: '20,000' }).click()
+  await page.getByRole('button', { name: '20,000', exact: true }).click() // the amount chip, not a board row that happens to hold 20,000
   await page.getByTestId('budget-submit').click()
   await expect(page.getByTestId('undo-toast')).toContainText('أُضيفت الميزانية')
 

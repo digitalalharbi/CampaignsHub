@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectToClientRedirect, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -17,6 +17,7 @@ const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPassword
 const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPage'), 'ResetPasswordPage')
 const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
 const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
+const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
 const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
 const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
@@ -42,6 +43,8 @@ const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), '
 const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
 const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
 const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
+// PROJECT-LIFECYCLE-001 §8 — «فتح»: an archived project opens view-only; a live one keeps its usual destination.
+const ProjectOpenPage = lazyPage(() => import('@/features/projects/lifecycle/ProjectOpenPage'), 'ProjectOpenPage')
 const ProjectTeamPage = lazyPage(() => import('@/features/projects/ProjectTeamPage'), 'ProjectTeamPage')
 const SystemStatusPage = lazyPage(() => import('@/features/system/SystemStatusPage'), 'SystemStatusPage')
 const PublicHomePage = lazyPage(() => import('@/features/marketing/PublicHomePage'), 'PublicHomePage')
@@ -77,6 +80,7 @@ const ClientsPortfolioPage = lazyPage(() => import('@/features/clients/ClientsPo
 const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage'), 'PortfolioPage')
 const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
 const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
+const FollowUpPage = lazyPage(() => import('@/features/notifications/FollowUpPage'), 'FollowUpPage')
 const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
 const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
 const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
@@ -115,6 +119,7 @@ const PlatformLegalPage = lazyPage(() => import('@/features/admin/PlatformLegalP
 const ProviderReviewPage = lazyPage(() => import('@/features/admin/ProviderReviewPage'), 'ProviderReviewPage')
 const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 'BillingPage')
 const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
+const AdminNotificationsPage = lazyPage(() => import('@/features/admin/AdminNotificationsPage'), 'AdminNotificationsPage')
 const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
 const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
 const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'AddonsPage')
@@ -356,7 +361,16 @@ export const router = createBrowserRouter(withErrorBoundary([
            * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
            * the advertiser portal simply never got one.
            */
+          /*
+           * The landing stays the dashboard (CI-REPAIR, PR #1071). `/app` and `/agency` are where the server sends a person
+           * after sign-in, onboarding and an accepted invitation (`Portal::landingPath`), so redirecting them to `/home` made
+           * the role dashboard the landing — the flip builder E deferred on purpose ("flip three things together: the server's
+           * destination, the rail's Home leaf, and the assertions"; E-notes §Deferred). Until the Owner takes that decision
+           * the role dashboard is reached at its own address, `/…/home`.
+           */
           { index: true, element: <Navigate to="/app/dashboard" replace /> },
+          // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
+          { path: 'home', element: <RoleDashboardPage portal="app" /> },
           { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
@@ -379,6 +393,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'portfolio', element: <PortfolioPage /> },
           { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/:projectId', element: <ProjectOpenPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
@@ -407,6 +422,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // NOTIF-V2-FOLLOWUP-001 — ONE page for every workspace type; the portal prefix only decides the path.
+          { path: 'followup', element: <FollowUpPage /> },
           // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
           { path: 'budgets', element: <BudgetsPage /> },
           /*
@@ -595,6 +612,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             // inside Audit: it is the surface an operator opens when a customer says an email never
             // arrived, and the audit trail is about people's actions rather than the mailer's.
             { path: 'email', element: <EmailOperationsPage /> },
+            // NOTIF-V2-SETTINGS-UI-001 — the platform's notification layer: catalog, texts, plan features, footprint, statistics.
+            { path: 'notifications', element: <AdminNotificationsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],
@@ -605,7 +624,9 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
+            // The landing stays the dashboard until the Owner flips it (see the `/app` index above).
             { index: true, element: <Navigate to="/agency/dashboard" replace /> },
+            { path: 'home', element: <RoleDashboardPage portal="agency" /> },
             { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
@@ -614,7 +635,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'portfolio', element: <PortfolioPage /> },
             // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
             { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
-            { path: 'projects/:projectId', element: <AgencyProjectToClientRedirect /> },
+            // PROJECT-LIFECYCLE-001 §8 — still lands on the client for a live project; an archived one opens view-only.
+            { path: 'projects/:projectId', element: <ProjectOpenPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*
@@ -654,6 +676,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
+            { path: 'followup', element: <FollowUpPage /> },
             /*
              * AGENCY-DECISION-SURFACES-001 — the two decision pages existed only under `/app`.
              *

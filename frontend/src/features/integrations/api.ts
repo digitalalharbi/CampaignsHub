@@ -759,6 +759,8 @@ export interface HubConnection {
   sync_state: SyncState
   /** At least one reachable account carries a sync error category of its own. */
   needs_attention: boolean
+  /** SOURCE-FAILURE-REASON-001 — the sync's recorded category for an account that failed (a closed word, never a provider sentence). */
+  last_error_category?: string | null
   last_success_at: string | null
   next_sync_at: string | null
   /** The clients this authorisation feeds — the answer to «who breaks if it lapses». */
@@ -998,4 +1000,21 @@ export async function confirmLinkAccount(input: {
     external_id: input.externalId,
     organisation: input.organisation,
   })
+}
+
+
+/** INTEGRATIONS-ALL-CLIENTS-001 — one row per client the reader reaches, with what its sources are doing. */
+export interface ClientIntegrationRow {
+  client_id: string
+  client_name: string
+  projects: number
+  sources: number
+  platforms: string[]
+  needs_action: boolean
+  issues: { provider: string; account: string | null; reason: 'failed' | 'access_lost' | 'old' | 'never'; error_category: string | null; last_synced_at: string | null }[]
+  last_success_at: string | null
+}
+
+export function fetchClientsIntegrationOverview(): Promise<ClientIntegrationRow[]> {
+  return getData<ClientIntegrationRow[]>('/integrations/clients-overview')
 }

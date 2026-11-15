@@ -42,6 +42,13 @@ final class SpendSummaryMail extends Mailable
         public readonly string $kind = 'weekly',
         public readonly bool $external = false,
         public readonly string $recipientName = '',
+        /** NOTIF-V2 — the workspace · project identity line under the header, the one-line privacy notice and the short financial-reference notice of an external message. */
+        public readonly ?string $scopeNote = null,
+        public readonly ?string $privacyLine = null,
+        public readonly ?string $disclaimer = null,
+        /** The click-counted footprint link (UTM) of the © line, or the removal of the footprint (branding.remove_platform_footprint). */
+        public readonly ?string $footprintUrl = null,
+        public readonly bool $hideFootprint = false,
     ) {}
 
     public function title(bool $ar): string
@@ -69,7 +76,7 @@ final class SpendSummaryMail extends Mailable
 
         $projects = array_map(function (array $r) use ($ar, $p, $notConverted): array {
             $stateLabel = match ($r['state']) {
-                'over' => $ar ? 'تجاوزت الحد' : 'Over the limit',
+                'over' => $this->external ? ($ar ? 'يحتاج متابعة' : 'Being followed') : ($ar ? 'تجاوزت الحد' : 'Over the limit'), // spec §7: no alarm wording outside the platform
                 'near' => $ar ? 'قرّبت تخلص' : 'Close to the limit',
                 'ok' => $ar ? 'ضمن الحد' : 'Within the limit',
                 'unconverted' => $notConverted,
@@ -104,19 +111,22 @@ final class SpendSummaryMail extends Mailable
             subject: (string) $subject,
             preheader: trim($periodLabel.' · '.($ar ? 'الإنفاق ' : 'Spend ').$fmt['total_spend'].' · '.($ar ? 'المتبقي ' : 'Remaining ').$fmt['total_remaining']),
             preferences: ! $this->external,
-            footerNote: MailDisclaimer::note($this->lang),
+            footerNote: $this->disclaimer ?? MailDisclaimer::note($this->lang),
         );
 
         return new Content(view: 'mail.layout', with: $shell + [
             'unsubscribeUrl' => $this->unsubscribeUrl,
             // A recipient outside the platform gets the standalone shell: no link into the product, only the unsubscribe.
             'standalone' => $this->external,
+            'scopeNote' => $this->scopeNote,
+            'footprintUrl' => $this->footprintUrl,
+            'hideFootprint' => $this->hideFootprint,
             'slot' => view('mail.spend-summary', [
                 's' => ['projects' => $projects] + $s,
                 'fmt' => $fmt,
                 'title' => $this->title($ar),
                 'periodLabel' => $periodLabel,
-                'recipientLine' => $this->external && $this->recipientName !== '' ? ($ar ? "مرحبًا، {$this->recipientName}" : "Hello, {$this->recipientName}") : '',
+                'recipientLine' => trim(($this->external && $this->recipientName !== '' ? ($ar ? "مرحبًا، {$this->recipientName}" : "Hello, {$this->recipientName}") : '').($this->privacyLine !== null ? ' '.$this->privacyLine : '')),
                 'external' => $this->external,
                 'budgetsUrl' => MailLinks::to('/app/budgets'),
                 'dir' => $ar ? 'rtl' : 'ltr',

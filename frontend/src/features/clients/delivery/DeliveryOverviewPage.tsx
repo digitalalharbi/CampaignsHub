@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, CalendarClock } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { money } from '@/features/analytics/format'
 import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
+import { DELIVERY_LABEL } from '@/features/reports/scheduleDeliveryWords'
 import { getDeliveryOverview, type DeliveryOverviewRow, type NextAction } from './deliveryApi'
 
 /**
@@ -70,16 +71,35 @@ function Row({ r, ar }: { r: DeliveryOverviewRow; ar: boolean }) {
   const lang = ar ? 'ar' : 'en'
   const inv = r.invoice
   const action = ACTION[r.next_action]
+  const sched = r.scheduled !== undefined && r.scheduled.active > 0 ? r.scheduled : null
 
   return (
     <li data-testid={`delivery-row-${r.client_id}`} data-visual={r.visual} className="grid gap-3 rounded-2xl border border-border bg-surface p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center">
       <div className="min-w-0">
         <div className="truncate font-bold text-text-primary">{r.client}</div>
         <div className="mt-0.5 text-xs text-text-muted">
-          {r.pack === null
-            ? (ar ? 'لا توجد حزمة بعد' : 'No pack yet')
-            : `${r.pack.period.from} → ${r.pack.period.to}`}
+          {r.pack !== null
+            ? `${r.pack.period.from} → ${r.pack.period.to}`
+            : sched === null
+              ? (ar ? 'لا توجد حزمة بعد' : 'No pack yet')
+              : null}
         </div>
+        {/* CONS-DELIVERY-SCHEDULED — what the client's schedules actually did, read from the schedules themselves. */}
+        {sched !== null && (
+          <div data-testid={`delivery-scheduled-${r.client_id}`} className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <Badge tone="info"><CalendarClock size={12} className="inline" /> {ar ? `تقرير مجدول${sched.active > 1 ? ` ×${sched.active}` : ''}` : `Scheduled report${sched.active > 1 ? ` ×${sched.active}` : ''}`}</Badge>
+            <span className="text-text-muted">
+              {sched.last_run_at === null
+                ? (ar ? 'لم يُرسل بعد' : 'Not run yet')
+                : `${ar ? 'آخر إرسال' : 'Last run'} ${fmtDateTime(sched.last_run_at)}`}
+            </span>
+            {sched.next_run_at !== null && <span className="text-text-muted">{ar ? 'التالي' : 'Next'} {fmtDateTime(sched.next_run_at)}</span>}
+            {Object.entries(sched.deliveries).map(([status, n]) => {
+              const meta = DELIVERY_LABEL[status] ?? { ar: status, tone: 'neutral' as const }
+              return <Badge key={status} tone={meta.tone}>{ar ? meta.ar : status.replace(/_/g, ' ')}: <span className="tnum">{n}</span></Badge>
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 text-xs">

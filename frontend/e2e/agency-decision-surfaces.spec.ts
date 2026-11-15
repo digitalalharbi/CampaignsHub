@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, openRail } from './helpers'
 
 /**
  * AGENCY-DECISION-SURFACES-001 — Recommendations and Spend limits exist for the agency operator.
@@ -19,6 +19,7 @@ async function freshVisit(page: import('@playwright/test').Page, path: string) {
 test('recommendations: rail link, chooser on a fresh visit, a click lands on the action centre', async ({ page }) => {
   await freshVisit(page, '/agency/recommendations')
   await expect(page.getByText('الصفحة غير موجودة')).toHaveCount(0)
+  await openRail(page)
   await expect(page.getByRole('link', { name: 'التوصيات' })).toBeVisible()
 
   const chooser = page.getByTestId('project-chooser')
@@ -36,6 +37,7 @@ test('recommendations: rail link, chooser on a fresh visit, a click lands on the
 test('spend limits: rail link, chooser on a fresh visit, a click lands on the limits', async ({ page }) => {
   await freshVisit(page, '/agency/spend-limits')
   await expect(page.getByText('الصفحة غير موجودة')).toHaveCount(0)
+  await openRail(page)
   await expect(page.getByRole('link', { name: 'حدود الإنفاق' }).first()).toBeVisible()
 
   const chooser = page.getByTestId('project-chooser')

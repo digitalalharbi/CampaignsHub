@@ -14,6 +14,8 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -236,7 +238,7 @@ final class SyncGateHardeningTest extends TestCase
         $job = new SyncAccountMetricsJob($account->id, '2026-10-25', '2026-11-01');
         $structure = new SyncAccountStructureJob($account->id);
 
-        $project->update(['status' => 'paused']);
+        app(ProjectLifecycle::class)->transition($project, ProjectStatus::Paused, null);
         app()->call([$job, 'handle']);
         app()->call([$structure, 'handle']);
 
@@ -244,7 +246,7 @@ final class SyncGateHardeningTest extends TestCase
         $this->assertSame(0, DB::table('metric_sync_runs')->count());
         $this->assertSame(0, DB::table('integration_sync_runs')->count());
 
-        $project->update(['status' => 'active']);
+        app(ProjectLifecycle::class)->transition($project, ProjectStatus::Active, null);
         $this->assertTrue(app(AccountAssignment::class)->isActivelyAssigned($account->fresh()));
     }
 

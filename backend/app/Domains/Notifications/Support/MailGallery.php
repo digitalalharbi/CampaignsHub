@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Support;
 
 use App\Domains\Alerts\Services\AlertEventMailer;
+use App\Domains\Notifications\Engine\Content\ComposedMessage;
+use App\Domains\Notifications\Engine\Sending\EngineMail;
+use App\Domains\Notifications\External\Content\ExternalMode;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
@@ -117,6 +120,38 @@ final class MailGallery
             : ['spend' => null, 'spend_currency' => 'SAR', 'spend_left_out' => 1, 'cap' => 47000.0, 'remaining' => 8800.0, 'cap_currency' => 'SAR', 'cap_left_out' => 1, 'used' => 0.81, 'near' => 2, 'projects' => 5]];
     }
 
+    /**
+     * NOTIF-V2 — the seven external templates, from the SAME approved templates in their external mode, on fixture data (previews only:
+     * the real message is composed from the project's own figures by `ExternalMessageComposer`). Null when nothing goes by that name.
+     */
+    public static function externalDemo(string $template, string $locale): ?Mailable
+    {
+        $ar = $locale === 'ar';
+        $scope = ($ar ? 'Nour Agency · مشروع: ' : 'Nour Agency · Project: ');
+        $privacy = static fn (string $role, string $project): string => $ar ? "مخصصة لك بصفتك {$role} — بيانات {$project} فقط" : "For you as {$role} — {$project} data only";
+        $disclaimer = $ar ? 'المرجع المالي: فواتير المنصات والمحاسبة المالية.' : 'Financial reference: platform invoices and accounting records.';
+        $name = $ar ? 'سارة' : 'Sarah';
+        $project = static function (array $row, string $kind, int $days, string $role) use ($locale, $ar, $name, $scope, $privacy, $disclaimer): OperationalDigestMail {
+            $model = ExternalMode::digestModel(OperationalDigestModel::project($row, $locale, $days, $kind), $ar);
+
+            return (new OperationalDigestMail($model, $locale, $name, $kind, 'project', null, external: true, scopeNote: $scope.$model['name'], privacyLine: $privacy($role, (string) $model['name']), disclaimer: $disclaimer))
+                ->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        };
+        $spend = static fn (bool $near) => (new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $name,
+            scopeNote: $scope.'Al-Ettifaq Club', privacyLine: $privacy($ar ? 'المالية' : 'Finance', 'Al-Ettifaq Club'), disclaimer: $disclaimer))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        $ops = self::operationalDigest()['projects'];
+
+        return match ($template) {
+            'finance', 'continuity_planning' => $spend($template === 'continuity_planning'),
+            'project_manager' => $project($ops[0], 'weekly', 7, $ar ? 'مدير المشاريع' : 'Project manager'),
+            'admin_owner' => $project($ops[1], 'weekly', 7, $ar ? 'الإدارة' : 'Management'),
+            'client' => $project($ops[0], 'weekly', 7, $ar ? 'العميل' : 'Client'),
+            'achievement' => $project($ops[1], 'daily', 1, $ar ? 'الإدارة' : 'Management'),
+            'month_end' => $project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], 'monthly', 31, $ar ? 'الإدارة' : 'Management'),
+            default => null,
+        };
+    }
+
     public static function messages(string $locale): array
     {
         $ar = $locale === 'ar';
@@ -223,6 +258,16 @@ final class MailGallery
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
             ),
+
+            // NOTIF-V2-ENGINE-001 — the shared engine's own message (internal catalog words, and the consent request).
+            'notifications-v2-notice' => new EngineMail(new ComposedMessage(
+                subject: $ar ? 'متجر تجريبي — وكالة المدى | انتهى ربط منصة' : 'Demo store — Almada Agency | A platform link expired',
+                title: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+                body: $ar ? 'ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.' : 'A platform link in Demo store expired and needs relinking.',
+                html: $ar ? '<p><strong>انتهى ربط منصة</strong></p><p>ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.</p><p>الرقم المرجعي: N-261115-ABCDEFGH</p>'
+                    : '<p><strong>A platform link expired</strong></p><p>A platform link in Demo store expired and needs relinking.</p><p>Reference: N-261115-ABCDEFGH</p>',
+                text: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+            ), 'N-261115-ABCDEFGH', $locale),
 
             // DELIVERY-REMINDERS-001 — a reviewer's nudge, sent by `MemberNotices`.
             'delivery-reminder' => new OperationalMail(

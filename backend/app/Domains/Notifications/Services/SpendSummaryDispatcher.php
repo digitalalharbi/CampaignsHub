@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Notifications\Engine\Migration\LegacyNotificationImporter;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Models\ExternalDigestRecipient;
 use App\Domains\Notifications\Providers\ProviderRegistry;
@@ -125,6 +126,10 @@ final class SpendSummaryDispatcher
         if (! $recipient->active) {
             return 'inactive';
         }
+        // NOTIF-V2-ENGINE-001 — a recipient moved to the shared model is sent only by it, after confirmation.
+        if (LegacyNotificationImporter::migrated((string) $recipient->id)) {
+            return 'moved_to_shared_engine';
+        }
         if (! $this->claimExternal($recipient, $key)) {
             return 'already_sent';
         }
@@ -136,7 +141,7 @@ final class SpendSummaryDispatcher
             $this->tenants->setTenantId($tenantId);
             $projectIds = Project::query()->withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)->whereIn('id', $recipient->projectIds())
-                ->where('status', '!=', 'archived')->whereNull('deleted_at')
+                ->live() // PROJECT-LIFECYCLE-001 — active + paused only
                 ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
             if ($projectIds === []) {
                 return $this->finishExternal($recipient, $key, 'skipped', 'no_projects');

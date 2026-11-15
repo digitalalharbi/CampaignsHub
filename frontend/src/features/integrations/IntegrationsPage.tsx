@@ -5,11 +5,12 @@ import {
   fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
 } from './api'
-import { ConnectionHub, HubSummary, isGone } from './ConnectionHub'
+import { ConnectionHub, HubSummary, isGone, sourceNeedsAction } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { IntegrationAudit } from './IntegrationAudit'
 import { ProjectLinkFlow } from './ProjectLinkFlow'
+import { AllClientsIntegrations } from './AllClientsIntegrations'
 import { SourcePlatformRows } from './SourcePlatformRows'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
@@ -19,7 +20,8 @@ import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
-import { Plus } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { ProviderMark } from '@/components/ProviderMark'
 import { PLATFORM_ORDER, canonicalPlatform, platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
@@ -48,8 +50,42 @@ export const HUB_SECTIONS: Array<{ key: 'sources' | 'platforms' | 'audit'; ar: s
  */
 export function IntegrationsPage() {
   const currentProjectId = useProject((s) => s.currentProjectId)
+  const setProject = useProject((s) => s.setCurrentProjectId)
+  const setClient = useAgencyClient((s) => s.setCurrentClientId)
+  const inAgency = useLocation().pathname.startsWith('/agency')
+  const ar = useUi((s) => s.locale) === 'ar'
+  const [params, setParams] = useSearchParams()
+  // INTEGRATIONS-ALL-CLIENTS-001 — the agency's second view: every client at once. It lives in the address (`?view=all`) and on THIS page:
+  // changing the client in the side menu never navigates away from it.
+  const all = inAgency && params.get('view') === 'all'
+  const setView = (next: 'client' | 'all') => setParams((p) => { const n = new URLSearchParams(p); if (next === 'all') n.set('view', 'all'); else n.delete('view'); return n }, { replace: true })
 
-  return currentProjectId === null ? <ProjectChooser /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} />
+  const body = all
+    ? <AllClientsIntegrations onPick={(clientId) => { setClient(clientId); setProject(null); setView('client') }} />
+    : currentProjectId === null ? <ProjectChooser /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} />
+
+  if (!inAgency) return body
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div role="tablist" aria-label={ar ? 'عرض التكاملات' : 'Integrations view'} className="flex w-fit gap-1 rounded-[13px] border border-border bg-surface-secondary p-1" data-testid="integrations-view">
+        {([['client', ar ? 'العميل المحدد' : 'Selected client'], ['all', ar ? 'كل العملاء' : 'All clients']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={(key === 'all') === all}
+            onClick={() => setView(key)}
+            data-testid={`integrations-view-${key}`}
+            className={`whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-colors ${(key === 'all') === all ? 'bg-surface text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {body}
+    </div>
+  )
 }
 
 const isAdPlatform = (key: string): boolean => (PLATFORM_ORDER as readonly string[]).includes(canonicalPlatform(key))
@@ -280,14 +316,20 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="hub-platforms">
           {hub.isLoading && <li><Skeleton className="h-16 w-full" /></li>}
           {sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key).map((provider) => {
-            const linked = live.filter((c) => c.provider === provider.key).reduce((n, c) => n + c.selected_accounts, 0)
+            const mine = live.filter((c) => c.provider === provider.key)
+            const linked = mine.reduce((n, c) => n + c.selected_accounts, 0)
+            // «متصل» only for a platform that is linked AND asks for nothing; one that asks says «يحتاج إجراء» instead.
+            const attention = mine.some(sourceNeedsAction)
             return (
               <li key={provider.key} className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3" data-testid={`hub-platform-${provider.key}`}>
                 <ProviderMark provider={provider.key} size={26} />
                 <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{platformLabel(provider.key, ar)}</span>
-                {linked > 0 && <span className="tnum rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success" data-testid={`hub-platform-linked-${provider.key}`}>{linked.toLocaleString('en-US')}</span>}
-                {/* «إعادة الربط» and «ربط» are the same journey: the platform's own sign-in, for this project. */}
-                <Button size="sm" variant={linked > 0 ? 'ghost' : 'primary'} onClick={() => startLink(provider)} data-testid={`hub-platform-link-${provider.key}`}>
+                {linked > 0 && <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-bold text-text-secondary" data-testid={`hub-platform-linked-${provider.key}`}>{linked.toLocaleString('en-US')}</span>}
+                {linked > 0 && (attention
+                  ? <span data-testid={`hub-platform-attention-${provider.key}`}><Badge tone="warning">{ar ? 'يحتاج إجراء' : 'Needs action'}</Badge></span>
+                  : <span data-testid={`hub-platform-connected-${provider.key}`}><Badge tone="success"><Check size={12} aria-hidden /> {ar ? 'متصل' : 'Connected'}</Badge></span>)}
+                {/* «إعادة الربط» and «ربط» are the same journey: the platform's own sign-in, for this project. Re-linking is secondary: it is not an error. */}
+                <Button size="sm" variant={linked > 0 ? 'secondary' : 'primary'} onClick={() => startLink(provider)} data-testid={`hub-platform-link-${provider.key}`}>
                   {linked > 0 ? (ar ? 'إعادة الربط' : 'Re-link') : (ar ? 'ربط' : 'Link')}
                 </Button>
               </li>

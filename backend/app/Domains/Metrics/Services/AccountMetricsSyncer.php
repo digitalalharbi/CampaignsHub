@@ -626,7 +626,38 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * X-NO-ACTIVITY-001 — a success whose every stored figure is zero says so, on the run, so the screens can read
+         * «ناجحة — لا نشاط». The status stays `success`: the platform answered in full and the zeros were stored.
+         */
+        if ($this->recordsAreAllZero($result->records)) {
+            $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'no_activity' => true]])->save();
+        }
+
         return $this->finish($run, SyncRunStatus::Success, $upserted, null, $account, $counts);
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $records
+     */
+    private function recordsAreAllZero(array $records): bool
+    {
+        if ($records === []) {
+            return false;
+        }
+
+        foreach ($records as $row) {
+            foreach ($row as $key => $value) {
+                if (in_array($key, ['date', 'campaign_id', 'currency'], true) || $value === null) {
+                    continue;
+                }
+                if (! is_numeric($value) || (float) $value !== 0.0) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

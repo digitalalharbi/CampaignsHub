@@ -1,6 +1,8 @@
 import { patchData, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 import { api } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
+import type { ProjectLifecycleStatus } from '@/lib/projectLifecycle'
+import type { SpendReading } from '@/lib/money/fx'
 
 /**
  * PROJECT-LIST-SURFACE-001 §10 — the facts a card needs to be worth reading.
@@ -37,8 +39,15 @@ export interface ProjectSummary {
 export interface Project {
   id: string
   client_workspace_id: string
+  /** PROJECT-LIFECYCLE-001 §8 — the client's name, on the listing (every portal). */
+  client_name?: string | null
   name: string
   status: string
+  /** PROJECT-LIFECYCLE-001 — the stored lifecycle state; `status` is the display one (may derive «onboarding»). */
+  lifecycle_status?: ProjectLifecycleStatus
+  archived_at?: string | null
+  previous_status?: ProjectLifecycleStatus | null
+  purge_after?: string | null
   setup_completion: number
   account_manager_id: number | null
   created_at: string | null
@@ -72,6 +81,8 @@ export interface Binding {
   is_active: boolean
   account: ExternalAccount | null
   created_at: string | null
+  /** PROJECT-LIFECYCLE-001 §8 — other projects this account is ALSO actively linked to («مشترك»). Absent from an older server. */
+  shared_with?: { id: string; name: string }[]
 }
 
 /**
@@ -133,7 +144,8 @@ export async function projectAction(
   action: 'archive' | 'restore' | 'pause' | 'resume' | 'clone',
 ): Promise<Project> {
   await ensureCsrfCookie()
-  return postData<Project>(`/projects/${projectId}/${action}`)
+  // PROJECT-LIFECYCLE-001 — un-archiving needs the explicit confirmation server-side (the restore window is N2's).
+  return postData<Project>(`/projects/${projectId}/${action}`, action === 'restore' ? { confirm: true } : undefined)
 }
 
 export async function archiveProject(projectId: string): Promise<Project> {
@@ -212,6 +224,8 @@ export interface PortfolioOverview {
      * The server offers no `total` key at all, so there is nothing here to print by accident.
      */
     comparable: boolean
+    /** PROJECT-LIFECYCLE-001 §7 — the shared aggregation's reading: what was excluded (no rate, named) and old rates used. */
+    reading?: SpendReading
   }
   attention: { total: number; by_state: Record<string, number> }
   /**
@@ -399,6 +413,8 @@ export interface SyncRun {
   started_at: string | null
   finished_at: string | null
   error: string | null
+  /** X-NO-ACTIVITY-001 — success where every stored figure was zero. */
+  no_activity?: boolean
   is_demo: boolean
   /** §8 — consecutive identical answers are said once, with how many times they were said. */
   repeats: number

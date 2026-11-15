@@ -71,6 +71,30 @@ export interface PacedRow {
   pacing_basis?: string | null
 }
 
+const REFUSED = ['currency_mismatch', 'no_budget', 'partial', 'mixed_currency']
+
+/**
+ * CONS-I-001 — WHY a row is outside the total, or null when it is inside. The one predicate behind the count
+ * and behind the list of names beside it, so the two can never disagree.
+ */
+export function excludedReason(r: PacedRow): 'no_budget' | 'other_currency' | 'partial' | null {
+  const basis = String(r.pacing_basis ?? 'comparable')
+  if (basis === 'no_budget' || (r.budget ?? 0) <= 0) return 'no_budget'
+  if (basis === 'currency_mismatch' || basis === 'mixed_currency') return 'other_currency'
+  if (REFUSED.includes(basis)) return 'partial'
+
+  return null
+}
+
+/** The rows left out of the total, each with its reason — names are the caller's (`campaign_name`). */
+export function excludedRows<T extends PacedRow>(rows: T[]): Array<{ row: T; reason: NonNullable<ReturnType<typeof excludedReason>> }> {
+  return rows.flatMap((row) => {
+    const reason = excludedReason(row)
+
+    return reason ? [{ row, reason }] : []
+  })
+}
+
 export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
   /*
    * `comparable` is the only basis that may be added. The other four each name a reason the row's
@@ -87,8 +111,7 @@ export function portfolioBudget(rows: PacedRow[]): PortfolioBudget {
    * direction that cannot invent a figure: an unstated basis on a row with a budget and a spend is
    * two numbers in one currency, which is all this arithmetic needs.
    */
-  const refused = ['currency_mismatch', 'no_budget', 'partial', 'mixed_currency']
-  const usable = rows.filter((r) => ! refused.includes(String(r.pacing_basis ?? 'comparable')) && (r.budget ?? 0) > 0)
+  const usable = rows.filter((r) => ! excludedReason(r))
   const excluded = rows.length - usable.length
   /*
    * Owner directive 2026-10-09 §19 — committed money counts whether or not it has started moving,

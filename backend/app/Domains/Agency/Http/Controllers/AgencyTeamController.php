@@ -6,6 +6,7 @@ namespace App\Domains\Agency\Http\Controllers;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Actions\ManageMembershipScopes;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -294,7 +295,7 @@ final class AgencyTeamController extends Controller
             ->join('users', 'users.id', '=', 'projects.account_manager_id')
             ->where('projects.tenant_id', $this->tenants->tenantId())
             ->whereIn('projects.client_workspace_id', $ids)
-            ->whereNull('projects.deleted_at')
+            ->whereIn('projects.id', LiveProjects::idsQuery()) // PROJECT-LIFECYCLE-001
             ->get(['projects.client_workspace_id as client_id', 'users.name as name'])
             ->groupBy('client_id');
 

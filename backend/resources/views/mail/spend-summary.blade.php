@@ -30,7 +30,7 @@
                     <div style="font-size:11px; font-weight:700; color:#5b6b68;">{{ $ar ? 'المتبقي من حدود الإنفاق' : 'Left of the spend limits' }}</div>
                     <div data-tile="remaining" style="font-size:22px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $fmt['total_remaining'] }}</div>
                     @if (($tot['cap_left_out'] ?? 0) > 0)<div style="font-size:11px; color:{{ $S::INK['watch'] }};">{{ $ar ? 'بعض الحدود غير محوّلة، خارج المجموع' : 'Some limits are not converted, outside the total' }}</div>@endif
-                    @if ($tot['near'] > 0)<div style="font-size:11px; font-weight:700; color:{{ $S::INK['bad'] }};">{{ $ar ? $tot['near'].' قرّبت تخلص' : $tot['near'].' close to the limit' }}</div>@endif
+                    @if ($tot['near'] > 0)<div style="font-size:11px; font-weight:700; color:{{ $external ? $S::INK['watch'] : $S::INK['bad'] }};">{{ $ar ? $tot['near'].' قرّبت تخلص' : $tot['near'].' close to the limit' }}</div>@endif
                 </td></tr></table>
             </td>
         </tr>
@@ -38,7 +38,7 @@
 
     {{-- One card per project: name, state chip, the bar of the limit used, remaining amount and share, days left. --}}
     @foreach ($s['projects'] as $p)
-        @php($tone = ['over' => 'bad', 'near' => 'watch', 'ok' => 'ok', 'unconverted' => 'none', 'none' => 'none'][$p['state']])
+        @php($tone = ['over' => ($external ? 'watch' : 'bad'), 'near' => 'watch', 'ok' => 'ok', 'unconverted' => 'none', 'none' => 'none'][$p['state']])
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="spend-project" data-state="{{ $p['state'] }}" style="border:1px solid #e4e0d6; border-{{ $startSide }}:4px solid {{ $S::INK[$tone] }}; border-radius:12px; margin-bottom:8px; background-color:{{ $S::SOFT[$tone] }};">
             <tr><td style="padding:10px 12px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>

@@ -17,8 +17,8 @@ import { ClassificationEditor } from './ClassificationEditor'
  * the two surfaces from drifting into different words for the same state.
  */
 import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
-import { projectStatusLabel } from '@/features/projects/ProjectsPage'
 import { TabBilling } from './TabBilling'
+import { ClientBudgetCard } from './ClientBudgetCard'
 import { TabDelivery } from './delivery/TabDelivery'
 import { TabPortal } from './portal/TabPortal'
 import { TabContentApprovals } from './portal/TabContentApprovals'
@@ -30,6 +30,7 @@ import { TabFiles } from './TabFiles'
 import { TabReports } from './TabReports'
 import { TabSettings } from './TabSettings'
 import { TabTeam } from './TabTeam'
+import { ClientProjectsTab } from './ClientProjectsTab'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
@@ -97,7 +98,8 @@ export function ClientCommandCenterPage() {
   const TABS: { key: Tab; label: string }[] = [
     { key: 'overview', label: t('tab_overview') },
     // CLIENT-UNIT-001 — the project is hidden until the client has a second one; one project IS the client.
-    ...(d.projects.length > 1 ? [{ key: 'projects' as Tab, label: t('tab_projects') }] : []),
+    // PROJECT-LIFECYCLE-001 §8 — shown whenever there is more than one project OR an archived one to find.
+    ...(d.projects.length > 1 || d.projects.some((p) => p.status === 'archived') ? [{ key: 'projects' as Tab, label: t('tab_projects') }] : []),
     { key: 'campaigns', label: t('tab_campaigns') },
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
@@ -160,6 +162,8 @@ export function ClientCommandCenterPage() {
             </StatGrid>
           )}
 
+          {tab === 'overview' && d.budget && <ClientBudgetCard budget={d.budget} ar={ar} clientName={d.name} />}
+
           {tab === 'overview' && (
             <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="client-project-actions">
               {d.projects.length === 1 && (
@@ -184,17 +188,7 @@ export function ClientCommandCenterPage() {
             </div>
           )}
 
-          {tab === 'projects' && d.projects.length > 1 && (
-            <ul className="space-y-2">
-              {d.projects.length === 0 && <li className="text-sm text-text-muted">—</li>}
-              {d.projects.map((p) => (
-                <li key={p.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm">
-                  <Link to={portalTo(`/projects/${p.id}/integrations`)} className="font-medium text-brand-600 hover:underline">{p.name}</Link>
-                  <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{projectStatusLabel(p.status, ar)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {tab === 'projects' && <ClientProjectsTab projects={d.projects} ar={ar} portalTo={portalTo} />}
 
           {tab === 'campaigns' && (
             <ul className="space-y-2">

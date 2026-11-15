@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
+import type { FxSpendNote } from '@/lib/money/fx'
 
 /**
  * FIN-LOOP-001 — a project's approved budget, read from the endpoints that compute it.
@@ -66,9 +67,16 @@ export interface BudgetRow {
   used_ratio: number | null
   pace_per_day: number | null
   days_left: number | null
+  /** BUDGET-RUNOUT-001 — the last 3 full days' spend per day, and the day the balance runs out at that rate. */
+  pace_3d?: number | null
+  run_out_date?: string | null
+  /** BUDGET-FRESHNESS-001 */
+  freshness?: FreshnessInfo
   spend_without_rate: number
   complete: boolean
   last_spend_day: string | null
+  /** PROJECT-LIFECYCLE-001 §7 — the parts the spend excludes (no rate, named) and the old rates it used (`SpendLedger`). */
+  fx?: FxSpendNote | null
   /** `spent` in SAR (it adds up to the totals); `spent_usd` is the platform's own figure in USD, null with no rate; `unconverted` keeps days with no rate in their own currency. */
   by_platform: { provider: string; spent: number; spent_usd?: number | null; unconverted_days?: number; unconverted?: { currency: string; amount: number }[] }[]
   this_month: number | null
@@ -106,6 +114,8 @@ export interface BudgetPayment {
   added_at: string
   plan_before?: { provider: string; percent: number }[] | null
   plan_after?: { provider: string; percent: number }[] | null
+  /** FIN-WALLET-001 — where a deposit came from: a payment in the system (an invoice), or a manual entry with its reference. */
+  source?: { type: 'invoice_payment'; invoice_number?: string; via?: 'manual' | 'gateway' } | { type: 'manual'; reference: string | null } | { type: 'spend_limit' } | null
 }
 
 export interface BudgetPoint { date: string; approved: number; spent: number; remaining: number | null; added: number }
@@ -164,6 +174,62 @@ export function useBudget(projectId: string | null) {
     queryKey: ['funding', projectId],
     enabled: projectId !== null,
     queryFn: () => getData<BudgetDetail>(`/funding/projects/${projectId}`),
+  })
+}
+
+/**
+ * ONE-BUDGET-001 — the approved project budget as every other surface reads it (`ProjectBudgetReader` on the server):
+ * SAR, over the budget's OWN period, never a dashboard window. `has_budget: false` means «بدون ميزانية».
+ */
+export type ApprovedBudget =
+  | { has_budget: false; withheld?: boolean }
+  | {
+      has_budget: true
+      project_id: string
+      currency: 'SAR'
+      payment_mode: PaymentMode
+      payment_method: 'prepaid' | 'direct' | 'unset'
+      status: BudgetStatus
+      approved: number
+      deposits: number
+      settlements: number
+      spent: number
+      remaining: number | null
+      used_ratio: number | null
+      pace_per_day: number | null
+      cover_days: number | null
+      run_out_date: string | null
+      projected: number | null
+      period_start: string | null
+      period_end: string | null
+      thresholds: number[]
+      crossed_threshold: number | null
+      complete: boolean
+      last_spend_day: string | null
+      fx?: FxSpendNote
+    }
+
+/** Several projects' approved budgets added (SAR). `approved`/`remaining` are null when none has a balance. */
+export interface ApprovedBudgetTotal {
+  currency: 'SAR'
+  budgeted: number
+  unbudgeted: number
+  without_balance: number
+  approved: number | null
+  spent: number | null
+  remaining: number | null
+  used_ratio: number | null
+  pace_per_day: number | null
+  cover_days: number | null
+  fx?: FxSpendNote
+}
+
+export function useApprovedBudget(projectId: string | null) {
+  return useQuery({
+    queryKey: ['funding', 'approved', projectId],
+    enabled: projectId !== null,
+    retry: false,
+    queryFn: () => getData<ApprovedBudget>(`/projects/${projectId}/approved-budget`),
   })
 }
 
@@ -246,6 +312,55 @@ export function useFinancialDisclaimer() {
     staleTime: Infinity,
     retry: 1,
     queryFn: () => getData<{ ar: string; en: string }>('/funding/disclaimer'),
+  })
+}
+
+/**
+ * FX-ENGINE-001 — the platform's USD→SAR rate as a workspace reads it. Managed only at /admin/settings/currency-rates:
+ * `can_manage` is always false here, and the old PUT answers 410.
+ */
+export interface FundingRate {
+  usd_sar: number | null
+  custom: false
+  peg: number
+  can_manage: false
+  managed_by: 'platform'
+  rates_page: string
+  kind: 'manual' | 'pegged' | 'automatic' | 'cross' | 'identity' | null
+  source: string | null
+  rate_date: string | null
+  stale: boolean
+  withheld: boolean
+}
+
+export function useFundingRate() {
+  return useQuery({ queryKey: ['funding', 'rate'], retry: 1, queryFn: () => getData<FundingRate>('/funding/rate') })
+}
+
+/** BUDGET-FRESHNESS-001 — a platform behind this figure failed to sync, or its data is older than 2 hours. */
+export interface FreshnessInfo { stale: boolean; items: { provider: string; account: string | null; reason: 'failed' | 'access_lost' | 'old' | 'never'; error_category: string | null; last_synced_at: string | null }[] }
+
+/** BUDGET-RENEW-ALL-001 — what «جدّد كل الميزانيات للشهر القادم» would copy; the preview writes nothing. */
+export interface RenewPreview {
+  month: string
+  from: string
+  to: string
+  budgets: { project_id: string; project_name: string; client_name: string; amount: number; currency: string; mode: PaymentMode; already_renewed: boolean }[]
+  limits: { id: string; project_id: string; scope: string; scope_id: string | null; amount: number; currency: string; thresholds: number[]; starts_on: string; ends_on: string; already_renewed: boolean }[]
+}
+
+export function useRenewPreview(enabled: boolean) {
+  return useQuery({ queryKey: ['funding', 'renew-preview'], enabled, staleTime: 0, gcTime: 0, queryFn: () => getData<RenewPreview>('/funding/renew-next-month') })
+}
+
+export function useApplyRenew() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: { budgets: { project_id: string; amount: number }[]; limits: { id: string; amount: number }[] }) => {
+      await ensureCsrfCookie()
+      return postData<{ budgets: number; limits: number; skipped: number }>('/funding/renew-next-month', { confirmed: true, ...body })
+    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['funding'] }); void qc.invalidateQueries({ queryKey: ['spend-limits'] }) },
   })
 }
 

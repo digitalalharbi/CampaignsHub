@@ -365,6 +365,7 @@ export function RankingBarChart({
   horizontal = false,
   colorByPlatform = false,
   currency = '',
+  rowColor,
 }: {
   data: Array<Record<string, unknown>>
   bars: Array<{ key: string; name: string; color?: string; kind?: FmtKind }>
@@ -372,6 +373,8 @@ export function RankingBarChart({
   horizontal?: boolean
   colorByPlatform?: boolean
   currency?: string
+  /** A fill for one bar of one row — the status colour of a budget bar. Returning undefined keeps the bar's own colour. */
+  rowColor?: (row: Record<string, unknown>, barKey: string) => string | undefined
 }) {
   const cat = horizontal ? { type: 'category' as const } : {}
   return (
@@ -402,6 +405,7 @@ export function RankingBarChart({
         {bars.map((b, i) => (
           <Bar key={b.key} name={b.name} dataKey={b.key} radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} fill={b.color ?? CHART_SERIES[i % CHART_SERIES.length]}>
             {colorByPlatform && data.map((d) => <Cell key={String(d.label)} fill={platformColor(String(d.platform ?? d.label))} />)}
+            {rowColor && !colorByPlatform && data.map((d, j) => <Cell key={`${j}-${String(d.label)}`} fill={rowColor(d, b.key) ?? b.color ?? CHART_SERIES[i % CHART_SERIES.length]} />)}
           </Bar>
         ))}
       </BarChart>

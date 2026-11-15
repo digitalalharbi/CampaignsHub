@@ -78,7 +78,8 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
    * reading instead, so a line and the card above it cannot disagree about the same window.
    */
   const series = plotSeries(points, reportingCurrency, ar)
-  const chartCurrency = series.currency ?? reportingCurrency ?? 'SAR'
+  // FX-APPLY-001 — the series' own currency, else the reporting one, else none — never a guessed «SAR».
+  const chartCurrency = series.currency ?? reportingCurrency ?? null
 
   /*
    * ANALYTICS-COMPARE-001 — six mute dashes were the page's way of saying «there is no yesterday».
@@ -185,7 +186,8 @@ const axis = { fill: 'var(--text-secondary)', fontSize: 12 }
 function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: boolean }) {
   if (!commerce) return null
 
-  const cur = commerce.reporting_currency || 'SAR'
+  // FX-APPLY-001 — the store figures' own reporting currency, never a guessed «SAR».
+  const cur = commerce.reporting_currency || null
 
   return (
     <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
@@ -666,7 +668,7 @@ export function AnalyticsOverview(d: OverviewData) {
       */}
       <ChangeDiagnosis
         data={drivers.data}
-        currency={d.reportingCurrency ?? 'SAR'}
+        currency={d.reportingCurrency ?? null}
         loading={drivers.isPending}
         error={drivers.isError}
         subtitle={d.unlikeNote ?? undefined}

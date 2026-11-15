@@ -13,6 +13,7 @@ use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Models\Membership;
@@ -65,6 +66,9 @@ final class FundingNotifier
     public function added(FundingPayment $payment, ?int $actorId, int $cycle): int
     {
         try {
+            if (! LiveProjects::isLive((string) $payment->project_id)) {
+                return 0; // PROJECT-LIFECYCLE-001
+            }
             $funding = ProjectFunding::query()->where('project_id', $payment->project_id)->firstOrFail();
             $this->closeOpen($funding);
 
@@ -91,13 +95,14 @@ final class FundingNotifier
      */
     public function evaluate(ProjectFunding $funding): int
     {
-        if ($funding->payment_method !== 'prepaid') {
+        // PROJECT-LIFECYCLE-001 — no budget notice for an archived or deleted project.
+        if ($funding->payment_method !== 'prepaid' || ! LiveProjects::isLive((string) $funding->project_id)) {
             return 0;
         }
 
         // BUDGET-MODES-001 — a credit budget has no balance to run low: it has a ceiling (if any) and a month to invoice.
         $credit = $funding->payment_mode === 'credit';
-        $sent = $credit ? $this->ceiling($funding) + $this->invoice($funding) : $this->balanceState($funding);
+        $sent = $credit ? $this->ceiling($funding) + $this->invoice($funding) : $this->balanceState($funding) + $this->steps($funding);
 
         return $sent + $this->plan($funding);
     }
@@ -116,7 +121,7 @@ final class FundingNotifier
             $f = $this->balance->of($funding);
             $state = match (true) {
                 $f['remaining'] !== null && $f['remaining'] < 0 => 'over',
-                $f['remaining'] !== null && ($f['remaining'] < $f['alert_floor'] || ($f['days_left'] !== null && $f['days_left'] < 7)) => 'low',
+                $f['remaining'] !== null && $f['spent'] > 0 && ($f['remaining'] < $f['alert_floor'] || ($f['days_left'] !== null && $f['days_left'] < 7)) => 'low',
                 default => null,
             };
             if ($state === null) {
@@ -132,6 +137,45 @@ final class FundingNotifier
             return $this->claim($funding, $cycle, $state, $f['remaining']) ? [$state, $f, $cycle] : null;
         });
 
+        if ($decision === null) {
+            return 0;
+        }
+        [$state, $f, $cycle] = $decision;
+
+        return $this->send($funding, $this->audience($funding, ['manager', 'finance'], null), $state, $f, $cycle);
+    }
+
+    /**
+     * ONE-BUDGET-001 — the budget's own alert steps (50/75/90 by default, `project_funding.alert_thresholds`): the highest
+     * step newly reached is announced once per cycle, unless «running low» / «over» was already said in it (the stronger
+     * news). 100% and beyond is «over», said by `balanceState`; a renewal is a
+     * new cycle, so the steps are judged afresh against the new amount.
+     */
+    private function steps(ProjectFunding $funding): int
+    {
+        $decision = DB::transaction(function () use ($funding): ?array {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ['funding:'.$funding->project_id]);
+            $cycle = $this->cycle($funding);
+            if ($cycle === 0) {
+                return null;
+            }
+            // «Running low» / «over» already said in this cycle outrank a step: the reader has the stronger news.
+            if (DB::table('funding_notices')->where('project_id', $funding->project_id)->where('cycle', $cycle)->whereIn('state', ['low', 'over'])->exists()) {
+                return null;
+            }
+            $f = $this->balance->of($funding);
+            if ($f['used_ratio'] === null || (float) $f['spent'] <= 0) {
+                return null;
+            }
+            $pct = (float) $f['used_ratio'] * 100;
+            $reached = array_values(array_filter($funding->thresholdPercents(), static fn (int $s): bool => $s < 100 && $pct >= $s));
+            if ($reached === []) {
+                return null;
+            }
+            $state = 'pct:'.max($reached);
+
+            return $this->claim($funding, $cycle, $state, $f['remaining']) ? [$state, $f, $cycle] : null;
+        });
         if ($decision === null) {
             return 0;
         }
@@ -311,6 +355,11 @@ final class FundingNotifier
             $state === 'added' => ['warning', "أُضيفت ميزانية: {$clientName}", "Budget added: {$clientName}",
                 'الإنفاق ما زال أعلى من الميزانية بـ '.$sar($f['remaining']), 'Spend is still '.$sarEn($f['remaining']).' over the budget',
                 'الخطوة: جدّد الميزانية مع العميل — مدير المشروع، وتسجيلها — المالية', 'Next: renew with the client — project manager; record it — finance'],
+            str_starts_with($state, 'pct:') => [(int) substr($state, 4) >= 90 ? 'warning' : 'info',
+                'وصل الإنفاق '.substr($state, 4)."% من الميزانية: {$clientName}", 'Spend reached '.substr($state, 4)."% of the budget: {$clientName}",
+                'الإنفاق '.$sar($f['spent']).' من '.$sar($f['approved']).' · المتبقي '.$sar($f['remaining']),
+                'Spent '.$sarEn($f['spent']).' of '.$sarEn($f['approved']).' · remaining '.$sarEn($f['remaining']),
+                'الخطوة: راجع الميزانية مع العميل — مدير المشروع', 'Next: review the budget with the client — project manager'],
             $state === 'over' => ['critical', "تجاوزت الميزانية: {$clientName}", "Over budget: {$clientName}",
                 'الإنفاق زاد على الميزانية بـ '.$sar($f['remaining']), 'Spend is '.$sarEn($f['remaining']).' over the budget',
                 'الخطوة: جدّد الميزانية مع العميل — مدير المشروع، وتسجيلها — المالية', 'Next: renew with the client — project manager; record it — finance'],
@@ -334,6 +383,10 @@ final class FundingNotifier
                     'client_workspace_id' => $funding->client_workspace_id,
                     'project_id' => $funding->project_id,
                     'type' => 'project_budget',
+                    // NOTIF-BELL-001 — «تجاوز حدود الميزانية» only when the spend is actually past the budget or its ceiling.
+                    'kind' => match ($state) {
+                        'over', 'ceiling_over' => 'budget_over', 'low', 'ceiling_near' => 'budget_low', default => null
+                    },
                     'severity' => $severity,
                     'title' => $titleEn, 'message' => $messageEn,
                     'title_ar' => $titleAr, 'message_ar' => $messageAr,

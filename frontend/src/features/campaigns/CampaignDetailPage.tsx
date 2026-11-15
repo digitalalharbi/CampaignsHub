@@ -1,3 +1,4 @@
+import { FxAmount } from '@/components/money/FxAmount'
 import { moneyExact } from '@/features/analytics/format'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -45,8 +46,8 @@ import {
   CampaignPlatformsTab,
   CampaignReportsTab,
 } from './CampaignCommandCenter'
-import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { RangeTabs } from '@/features/analytics/components'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -95,8 +96,8 @@ export function CampaignDetailPage() {
   const [sp, setSp] = useSearchParams()
   // Resolve the owner id to a real member name (same source as the edit modal's owner select).
   const usersQ = useQuery({ queryKey: ['users'], queryFn: () => listUsers() })
-  const [days, setDays] = useState(30)
-  const range = useLastNDaysRange(days)
+  // DATE-RANGE-001 — the system's one period (shared with every page; rolling presets end yesterday).
+  const { range } = usePeriod()
 
   const { currentProjectId, setCurrentProjectId } = useProject()
 
@@ -319,7 +320,7 @@ export function CampaignDetailPage() {
             <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
           </HeaderFact>
           <HeaderFact label={t('budget_label')}>
-            <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>
+            {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
           </HeaderFact>
           <HeaderFact label={t('owner_label')}>{c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? <span className="tnum">#{c.owner_id}</span>) : '—'}</HeaderFact>
           <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
@@ -338,9 +339,13 @@ export function CampaignDetailPage() {
       {tab === 'overview' && (
         <TabPanel>
           {/* CMC-2 — KPIs + executive summary (this campaign only). */}
-          <div className="mb-4 flex items-center justify-between gap-2">
+          {/*
+            `flex-wrap` + `min-w-0`: the period picker (DATE-RANGE-001) is ~300px with its label, and beside the title at 390px it
+            pushed the page 25px sideways (first-viewport-detail, CI PR #1071). It now drops under the title when both do not fit.
+          */}
+          <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
             <CardTitle>{t('cmc_performance')}</CardTitle>
-            <RangeTabs value={days} onChange={setDays} />
+            <DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" />
           </div>
           <CampaignKpis campaign={c} projectId={projectId} range={range} />
           <div className="my-4">
@@ -356,7 +361,7 @@ export function CampaignDetailPage() {
                 <Row label={t('cmc_stage')}>{c.stage ? stageLabel(c.stage, locale) : '—'}</Row>
                 <Row label={t('cmc_priority')}>{c.priority ? priorityLabel(c.priority, locale) : '—'}</Row>
                 <Row label={t('budget_label')}>
-                  <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>
+                  {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
                 </Row>
                 <Row label={t('period_label')}>
                   <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
@@ -379,7 +384,7 @@ export function CampaignDetailPage() {
 
       {tab === 'platforms' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           {linkedQuery.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -395,7 +400,7 @@ export function CampaignDetailPage() {
 
       {tab === 'performance' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
 
           {/*
@@ -419,13 +424,13 @@ export function CampaignDetailPage() {
 
       {tab === 'budget' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignBudgetTab campaign={c} projectId={projectId} range={range} locale={locale} />
         </TabPanel>
       )}
       {tab === 'funnel' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
         </TabPanel>
       )}
@@ -447,7 +452,7 @@ export function CampaignDetailPage() {
 
       {tab === 'creatives' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
         </TabPanel>
       )}
@@ -463,7 +468,7 @@ export function CampaignDetailPage() {
       )}
       {tab === 'events' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><RangeTabs value={days} onChange={setDays} /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignEventsTab campaign={c} projectId={projectId} range={range} />
         </TabPanel>
       )}

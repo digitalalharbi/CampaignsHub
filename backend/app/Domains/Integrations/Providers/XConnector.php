@@ -7,8 +7,10 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Reporting\ReportingWindow;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
+use RuntimeException;
 
 /**
  * X (Twitter) Ads API (`ads-api.x.com/12`).
@@ -87,6 +89,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                     ? (float) $c['total_budget_amount_local_micro'] / self::MICRO
                     : null,
                 'currency' => isset($c['currency']) ? (string) $c['currency'] : null,
+                'platform_created_at' => PlatformCreatedAt::from($c['created_at'] ?? null), // CONS-I-AGE
                 'raw' => (array) $c,
             ];
         }
@@ -558,8 +561,19 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             'daily stats',
         );
 
+        /*
+         * X-NO-ACTIVITY-001 — only a shape we do not recognise is an error; an empty answer is not.
+         *
+         * `data` absent or null is an empty answer; a `data` that is not a list, an entity that is not an object, an
+         * `id_data` that is not a list or a `metrics` that is not an object is a body we cannot read, and the sync
+         * fails and says so rather than storing a zero it never observed.
+         */
+        $data = $body['data'] ?? [];
+        if (! is_array($data) || ! array_is_list($data)) {
+            throw new RuntimeException('X stats answered an unexpected shape: `data` is not a list of entities.');
+        }
         /** @var list<mixed> $entities */
-        $entities = (array) ($body['data'] ?? []);
+        $entities = $data;
 
         // X returns one record per ENTITY, each carrying its own day series — so the unit here is
         // the entity. See the note on `$rawInsightRows`: the number is not cross-platform.
@@ -567,12 +581,40 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             $this->countRawInsightRows(count($entities));
         }
 
-        foreach ($entities as $entity) {
-            $campaignId = (string) ($entity['id'] ?? '');
-            /** @var array<string,mixed> $series */
-            $series = (array) (($entity['id_data'][0]['metrics'] ?? []));
+        $kind = $entity;
 
-            if ($campaignId === '' || $series === []) {
+        foreach ($entities as $entity) {
+            if (! is_array($entity)) {
+                throw new RuntimeException('X stats answered an unexpected shape: an entity is not an object.');
+            }
+
+            $campaignId = (string) ($entity['id'] ?? '');
+            $idData = $entity['id_data'] ?? [];
+            if (! is_array($idData)) {
+                throw new RuntimeException('X stats answered an unexpected shape: `id_data` is not a list.');
+            }
+            $metrics = $idData[0]['metrics'] ?? null;
+            if ($metrics !== null && ! is_array($metrics)) {
+                throw new RuntimeException('X stats answered an unexpected shape: `metrics` is not an object.');
+            }
+            /** @var array<string,mixed> $series */
+            $series = (array) $metrics;
+
+            if ($campaignId === '') {
+                continue;
+            }
+
+            if (! $this->hasAnyFigure($series)) {
+                // Promoted-tweet (creative) grain keeps its old rule: no figure, no row — a zero there would mark a creative active.
+                if ($kind !== 'CAMPAIGN') {
+                    continue;
+                }
+
+                // A campaign we asked about, with nothing in it: it did not deliver. Zero for every day of the piece.
+                foreach ($this->zeroDays($from, $piece->days()) as $row) {
+                    $rows[] = ['campaign_id' => $campaignId, ...$row];
+                }
+
                 continue;
             }
 
@@ -692,6 +734,52 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     }
 
     /**
+     * Whether a metrics object holds a single figure — anything that is not null, an empty list or a list of nulls.
+     *
+     * @param  array<string,mixed>  $series
+     */
+    private function hasAnyFigure(array $series): bool
+    {
+        foreach ($series as $values) {
+            if (! is_array($values)) {
+                if ($values !== null) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ($this->hasAnyFigure($values)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * One all-zero row per day: the campaign was asked about and X reported nothing, which is «no activity».
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function zeroDays(string $from, int $days): array
+    {
+        $start = Carbon::parse($from);
+        $rows = [];
+
+        for ($day = 0; $day < max(1, $days); $day++) {
+            $rows[] = [
+                'date' => $start->copy()->addDays($day)->toDateString(),
+                'spend' => 0.0,
+                'impressions' => 0.0,
+                'clicks' => 0.0,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Turn day-indexed metric arrays into one row per day.
      *
      * X answers `{"billed_charge_local_micro":[1000000,2000000], "impressions":[10,20]}` — position 0
@@ -750,7 +838,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
              */
             $row = array_filter([
                 'date' => $start->copy()->addDays($day)->toDateString(),
-                'spend' => isset($spend[$day]) ? (float) $spend[$day] / self::MICRO : null,
+                'spend' => isset($spend[$day]) ? $this->number($spend[$day], 'billed_charge_local_micro') / self::MICRO : null,
                 'impressions' => $this->at($series, 'impressions', $day),
                 'clicks' => $this->at($series, 'clicks', $day),
                 'engagements' => $this->at($series, 'engagements', $day),
@@ -770,6 +858,16 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
         }
 
         return $rows;
+    }
+
+    /** A figure X sent, or an error: a value we cannot read as a number is never stored as zero. */
+    private function number(mixed $value, string $metric): float
+    {
+        if (! is_int($value) && ! is_float($value) && ! (is_string($value) && is_numeric($value))) {
+            throw new RuntimeException("X stats sent a value for `{$metric}` that is not a number.");
+        }
+
+        return (float) $value;
     }
 
     /**
@@ -798,7 +896,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             return null;
         }
 
-        return (float) $values[$day];
+        return $this->number($values[$day], $metric);
     }
 
     /**

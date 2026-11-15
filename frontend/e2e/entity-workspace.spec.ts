@@ -79,7 +79,12 @@ test.describe('the ads and ad-groups tables (advertiser portal)', () => {
       await page.goto(path)
       await expect(page.getByTestId(`entity-workspace-${level}`)).toBeVisible({ timeout: 30_000 })
       await expect(page.getByTestId(`entity-overview-${level}`)).toBeVisible()
-      await expect(page).toHaveURL(new RegExp(`${path}$`))
+      /*
+       * The advertiser's OWN page: the path is exactly this one, never redirected into another portal. DATE-RANGE-001
+       * (builder K) carries the system period in the address (`?from=…&to=…`, «a link carries dates»), so the path is
+       * compared on its own rather than as the end of the whole URL — the same claim, without reading the period as a path.
+       */
+      await expect.poll(() => new URL(page.url()).pathname).toBe(path)
       await expect(page.getByTestId(`entity-status-${level}`)).toBeVisible()
       await expect(page.getByTestId(`entity-search-${level}`)).toBeVisible()
       await expect(page.locator('main a[href^="/agency"]')).toHaveCount(0)

@@ -12,6 +12,7 @@ return [
     'not_latest' => 'A newer change exists. Reload and try again.',
     'direct_needs_amount' => 'A direct budget needs an amount. Enter one, or choose credit.',
     'mode_via_edit' => 'The mode and the plan are set when a budget is added. To change them later, use edit.',
+    'renew_bad_item' => 'This item cannot be renewed. Refresh the preview and try again.',
     'plan_rows' => 'Enter at least one platform (up to 12).',
     'plan_provider' => 'A platform name is invalid or repeated.',
     'plan_unit' => 'Give every platform an amount, or every platform a percentage. Do not mix.',

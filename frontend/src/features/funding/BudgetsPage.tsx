@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -9,6 +9,8 @@ import { useUi } from '@/stores/ui'
 import { AddBudgetDialog } from './AddBudgetDialog'
 import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
+import { FxRateBar } from './FxRateBar'
+import { RenewAllButton } from './RenewAllDialog'
 import { BudgetDrawer } from './BudgetDrawer'
 import { DeleteBudgetDialog, EditBudgetDialog } from './EditBudgetDialog'
 import { UndoToast } from './UndoToast'
@@ -37,7 +39,10 @@ export function BudgetsPage() {
   const open = params.get('project')
   const canManage = data?.canManage === true
 
-  const [adding, setAdding] = useState(false)
+  // ONE-BUDGET-001 — «أضف ميزانية» from a project with no budget lands here with `?add=1`; the names travel in router state.
+  const location = useLocation()
+  const [adding, setAdding] = useState(() => params.get('add') === '1')
+  const handed = (location.state ?? null) as { clientName?: string; projectName?: string } | null
   const [renewing, setRenewing] = useState<BudgetDetail | null>(null)
   const [editing, setEditing] = useState<BudgetDetail | null>(null)
   const [deleting, setDeleting] = useState<BudgetDetail | null>(null)
@@ -68,7 +73,7 @@ export function BudgetsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] min-w-0 flex-col gap-2" data-testid="budgets-page">
-      <div className="sticky top-0 z-10 rounded-[var(--radius-card)] border border-border bg-surface px-3 py-2">
+      <div className="sticky top-0 z-10 rounded-[var(--radius-card)] border border-border bg-surface px-3 py-2" data-slideover-avoid>
         <PageIntro
           title={tx(showDeleted ? L.deleted : L.title)}
           testid="budgets-intro"
@@ -82,6 +87,7 @@ export function BudgetsPage() {
                   {showDeleted ? tx(L.back) : `${tx(L.deleted)} · ${data?.deletedCount ?? 0}`}
                 </Button>
               ) : null}
+              {canManage && !showDeleted && <RenewAllButton />}
               {canManage && !showDeleted && (
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="budgets-add"><Plus className="h-4 w-4" aria-hidden /> {tx(L.add)}</Button>
               )}
@@ -89,6 +95,7 @@ export function BudgetsPage() {
           }
         />
       </div>
+      <FxRateBar />
 
       {error ? (
         toApiError(error).status === 403 ? <NoPermission /> : <ErrorState error={error} onRetry={() => void refetch()} ar={ar} title={tx(L.title)} />
@@ -97,7 +104,9 @@ export function BudgetsPage() {
       ) : (
         <>
           <BoardHeader ar={ar} />
-          <ul className="flex min-w-0 flex-col gap-1 overflow-y-auto lg:max-h-[calc(100dvh-20rem)]" data-testid="budgets-list">
+          {/* 22rem = shell header, title + KPI strip, the FX rate bar (F/G/N4: source + «سعر قديم» chip), column header, note and footer;
+              at 20rem the merged page ran 29px past 1280×720 and the document scrolled (budgets-ledger.spec). */}
+          <ul className="flex min-w-0 flex-col gap-1 overflow-y-auto lg:max-h-[calc(100dvh-22rem)]" data-testid="budgets-list">
             {rows.map((r) => (
               <li key={r.project_id} className="min-w-0">
                 <BudgetBoardRow row={r} active={r.project_id === open} onOpen={() => choose(r.project_id)} ar={ar} />
@@ -123,8 +132,8 @@ export function BudgetsPage() {
 
       <AddBudgetDialog
         open={adding}
-        onClose={() => setAdding(false)}
-        defaults={defaults}
+        onClose={() => { setAdding(false); if (params.get('add')) setParams((p) => { p.delete('add'); return p }, { replace: true }) }}
+        defaults={defaults ?? (handed?.projectName ? { clientName: handed.clientName ?? '', projectName: handed.projectName } : undefined)}
         onAdded={(projectId, entryId) => { choose(projectId); if (entryId) announce(projectId, entryId, L.addDone) }}
       />
       {renewing && (
@@ -178,7 +187,11 @@ function ExportMenu({ onPick, ar }: { onPick: (format: 'xlsx' | 'csv' | 'pdf', h
       <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl border border-border-strong bg-surface px-3 text-sm font-semibold text-text-primary hover:bg-surface-hover" data-testid="budgets-export">
         <Download className="h-4 w-4" aria-hidden /> {ar ? L.export.ar : L.export.en}
       </summary>
-      <div className="absolute end-0 top-full z-30 mt-1 flex w-44 flex-col rounded-xl border border-border bg-surface p-1 shadow-lg">
+      {/*
+        Below `sm` the menu spans the screen less a 16px gutter (fixed, vertical position left at its place under the button):
+        anchored to the button's end it opened past the phone's edge (at 360px it ran to 428px in Arabic).
+      */}
+      <div className="absolute end-0 top-full z-30 mt-1 flex w-44 flex-col rounded-xl border border-border bg-surface p-1 shadow-lg max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:w-auto">
         {item('XLSX', 'budgets-export-xlsx', 'xlsx')}
         {item('CSV', 'budgets-export-csv', 'csv')}
         {item('PDF', 'budgets-export-pdf', 'pdf')}

@@ -1,3 +1,4 @@
+import { FreshnessChip } from './FreshnessChip'
 import { useEffect, useState } from 'react'
 import { Pencil, RefreshCw, Trash2, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
@@ -9,7 +10,8 @@ import { ModeBadges, PeriodChip, PlatformSplit, Ring, Sar } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
 import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
-import { Money, currencyMark, moneyNumber } from './money'
+import { Money } from './money'
+import { FxSpendNote } from '@/components/money/FxAmount'
 
 type Lang = { ar: string; en: string }
 
@@ -81,6 +83,14 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
               </div>
             </div>
           )}
+
+          {data.run_out_date && (
+            <p className="text-xs font-semibold text-text-secondary" data-testid="budget-run-out" title={ar ? 'من متوسط إنفاق آخر 3 أيام' : 'From the average spend of the last 3 days'}>
+              {ar ? 'تخلص تقريبًا في' : 'Runs out about'} <bdi dir="ltr" className="tnum">{data.run_out_date}</bdi>
+            </p>
+          )}
+          <FreshnessChip freshness={data.freshness} testid="budget-freshness" />
+          <FxSpendNote note={data.fx} ar={ar} testId="budget-fx-note" />
 
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">
@@ -157,6 +167,12 @@ function History({ data, ar, canManage, onUndo, pending }: { data: BudgetDetail;
             <li key={p.id} data-testid={`history-${p.kind}`} className={`flex min-w-0 items-center gap-2 text-xs ${p.reversed ? 'opacity-50' : ''}`}>
               <span className="tnum shrink-0 text-text-muted">{p.paid_on}</span>
               <span className="shrink-0 rounded-md bg-surface-secondary px-1.5 py-0.5 font-bold text-text-secondary">{tx(kind)}</span>
+              {/* FIN-WALLET-001 — every deposit names its source. */}
+              {p.source && (
+                <span data-testid={`history-source-${p.source.type}`} className={`shrink-0 rounded-md px-1.5 py-0.5 font-semibold ${p.source.type === 'invoice_payment' ? 'bg-brand-primary-soft text-brand-700' : 'bg-surface-secondary text-text-muted'}`}>
+                  {p.source.type === 'invoice_payment' ? tx({ ar: 'دفعة في النظام', en: 'System payment' }) : p.source.type === 'spend_limit' ? tx({ ar: 'من حد إنفاق', en: 'From a limit' }) : tx({ ar: 'إدخال يدوي', en: 'Manual entry' })}
+                </span>
+              )}
               <span className="min-w-0 flex-1 truncate text-text-secondary" title={p.reason ?? p.note ?? ''}>
                 {[p.reference, p.reason ?? p.note, p.added_by].filter(Boolean).join(' · ')}
               </span>
@@ -251,7 +267,7 @@ export function PlatformFigure({ item, ar }: { item: BudgetDetail['by_platform']
     <span className="inline-flex flex-wrap items-center gap-1">
       {item.spent_usd !== null && item.spent_usd !== undefined && <Money n={item.spent_usd} currency="USD" className="font-semibold text-text-primary" />}
       {(item.unconverted ?? []).map((u) => (
-        <span key={u.currency} className="font-semibold text-text-primary"><bdi dir="ltr" className="tnum">{moneyNumber(u.amount)}</bdi> {currencyMark(u.currency)}</span>
+        <Money key={u.currency} n={u.amount} currency={u.currency} className="font-semibold text-text-primary" />
       ))}
       {!!item.unconverted_days && <Badge tone="warning">{ar ? L.noRate.ar : L.noRate.en}</Badge>}
     </span>

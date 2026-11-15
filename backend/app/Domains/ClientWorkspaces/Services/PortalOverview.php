@@ -89,7 +89,7 @@ final class PortalOverview
             return $row;
         }, array_values((array) ($data['platforms'] ?? [])));
 
-        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())
+        $projects = Project::query()->live()->where('client_workspace_id', $workspace->getKey()) // PROJECT-LIFECYCLE-001
             ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('id', $onlyProjectIds))
             ->orderBy('name')->get(['id', 'name', 'status']);
         $spendByProject = [];

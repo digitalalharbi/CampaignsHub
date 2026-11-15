@@ -1,3 +1,4 @@
+import { dataAge, syncFailureLabel } from './syncFailureLabel'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
@@ -599,8 +600,23 @@ function ConnectionRow({ connection, ar, onOpen, onAction, onRemove, onReauthori
               ? (ar ? 'لم يُسجَّل من أضافه' : 'Added by: not recorded')
               : `${ar ? 'أضافه' : 'Added by'}: ${connection.authorised_by.name}`}
           </span>
+          {/* SOURCE-FACTS-001 — authorisation, last SUCCESSFUL sync, data age and the failure reason, each by name. */}
+          <span className="flex gap-1" data-testid={`hub-authorisation-${connection.id}`}>
+            <span>{ar ? 'التفويض' : 'Authorisation'}</span>
+            <span className="font-semibold text-text-primary">{statuses !== null ? (ar ? statuses.authorisation.label_ar : statuses.authorisation.label_en) : (ar ? auth.ar : auth.en)}</span>
+          </span>
+          <span className="flex gap-1" data-testid={`hub-data-age-${connection.id}`}>
+            <span>{ar ? 'عمر البيانات' : 'Data age'}</span>
+            <span className="tnum font-semibold text-text-primary">{dataAge(connection.last_success_at, ar)}</span>
+          </span>
+          {(connection.needs_attention || connection.sync_state === 'FAILED') && (
+            <span className="flex gap-1 font-semibold text-warning" data-testid={`hub-failure-${connection.id}`}>
+              <span>{ar ? 'سبب الفشل' : 'Failure reason'}</span>
+              <span>{syncFailureLabel(connection.last_error_category, ar)}</span>
+            </span>
+          )}
           <span className="flex gap-1">
-            <span>{ar ? 'آخر مزامنة' : 'Last sync'}</span>
+            <span>{ar ? 'آخر مزامنة ناجحة' : 'Last successful sync'}</span>
             <span className="tnum font-semibold text-text-primary">{connection.last_success_at === null ? (ar ? 'لم تتم' : 'None') : fmtDateTime(connection.last_success_at)}</span>
           </span>
           <span className="flex gap-1">

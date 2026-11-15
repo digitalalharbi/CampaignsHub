@@ -6,6 +6,7 @@ namespace App\Domains\Campaigns\Launch;
 
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use Illuminate\Support\Carbon;
 
@@ -31,7 +32,7 @@ final class LaunchSpendCheck
      */
     public function forProject(string $projectId, array $lines, ?Carbon $today = null): array
     {
-        $today = ($today ?? Carbon::now())->copy()->startOfDay();
+        $today = $today?->copy()->startOfDay() ?? PeriodResolver::today(); // RIYADH-DAY-001
         $limits = SpendLimit::query()
             ->where('project_id', $projectId)
             ->where('active', true)

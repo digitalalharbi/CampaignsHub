@@ -10,6 +10,20 @@ export interface AppNotification {
   project_id: string | null
   client_workspace_id: string | null
   action_url: string | null
+  /**
+   * NOTIF-BELL-001 — the finding itself («no_results», «budget_90», …) and its name in the reader's language. The bell names a row by
+   * `kind_label`, never by `type` (which is the preference category and is shared by five different findings). Absent on an older server.
+   */
+  kind?: string | null
+  kind_label?: string | null
+  group?: 'budget' | 'performance' | 'sync' | 'other'
+  repeat_count?: number
+  /** NOTIF-V2-INTERNAL-001 — every notification names its project and its workspace, and carries its priority. */
+  project_name?: string | null
+  workspace_name?: string | null
+  priority?: 'info' | 'important' | 'critical'
+  /** The page of the related object (budgets, integrations, alerts, reports); the bell's «افتح» button goes here. */
+  open_url?: string | null
   status: 'unread' | 'read' | 'snoozed' | 'resolved'
   read_at: string | null
   created_at: string | null
@@ -51,14 +65,39 @@ export interface NotificationDeliveryRow {
  * completeness: three hundred notifications, ninety unread, showed a hundred rows beside «90» and
  * nothing said the other two hundred existed.
  */
-export async function listNotifications(): Promise<{
+export type BellFilter = 'all' | 'critical' | 'budget' | 'performance' | 'sync' | 'external'
+
+const FILTERS: readonly string[] = ['critical', 'budget', 'performance', 'sync', 'external']
+
+/** NOTIF-V2-INTERNAL-001 — what else the centre narrows by, all on the server so the count and the rows agree. */
+export interface CenterQuery {
+  tab?: 'all' | 'unread'
+  project_id?: string
+  type?: string
+  priority?: 'info' | 'important' | 'critical'
+}
+
+export interface CenterFacets {
+  projects: { id: string; name: string }[]
+  kinds: { kind: string; label: string }[]
+}
+
+/** `filter` is read defensively: a caller that hands this function straight to `useQuery` passes the query context here. */
+export async function listNotifications(filter: BellFilter | unknown = 'all', query?: CenterQuery): Promise<{
   items: AppNotification[]
   unread: number
   total: number
   withheld: number
+  facets?: CenterFacets
 }> {
-  const res = await api.get<ApiEnvelope<AppNotification[]>>('/notifications')
-  const meta = res.data.meta as { unread?: number; total?: number; withheld?: number } | undefined
+  const params: Record<string, string> = {}
+  if (typeof filter === 'string' && FILTERS.includes(filter)) params.group = filter
+  if (query?.tab === 'unread') params.tab = 'unread'
+  if (query?.project_id) params.project_id = query.project_id
+  if (query?.type) params.type = query.type
+  if (query?.priority) params.priority = query.priority
+  const res = await api.get<ApiEnvelope<AppNotification[]>>('/notifications', { params: Object.keys(params).length > 0 ? params : undefined })
+  const meta = res.data.meta as { unread?: number; total?: number; withheld?: number; facets?: CenterFacets } | undefined
   const items = res.data.data ?? []
 
   return {
@@ -66,13 +105,60 @@ export async function listNotifications(): Promise<{
     unread: meta?.unread ?? 0,
     total: meta?.total ?? items.length,
     withheld: meta?.withheld ?? 0,
+    facets: meta?.facets ?? { projects: [], kinds: [] },
   }
 }
 
 export const markNotificationRead = (id: string) => api.post(`/notifications/${id}/read`)
+/** One call on the server: every unread notification this reader can see, not only the page the panel loaded. */
 export const markAllNotificationsRead = () => api.post('/notifications/read-all')
+
+/**
+ * NOTIF-BELL-001 — the bell's live figure: the REAL unread count, and the unread critical / warning ids a sound may be played for.
+ * Small enough to ask every half minute while the tab is visible; the list is only fetched when the panel is open.
+ */
+export interface BellSummary {
+  unread: number
+  attention: { id: string; severity: 'critical' | 'warning' }[]
+  /** Sound settings and whether it is quiet hours for this reader right now. Absent on an older server. */
+  sound?: BellSoundState
+}
+
+export interface BellSoundState {
+  enabled: boolean
+  /** 0–100 */
+  volume: number
+  quiet: boolean
+}
+
+export async function getNotificationSummary(): Promise<BellSummary> {
+  const res = await api.get<ApiEnvelope<BellSummary>>('/notifications/summary')
+  const d = res.data.data
+
+  return { unread: d?.unread ?? 0, attention: d?.attention ?? [], sound: d?.sound }
+}
 
 export async function listDeliveries(): Promise<NotificationDeliveryRow[]> {
   const res = await api.get<ApiEnvelope<NotificationDeliveryRow[]>>('/notifications/deliveries')
   return res.data.data ?? []
 }
+
+/** NOTIF-V2-INTERNAL-001 — put one notification aside (this person only): one hour, or 08:00 tomorrow in the workspace timezone. */
+export const snoozeNotification = (id: string, preset: '1h' | 'tomorrow') => api.post(`/notifications/${id}/snooze`, { preset })
+/** Mute this TYPE for this PROJECT, for this person only. */
+export const muteNotification = (id: string) => api.post(`/notifications/${id}/mute`)
+
+export interface MuteRow {
+  project_id: string
+  project_name: string
+  kind: string
+  label: string
+  ids: string[]
+}
+
+export async function listMutes(): Promise<MuteRow[]> {
+  const res = await api.get<ApiEnvelope<MuteRow[]>>('/notifications/mutes')
+  return res.data.data ?? []
+}
+
+export const removeMutes = (ids: string[]) => api.post('/notifications/mutes/remove', { ids })

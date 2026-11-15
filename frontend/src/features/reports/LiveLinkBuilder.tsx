@@ -11,6 +11,8 @@ import { createLiveLink, liveBuilderAds, liveBuilderOptions, reportSectionRegist
 import { groupByLifecycle } from './reportScopeLifecycle'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
+import { DateRangeField } from '@/components/ui/DateRangeField'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -44,12 +46,6 @@ import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type 
  * Only the token's hash is stored, so it genuinely cannot be shown again — the copy button is the only
  * chance. That is said on screen rather than left for the operator to discover.
  */
-
-const isoDaysAgo = (days: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - days + 1)
-  return d.toISOString().slice(0, 10)
-}
 
 /**
  * The sections an EXECUTIVE SUMMARY does not contain — the mirror of `ReportComposition`.
@@ -115,8 +111,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
   const [periodMode, setPeriodMode] = useState<'fixed' | 'rolling'>('fixed')
-  const [from, setFrom] = useState(isoDaysAgo(30))
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
+  // DATE-RANGE-001 — a new link starts on the system's period (ending yesterday).
+  // URL-WRITE-RACE-001 — a dialog seeds its own dates from the period and leaves the page address alone.
+  const sharedPeriod = usePeriod({ writeUrl: false }).range
+  const [from, setFrom] = useState(sharedPeriod.from)
+  const [to, setTo] = useState(sharedPeriod.to)
 
   /*
    * REPORT-SCOPE-SELECTION-001 — the options are asked for THIS report's window.
@@ -778,10 +777,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             </p>
           </div>
           {periodKind === 'custom' && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Field label={ar ? 'من' : 'From'}><DateField value={from} onChange={setFrom} /></Field>
-              <Field label={ar ? 'إلى' : 'To'}><DateField value={to} onChange={setTo} /></Field>
-            </div>
+            <Field label={ar ? 'الفترة' : 'Period'}><DateRangeField testId="live-link-range" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t) }} /></Field>
           )}
 
           <div className="grid gap-2">

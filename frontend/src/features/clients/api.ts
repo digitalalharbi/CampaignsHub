@@ -1,4 +1,6 @@
+import type { FxTotal } from '@/lib/money/fx'
 import { api, getData } from '@/lib/api/client'
+import type { ApprovedBudget, ApprovedBudgetTotal } from '@/features/funding/fundingApi'
 
 export interface ClientCard {
   id: string
@@ -15,6 +17,8 @@ export interface ClientCard {
   alerts: number
   spend: number | null
   spend_currency_mode: 'single' | 'mixed' | 'none'
+  /** FX-APPLY-001 — the 30-day spend in the display currency through FxEngine; withheld when any part has no rate. */
+  spend_fx?: FxTotal | null
   currency: string | null
   data_sources: string[]
   last_report_at: string | null
@@ -69,6 +73,12 @@ export interface ClientDetail {
   overview: { projects: number; active_campaigns: number; draft_campaigns: number; open_requests: number }
   projects: { id: string; name: string; status: string; created_at: string | null }[]
   campaigns: { id: string; project_id: string; name: string; objective: string; status: string; budget: string | null; currency: string }[]
+  /** ONE-BUDGET-001 — the client's approved project budgets (/agency/budgets). Null without a budget permission. */
+  budget?: {
+    total: ApprovedBudgetTotal
+    projects: { project_id: string; project_name: string; budget: ApprovedBudget }[]
+    can_add: boolean
+  } | null
   requests: {
     id: string
     reference: string
@@ -102,6 +112,8 @@ export interface ClientFilters {
   include_archived?: boolean
   sort?: string
   page?: number
+  /** How many a page holds — a fitted page asks for exactly what fits the screen (NOV-FIT-001). */
+  per_page?: number
 }
 
 export async function listClients(filters: ClientFilters): Promise<ClientListResult> {
@@ -118,6 +130,7 @@ export async function listClients(filters: ClientFilters): Promise<ClientListRes
   set('include_archived', filters.include_archived)
   set('sort', filters.sort)
   set('page', filters.page)
+  set('per_page', filters.per_page)
   const qs = params.toString()
   const res = await api.get<ClientListResult>(`/app/clients${qs ? `?${qs}` : ''}`)
   return res.data
@@ -142,7 +155,8 @@ export async function updateSettings(id: string, patch: ClientSettingsPatch) {
   return res.data
 }
 
-export const archiveClient = (id: string, reason?: string) => api.post(`/app/clients/${id}/archive`, { reason })
+/** PROJECT-LIFECYCLE-001 §8 — the server requires the typed client name (it archives the client's projects too). */
+export const archiveClient = (id: string, confirmName: string, reason?: string) => api.post(`/app/clients/${id}/archive`, { confirm_name: confirmName, reason })
 export const restoreClient = (id: string) => api.post(`/app/clients/${id}/restore`, {})
 
 export interface ClientAnalytics {

@@ -19,6 +19,8 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Coverage\AggregateCoverage;
 use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
+use App\Domains\Metrics\Fx\FxConversion;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Metrics\Support\SiblingRounding;
@@ -609,6 +611,58 @@ final class MetricsAggregator
         }
 
         return $query;
+    }
+
+    /**
+     * FX-APPLY-001 (builder G) — what the money in this scope was converted FROM, so a total that adds several currencies says
+     * so («يشمل عملات محوّلة») and a rate older than 7 days for its row carries ⚠.
+     *
+     * Read-only, one grouped query over the same scope as every figure. Per original currency: rows converted, rows withheld
+     * (no rate for their date — the money is not in the total), the newest and oldest rate dates used, and how many rows were
+     * converted with a rate older than `fx.rates.stale_after_days` for their own date.
+     *
+     * @return array{reporting_currency: string, includes_converted: bool, currencies: list<string>, stale: bool, withheld_rows: int,
+     *   withheld_currencies: list<string>, by_currency: list<array{currency: ?string, converted_rows: int, withheld_rows: int, stale_rows: int, first_rate_date: ?string, last_rate_date: ?string}>,
+     *   rates_page: string}
+     */
+    public function fxCoverage(Carbon $from, Carbon $to): array
+    {
+        $staleDays = CurrencyConverter::staleAfterDays();
+        $rows = $this->base($from, $to)
+            ->whereIn('metric_key', ['spend', 'revenue'])
+            ->whereNotNull('original_amount')
+            ->selectRaw('UPPER(original_currency) AS currency')
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NOT NULL) AS converted_rows')
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NULL) AS withheld_rows')
+            ->selectRaw("COUNT(*) FILTER (WHERE value IS NOT NULL AND rate_date IS NOT NULL AND rate_source NOT LIKE 'official-peg%' AND rate_source <> 'identity' AND metric_date - rate_date > {$staleDays}) AS stale_rows")
+            ->selectRaw('MIN(rate_date) FILTER (WHERE value IS NOT NULL) AS first_rate_date')
+            ->selectRaw('MAX(rate_date) FILTER (WHERE value IS NOT NULL) AS last_rate_date')
+            ->groupByRaw('UPPER(original_currency)')
+            ->get();
+
+        $reporting = ReportingCurrency::DEFAULT;
+        $by = $rows->map(static fn ($r): array => [
+            'currency' => $r->currency !== null ? (string) $r->currency : null,
+            'converted_rows' => (int) $r->converted_rows,
+            'withheld_rows' => (int) $r->withheld_rows,
+            'stale_rows' => (int) $r->stale_rows,
+            'first_rate_date' => $r->first_rate_date !== null ? Carbon::parse((string) $r->first_rate_date)->toDateString() : null,
+            'last_rate_date' => $r->last_rate_date !== null ? Carbon::parse((string) $r->last_rate_date)->toDateString() : null,
+        ])->sortBy(static fn (array $r): string => (string) $r['currency'])->values()->all();
+
+        $converted = array_values(array_filter(array_map(static fn (array $r): ?string => $r['converted_rows'] > 0 ? $r['currency'] : null, $by)));
+        $withheld = array_values(array_filter(array_map(static fn (array $r): ?string => $r['withheld_rows'] > 0 ? ($r['currency'] ?? '?') : null, $by)));
+
+        return [
+            'reporting_currency' => $reporting,
+            'includes_converted' => array_diff($converted, [$reporting]) !== [],
+            'currencies' => $converted,
+            'stale' => array_sum(array_column($by, 'stale_rows')) > 0,
+            'withheld_rows' => (int) array_sum(array_column($by, 'withheld_rows')),
+            'withheld_currencies' => $withheld,
+            'by_currency' => $by,
+            'rates_page' => FxConversion::RATES_PAGE,
+        ];
     }
 
     private function base(Carbon $from, Carbon $to): Builder
@@ -2844,6 +2898,17 @@ final class MetricsAggregator
                 'budget_currency' => $budgetCurrency,
                 'spent' => $hasSpend ? round($spent, 2) : null,
                 'spent_currency' => $spentCurrency,
+                /*
+                 * FX-APPLY-001 — the plan in the reporting currency and, where the units differ, the spend in the plan's own
+                 * currency, both through FxEngine (window's last day). The figures above stay as they were; the ratios below
+                 * still refuse a cross-currency division (`currency_mismatch`) — see docs/currency-engine/G-notes.md.
+                 */
+                'budget_fx' => $budget > 0 && is_string($budgetCurrency)
+                    ? FxDisplay::forRequest()->one($budget, $budgetCurrency, $to, $reportingCurrency ?? ReportingCurrency::DEFAULT, 'metrics.budget_pacing')
+                    : null,
+                'spent_fx' => $hasSpend && is_string($spentCurrency) && is_string($budgetCurrency) && strtoupper($spentCurrency) !== strtoupper($budgetCurrency)
+                    ? FxDisplay::forRequest()->one($spent, $spentCurrency, $to, $budgetCurrency, 'metrics.budget_pacing')
+                    : null,
                 'spend_withheld' => $scope->state === MoneyState::CompleteWithheld,
                 'spend_state' => $nothingMeasured ? 'nothing_measured_in_window' : $scope->state->value,
                 /* False only where the whole project's window holds no measured row — not a zero, an absence. */

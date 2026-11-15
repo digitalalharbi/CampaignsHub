@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, type CSSProperties } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { agencyAccentFor } from '@/features/requests/portal/useClientBranding'
@@ -21,7 +21,10 @@ import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { useRail } from './railPreference'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
+import { useSectionAllowed } from '@/lib/accessSections'
 import { SidebarNav } from './SidebarNav'
 import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
@@ -78,6 +81,8 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
    * would empty somebody's rail on a slow network and look like an outage.
    */
   const { can } = useProjectCapabilities()
+  // ACCESS-SECTIONS-001 — a section the member lacks is hidden, not drawn disabled.
+  const sectionAllowed = useSectionAllowed()
 
   return (
     <SidebarNav
@@ -85,7 +90,7 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       ar={ar}
       collapsed={collapsed}
       onNavigate={onNavigate}
-      allow={(leaf) => can(leaf.cap)}
+      allow={(leaf) => can(leaf.cap) && sectionAllowed(leaf.to)}
       label={ar ? 'أقسام الوكالة' : 'Agency sections'}
       storageKey="nav.collapsed.agency"
     />
@@ -161,10 +166,19 @@ function useAgencyAccent(): CSSProperties | undefined {
 export function AgencyShell() {
   const agencyAccent = useAgencyAccent()
   const { can } = useProjectCapabilities()
-  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string }) => can(leaf.cap) }
-  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
-    useUi()
+  const sectionAllowed = useSectionAllowed()
+  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string; to: string }) => can(leaf.cap) && sectionAllowed(leaf.to) }
+  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen } = useUi()
   const ar = locale === 'ar'
+  /*
+   * NOV-SIDEBAR-001 — the rail is the 64px strip until THIS person opens it, and that choice is kept per user.
+   * Adopted before paint, so a person who left it open does not see it collapse and reopen.
+   */
+  const userId = useAuth((s) => s.user?.id)
+  const sidebarCollapsed = useRail((s) => s.collapsed)
+  const toggleSidebarCollapsed = useRail((s) => s.toggle)
+  const hydrateRail = useRail((s) => s.hydrate)
+  useLayoutEffect(() => hydrateRail(userId), [userId, hydrateRail])
 
   /* The tab says which screen it holds — it carried the marketing line on every one of them. */
   useSectionTitle(agencyAllGroups)
@@ -173,9 +187,11 @@ export function AgencyShell() {
     <PortalFrame
       style={agencyAccent}
       testId="agency-shell"
-      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
+      railWidth={sidebarCollapsed ? 'w-16' : 'w-[264px]'}
+      railCompact={sidebarCollapsed}
+      drawerLabel={ar ? 'القائمة' : 'Menu'}
       tabs={AGENCY_TABS}
-      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap))}
+      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap) && sectionAllowed(leaf.to))}
       // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
       // below it is read through that choice, and the drawer is no longer the phone's way in.
       moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" workspace={workspace} /></div>}
@@ -183,27 +199,19 @@ export function AgencyShell() {
       onDrawerClose={() => setSidebarOpen(false)}
       rail={
         <>
-          <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center justify-between gap-2 ${sidebarCollapsed ? 'flex-col' : ''}`}>
             <AgencyIdentity collapsed={sidebarCollapsed} />
-            {!sidebarCollapsed && (
-              <button
-                onClick={toggleSidebarCollapsed}
-                aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-              >
-                <PanelLeft size={17} />
-              </button>
-            )}
-          </div>
-          {sidebarCollapsed && (
+            {/* One button, both ways — the same control opens and closes the rail (NOV-SIDEBAR-001). */}
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
-              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              data-testid="rail-toggle"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? (ar ? 'فتح القائمة الجانبية' : 'Open sidebar') : (ar ? 'طي القائمة' : 'Collapse sidebar')}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} className="rotate-180" />
+              <PanelLeft size={18} style={sidebarCollapsed !== ar ? { transform: 'scaleX(-1)' } : undefined} aria-hidden />
             </button>
-          )}
+          </div>
           {/* Client → project, the agency's own scope control (AGENCY-006). Above the rail because
               every section below it is read through that choice. */}
           <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
@@ -229,11 +237,13 @@ export function AgencyShell() {
         </>
       }
       header={
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
-            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
+            aria-expanded={sidebarOpen}
+            data-testid="drawer-open"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover md:hidden"
           >
             <Menu size={19} />
           </button>

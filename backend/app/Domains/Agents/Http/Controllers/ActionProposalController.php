@@ -8,6 +8,7 @@ use App\Domains\Agents\Models\ActionProposal;
 use App\Domains\Agents\Services\ProposalService;
 use App\Domains\Agents\Support\ProposalAction;
 use App\Domains\Agents\Support\ProposalRules;
+use App\Domains\Metrics\Services\DisplayCurrencyAdapter;
 use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -25,7 +26,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
  */
 final class ActionProposalController extends Controller
 {
-    public function __construct(private readonly ProposalService $service) {}
+    public function __construct(private readonly ProposalService $service, private readonly DisplayCurrencyAdapter $display) {}
 
     public function index(Request $request, string $project): JsonResponse
     {
@@ -153,6 +154,8 @@ final class ActionProposalController extends Controller
             // The budget when it was asked, for the «before → after» preview; nothing else of the evidence leaves the server.
             'current_daily_budget' => is_numeric($p->evidence['current_daily_budget'] ?? null) ? (float) $p->evidence['current_daily_budget'] : null,
             'currency' => $p->currency,
+            // CONS-I-APPROVAL — the same budget figures in the currency the reader reads (the platform's own stay above, untouched).
+            'display' => $this->displayBudget($p),
             'reason' => $p->reason,
             'status' => $p->status,
             'violations' => $p->violations ?? [],
@@ -162,6 +165,38 @@ final class ActionProposalController extends Controller
             'executed_at' => $p->executed_at?->toIso8601String(),
             'created_at' => $p->created_at?->toIso8601String(),
             'log' => $p->relationLoaded('log') ? $p->log->map(fn ($l): array => ['phase' => $l->phase, 'note' => $l->note, 'at' => $l->created_at?->toIso8601String()])->all() : null,
+        ];
+    }
+
+    /**
+     * A daily-budget request «36 €» is a platform figure; the reader sees it converted, with the original kept beside it.
+     * A request with no rate (or no known currency) carries `daily_budget: null` and a reason — never a number in the wrong unit.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function displayBudget(ActionProposal $p): ?array
+    {
+        if ($p->action !== 'set_daily_budget') {
+            return null;
+        }
+        $convert = fn (mixed $v): ?array => is_numeric($v)
+            ? $this->display->toDisplay((string) $p->tenant_id, (string) $p->project_id, (float) $v, $p->currency)
+            : null;
+        $after = $convert($p->payload['daily_budget'] ?? null);
+        $before = $convert($p->evidence['current_daily_budget'] ?? null);
+        $any = $after ?? $before;
+
+        return [
+            'currency' => $any['currency'] ?? $this->display->displayCurrency((string) $p->project_id),
+            'daily_budget' => $after['amount'] ?? null,
+            'current_daily_budget' => $before['amount'] ?? null,
+            'converted' => ($any['converted'] ?? false) === true,
+            'source_currency' => $any['source_currency'] ?? null,
+            'reason' => $any['reason'] ?? null,
+            // FX-APPLY-001 — the FxConversion of each figure (rendered only by formatConversion; withheld → «—» + rates link).
+            'conversion' => $after['conversion'] ?? null,
+            'current_conversion' => $before['conversion'] ?? null,
+            'stale' => ($any['stale'] ?? false) === true,
         ];
     }
 }

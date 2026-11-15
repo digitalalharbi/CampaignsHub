@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -32,7 +33,7 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Inventory (the “جرد”)
  *
- * «Active» means `projects.status = 'active'` and `unified_campaigns.status = 'active'`. EVERY active project in the reader's reach is
+ * «Active» means a RUNNING project (LiveProjects, PROJECT-LIFECYCLE-001) and `unified_campaigns.status = 'active'`. EVERY active project in the reader's reach is
  * accounted for exactly once: its status is the worst of its cells (problem > no_data > watch > healthy); a project with no active
  * campaign naming a platform has no cell to judge, so it is listed as **unchecked** with its reason — never omitted, never «healthy».
  * `coverage` is «checked of total», where checked means at least one cell was judged.
@@ -67,6 +68,7 @@ final class AttentionBoard
         $now ??= Carbon::now();
 
         $campaigns = UnifiedCampaign::query()->where('status', 'active')
+            ->whereIn('project_id', LiveProjects::runningIdsQuery()) // PROJECT-LIFECYCLE-001
             ->when($reach !== null, fn ($q) => $q->whereIn('project_id', $reach))
             ->when($project !== null && $project !== '', fn ($q) => $q->where('project_id', $project))
             ->orderBy('name')->orderBy('id')->limit(self::CAMPAIGN_CAP + 1)->get();
@@ -173,7 +175,7 @@ final class AttentionBoard
      */
     private function inventory(?array $reach, ?string $project, array $rows): array
     {
-        $active = Project::query()->where('status', 'active')
+        $active = Project::query()->running()
             ->when($reach !== null, fn ($q) => $q->whereIn('id', $reach))
             ->when($project !== null && $project !== '', fn ($q) => $q->where('id', $project))
             ->orderBy('name')->orderBy('id')->get(['id', 'name']);

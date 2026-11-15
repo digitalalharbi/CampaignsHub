@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Services;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,14 +38,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class AccountAssignment
 {
-    /**
-     * SYNC-GATE-001 — a project in one of these states fetches nothing.
-     *
-     * `draft`, `onboarding`, `active` and `completed` sync: a project being set up needs its first
-     * numbers and a finished one still reconciles its last days. A paused or archived project is one
-     * its owner stopped, and a sweep that carried on spent the provider's rate limit on it.
+    /*
+     * SYNC-GATE-001 + PROJECT-LIFECYCLE-001 — only a RUNNING project fetches (LiveProjects::RUNNING = active). A paused
+     * or archived project is one its owner stopped, a deleted one is gone, and a draft has no linked account (the first
+     * link makes it active). The set lives in LiveProjects, never here.
      */
-    public const PROJECT_STATUSES_THAT_DO_NOT_SYNC = ['paused', 'archived'];
 
     /**
      * The project an account is assigned to, or null when nobody has assigned it.
@@ -54,14 +52,26 @@ final class AccountAssignment
      */
     public function projectIdFor(ExternalAccount $account): ?string
     {
-        $projectId = ProjectIntegrationBinding::withoutGlobalScopes()
+        $candidates = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->where('is_active', true)
             ->orderByDesc('is_primary')
             ->orderBy('created_at')
-            ->value('project_id');
+            ->pluck('project_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->filter(static fn (string $id): bool => $id !== '')
+            ->values()
+            ->all();
 
-        return is_string($projectId) && $projectId !== '' ? $projectId : null;
+        /*
+         * PROJECT-LIFECYCLE-001 rule 6 — an account linked to several projects («مشترك»): when the first-ranked project is
+         * stopped (archived, paused, deleted), the account keeps feeding a RUNNING project it is linked to. Stopping one
+         * project never stops the others. The ranking among running projects is unchanged.
+         */
+        $runningIds = $candidates === [] ? [] : LiveProjects::runningIdsQuery()->whereIn('id', $candidates)->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $running = array_values(array_filter($candidates, static fn (string $id): bool => in_array($id, $runningIds, true)));
+
+        return $running[0] ?? ($candidates[0] ?? null);
     }
 
     /**
@@ -210,11 +220,9 @@ final class AccountAssignment
                 // SYNC-GATE-001 — a binding the Owner switched off does not sync, and neither does a
                 // binding into a project that is paused, archived or deleted.
                 ->where('project_integration_bindings.sync_enabled', true)
-                ->whereExists(fn ($project) => $project->selectRaw('1')
+                ->whereExists(fn ($project) => LiveProjects::constrainRunning($project->selectRaw('1')
                     ->from('projects')
-                    ->whereColumn('projects.id', 'project_integration_bindings.project_id')
-                    ->whereNull('projects.deleted_at')
-                    ->whereNotIn('projects.status', self::PROJECT_STATUSES_THAT_DO_NOT_SYNC)),
+                    ->whereColumn('projects.id', 'project_integration_bindings.project_id'))),
         );
     }
 
@@ -286,7 +294,7 @@ final class AccountAssignment
 
         // SYNC-GATE-001 — `withoutGlobalScopes()` above also strips the soft-delete scope, so a deleted
         // project was still «found». The comment on this method promised «deleted, archived»; this keeps it.
-        if ($project->deleted_at !== null || in_array($project->status, self::PROJECT_STATUSES_THAT_DO_NOT_SYNC, true)) {
+        if ($project->deleted_at !== null || ! in_array($project->lifecycleStatus()->value, LiveProjects::RUNNING, true)) {
             return false;
         }
 

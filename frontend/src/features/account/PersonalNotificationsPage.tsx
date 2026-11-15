@@ -1,4 +1,6 @@
 import { Bell } from 'lucide-react'
+import { FollowUpPrefsCard } from '@/features/notifications/FollowUpPrefsCard'
+import { MobileAndSoundCard } from '@/features/notifications/MobileAndSoundCard'
 import { NotificationsTab } from '@/features/settings/tabs/NotificationsTab'
 import { useUi } from '@/stores/ui'
 
@@ -34,6 +36,12 @@ export function PersonalNotificationsPage() {
       </header>
 
       <NotificationsTab />
+
+      {/* NOTIF-PUSH-001 — sound, quiet hours, mobile notifications and the person's devices. */}
+      <MobileAndSoundCard />
+
+      {/* NOTIF-V2-FOLLOWUP-001 — the morning brief, the projects this person follows, and the types they muted. */}
+      <FollowUpPrefsCard />
 
       <p className="text-xs text-text-muted">
         {ar

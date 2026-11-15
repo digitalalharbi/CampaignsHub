@@ -15,6 +15,7 @@ import {
   type Project,
 } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { formatWholePercent } from '@/lib/percent'
 import { PLATFORM_LABELS, PLATFORM_ORDER } from '@/lib/platforms'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -218,6 +219,9 @@ export function ProjectsPage() {
   const notices = PROJ_NOTICES[locale]
   const surface = PROJ_SURFACE[locale]
   const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
+  // PROJECT-LIFECYCLE-001 — archive / un-archive are their own permissions (workspace owner by default); the server enforces them.
+  const mayArchive = useAuth((s) => s.hasPermission('projects.archive'))
+  const mayRestore = useAuth((s) => s.hasPermission('projects.restore'))
 
   const projects = useQuery({
     queryKey: ['projects', { showArchived }],
@@ -467,7 +471,7 @@ export function ProjectsPage() {
                 </div>
                 <p className="mt-2 text-xs text-text-secondary">{ws?.name ?? '—'}</p>
                 <span className="mt-1 block text-xs text-text-muted">
-                  {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
+                  {t('setup')}: <span className="tnum">{formatWholePercent(p.setup_completion)}</span>
                 </span>
 
                 {/*
@@ -560,7 +564,7 @@ export function ProjectsPage() {
                     <Copy size={13} /> {t('clone')}
                   </button>
                   {archived ? (
-                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    mayRestore && <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <RotateCcw size={13} /> {t('restore')}
                     </button>
                   ) : paused ? (
@@ -572,7 +576,7 @@ export function ProjectsPage() {
                       <Pause size={13} /> {t('pause')}
                     </button>
                   )}
-                  {!archived && (
+                  {!archived && mayArchive && (
                     <button type="button" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
                       {t('archive')}
                     </button>

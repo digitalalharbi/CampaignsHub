@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
-use App\Domains\Metrics\Services\CurrencyConverter;
+use App\Domains\Funding\Support\BudgetFx;
+use App\Domains\Metrics\Spend\SpendLedger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -26,7 +27,9 @@ final class FundingBalance
         private readonly FundingSpendRefresher $refresher,
         private readonly FundingPlan $plans,
         private readonly FundingMonth $months,
-        private readonly CurrencyConverter $fx,
+        private readonly BudgetFx $fx,
+        private readonly SourceFreshness $freshness,
+        private readonly SpendLedger $ledger,
     ) {}
 
     /**
@@ -95,7 +98,7 @@ final class FundingBalance
         // BUDGET-CURRENCY-001 — a platform's own spend is shown in USD (one unit for platforms), totals stay in SAR. The unit is the SAR
         // figure over the latest USD→SAR rate; with no rate there is no USD figure, never a guessed one. Days with no dated rate keep
         // their OWN currency and amount, so the page can say «بدون سعر صرف» next to them.
-        $usdRate = $this->fx->resolve('USD', 'SAR', $today)['rate'] ?? null;
+        $usdRate = $this->fx->rate('USD', 'SAR', $today)['rate'] ?? null;
         $toUsd = static fn (?float $sar): ?float => ($sar === null || $usdRate === null || $usdRate <= 0) ? null : round($sar / $usdRate, 2);
         $unconverted = $spendQuery()->whereNull('amount_sar')->where('original_amount', '>', 0)
             ->selectRaw('provider, original_currency AS currency, SUM(original_amount) AS amount')->groupBy('provider', 'original_currency')->get()
@@ -129,6 +132,19 @@ final class FundingBalance
         $invoiceMonths = $credit ? $this->months->invoiceMonths($funding, $today) : null;
         $thisMonth = $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['month'] === $today->format('Y-m') ? $m['spent'] : 0.0, $invoiceMonths)), 2);
 
+        // BUDGET-RUNOUT-001 — the estimated run-out day from the LAST 3 full days' spend (a short window: it must follow a
+        // change of pace). Only a prepaid balance runs out; with no spend in those days there is no estimate.
+        $threeStart = $today->copy()->subDays(3)->toDateString();
+        $pace3 = round((float) $spendQuery()->whereBetween('spend_date', [$threeStart, $weekEnd])->sum('amount_sar') / 3, 2);
+        $runOutDate = ($remaining !== null && $remaining > 0 && $pace3 > 0)
+            ? Carbon::parse($today->toDateString())->addDays((int) floor($remaining / $pace3))->toDateString() : null;
+
+        $platforms = array_values(array_unique(array_merge(
+            array_column($byPlatform, 'provider'),
+            $planRows === null ? [] : array_column($planRows, 'provider'),
+        )));
+        $freshness = $this->freshness->forProject((string) $funding->project_id, $platforms === [] ? null : $platforms);
+
         $daysLeft = ($remaining !== null && $pace !== null && $pace > 0 && $remaining > 0)
             ? (int) floor($remaining / $pace) : null;
 
@@ -144,9 +160,19 @@ final class FundingBalance
             $remaining < 0 => 'over',
             // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
             $withoutRate > 0 => 'incomplete',
-            $remaining < (float) $funding->alert_floor => 'low',
+            // Nothing spent is never «low»: a small budget under the alert floor has lost nothing yet.
+            $spent > 0 && $remaining < (float) $funding->alert_floor => 'low',
             default => 'ok',
         };
+
+        /*
+         * PROJECT-LIFECYCLE-001 §7 — what the budget's spend could NOT include, and why, in the one reading every page shares
+         * (`SpendLedger`, through FxEngine): each excluded part with its currency, account and original amount, the explicit
+         * «مستبعد من الإجمالي» statement, and every old rate used («سعر قديم — بتاريخ …»). Read over the budget's own period;
+         * the budget keeps its history, so this ledger is not narrowed to live projects (the budgets list itself is).
+         */
+        $reading = $from === null ? null : $this->ledger->read([(string) $funding->project_id], $from, $to, 'SAR', liveOnly: false);
+        $fx = $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'stale_label', 'rates_page', 'currencies', 'includes_converted']));
 
         return [
             'project_id' => $funding->project_id,
@@ -169,7 +195,7 @@ final class FundingBalance
             // credit: spend so far, the optional ceiling with its own ratio, and what is ready to invoice (closed months).
             'to_date' => $credit ? round($spent, 2) : null,
             'this_month' => $thisMonth,
-            'usd_rate' => $usdRate,
+            'usd_rate' => $usdRate === null ? null : round($usdRate, 6),
             'ceiling' => $ceiling,
             'ceiling_ratio' => $ceilingRatio,
             'to_invoice' => $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['closed'] ? $m['spent'] : 0.0, $invoiceMonths)), 2),
@@ -179,11 +205,15 @@ final class FundingBalance
             'plan_alerts' => $comparison === null ? 0 : count($this->plans->alerts($comparison)),
             'pace_per_day' => $pace,
             'days_left' => $daysLeft,
+            'pace_3d' => $pace3 > 0 ? $pace3 : null,
+            'run_out_date' => $runOutDate,
+            'freshness' => $freshness,
             'spend_without_rate' => $withoutRate,
             'complete' => $withoutRate === 0,
             'last_spend_day' => $lastDay,
             'by_platform' => $byPlatform,
             'status' => $status,
+            'fx' => $fx,
         ];
     }
 }

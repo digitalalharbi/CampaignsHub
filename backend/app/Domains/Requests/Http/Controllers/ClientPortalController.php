@@ -2058,7 +2058,7 @@ final class ClientPortalController
         abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
         $only = $this->restrictedProjectIds($token);
-        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())
+        $projects = Project::query()->live()->where('client_workspace_id', $workspace->getKey()) // PROJECT-LIFECYCLE-001
             ->when($only !== null, fn ($q) => $q->whereIn('id', $only))
             ->orderBy('name')->get(['id', 'name', 'tenant_id']);
 

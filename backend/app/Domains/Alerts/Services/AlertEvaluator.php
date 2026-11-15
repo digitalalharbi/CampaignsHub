@@ -26,18 +26,21 @@ use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Integrations\Status\LinkHealth;
-use App\Domains\Metrics\Models\MetricSyncRun;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Notifications\Support\AlertEventText;
+use App\Domains\Notifications\Support\BellKind;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -184,6 +187,7 @@ final class AlertEvaluator
         private readonly DataFreshnessService $freshness,
         private readonly AlertEventMailer $mailer,
         private readonly LinkHealth $linkHealth,
+        private readonly SpendLimitThresholdMail $thresholdMail,
     ) {}
 
     /**
@@ -220,6 +224,7 @@ final class AlertEvaluator
         $previous = $this->tenants->tenantId();
 
         $this->inSweep = true;
+        $this->liveIds = [];
         try {
             foreach ($tenantIds as $tenantId) {
                 $this->tenants->setTenantId((string) $tenantId);
@@ -313,6 +318,9 @@ final class AlertEvaluator
             default => $this->unevaluated($rule),
         };
 
+        // PROJECT-LIFECYCLE-001 rule 5 (N4) — every rule type, tenant-wide or project-scoped, speaks only about LIVE projects.
+        $breaches = $this->onlyLiveProjects($rule, $breaches);
+
         // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
         $openLinks = null;
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
@@ -334,6 +342,39 @@ final class AlertEvaluator
 
         return $raised;
     }
+
+    /**
+     * PROJECT-LIFECYCLE-001 rule 5 (N4, finishing N1/N3) — the ONE place the alerts engine applies the shared live-projects
+     * scope ({@see LiveProjects}) to every rule type. A rule scoped to a project that is not live finds nothing; a TENANT-WIDE
+     * rule keeps only the findings about live projects (and the findings about no project at all — a connection's token, a
+     * lead with no project). The live ids are read once per tenant per sweep, never per rule.
+     *
+     * @param  list<array<string,mixed>>  $breaches
+     * @return list<array<string,mixed>>
+     */
+    private function onlyLiveProjects(AlertRule $rule, array $breaches): array
+    {
+        $live = $this->liveProjectIds((string) $rule->tenant_id);
+        if ($rule->project_id !== null && ! isset($live[(string) $rule->project_id])) {
+            return [];
+        }
+
+        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+            || isset($live[(string) $b['project_id']])));
+    }
+
+    /** @return array<string, true> the tenant's live project ids — memoised for one sweep (a single rule reads afresh) */
+    private function liveProjectIds(string $tenantId): array
+    {
+        if ($this->inSweep && isset($this->liveIds[$tenantId])) {
+            return $this->liveIds[$tenantId];
+        }
+
+        return $this->liveIds[$tenantId] = array_fill_keys(LiveProjects::ids($tenantId), true);
+    }
+
+    /** @var array<string, array<string, true>> */
+    private array $liveIds = [];
 
     /**
      * EMAIL-ALERT-RECOVERY-001 — an alert whose condition is no longer present is resolved by the sweep
@@ -380,14 +421,12 @@ final class AlertEvaluator
 
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
             $closable = $events->filter(fn (AlertEvent $e): bool => ! isset($still[$e->dedup_key]));
+            // LIFECYCLE-6 — which of their projects are live, in one read, and the settle window of the rule sweeping them.
+            $this->linkClose = [
+                'live' => array_flip(LiveProjects::filter($closable->pluck('project_id')->filter()->map(static fn ($id): string => (string) $id)->values()->all())),
+                'settle' => AccountDayCoverage::settleHours((array) ($rule->threshold ?? [])),
+            ];
             $this->linkHealth->prime($closable->where('entity_type', ProviderConnection::class)->pluck('entity_id')->map(static fn ($id): string => (string) $id)->values()->all(), $now);
-            $pairs = [];
-            foreach ($closable->where('entity_type', Project::class) as $e) {
-                foreach ((array) (((array) $e->context)['sources'] ?? []) as $source) {
-                    $pairs[] = [(string) $e->entity_id, (string) ($source['provider'] ?? '')];
-                }
-            }
-            $this->linkHealth->primeProjects($pairs, $now);
         }
 
         $events->each(function (AlertEvent $event) use ($still, $rule, $now, $live): void {
@@ -418,6 +457,13 @@ final class AlertEvaluator
                     $this->resolve($event, $now);
                     $event->forceFill(['context' => (array) $event->context + ['closed_reason' => $why, 'closed_at' => $now->toIso8601String()]])->save();
                 }
+
+                return;
+            }
+            // PROJECT-LIFECYCLE-001 rule 5 (N4) — an open alert of a project that is no longer live did not recover: it closes
+            // silently with the reason, never with a «رجعت الأمور طبيعية» about an archived or deleted project.
+            if ($event->project_id !== null && ! isset($this->liveProjectIds((string) $rule->tenant_id)[(string) $event->project_id])) {
+                $this->closeQuietly($event, 'project_not_live', $now);
 
                 return;
             }
@@ -572,6 +618,7 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $event->entity_type,
             'entity_id' => $event->entity_id,
+            'kind' => 'recovered',
             'action_url' => '/alerts',
             // The alert itself was notified on this type+entity minutes ago; its recovery is a different
             // message, not a repeat of it, so it carries its own key past the dispatcher's dedup window.
@@ -597,7 +644,10 @@ final class AlertEvaluator
          * (one per project) produced three identical cards. Every other type stays keyed by its rule.
          */
         if (in_array($rule->type, LinkHealth::TYPES, true)) {
-            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '']));
+            // LIFECYCLE-6 — an account shared by two projects is two findings (one per project).
+            $scope = $b['entity_type'] === ExternalAccount::class ? [(string) ($b['project_id'] ?? '')] : [];
+
+            return hash('sha256', implode('|', [$rule->tenant_id, $rule->type, $b['entity_type'], $b['entity_id'] ?? '', ...$scope]));
         }
 
         // A notice raised under a rule of another type (ALERT-CRITERIA-001: «توقفت أمس», «ما تصرف» under «صرف بدون نتائج») is its own
@@ -750,6 +800,9 @@ final class AlertEvaluator
             'source' => 'alerts',
             'entity_type' => $b['entity_type'],
             'entity_id' => $b['entity_id'],
+            // NOTIF-BELL-001 — the finding itself (what the bell names it by) and one notification per finding per day.
+            'kind' => BellKind::forAlert((string) ($b['type'] ?? $rule->type), (array) ($b['context'] ?? [])),
+            'upsert_daily' => true,
             /*
              * PORTAL-RELATIVE (REG-011). An alert is tenant-wide and its recipients are not all in
              * the same portal, so a fixed `/app/alerts` sent an agency operator into the advertiser
@@ -897,41 +950,23 @@ final class AlertEvaluator
     }
 
     /**
-     * LINK-HEALTH-YESTERDAY-001 — every connection that synced in the last month is a CANDIDATE, one per connection; the
-     * one rule ({@see onlyWhereYesterdayMissing()}) keeps those whose yesterday did not arrive. A failed run that a later run
-     * made good is therefore nothing, and a connection that simply stopped syncing (no failed run at all) is
-     * still found. A connection the platform refused is the `token_expiry` card, never a second one here.
+     * LIFECYCLE-6 (Owner spec 2026-11-15 §6) — «بيانات أمس ما وصلت من المنصة», one candidate per live (project, ad account),
+     * judged by {@see DataArrivalJudge} from the sync record in the account's own time zone plus the settle window.
+     *
+     * Replaces the per-connection reading (every connection with a run in the last month, judged in Riyadh time), which kept
+     * judging a connection whose account had been unlinked, or whose project was archived, on its last runs — the false
+     * critical alerts of 2026-11-15. A refused link is the `token_expiry` card when the tenant watches tokens.
+     *
+     * @return list<array<string,mixed>>
      */
     private function syncFailures(AlertRule $rule, ?Carbon $now = null): array
     {
-        $now ??= Carbon::now();
-        // The latest run per connection, for THIS rule's project when it has one (filtered inside, so another project's newer
-        // run never hides this project's connection).
-        $latest = MetricSyncRun::query()
-            ->whereIn('id', function ($q) use ($rule, $now) {
-                $q->selectRaw('DISTINCT ON (connection_id) id')
-                    ->from('metric_sync_runs')
-                    ->whereNotNull('connection_id')
-                    ->where('created_at', '>=', $now->copy()->subDays(30))
-                    ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
-                    ->orderByRaw('connection_id, started_at DESC NULLS LAST, created_at DESC');
-            })
-            ->get();
-        // A removed link says nothing; a refused one is the `token_expiry` card — when the tenant watches tokens at all.
-        $watchesTokens = in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true);
-        $skip = $latest->isEmpty() ? [] : ProviderConnection::query()->whereIn('id', $latest->pluck('connection_id')->unique()->values()->all())
-            ->whereIn('status', $watchesTokens ? ['error', 'disconnected', 'disabled', 'revoked'] : ['disconnected', 'disabled', 'revoked'])
-            ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
-        $latest = $latest->reject(fn (MetricSyncRun $r): bool => in_array((string) $r->connection_id, $skip, true))->values();
+        return $this->arrival()->breaches($rule, $now ?? Carbon::now(), in_array('token_expiry', $this->activeRuleTypes((string) $rule->tenant_id), true));
+    }
 
-        return $latest->map(fn (MetricSyncRun $r) => [
-            'entity_type' => ProviderConnection::class,
-            'entity_id' => (string) $r->connection_id,
-            'project_id' => $r->project_id ? (string) $r->project_id : null,
-            'title' => 'Data sync failed',
-            'message' => $r->status === 'failed' ? 'The latest sync for '.$r->provider.' failed'.($r->error ? ': '.$r->error : '.') : 'Syncs for '.$r->provider.' have not delivered the day.',
-            'context' => ['provider' => $r->provider, 'sync_run_id' => (string) $r->id, 'error' => $r->status === 'failed' ? $r->error : null],
-        ])->all();
+    private function arrival(): DataArrivalJudge
+    {
+        return app(DataArrivalJudge::class);
     }
 
     /** @return list<array<string,mixed>> */
@@ -945,12 +980,14 @@ final class AlertEvaluator
     private function syncOutages(AlertRule $rule, Carbon $now): array
     {
         $tenantId = (string) $rule->tenant_id;
-        $projectIds = DB::table('project_integration_bindings')
-            ->where('tenant_id', $tenantId)
-            ->where('is_active', true)
-            ->when($rule->project_id !== null, fn ($q) => $q->where('project_id', $rule->project_id))
+        // LIFECYCLE-6 — live projects only (N1's one scope): an archived, deleted or draft project is never an outage.
+        $projectIds = LiveProjects::constrain(DB::table('project_integration_bindings')
+            ->join('projects', 'projects.id', '=', 'project_integration_bindings.project_id')
+            ->where('project_integration_bindings.tenant_id', $tenantId)
+            ->where('project_integration_bindings.is_active', true)
+            ->when($rule->project_id !== null, fn ($q) => $q->where('project_integration_bindings.project_id', $rule->project_id)))
             ->distinct()
-            ->pluck('project_id')
+            ->pluck('project_integration_bindings.project_id')
             ->map(static fn (mixed $id): string => (string) $id)
             ->all();
 
@@ -1129,37 +1166,44 @@ final class AlertEvaluator
     {
         $this->linkHealth->prime(array_values(array_map(static fn (array $b): string => (string) $b['entity_id'],
             array_filter($breaches, static fn (array $b): bool => $b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null))), $now);
-        $pairs = [];
-        foreach ($breaches as $b) {
-            if ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
-                foreach ((array) ($b['context']['sources'] ?? []) as $source) {
-                    $pairs[] = [(string) $b['entity_id'], (string) ($source['provider'] ?? '')];
-                }
-            }
-        }
-        $this->linkHealth->primeProjects($pairs, $now);
+        // (A project-level outage is judged by the account-day rule below; it no longer reads the per-project LinkHealth memo.)
         $out = [];
+        /*
+         * LIFECYCLE-6 — no link alert of any type about an archived or deleted project (one read for the whole list). The data-arrival
+         * types already read live projects only (`sync_failure` from live bindings, `sync_outage` from live projects).
+         */
+        $judged = in_array($rule->type, DataArrivalJudge::TYPES, true);
+        $live = $judged ? [] : array_flip(LiveProjects::filter(array_values(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches)))));
         foreach ($breaches as $b) {
             $context = (array) ($b['context'] ?? []);
+            if (! $judged && ($b['project_id'] ?? null) !== null && ! isset($live[(string) $b['project_id']])) {
+                continue;
+            }
+            // LIFECYCLE-6 — a (project, account) breach was already judged by the account-day rule.
+            if ($b['entity_type'] === ExternalAccount::class) {
+                $out[] = $b;
+
+                continue;
+            }
             if ($b['entity_type'] === ProviderConnection::class && $b['entity_id'] !== null) {
                 $reading = $this->linkHealth->forConnection((string) $b['entity_id'], $now);
                 if ($reading['arrived']) {
                     continue;
                 }
             } elseif ($b['entity_type'] === Project::class && $b['entity_id'] !== null) {
-                $missing = [];
-                $reading = null;
-                foreach ((array) ($context['sources'] ?? []) as $source) {
-                    $r = $this->linkHealth->forProjectProvider((string) $b['entity_id'], (string) ($source['provider'] ?? ''), $now);
-                    if (! $r['arrived']) {
-                        $missing[] = $source;
-                        $reading ??= $r;
-                    }
-                }
+                // LIFECYCLE-6 — the project's platforms are judged per live account, in each account's time zone.
+                $sources = $this->arrival()->projectSources((string) $rule->tenant_id, (string) $b['entity_id'], (array) ($context['sources'] ?? []), $now,
+                    AccountDayCoverage::settleHours((array) ($rule->threshold ?? [])));
+                $missing = $sources['missing'];
+                $reading = $sources['reading'];
                 if ($missing === [] || $reading === null) {
                     continue;
                 }
                 $context['sources'] = $missing;
+                $context['verdict'] = $reading['verdict'];
+                $context['reason_ar'] = $reading['reason_ar'];
+                $context['reason_en'] = $reading['reason_en'];
+                $context['project_name'] = $reading['project_name'];
             } else {
                 continue;
             }
@@ -1219,6 +1263,19 @@ final class AlertEvaluator
         }
         foreach ($breaches as $b) {
             $key = $this->dedupKey($rule, $b);
+            /*
+             * LIFECYCLE-6 — an open connection-level «data did not arrive» event is the same fact as the first (project, account)
+             * finding on that connection: it is moved onto the account (no second notice on deploy), not announced again.
+             */
+            $connection = (string) ($b['context']['connection_id'] ?? '');
+            if ($b['entity_type'] === ExternalAccount::class && $connection !== '' && ! $open->contains(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
+                $legacy = $open->first(fn (AlertEvent $e): bool => $e->entity_type === ProviderConnection::class && (string) $e->entity_id === $connection);
+                if ($legacy !== null) {
+                    $legacy->forceFill(['dedup_key' => $key, 'entity_type' => ExternalAccount::class, 'entity_id' => $b['entity_id'], 'project_id' => $b['project_id'] ?? $legacy->project_id])->save();
+
+                    continue;
+                }
+            }
             $same = $open->filter(fn (AlertEvent $e): bool => $e->entity_type === $b['entity_type'] && (string) $e->entity_id === (string) ($b['entity_id'] ?? ''))->values();
             if ($same->isEmpty() || $same->every(fn (AlertEvent $e): bool => $e->dedup_key === $key)) {
                 continue;
@@ -1238,12 +1295,20 @@ final class AlertEvaluator
         $event->forceFill(['context' => (array) $event->context + ['closed_reason' => 'same_link', 'closed_at' => $now->toIso8601String()]])->save();
     }
 
+    /** @var array{live?: array<string,int>, settle?: int} LIFECYCLE-6 — read once per rule for the events {@see linkCloseReason()} decides */
+    private array $linkClose = [];
+
     /**
      * LINK-HEALTH-YESTERDAY-001 — why an open link event may close, on PROOF only: its yesterday arrived (`yesterday_arrived`), or
      * the link is gone (`link_removed`). Null keeps it open.
      */
     private function linkCloseReason(AlertEvent $event, Carbon $now): ?string
     {
+        // LIFECYCLE-6 — a data-arrival event (and any link event of an archived/deleted project) is decided by the account-day rule.
+        $live = $event->project_id === null || ! isset($this->linkClose['live']) ? null : isset($this->linkClose['live'][(string) $event->project_id]);
+        if ($this->arrival()->handles($event, $live)) {
+            return $this->arrival()->closeReason($event, $now, $this->linkClose['settle'] ?? null, $live);
+        }
         $ctx = (array) $event->context;
         if ($event->entity_type === ProviderConnection::class && $event->entity_id !== null) {
             if ($this->linkHealth->forConnection((string) $event->entity_id, $now)['arrived']) {
@@ -1415,43 +1480,53 @@ final class AlertEvaluator
     private function internalSpendLimits(AlertRule $rule, Carbon $now): array
     {
         $out = [];
+        $day = PeriodResolver::today($now); // RIYADH-DAY-001 — the limit's dates and its reading on one day
 
         SpendLimit::query()
             ->where('active', true)
-            ->whereDate('starts_on', '<=', $now->toDateString())
-            ->whereDate('ends_on', '>=', $now->toDateString())
+            ->whereDate('starts_on', '<=', $day->toDateString())
+            ->whereDate('ends_on', '>=', $day->toDateString())
             ->when($rule->project_id, fn ($q) => $q->where('project_id', $rule->project_id))
             ->get()
-            ->each(function (SpendLimit $limit) use ($now, &$out): void {
-                $reading = $this->limits->read($limit, $now->copy()->startOfDay());
+            ->each(function (SpendLimit $limit) use ($now, $day, &$out): void {
+                $reading = $this->limits->read($limit, $day->copy());
 
                 // No comparable figure is not a breach. It is the state where nothing can be said.
                 if ($reading['utilisation'] === null) {
                     return;
                 }
 
-                $crossed = $this->highestCrossedThreshold($limit, (float) $reading['utilisation']);
-
-                if ($crossed === null) {
-                    return;
+                /*
+                 * BUDGET-LIMIT-ALERTS-001 — every threshold crossed is recorded once (the ledger's unique key is the dedup);
+                 * the HIGHEST one newly crossed is announced, in the system and by mail. 75%, 90% and 100% are always among
+                 * them, whatever the limit was created with, so a jump from 70% to 95% still leaves 75 and 90 on record.
+                 */
+                $newest = null;
+                $recorded = null;
+                foreach ($this->crossedThresholds($limit, (float) $reading['utilisation']) as $threshold) {
+                    $event = SpendLimitEvent::query()->firstOrCreate(
+                        ['spend_limit_id' => $limit->getKey(), 'threshold' => $threshold],
+                        [
+                            'tenant_id' => $limit->tenant_id,
+                            'consumed' => $reading['consumed'],
+                            'limit_amount' => $reading['amount'],
+                            'currency' => $limit->currency,
+                            'crossed_at' => $now,
+                        ],
+                    );
+                    if ($event->wasRecentlyCreated) {
+                        $newest = $threshold;
+                        $recorded = $event;
+                    }
                 }
-
-                $recorded = SpendLimitEvent::query()->firstOrCreate(
-                    ['spend_limit_id' => $limit->getKey(), 'threshold' => $crossed],
-                    [
-                        'tenant_id' => $limit->tenant_id,
-                        'consumed' => $reading['consumed'],
-                        'limit_amount' => $reading['amount'],
-                        'currency' => $limit->currency,
-                        'crossed_at' => $now,
-                    ],
-                );
 
                 // Already announced. The ledger is the dedup; re-raising would be a second alert for
                 // one event, which is the shape MAIL-006's cooldown exists to prevent.
-                if (! $recorded->wasRecentlyCreated) {
+                if ($newest === null || $recorded === null) {
                     return;
                 }
+                $crossed = $newest;
+                $this->thresholdMail->send($limit, $reading, $crossed, $now);
 
                 $out[] = [
                     'entity_type' => SpendLimit::class,
@@ -1476,15 +1551,17 @@ final class AlertEvaluator
         return $out;
     }
 
-    /** The highest configured threshold this utilisation has passed, or null for none. */
-    private function highestCrossedThreshold(SpendLimit $limit, float $utilisation): ?int
+    /**
+     * Every threshold this utilisation has passed, ascending: the limit's own plus the always-on 75, 90 and 100.
+     *
+     * @return list<int>
+     */
+    private function crossedThresholds(SpendLimit $limit, float $utilisation): array
     {
-        $crossed = array_filter(
-            $limit->thresholdPercents(),
-            static fn (int $t): bool => $utilisation * 100 >= $t,
-        );
+        $all = array_values(array_unique(array_merge($limit->thresholdPercents(), SpendLimit::ALERT_THRESHOLDS)));
+        sort($all);
 
-        return $crossed === [] ? null : max($crossed);
+        return array_values(array_filter($all, static fn (int $t): bool => $utilisation * 100 >= $t));
     }
 
     /**
