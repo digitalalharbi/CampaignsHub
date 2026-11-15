@@ -321,6 +321,13 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/fx/rates', [PlatformCurrencyRateController::class, 'index'])->name('fx.rates.index');
         Route::post('/fx/rates', [PlatformCurrencyRateController::class, 'store'])
             ->middleware('throttle:30,1')->name('fx.rates.store');
+        // FX-ENGINE-001 — history, preview, recompute (bounded, dry run first), display currency and the free auto source.
+        Route::get('/fx/rates/history', [PlatformCurrencyRateController::class, 'history'])->name('fx.rates.history');
+        Route::post('/fx/preview', [PlatformCurrencyRateController::class, 'preview'])->middleware('throttle:120,1')->name('fx.preview');
+        Route::post('/fx/recompute', [PlatformCurrencyRateController::class, 'recompute'])->middleware('throttle:10,1')->name('fx.recompute');
+        Route::put('/fx/policy', [PlatformCurrencyRateController::class, 'policy'])->middleware('throttle:30,1')->name('fx.policy');
+        Route::put('/fx/workspaces/{tenant}/display-currency', [PlatformCurrencyRateController::class, 'workspaceDisplay'])
+            ->whereUuid('tenant')->middleware('throttle:60,1')->name('fx.workspace-display');
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
         // integration view counts what tenants have connected, and the status check is the SAME one

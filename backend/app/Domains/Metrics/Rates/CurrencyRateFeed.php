@@ -176,6 +176,10 @@ final class CurrencyRateFeed
             ];
         }
 
+        // FX-ENGINE-001 — a daily source also keeps every floating currency IN USE current against USD, not only the
+        // pairs already withheld: a rate older than 7 days is flagged stale, and the point of a daily feed is that it never is.
+        $pairs = $this->withUsedCurrencies($pairs);
+
         if ($pairs === []) {
             return ['state' => 'ready', 'requested' => $pegged, 'imported' => $pegged, 'missing' => [], 'error' => null];
         }
@@ -261,6 +265,30 @@ final class CurrencyRateFeed
         }
 
         return ['state' => 'ready', 'requested' => count($pairs) + $pegged, 'imported' => $imported + $pegged, 'missing' => $missing, 'error' => null];
+    }
+
+    /**
+     * The withheld pairs plus «X→USD» for every floating currency a connected ad account uses (pegs need no feed).
+     *
+     * @param  list<array{base: string, quote: string, withheld: int, earliest: ?string, latest: ?string, sources: list<string>}>  $pairs
+     * @return list<array{base: string, quote: string, withheld: int, earliest: ?string, latest: ?string, sources: list<string>}>
+     */
+    private function withUsedCurrencies(array $pairs): array
+    {
+        $have = array_map(static fn (array $p): string => $p['base'].'|'.$p['quote'], $pairs);
+        $used = DB::table('external_accounts')->where('account_type', 'ad_account')->whereNotNull('currency')
+            ->selectRaw('DISTINCT UPPER(currency) AS currency')->pluck('currency');
+
+        foreach ($used as $currency) {
+            $currency = (string) $currency;
+            if (preg_match('/^[A-Z]{3}$/', $currency) !== 1 || $currency === 'USD' || OfficialPegs::rate($currency, 'USD') !== null
+                || in_array($currency.'|USD', $have, true)) {
+                continue;
+            }
+            $pairs[] = ['base' => $currency, 'quote' => 'USD', 'withheld' => 0, 'earliest' => null, 'latest' => null, 'sources' => ['in_use']];
+        }
+
+        return $pairs;
     }
 
     /**

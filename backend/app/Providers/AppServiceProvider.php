@@ -23,7 +23,9 @@ use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Rates\EcbReferenceRates;
 use App\Domains\Metrics\Services\PeriodReachReader;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
@@ -181,6 +183,12 @@ class AppServiceProvider extends ServiceProvider
             if (is_string($driver) && $driver !== '' && class_exists($driver)) {
                 $resolved = $this->app->make($driver);
                 $source = $resolved instanceof CurrencyRateSource ? $resolved : null;
+            }
+
+            // FX-ENGINE-001 — the FREE daily ECB reference rates, switched on by the platform admin from the rates page
+            // (default OFF). Public, no key, no account; each rate is recorded under the source name `ecb_reference`.
+            if ($source === null && $this->app->make(FxPolicy::class)->autoSourceEnabled()) {
+                $source = $this->app->make(EcbReferenceRates::class);
             }
 
             return new CurrencyRateFeed($source);
