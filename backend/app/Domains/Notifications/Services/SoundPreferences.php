@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
+use App\Domains\Notifications\Engine\Enums\EntitlementKey;
 use App\Domains\Notifications\Push\PushTypes;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
@@ -37,7 +39,13 @@ final class SoundPreferences
     {
         $tenantId = $this->tenant->tenantId();
 
-        return $this->stored($user) + [
+        $stored = $this->stored($user);
+        // NOTIF-V2-ENGINE-001 — the plan, server-side: without `notifications.sound` the bell stays silent whatever was chosen.
+        if ($tenantId !== null && ! app(EntitlementGate::class)->allows((string) $tenantId, EntitlementKey::Sound)) {
+            $stored['enabled'] = false;
+        }
+
+        return $stored + [
             'quiet' => $tenantId !== null && $this->quiet->isQuiet((int) $user->id, (string) $tenantId),
         ];
     }

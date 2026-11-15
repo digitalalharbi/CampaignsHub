@@ -57,6 +57,12 @@ final class ScheduledWorkInventoryTest extends TestCase
         'notifications:retry-failed',
         // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person; every ten minutes, a few rows.
         'notifications:flush-deferred-push',
+        // NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox (5 min), the outbox drained in spread batches
+        // (1 min), the 7-day unconfirmed notice and the grace-period heads-up (daily).
+        'notifications:v2-digests',
+        'notifications:v2-send',
+        'notifications:v2-consent-sweep',
+        'notifications:v2-grace-heads-up',
         'fx:rates',
         // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
         'fx:monitor',
@@ -181,6 +187,9 @@ final class ScheduledWorkInventoryTest extends TestCase
             'notifications:send-alerts',
             // NOTIF-PUSH-001 — two overlapping flushes could each send a person's summary.
             'notifications:flush-deferred-push',
+            // NOTIF-V2-ENGINE-001 — the claim makes a double send impossible; overlap would still be wasted work.
+            'notifications:v2-send',
+            'notifications:v2-digests',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on

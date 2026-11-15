@@ -2,6 +2,7 @@
 
 use App\Domains\Campaigns\Http\Controllers\AppMediaController;
 use App\Domains\Influencers\Http\Controllers\AttributionController;
+use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
 use App\Domains\Notifications\Http\Controllers\MailChartController;
 use App\Domains\Notifications\Http\Controllers\MailUnsubscribeController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
@@ -71,6 +72,13 @@ Route::post('/mail/unsubscribe/{token}', [MailUnsubscribeController::class, 'lea
     ->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]+')
     ->middleware('throttle:60,1')
     ->name('mail.unsubscribe.confirm');
+
+/*
+ * NOTIF-V2-ENGINE-001 — an external recipient confirms receiving reports (double opt-in). GET only shows the page (link
+ * scanners fetch every URL in a message and must not confirm anybody); POST confirms.
+ */
+Route::get('/n/confirm/{token}', [ConsentController::class, 'showConfirm'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:60,1')->name('notifications.confirm');
+Route::post('/n/confirm/{token}', [ConsentController::class, 'confirm'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:60,1')->name('notifications.confirm.post');
 
 /*
  * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.

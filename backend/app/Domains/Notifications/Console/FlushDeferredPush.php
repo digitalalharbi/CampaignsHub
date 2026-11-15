@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Console;
 
 use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Ops\Services\ScheduledRunRows;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,7 @@ final class FlushDeferredPush extends Command
             $summaries += $push->flushFor($user, (string) $row->tenant_id)['sent'] > 0 ? 1 : 0;
         });
 
+        app(ScheduledRunRows::class)->report($summaries);
         $this->info("summaries sent: {$summaries}");
 
         return self::SUCCESS;

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
+use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
+use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\AccessCenterController;
@@ -125,6 +128,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // EMAIL-SETTINGS-DEPTH-001 — what was actually sent, and what failed, from the ledgers that
     // already record it.
     Route::get('notifications/deliveries', [TeamNotificationsController::class, 'deliveries'])->name('notifications.deliveries');
+    // NOTIF-V2-ENGINE-001 — the shared notifications engine, workspace level (one component for every workspace type).
+    Route::get('workspace/notifications/entitlements', [WorkspacePlanUsageController::class, 'entitlements'])->name('workspace.notifications.entitlements');
+    Route::get('workspace/notifications/usage', [WorkspacePlanUsageController::class, 'usage'])->name('workspace.notifications.usage');
+    // The proof of notice: read-only, no write route exists (the tables refuse UPDATE/DELETE too).
+    Route::get('workspace/notifications/log', [DeliveryLogController::class, 'index'])->name('workspace.notifications.log');
+    Route::get('workspace/notifications/log/export', [DeliveryLogController::class, 'export'])->middleware('throttle:10,1')->name('workspace.notifications.log.export');
+    Route::get('workspace/notifications/subscription-log', [DeliveryLogController::class, 'subscriptions'])->name('workspace.notifications.subscription-log');
+    // «أرسل طلبات التأكيد»: preview, then one explicit owner send repeating the previewed count. Never automatic.
+    Route::get('workspace/notifications/confirmation-requests', [ConsentController::class, 'preview'])->name('workspace.notifications.confirmation-requests.preview');
+    Route::post('workspace/notifications/confirmation-requests', [ConsentController::class, 'send'])->middleware(['plan.feature:notifications.external', 'throttle:3,1'])->name('workspace.notifications.confirmation-requests.send');
+    Route::post('workspace/notifications/recipients/{recipient}/approve-internally', [ConsentController::class, 'approveInternally'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('workspace.notifications.recipients.approve-internally');
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');

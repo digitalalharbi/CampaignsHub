@@ -168,6 +168,11 @@ Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh
 Schedule::command('notifications:send-spend-summaries')->hourlyAt(10)->timezone('Asia/Riyadh')->withoutOverlapping();
 // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person, once their window has ended.
 Schedule::command('notifications:flush-deferred-push')->everyTenMinutes()->withoutOverlapping();
+// NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox, then the sender drains it in spread batches.
+Schedule::command('notifications:v2-digests')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-send')->everyMinute()->withoutOverlapping();
+Schedule::command('notifications:v2-grace-heads-up')->dailyAt('09:05')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('notifications:v2-consent-sweep')->dailyAt('09:00')->timezone('Asia/Riyadh')->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Push;
 
+use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
@@ -26,7 +28,7 @@ final class PushSubscriptions
 
         $existing = PushSubscription::query()->where('endpoint_hash', $hash)->first();
         // The same browser signing in as somebody else takes the device over: it is one browser, and it belongs to who is signed in now.
-        if ($existing === null && PushSubscription::query()->where('user_id', $user->getKey())->count() >= self::MAX_DEVICES_PER_USER) {
+        if ($existing === null && PushSubscription::query()->where('user_id', $user->getKey())->count() >= $this->maxDevices()) {
             throw ValidationException::withMessages(['endpoint' => ['وصلت للحد الأقصى من الأجهزة. احذف جهازًا قديمًا أولًا.']]);
         }
 
@@ -48,6 +50,18 @@ final class PushSubscriptions
         }
 
         return PushSubscription::create($fields + ['endpoint_hash' => $hash]);
+    }
+
+    /**
+     * NOTIF-V2-ENGINE-001 — the plan's `devices_per_user` for the bound workspace (editable per plan and per workspace),
+     * `MAX_DEVICES_PER_USER` when no workspace is bound or the limit is unlimited.
+     */
+    private function maxDevices(): int
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+        $limit = $tenantId === null ? null : app(EntitlementGate::class)->limit((string) $tenantId, 'devices_per_user');
+
+        return $limit ?? self::MAX_DEVICES_PER_USER;
     }
 
     public function vetted(string $endpoint): string

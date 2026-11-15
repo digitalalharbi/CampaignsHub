@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Support;
 
 use App\Domains\Alerts\Services\AlertEventMailer;
+use App\Domains\Notifications\Engine\Content\ComposedMessage;
+use App\Domains\Notifications\Engine\Sending\EngineMail;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
@@ -223,6 +225,16 @@ final class MailGallery
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
             ),
+
+            // NOTIF-V2-ENGINE-001 — the shared engine's own message (internal catalog words, and the consent request).
+            'notifications-v2-notice' => new EngineMail(new ComposedMessage(
+                subject: $ar ? 'متجر تجريبي — وكالة المدى | انتهى ربط منصة' : 'Demo store — Almada Agency | A platform link expired',
+                title: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+                body: $ar ? 'ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.' : 'A platform link in Demo store expired and needs relinking.',
+                html: $ar ? '<p><strong>انتهى ربط منصة</strong></p><p>ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.</p><p>الرقم المرجعي: N-261115-ABCDEFGH</p>'
+                    : '<p><strong>A platform link expired</strong></p><p>A platform link in Demo store expired and needs relinking.</p><p>Reference: N-261115-ABCDEFGH</p>',
+                text: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+            ), 'N-261115-ABCDEFGH', $locale),
 
             // DELIVERY-REMINDERS-001 — a reviewer's nudge, sent by `MemberNotices`.
             'delivery-reminder' => new OperationalMail(

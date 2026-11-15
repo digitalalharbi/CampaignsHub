@@ -70,6 +70,7 @@ use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
 use App\Domains\Notifications\Console\SendSpendSummaries;
+use App\Domains\Notifications\Engine\Http\Middleware\EnsurePlanFeature;
 use App\Domains\Ops\Console\PerfCheckCommand;
 use App\Domains\Ops\Console\PerfSnapshotCommand;
 use App\Domains\Ops\Console\ProfileLiveReportCommand;
@@ -295,6 +296,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/webhooks/*',
             // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
             'mail/unsubscribe/*',
+            'n/confirm/*',
         ]);
 
         /*
@@ -392,6 +394,8 @@ return Application::configure(basePath: dirname(__DIR__))
              */
             'project.can' => RequireProjectCapability::class,
             'entitlement' => EnsureEntitlement::class,
+            // NOTIF-V2-ENGINE-001 — a notifications plan key (spec §1): reads pass unless off, writes need a usable key.
+            'plan.feature' => EnsurePlanFeature::class,
             'throttle' => ConditionalThrottle::class,
         ]);
 
