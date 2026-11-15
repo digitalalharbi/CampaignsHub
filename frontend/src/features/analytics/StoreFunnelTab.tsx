@@ -181,7 +181,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   )
   // One currency for the whole page, named by the server. Falling back to SAR keeps an older payload
   // rendering, but nothing on this page decides a currency for itself any more.
-  const cur = totals.reporting_currency || 'SAR'
+  // FX-APPLY-001 — the store figures' own reporting currency, never a guessed «SAR».
+  const cur = totals.reporting_currency || null
   const stepFrom = new Map(steps.map((s) => [s.to, s]))
   const widest = Math.max(...stages.map((s) => s.value ?? 0), 1)
 

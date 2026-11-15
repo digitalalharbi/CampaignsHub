@@ -1,3 +1,4 @@
+import type { FxTotal } from '@/lib/money/fx'
 import { api, getData } from '@/lib/api/client'
 import type { ApprovedBudget, ApprovedBudgetTotal } from '@/features/funding/fundingApi'
 
@@ -16,6 +17,8 @@ export interface ClientCard {
   alerts: number
   spend: number | null
   spend_currency_mode: 'single' | 'mixed' | 'none'
+  /** FX-APPLY-001 — the 30-day spend in the display currency through FxEngine; withheld when any part has no rate. */
+  spend_fx?: FxTotal | null
   currency: string | null
   data_sources: string[]
   last_report_at: string | null

@@ -1525,7 +1525,7 @@ export function CreativesPage() {
                 creativeId={creatives[viewerIndex].id}
                 window={{ from, to }}
                 locale={ar ? 'ar' : 'en'}
-                currency={data?.currency ?? 'SAR'}
+                currency={data?.currency ?? ''}
                 height={180}
               />
             )

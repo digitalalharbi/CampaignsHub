@@ -1,3 +1,4 @@
+import { FxTotalAmount } from '@/components/money/FxAmount'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -303,7 +304,7 @@ function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof us
         <div><div className="tnum text-lg font-bold text-text-primary">{c.open_requests}</div><div className="text-[11px] text-text-muted">{t('col_open_requests')}</div></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2 text-[11px] text-text-muted">
-        <span>{t('cc_col_spend')}: <span className="tnum font-semibold text-text-secondary">{spendCell(c, t('cc_currency_mixed'))}</span></span>
+        <span>{t('cc_col_spend')}: <span className="tnum font-semibold text-text-secondary">{c.spend_fx ? <FxTotalAmount t={c.spend_fx} ar={lang === 'ar'} /> : spendCell(c, t('cc_currency_mixed'))}</span></span>
         <span>{t('cc_col_last_sync')}: {fmtDate(c.last_sync_at)}</span>
       </div>
       {c.data_sources.length > 0 && (
@@ -342,7 +343,7 @@ function ClientTableView({ rows, t, lang }: { rows: ClientCard[]; t: ReturnType<
               <td className="p-3 text-center"><span className="tnum">{c.active_campaigns}</span></td>
               <td className="p-3 text-center"><span className="tnum">{c.open_requests}</span></td>
               <td className="p-3 text-center"><span className="tnum">{c.alerts > 0 ? <span className="font-semibold text-warning">{c.alerts}</span> : '—'}</span></td>
-              <td className="p-3 text-end"><span className="tnum">{spendCell(c, t('cc_currency_mixed'))}</span></td>
+              <td className="p-3 text-end"><span className="tnum">{c.spend_fx ? <FxTotalAmount t={c.spend_fx} ar={lang === 'ar'} testId="client-spend-fx" /> : spendCell(c, t('cc_currency_mixed'))}</span></td>
               <td className="p-3">{fmtDate(c.last_sync_at)}</td>
             </tr>
           ))}

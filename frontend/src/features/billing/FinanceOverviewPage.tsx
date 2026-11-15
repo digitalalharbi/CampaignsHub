@@ -68,7 +68,8 @@ export function FinanceOverviewPage() {
   }
 
   const d = overview.data
-  const cur = d?.currency ?? 'SAR'
+  // FX-APPLY-001 — the totals' own currency (from the server), never a guessed «SAR».
+  const cur = d?.currency ?? null
   const agingTotal = d ? Object.values(d.aging).reduce((a, b) => a + b, 0) : 0
 
   return (
@@ -330,7 +331,7 @@ function Kpi({ icon: Icon, label, value, sub, tone, to }: {
 }
 
 function StatusList({ title, buckets, labels, currency }: {
-  title: string; buckets: Record<string, { count: number; total: number }>; labels: Record<string, { ar: string; en: string }>; currency: string
+  title: string; buckets: Record<string, { count: number; total: number }>; labels: Record<string, { ar: string; en: string }>; currency: string | null
 }) {
   const ar = useUi((u) => u.locale) === 'ar'
   const entries = Object.entries(buckets)
