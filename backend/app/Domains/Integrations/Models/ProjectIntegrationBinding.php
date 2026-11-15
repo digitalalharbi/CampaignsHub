@@ -6,6 +6,9 @@ namespace App\Domains\Integrations\Models;
 
 use App\Domains\Funding\Services\FundingAccountGuard;
 use App\Domains\Projects\Concerns\BelongsToProject;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -54,6 +57,21 @@ final class ProjectIntegrationBinding extends Model
         };
         self::creating($guard);
         self::updating($guard);
+
+        /*
+         * PROJECT-LIFECYCLE-001 — a draft project becomes active when its first account is linked (it starts to have
+         * data, and a draft is not live). Through the one transition function, actor = system. Never touches any other
+         * state: an archived or paused project stays as it is.
+         */
+        self::saved(static function (self $binding): void {
+            if (! $binding->is_active || (string) $binding->project_id === '') {
+                return;
+            }
+            $project = Project::withoutGlobalScopes()->find($binding->project_id);
+            if ($project !== null && $project->lifecycleStatus() === ProjectStatus::Draft) {
+                app(ProjectLifecycle::class)->transition($project, ProjectStatus::Active, null, 'account_linked');
+            }
+        });
     }
 
     /** @return BelongsTo<ExternalAccount, $this> */

@@ -69,7 +69,7 @@ final class ProjectManagementTest extends TestCase
         $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/projects')->assertJsonCount(0, 'data');
         $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/projects?include_archived=1')->assertJsonCount(1, 'data');
 
-        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$id}/restore")->assertOk()->assertJsonPath('data.status', 'active');
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/projects/{$id}/restore", ['confirm' => true])->assertOk()->assertJsonPath('data.status', 'active');
     }
 
     public function test_team_membership_and_last_admin_protection(): void

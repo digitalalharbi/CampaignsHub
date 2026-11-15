@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Actions;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Services\ProjectDeletionImpact;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -58,6 +61,7 @@ final class DeleteProject
     public function __construct(
         private readonly ProjectDeletionImpact $impact,
         private readonly AuditLogger $audit,
+        private readonly ProjectLifecycle $lifecycle,
     ) {}
 
     /**
@@ -71,7 +75,7 @@ final class DeleteProject
         // Measured BEFORE, so the audit record says what was actually there rather than what is left.
         $impact = $this->impact->for($project);
 
-        DB::transaction(function () use ($project, $tenantId, $projectId): void {
+        DB::transaction(function () use ($project, $tenantId, $projectId, $actorId): void {
             // 1. Stop the data arriving. This project's bindings only — never the connection.
             DB::table('project_integration_bindings')
                 ->where('tenant_id', $tenantId)
@@ -110,7 +114,9 @@ final class DeleteProject
                 ->where('status', '!=', 'off')
                 ->update(['status' => 'off', 'updated_at' => now()]);
 
-            $project->delete();
+            // PROJECT-LIFECYCLE-001 — the soft delete is the `deleted` transition (status, deleted_at/by, purge_after,
+            // logged with the name snapshot). Builder N2 extends this flow (archive effects, trash, purge).
+            $this->lifecycle->transition($project, ProjectStatus::Deleted, $actorId === null ? null : User::find($actorId), 'delete');
         });
 
         /*
