@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domains\Integrations\Http\Controllers\AccountInventoryController;
 use App\Domains\Integrations\Http\Controllers\AdPlatformOAuthController;
 use App\Domains\Integrations\Http\Controllers\ApiKeyConnectionController;
+use App\Domains\Integrations\Http\Controllers\ClientsIntegrationOverviewController;
 use App\Domains\Integrations\Http\Controllers\ConnectionHubController;
 use App\Domains\Integrations\Http\Controllers\ConnectionWizardController;
 use App\Domains\Integrations\Http\Controllers\IntegrationAuditController;
@@ -70,6 +71,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
          * Above `{key}` in the file so the literal segment is never read as a provider key.
          */
         Route::get('hub', ConnectionHubController::class)->name('hub');
+        // INTEGRATIONS-ALL-CLIENTS-001 — every client the reader reaches in one read, with what needs an action.
+        Route::get('clients-overview', ClientsIntegrationOverviewController::class)->name('clients-overview');
         // INTEG-UNIFIED-002 — the centre's «التدقيق» section: the tenant's own read of its integration audit rows.
         Route::get('audit', IntegrationAuditController::class)->name('audit');
         Route::get('{key}/health', [IntegrationController::class, 'health'])->name('health');

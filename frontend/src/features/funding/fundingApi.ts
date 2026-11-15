@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ensureCsrfCookie, getData, getEnvelope, postData } from '@/lib/api/client'
+import { api, ensureCsrfCookie, getData, getEnvelope, postData, putData } from '@/lib/api/client'
 
 /**
  * FIN-LOOP-001 — a project's approved budget, read from the endpoints that compute it.
@@ -66,6 +66,11 @@ export interface BudgetRow {
   used_ratio: number | null
   pace_per_day: number | null
   days_left: number | null
+  /** BUDGET-RUNOUT-001 — the last 3 full days' spend per day, and the day the balance runs out at that rate. */
+  pace_3d?: number | null
+  run_out_date?: string | null
+  /** BUDGET-FRESHNESS-001 */
+  freshness?: FreshnessInfo
   spend_without_rate: number
   complete: boolean
   last_spend_day: string | null
@@ -246,6 +251,52 @@ export function useFinancialDisclaimer() {
     staleTime: Infinity,
     retry: 1,
     queryFn: () => getData<{ ar: string; en: string }>('/funding/disclaimer'),
+  })
+}
+
+/** BUDGET-FX-DEFAULT-001 — the workspace's default USD→SAR rate, used where no dated rate exists. */
+export interface FundingRate { usd_sar: number; custom: boolean; peg: number; can_manage: boolean }
+
+export function useFundingRate() {
+  return useQuery({ queryKey: ['funding', 'rate'], retry: 1, queryFn: () => getData<FundingRate>('/funding/rate') })
+}
+
+export function useSetFundingRate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (usdSar: number) => {
+      await ensureCsrfCookie()
+      return putData<FundingRate>('/funding/rate', { usd_sar: usdSar })
+    },
+    // A new rate re-reads every budget and every limit of the workspace, so all of them are refetched.
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['funding'] }); void qc.invalidateQueries({ queryKey: ['spend-limits'] }) },
+  })
+}
+
+/** BUDGET-FRESHNESS-001 — a platform behind this figure failed to sync, or its data is older than 2 hours. */
+export interface FreshnessInfo { stale: boolean; items: { provider: string; account: string | null; reason: 'failed' | 'access_lost' | 'old' | 'never'; error_category: string | null; last_synced_at: string | null }[] }
+
+/** BUDGET-RENEW-ALL-001 — what «جدّد كل الميزانيات للشهر القادم» would copy; the preview writes nothing. */
+export interface RenewPreview {
+  month: string
+  from: string
+  to: string
+  budgets: { project_id: string; project_name: string; client_name: string; amount: number; currency: string; mode: PaymentMode; already_renewed: boolean }[]
+  limits: { id: string; project_id: string; scope: string; scope_id: string | null; amount: number; currency: string; thresholds: number[]; starts_on: string; ends_on: string; already_renewed: boolean }[]
+}
+
+export function useRenewPreview(enabled: boolean) {
+  return useQuery({ queryKey: ['funding', 'renew-preview'], enabled, staleTime: 0, gcTime: 0, queryFn: () => getData<RenewPreview>('/funding/renew-next-month') })
+}
+
+export function useApplyRenew() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: { budgets: { project_id: string; amount: number }[]; limits: { id: string; amount: number }[] }) => {
+      await ensureCsrfCookie()
+      return postData<{ budgets: number; limits: number; skipped: number }>('/funding/renew-next-month', { confirmed: true, ...body })
+    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['funding'] }); void qc.invalidateQueries({ queryKey: ['spend-limits'] }) },
   })
 }
 

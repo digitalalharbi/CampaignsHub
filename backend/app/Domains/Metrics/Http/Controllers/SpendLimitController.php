@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\SpendLimitScope;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -54,7 +55,7 @@ final class SpendLimitController extends Controller
             ->orderBy('scope')
             ->orderBy('starts_on')
             ->get()
-            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today) + ['actions' => $this->actions($request, $project, $l)])
+            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today, detail: true) + ['actions' => $this->actions($request, $project, $l)])
             ->all();
 
         return ApiResponse::success($limits, 'Spend limits.', [
@@ -67,7 +68,18 @@ final class SpendLimitController extends Controller
             'enforcement_note_en' => 'CampaignsHub watches spend against this limit and warns. It does not stop delivery on any ad platform.',
             'enforcement_note_ar' => 'يراقب كامبينز هب الإنفاق مقابل هذا الحد ويُنبّه — ولا يوقف عرض الإعلانات على أي منصة.',
             'today' => $today->toDateString(),
+            // The currency a NEW limit starts in: the one this project reports its money in (the figures' own), else the riyal.
+            'project_currency' => $this->projectCurrency($project),
         ]);
+    }
+
+    private function projectCurrency(string $project): string
+    {
+        $value = DailyMetric::query()->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('project_currency')->orderByDesc('metric_date')->toBase()->value('project_currency');
+
+        return $value !== null ? strtoupper((string) $value) : 'SAR';
     }
 
     /**
@@ -134,7 +146,7 @@ final class SpendLimitController extends Controller
         ]);
 
         return ApiResponse::success(
-            $this->governor->read($limit, Carbon::today()),
+            $this->governor->read($limit, Carbon::today(), detail: true),
             'Spend limit created.',
             ['enforcement' => SpendLimit::ENFORCEMENT],
             status: 201,
@@ -148,7 +160,7 @@ final class SpendLimitController extends Controller
 
         $spendLimit->update($this->validated($request, partial: true));
 
-        return ApiResponse::success($this->governor->read($spendLimit->refresh(), Carbon::today()), 'Spend limit updated.');
+        return ApiResponse::success($this->governor->read($spendLimit->refresh(), Carbon::today(), detail: true), 'Spend limit updated.');
     }
 
     /**

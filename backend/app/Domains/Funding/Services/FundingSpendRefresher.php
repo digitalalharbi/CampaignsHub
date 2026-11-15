@@ -72,7 +72,7 @@ final class FundingSpendRefresher
 
             foreach ($group as $part) {
                 $cur = $part->currency !== null ? strtoupper((string) $part->currency) : null;
-                $rate = $cur === null ? null : $this->fx->resolve($cur, 'SAR', $date);
+                $rate = $cur === null ? null : $this->fx->resolveForWorkspace((string) $funding->tenant_id, $cur, 'SAR', $date);
                 if ($rate === null) {
                     $missing = true;
 

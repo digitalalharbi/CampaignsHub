@@ -1,3 +1,4 @@
+import { FreshnessChip } from './FreshnessChip'
 import { providerLabel } from '@/features/campaigns/labels'
 import { CHART_SERIES } from '@/features/analytics/charts'
 import { Badge } from '@/components/ui/Badge'
@@ -190,6 +191,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       <span className="col-span-2 flex flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-self-end">
         <Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge>
         {off && <Badge tone="warning" className="whitespace-nowrap" data-testid="plan-diff-chip">{ar ? PLAN_DIFF.ar : PLAN_DIFF.en}</Badge>}
+        <FreshnessChip freshness={row.freshness} testid="row-freshness" />
       </span>
     </button>
   )

@@ -27,6 +27,7 @@ final class FundingBalance
         private readonly FundingPlan $plans,
         private readonly FundingMonth $months,
         private readonly CurrencyConverter $fx,
+        private readonly SourceFreshness $freshness,
     ) {}
 
     /**
@@ -95,7 +96,7 @@ final class FundingBalance
         // BUDGET-CURRENCY-001 — a platform's own spend is shown in USD (one unit for platforms), totals stay in SAR. The unit is the SAR
         // figure over the latest USD→SAR rate; with no rate there is no USD figure, never a guessed one. Days with no dated rate keep
         // their OWN currency and amount, so the page can say «بدون سعر صرف» next to them.
-        $usdRate = $this->fx->resolve('USD', 'SAR', $today)['rate'] ?? null;
+        $usdRate = $this->fx->resolveForWorkspace((string) $funding->tenant_id, 'USD', 'SAR', $today)['rate'] ?? null;
         $toUsd = static fn (?float $sar): ?float => ($sar === null || $usdRate === null || $usdRate <= 0) ? null : round($sar / $usdRate, 2);
         $unconverted = $spendQuery()->whereNull('amount_sar')->where('original_amount', '>', 0)
             ->selectRaw('provider, original_currency AS currency, SUM(original_amount) AS amount')->groupBy('provider', 'original_currency')->get()
@@ -129,6 +130,19 @@ final class FundingBalance
         $invoiceMonths = $credit ? $this->months->invoiceMonths($funding, $today) : null;
         $thisMonth = $invoiceMonths === null ? null : round((float) array_sum(array_map(static fn (array $m): float => $m['month'] === $today->format('Y-m') ? $m['spent'] : 0.0, $invoiceMonths)), 2);
 
+        // BUDGET-RUNOUT-001 — the estimated run-out day from the LAST 3 full days' spend (a short window: it must follow a
+        // change of pace). Only a prepaid balance runs out; with no spend in those days there is no estimate.
+        $threeStart = $today->copy()->subDays(3)->toDateString();
+        $pace3 = round((float) $spendQuery()->whereBetween('spend_date', [$threeStart, $weekEnd])->sum('amount_sar') / 3, 2);
+        $runOutDate = ($remaining !== null && $remaining > 0 && $pace3 > 0)
+            ? Carbon::parse($today->toDateString())->addDays((int) floor($remaining / $pace3))->toDateString() : null;
+
+        $platforms = array_values(array_unique(array_merge(
+            array_column($byPlatform, 'provider'),
+            $planRows === null ? [] : array_column($planRows, 'provider'),
+        )));
+        $freshness = $this->freshness->forProject((string) $funding->project_id, $platforms === [] ? null : $platforms);
+
         $daysLeft = ($remaining !== null && $pace !== null && $pace > 0 && $remaining > 0)
             ? (int) floor($remaining / $pace) : null;
 
@@ -144,7 +158,8 @@ final class FundingBalance
             $remaining < 0 => 'over',
             // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
             $withoutRate > 0 => 'incomplete',
-            $remaining < (float) $funding->alert_floor => 'low',
+            // Nothing spent is never «low»: a small budget under the alert floor has lost nothing yet.
+            $spent > 0 && $remaining < (float) $funding->alert_floor => 'low',
             default => 'ok',
         };
 
@@ -179,6 +194,9 @@ final class FundingBalance
             'plan_alerts' => $comparison === null ? 0 : count($this->plans->alerts($comparison)),
             'pace_per_day' => $pace,
             'days_left' => $daysLeft,
+            'pace_3d' => $pace3 > 0 ? $pace3 : null,
+            'run_out_date' => $runOutDate,
+            'freshness' => $freshness,
             'spend_without_rate' => $withoutRate,
             'complete' => $withoutRate === 0,
             'last_spend_day' => $lastDay,

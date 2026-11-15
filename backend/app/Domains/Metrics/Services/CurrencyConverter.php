@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Funding\Services\WorkspaceFxDefault;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\ValueObjects\Money;
 use Illuminate\Support\Carbon;
@@ -110,6 +111,18 @@ final class CurrencyConverter
         }
 
         return $this->cache[$key] = null;
+    }
+
+    /**
+     * BUDGET-FX-DEFAULT-001 — `resolve()`, then, for USD↔SAR only, the workspace's own default rate (else the SAR peg).
+     * Used by the budget and spend-limit surfaces; ingest keeps the strict `resolve()` and its withheld figures.
+     *
+     * @return array{rate: float, rate_date: string, source: string}|null
+     */
+    public function resolveForWorkspace(string $tenantId, string $from, string $to, Carbon $date): ?array
+    {
+        return $this->resolve($from, $to, $date)
+            ?? app(WorkspaceFxDefault::class)->resolve($tenantId, $from, $to, $date->toDateString());
     }
 
     public function convert(Money $money, string $to, Carbon $date): Money

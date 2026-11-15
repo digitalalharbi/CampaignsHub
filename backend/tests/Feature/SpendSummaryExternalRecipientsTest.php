@@ -81,14 +81,14 @@ final class SpendSummaryExternalRecipientsTest extends TestCase
         return Project::create(['tenant_id' => $tenant->id, 'client_workspace_id' => $ws->id, 'name' => $name, 'status' => 'active']);
     }
 
-    private function spend(Project $p, string $date, ?float $value, string $currency = 'SAR', ?float $original = null): void
+    private function spend(Project $p, string $date, ?float $value, string $currency = 'SAR', ?float $original = null, string $originalCurrency = 'USD'): void
     {
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $p->tenant_id, 'project_id' => $p->id,
             'external_account_id' => (string) Str::uuid(), 'external_campaign_id' => (string) Str::uuid(),
             'unified_campaign_id' => null, 'provider' => 'meta', 'metric_key' => 'spend', 'metric_date' => $date,
             'value' => $value, 'project_currency' => $value === null ? null : $currency,
-            'original_amount' => $original, 'original_currency' => $original === null ? null : 'USD',
+            'original_amount' => $original, 'original_currency' => $original === null ? null : $originalCurrency,
             'created_at' => now(), 'updated_at' => now(),
         ]);
     }
@@ -122,7 +122,8 @@ final class SpendSummaryExternalRecipientsTest extends TestCase
         }
         $this->limit($a, 1000.0);
         $this->spend($b, '2026-11-10', 300.0);                  // no limit set
-        $this->spend($c, '2026-11-10', null, 'SAR', 500.0);     // withheld (no exchange rate)
+        // withheld, in a FLOATING currency: no dated rate and no default (the riyal<->dollar peg is the only default rate, BUDGET-FX-DEFAULT-001)
+        $this->spend($c, '2026-11-10', null, 'SAR', 500.0, 'EUR');
         $this->limit($c, 1000.0);
 
         app(TenantContext::class)->setTenantId($this->tenant->id);
@@ -320,7 +321,7 @@ final class SpendSummaryExternalRecipientsTest extends TestCase
         $this->spend($mixed, '2026-11-10', 100.0, 'SAR');
         $this->spend($mixed, '2026-11-11', 100.0, 'USD');
         $held = $this->project($this->tenant, 'Held');
-        $this->spend($held, '2026-11-10', null, 'SAR', 50.0);
+        $this->spend($held, '2026-11-10', null, 'SAR', 50.0, 'EUR');
         $this->limit($held, 1000.0);
 
         app(TenantContext::class)->setTenantId($this->tenant->id);
