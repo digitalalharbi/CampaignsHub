@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLatestSearchParams } from '@/lib/url/latestSearchParams'
 import { useAuth } from '@/stores/auth'
 import { riyadhToday, spanLength, type Comparison, type CompareMode, type Period, type PresetKey, type ResolveContext } from './periodMath'
 import {
@@ -46,8 +46,14 @@ export interface PeriodState {
 
 const DAY_PRESET: Record<number, PresetKey> = { 7: 'last_7', 14: 'last_14', 28: 'last_28', 30: 'last_30', 90: 'last_90' }
 
-export function usePeriod(options: { earliest?: string | null } = {}): PeriodState {
-  const [params, setParams] = useSearchParams()
+/**
+ * `writeUrl: false` — a reader that does not own the page's address (a report or live-link builder opened in a dialog on
+ * `/reports`) seeds its own fields from the period and leaves the address alone: a dialog that rewrites the page URL
+ * the moment it opens navigates under the person's first click (CI PR #1071, live-link builder on Firefox).
+ */
+export function usePeriod(options: { earliest?: string | null; writeUrl?: boolean } = {}): PeriodState {
+  const writeUrl = options.writeUrl !== false
+  const [params, setParams] = useLatestSearchParams()
   const userId = useAuth((s) => s.user?.id ?? null)
   const uid = userId ?? 'anon'
   const today = riyadhToday()
@@ -70,10 +76,11 @@ export function usePeriod(options: { earliest?: string | null } = {}): PeriodSta
   /* The address names no period (or only an old `?days=`): write the resolved one so the link is shareable. */
   const hasPeriodInUrl = params.has('from') && params.has('to') && !params.has('days')
   useEffect(() => {
-    if (hasPeriodInUrl) return
-    setParams((cur) => paramsWithPeriod(cur, resolved, selection.compare), { replace: true })
+    if (hasPeriodInUrl || !writeUrl) return
+    // URL-WRITE-RACE-001 — merged into the latest address, and only when that address still names no period.
+    setParams((latest) => (latest.has('from') && latest.has('to') && !latest.has('days') ? latest : paramsWithPeriod(latest, resolved, selection.compare)), { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPeriodInUrl, resolved.period.from, resolved.period.to, selection.compare])
+  }, [hasPeriodInUrl, writeUrl, resolved.period.from, resolved.period.to, selection.compare])
 
   /* Remember what the address said, so the next page opens on it. */
   useEffect(() => {
@@ -89,8 +96,8 @@ export function usePeriod(options: { earliest?: string | null } = {}): PeriodSta
     sessionRecent.set(uid, nextRecent)
     saveStored(userId, { selection: next, recent: nextRecent })
     const r = resolveSelection(next, ctx)
-    setParams((cur) => paramsWithPeriod(cur, r, next.compare), { replace: true })
-  }, [ctx, setParams, stored, uid, userId])
+    if (writeUrl) setParams((latest) => paramsWithPeriod(latest, r, next.compare), { replace: true })
+  }, [ctx, setParams, stored, uid, userId, writeUrl])
 
   const setPreset = useCallback((key: PresetKey) => setSelection({ key, compare: selection.compare === 'custom' ? 'none' : selection.compare }), [selection.compare, setSelection])
   const setDays = useCallback((n: number) => { const key = DAY_PRESET[n]; if (key) setPreset(key) }, [setPreset])

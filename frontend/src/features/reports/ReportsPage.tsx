@@ -1257,7 +1257,8 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
    */
   const [scope, setScope] = useState<ReportScopeShape>(start?.scope ?? {})
   // DATE-RANGE-001 — a new report starts on the system's period (ending yesterday), not on «30 days to today».
-  const sharedPeriod = usePeriod().range
+  // URL-WRITE-RACE-001 — a dialog seeds its own dates from the period and leaves the page address alone.
+  const sharedPeriod = usePeriod({ writeUrl: false }).range
   const [from, setFrom] = useState(start?.period_start ?? sharedPeriod.from)
   const [to, setTo] = useState(start?.period_end ?? sharedPeriod.to)
   // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so

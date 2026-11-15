@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLatestSearchParams } from '@/lib/url/latestSearchParams'
 
 /**
  * ANALYTICS-FILTER-TRUTH-001 — a filter lives in the URL, or it does not survive.
@@ -26,7 +26,7 @@ import { useSearchParams } from 'react-router-dom'
 
 /** A single-valued filter — objective, client, tab. */
 export function useUrlState(key: string, fallback: string): [string, (value: string) => void] {
-  const [params, setParams] = useSearchParams()
+  const [params, setParams] = useLatestSearchParams()
   const value = params.get(key) ?? fallback
 
   const set = useCallback(
@@ -61,7 +61,7 @@ export function useUrlState(key: string, fallback: string): [string, (value: str
  * does not belong in a shared link.
  */
 export function useUrlWriter(): (next: Record<string, { value: string; fallback: string }>) => void {
-  const [, setParams] = useSearchParams()
+  const [, setParams] = useLatestSearchParams()
 
   return useCallback(
     (next) => {
@@ -84,7 +84,7 @@ export function useUrlWriter(): (next: Record<string, { value: string; fallback:
 
 /** A multi-select filter — platforms, campaigns. Empty means every, and writes nothing. */
 export function useUrlList(key: string): [string[], (next: string[] | ((prev: string[]) => string[])) => void] {
-  const [params, setParams] = useSearchParams()
+  const [params, setParams] = useLatestSearchParams()
   const raw = params.get(key)
   const value = raw === null || raw === '' ? [] : raw.split(',').filter(Boolean)
 

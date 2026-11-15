@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLatestSearchParams } from '@/lib/url/latestSearchParams'
 import { useQuery } from '@tanstack/react-query'
 import { listClientWorkspaces, listProjects } from './api'
 import { useProject } from '@/stores/project'
@@ -31,7 +31,7 @@ import { usePortalBase } from '@/app/portalPath'
  * keys (`view`, `band`, `lifecycle`) stay exactly as the link wrote them.
  */
 export function useProjectFromUrl(): void {
-  const [params, setParams] = useSearchParams()
+  const [params, setParams] = useLatestSearchParams()
   const wanted = params.get('project')
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()

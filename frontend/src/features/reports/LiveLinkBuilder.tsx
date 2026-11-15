@@ -112,7 +112,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
   const [periodMode, setPeriodMode] = useState<'fixed' | 'rolling'>('fixed')
   // DATE-RANGE-001 — a new link starts on the system's period (ending yesterday).
-  const sharedPeriod = usePeriod().range
+  // URL-WRITE-RACE-001 — a dialog seeds its own dates from the period and leaves the page address alone.
+  const sharedPeriod = usePeriod({ writeUrl: false }).range
   const [from, setFrom] = useState(sharedPeriod.from)
   const [to, setTo] = useState(sharedPeriod.to)
 
