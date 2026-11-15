@@ -37,6 +37,16 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
       } else if (!e.shiftKey && (current === last || !container.contains(current))) {
         e.preventDefault()
         first.focus()
+      } else {
+        /*
+         * Safari does not Tab to links and buttons unless the person turned that on, so the browser's own «next» can
+         * be a field in the page behind, or the address bar, whatever this list says is last. Whatever it chose,
+         * if it left the layer, bring focus back to the end it should have wrapped to.
+         */
+        const backwards = e.shiftKey
+        window.setTimeout(() => {
+          if (!container.contains(document.activeElement)) (backwards ? last : first).focus()
+        }, 0)
       }
     }
     document.addEventListener('keydown', onKey)

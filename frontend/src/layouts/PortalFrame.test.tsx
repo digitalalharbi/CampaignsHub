@@ -55,3 +55,21 @@ describe('the phone navigation layer (NOV-SIDEBAR-001)', () => {
     expect(document.body.style.overflow).toBe('hidden')
   })
 })
+
+describe('Safari Tab order (NOV-SAFARI-001)', () => {
+  it('brings focus back into the layer when the browser tabs out of it', async () => {
+    frame()
+    const first = screen.getByRole('button', { name: 'first' })
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+
+    // A browser that does not Tab to buttons hands focus to whatever comes next in the page.
+    first.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    outside.focus()
+    await new Promise((r) => setTimeout(r, 5))
+
+    expect(screen.getByTestId('mobile-drawer').contains(document.activeElement)).toBe(true)
+    outside.remove()
+  })
+})
