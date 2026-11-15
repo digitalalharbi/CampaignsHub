@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
 use App\Domains\Notifications\Engine\Console\ConsentSweepCommand;
+use App\Domains\Notifications\Engine\Console\GraceHeadsUpCommand;
 use App\Domains\Notifications\Engine\Console\ImportLegacyCommand;
 use App\Domains\Notifications\Engine\Console\MailDnsCheckCommand;
 use App\Domains\Notifications\Engine\Console\RunDigestsCommand;
@@ -91,6 +92,7 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
                 MailDnsCheckCommand::class,
                 ImportLegacyCommand::class,
                 ConsentSweepCommand::class,
+                GraceHeadsUpCommand::class,
             ]);
         }
     }

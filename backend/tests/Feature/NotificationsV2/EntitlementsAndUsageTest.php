@@ -6,6 +6,7 @@ namespace Tests\Feature\NotificationsV2;
 
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\UsageCounter;
+use App\Domains\Notifications\Engine\Entitlements\GraceHeadsUp;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
 use App\Domains\Notifications\Engine\Enums\EntitlementMode;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
@@ -120,6 +121,24 @@ final class EntitlementsAndUsageTest extends TestCase
         app()->forgetScopedInstances();
         $this->actingAs($owner)->getJson('/api/v1/__nv2/external')->assertOk();      // view-only: settings still readable
         $this->actingAs($owner)->postJson('/api/v1/__nv2/external')->assertForbidden(); // …but not editable
+    }
+
+    public function test_the_owner_gets_one_heads_up_before_the_grace_period_ends(): void
+    {
+        $tenant = $this->tenant('A');
+        DB::table('tenants')->where('id', $tenant->id)->update(['created_at' => '2026-10-01 00:00:00']);
+        $owner = $this->member($tenant, 'tenant-owner');
+        $buyer = $this->member($tenant, 'media-buyer');
+        $this->feature('notifications.external', false, ['paid_from' => '2026-11-04 00:00:00', 'keep_existing' => false, 'grace_days' => 14]); // ends 18 Nov
+
+        app()->forgetScopedInstances();
+        $this->assertSame(1, app(GraceHeadsUp::class)->run());
+        app()->forgetScopedInstances();
+        $this->assertSame(0, app(GraceHeadsUp::class)->run());
+
+        $this->assertSame(1, DB::table('notification_outbox')->where('event_key', 'plan.grace_ending')->where('recipient_user_id', $owner->id)->where('channel', 'in_app')->count());
+        $this->assertSame(0, DB::table('notification_outbox')->where('event_key', 'plan.grace_ending')->where('recipient_user_id', $buyer->id)->count());
+        $this->assertSame(EntitlementMode::Grace, $this->gate()->state($tenant->id, EntitlementKey::External)->mode);
     }
 
     public function test_an_explicit_workspace_state_wins_and_the_most_specific_plan_row_applies(): void
