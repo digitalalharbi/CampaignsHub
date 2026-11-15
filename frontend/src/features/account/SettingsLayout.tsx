@@ -86,7 +86,7 @@ export function SettingsLayout() {
   const openTab = new URLSearchParams(location.search).get('tab') ?? 'general'
 
   return (
-    <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
+    <div className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
       {/*
         SETTINGS-MOBILE-OVERFLOW-001 — the settings page scrolled sideways on a phone.
 
@@ -124,7 +124,7 @@ export function SettingsLayout() {
           ))}
         </div>
       </nav>
-      <div className="min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-col">
         <Outlet />
       </div>
     </div>
