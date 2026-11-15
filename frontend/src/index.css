@@ -221,3 +221,35 @@ body {
     min-width: 44px;
   }
 }
+
+/*
+ * NOV-FIT-001 — a page that fits the screen is locked to it, on a desktop only.
+ *
+ * `PortalFrame` sets `data-fit` while a page that called `useFitLock()` is mounted. Here the root is pinned to the
+ * viewport and every level between it and the page may shrink (`min-height: 0` — a flex item otherwise refuses to
+ * go below its content), so the page's own body is what gives. Nothing here hides content: a page that did not
+ * budget its height would be cut off, and `e2e/shell.spec.ts` measures every converted page for exactly that.
+ *
+ * The query is `FIT_LOCK_QUERY` in `styles/scale.ts` (`fitMedia.test.ts` keeps the two equal). Below it — a phone,
+ * a tablet, a short window — the page flows and scrolls vertically like any other. `100vh` first, `100dvh` after:
+ * a browser without `dvh` keeps the first, and one with it takes the viewport that tracks its toolbars.
+ */
+@media (min-width: 1280px) and (min-height: 640px) {
+  [data-fit='true'] {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  [data-fit='true'] .portal-col,
+  [data-fit='true'] .portal-main {
+    min-height: 0;
+  }
+  [data-fit='true'] .portal-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0.5rem;
+  }
+}

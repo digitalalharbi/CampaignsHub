@@ -1,5 +1,6 @@
 import { MoneyWithheldNote } from '@/components/MoneyWithheldNote'
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { FitContext } from './fitContext'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { ReviewBanner } from '@/components/ReviewBanner'
 import { SupportBanner } from '@/components/SupportBanner'
@@ -105,9 +106,12 @@ export function PortalFrame({
   children: ReactNode
 }) {
   const hasTabs = Boolean(tabs && tabs.length > 0)
+  /* NOV-FIT-001 — set by a page that fits the screen (`useFitLock`); `index.css` pins the height from it. */
+  const [fit, setFit] = useState(false)
 
   return (
-    <div data-testid={testId} style={style} className="flex min-h-[100dvh] bg-background text-text-primary">
+    <FitContext.Provider value={setFit}>
+    <div data-testid={testId} data-fit={fit ? 'true' : undefined} style={style} className="flex min-h-[100dvh] bg-background text-text-primary">
       {rail && (
         <aside
           className={`sticky top-0 z-50 hidden h-[100dvh] shrink-0 flex-col overflow-y-auto border-e border-border bg-surface transition-[width] duration-[var(--motion-panel)] ease-[var(--motion-ease)] md:flex ${railCompact ? 'items-stretch gap-3 px-2 py-3' : 'gap-6 p-3.5'} ${railWidth}`}
@@ -129,7 +133,7 @@ export function PortalFrame({
         * gets a chance to contain it. This is what keeps a dense portal page honest at 1280px and at
         * 375px alike.
         */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="portal-col flex min-w-0 flex-1 flex-col">
         <SupportBanner />
         <ReviewBanner />
         {header}
@@ -138,7 +142,7 @@ export function PortalFrame({
           * The column that fixes the dead space: `main` is the flex parent, the content box takes
           * the slack, the footer is last and therefore sits on the bottom edge of a short page.
           */}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="portal-main flex min-w-0 flex-1 flex-col">
           {/*
             UI-DENSITY-001 — the frame gives the work more of the screen.
 
@@ -151,7 +155,7 @@ export function PortalFrame({
             drifts into its own rhythm. The side padding keeps a 12px floor on a phone, which is what
             stops text meeting the bezel.
           */}
-          <div className={`mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
+          <div className={`portal-content mx-auto w-full min-w-0 flex-1 px-3 pb-8 pt-3 sm:px-4 lg:px-5 ${contentWidth}`}>
             {/* MEMBER-VISIBILITY-001 — said once, above whatever the page draws, for the project in view. */}
             <MoneyWithheldNote />
             {children}
@@ -163,8 +167,8 @@ export function PortalFrame({
             * row above it; paying it on the content box as well would add a phone-sized gap between
             * the content and the footer on every page — the same dead space in a new place.
             */}
-          <div className={`px-4 sm:px-5 lg:px-6 ${hasTabs ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
-            <div className={`mx-auto w-full ${contentWidth}`}><PortalFooter /></div>
+          <div className={`portal-foot px-4 sm:px-5 lg:px-6 ${hasTabs ? MOBILE_TAB_BAR_CLEARANCE : ''}`}>
+            <div className={`mx-auto w-full ${contentWidth}`}><PortalFooter compact={fit} /></div>
           </div>
         </main>
       </div>
@@ -180,6 +184,7 @@ export function PortalFrame({
 
       {hasTabs && <MobileTabBar tabs={tabs!} moreGroups={moreGroups} moreHeader={moreHeader} />}
     </div>
+    </FitContext.Provider>
   )
 }
 
