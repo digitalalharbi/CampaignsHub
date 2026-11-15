@@ -15,9 +15,12 @@
     @if ($cards !== [])
         <div style="font-size:13px; font-weight:700; color:#3d4742; padding-bottom:8px;">{{ $w['results'] }}</div>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed; margin-bottom:18px; border:1px solid #e4e0d6; border-radius:12px;">
+            {{-- EMAIL-CLIENT-COMPAT-001 — two figures to a row on every screen: four 20px figures side by side touched each other on a
+                 phone once the layout stopped stacking them (the stacking lived in <style>, which the Gmail app drops). --}}
+            @foreach (array_chunk($cards, count($cards) > 2 ? 2 : count($cards)) as $cardRow)
             <tr>
-                @foreach ($cards as $card)
-                    <td class="ch-kpi" align="center" valign="top" width="{{ (int) floor(100 / count($cards)) }}%" style="padding:14px 6px; text-align:center;">
+                @foreach ($cardRow as $card)
+                    <td class="ch-kpi" align="center" valign="top" width="{{ (int) floor(100 / count($cardRow)) }}%" style="padding:14px 6px; text-align:center;">
                         <div style="font-size:12px; color:#5b6b68; line-height:1.5;">{{ $card['label'] }}</div>
                         <div dir="ltr" style="font-family:{!! $numericFont !!}; font-size:20px; font-weight:800; color:#0b1a16; line-height:1.5;">{{ $card['value'] }}@if ($card['unit'] !== null && $card['unit'] !== '') <span style="font-size:11px; font-weight:600; color:#5b6b68;">{{ $card['unit'] }}</span>@endif</div>
                         @if ($card['up'] !== null)
@@ -25,7 +28,9 @@
                         @endif
                     </td>
                 @endforeach
+                @if (count($cards) > 2 && count($cardRow) < 2)<td width="50%" style="padding:14px 6px;">&nbsp;</td>@endif
             </tr>
+            @endforeach
         </table>
     @endif
 
