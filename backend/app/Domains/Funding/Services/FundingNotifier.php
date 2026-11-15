@@ -116,7 +116,7 @@ final class FundingNotifier
             $f = $this->balance->of($funding);
             $state = match (true) {
                 $f['remaining'] !== null && $f['remaining'] < 0 => 'over',
-                $f['remaining'] !== null && ($f['remaining'] < $f['alert_floor'] || ($f['days_left'] !== null && $f['days_left'] < 7)) => 'low',
+                $f['remaining'] !== null && $f['spent'] > 0 && ($f['remaining'] < $f['alert_floor'] || ($f['days_left'] !== null && $f['days_left'] < 7)) => 'low',
                 default => null,
             };
             if ($state === null) {
