@@ -8,6 +8,7 @@ use App\Domains\Notifications\Engine\Sending\SenderPipeline;
 use App\Domains\Notifications\Followup\MorningBriefRunner;
 use App\Domains\Notifications\Internal\InternalEvents;
 use App\Domains\Notifications\Internal\InternalScan;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
@@ -74,7 +75,7 @@ final class E2eFollowupCommand extends Command
         }
 
         if ((string) $this->option('event') !== '') {
-            $projectId = (string) DB::table('projects')->where('tenant_id', $tenantId)->whereIn('status', ['active', 'onboarding'])->orderBy('created_at')->value('id');
+            $projectId = (string) LiveProjects::constrain(DB::table('projects')->where('tenant_id', $tenantId))->orderBy('created_at')->value('id');
             $tenants->setTenantId($tenantId);
             for ($i = 0; $i < (int) $this->option('count'); $i++) {
                 $events->raise((string) $this->option('event'), $tenantId, $projectId, [], null, 'e2e', 'e2e-'.Str::random(8));

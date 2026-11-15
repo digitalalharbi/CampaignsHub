@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Engine\Scheduling;
 use App\Domains\Notifications\Engine\Contracts\Scheduler;
 use App\Domains\Notifications\Engine\Data\DeliveryIntent;
 use App\Domains\Notifications\Engine\NotificationEngine;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -32,8 +33,8 @@ final class DigestRunner
             if ($period === null) {
                 $out['skipped_empty_period']++;
             } else {
-                $live = DB::table('projects')->where('tenant_id', $subscription->tenantId)->whereIn('id', $subscription->projectIds)
-                    ->where('status', '!=', 'archived')->whereNull('deleted_at')->orderBy('id')->pluck('id');
+                $live = LiveProjects::idsQuery($subscription->tenantId)->whereIn('projects.id', $subscription->projectIds)
+                    ->orderBy('projects.id')->pluck('id');
                 foreach ($live as $projectId) {
                     $this->engine->raise(new DeliveryIntent(
                         eventKey: 'digest.periodic',

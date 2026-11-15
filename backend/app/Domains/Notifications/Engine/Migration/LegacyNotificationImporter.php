@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Engine\Migration;
 
 use App\Domains\Notifications\Engine\Contracts\SubscriptionLog;
 use App\Domains\Notifications\Engine\Enums\SubscriptionLogAction;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -46,10 +47,11 @@ final class LegacyNotificationImporter
                 continue;
             }
 
-            $projects = DB::table('external_digest_recipient_projects as p')->join('projects', 'projects.id', '=', 'p.project_id')
-                ->where('p.recipient_id', $legacy->id)->where('p.tenant_id', $legacy->tenant_id)->where('projects.tenant_id', $legacy->tenant_id)
-                ->get(['projects.id', 'projects.status', 'projects.deleted_at']);
-            $live = $projects->filter(static fn ($p): bool => $p->status !== 'archived' && $p->deleted_at === null)->pluck('id')->map(static fn ($id): string => (string) $id)->values()->all();
+            $projects = DB::table('external_digest_recipient_projects as p')
+                ->where('p.recipient_id', $legacy->id)->where('p.tenant_id', $legacy->tenant_id)
+                ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('projects as pr')->whereColumn('pr.id', 'p.project_id')->where('pr.tenant_id', $legacy->tenant_id))
+                ->pluck('p.project_id');
+            $live = LiveProjects::idsQuery((string) $legacy->tenant_id)->whereIn('projects.id', $projects)->pluck('id')->map(static fn ($id): string => (string) $id)->values()->all();
             $excluded = $projects->count() - count($live);
             $out['excluded_archived_projects'] += $excluded;
 

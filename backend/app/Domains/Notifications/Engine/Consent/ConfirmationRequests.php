@@ -14,6 +14,7 @@ use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Notifications\External\Consent\ConsentMessage;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -43,8 +44,8 @@ final class ConfirmationRequests
         $eligible = $this->eligible($tenantId);
         $subs = DB::table('notification_subscriptions')->where('tenant_id', $tenantId)->whereIn('recipient_id', $eligible->pluck('id'))
             ->where('status', 'pending')->pluck('id');
-        $archived = DB::table('notification_subscription_projects as p')->join('projects', 'projects.id', '=', 'p.project_id')
-            ->whereIn('p.subscription_id', $subs)->where(fn ($q) => $q->where('projects.status', 'archived')->orWhereNotNull('projects.deleted_at'))->count();
+        $archived = DB::table('notification_subscription_projects as p')
+            ->whereIn('p.subscription_id', $subs)->whereNotIn('p.project_id', LiveProjects::idsQuery($tenantId))->count();
 
         return ['recipients' => $eligible->count(), 'subscriptions' => $subs->count(), 'excluded_archived_projects' => $archived];
     }
@@ -63,8 +64,8 @@ final class ConfirmationRequests
             $token = Str::random(48);
             $projects = DB::table('notification_subscription_projects as p')->join('notification_subscriptions as s', 's.id', '=', 'p.subscription_id')
                 ->join('projects', 'projects.id', '=', 'p.project_id')
-                ->where('s.recipient_id', $recipient->id)->where('s.tenant_id', $tenantId)->where('projects.status', '!=', 'archived')
-                ->whereNull('projects.deleted_at')->orderBy('projects.name')->pluck('projects.name')->unique()->values()->all();
+                ->where('s.recipient_id', $recipient->id)->where('s.tenant_id', $tenantId)->whereIn('p.project_id', LiveProjects::idsQuery($tenantId))
+                ->orderBy('projects.name')->pluck('projects.name')->unique()->values()->all();
             $ar = $recipient->language !== 'en';
             $link = url('/n/confirm/'.$token).($ar ? '' : '?lang=en');
             // The invitation's words and design: builder Q's ConsentMessage (shared design tokens, §9 wording).
@@ -174,9 +175,8 @@ final class ConfirmationRequests
                 ->orWhere(fn ($q) => $q->where('r.status', 'active')->where('r.consent', 'double_opt_in')->whereNull('r.confirmation_token_hash')))
             ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('notification_subscriptions as s')
                 ->join('notification_subscription_projects as p', 'p.subscription_id', '=', 's.id')
-                ->join('projects', 'projects.id', '=', 'p.project_id')
                 ->whereColumn('s.recipient_id', 'r.id')->where('s.status', 'pending')
-                ->where('projects.status', '!=', 'archived')->whereNull('projects.deleted_at'))
+                ->whereIn('p.project_id', LiveProjects::idsQuery($tenantId)))
             ->orderBy('r.created_at')->get(['r.id', 'r.email', 'r.name', 'r.language']);
     }
 }

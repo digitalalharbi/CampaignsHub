@@ -11,6 +11,8 @@ use App\Domains\Notifications\Followup\FollowupTasks;
 use App\Domains\Notifications\Followup\Models\FollowupTask;
 use App\Domains\Notifications\Followup\Models\FollowupTaskEvent;
 use App\Domains\Notifications\Services\NotificationDispatcher;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -169,7 +171,8 @@ final class FollowupTasksTest extends TestCase
         $this->scan();
         $this->assertCount(1, $this->tasks($this->finance));
 
-        $project->update(['status' => 'archived']);
+        // PROJECT-LIFECYCLE-001 — the status is written only by the state machine (the archive also runs its effects).
+        app(ProjectLifecycle::class)->transition($project, ProjectStatus::Archived, null);
         $this->scan();
         $this->assertSame([], $this->tasks($this->finance));
         $this->assertSame(0, FollowupTask::query()->withoutGlobalScopes()->where('status', 'open')->count());

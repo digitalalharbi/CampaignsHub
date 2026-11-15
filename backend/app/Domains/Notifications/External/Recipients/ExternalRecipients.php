@@ -18,6 +18,7 @@ use App\Domains\Notifications\Engine\Models\ExternalRecipient;
 use App\Domains\Notifications\Engine\Models\NotificationSubscription;
 use App\Domains\Notifications\Engine\Scheduling\DigestPeriods;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettings;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -380,7 +381,7 @@ final class ExternalRecipients
     private function cleanSubscription(string $tenantId, WorkspaceSettings $ws, WorkspaceTypeProfile $profile, string $role, array $s, string $field, array &$notes): array
     {
         $requested = array_values(array_unique(array_map('strval', (array) ($s['project_ids'] ?? []))));
-        $live = DB::table('projects')->where('tenant_id', $tenantId)->whereIn('id', $requested)->where('status', '!=', 'archived')->whereNull('deleted_at')
+        $live = LiveProjects::idsQuery($tenantId)->whereIn('projects.id', $requested)
             ->pluck('id')->map(static fn ($p): string => (string) $p)->all();
         $foreign = count($requested) - DB::table('projects')->where('tenant_id', $tenantId)->whereIn('id', $requested)->count();
         $this->fail($foreign > 0, "{$field}.project_ids", 'Projects must belong to this workspace.');

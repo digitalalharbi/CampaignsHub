@@ -10,6 +10,7 @@ use App\Domains\Notifications\Engine\NotificationEngine;
 use App\Domains\Notifications\Engine\Scheduling\DigestPeriods;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
 use App\Domains\Notifications\External\Recipients\ExternalSettings;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -45,8 +46,7 @@ final class ExternalEventDetector
         $rows = DB::table('notification_subscriptions as s')
             ->join('notification_external_recipients as r', 'r.id', '=', 's.recipient_id')
             ->join('notification_subscription_projects as p', 'p.subscription_id', '=', 's.id')
-            ->join('projects', 'projects.id', '=', 'p.project_id')
-            ->where('s.status', 'active')->where('r.status', 'active')->where('projects.status', '!=', 'archived')->whereNull('projects.deleted_at')
+            ->where('s.status', 'active')->where('r.status', 'active')->whereIn('p.project_id', LiveProjects::idsQuery())
             ->whereNotNull('s.event_keys')->get(['s.tenant_id', 'p.project_id', 's.event_keys']);
 
         $wanted = [];

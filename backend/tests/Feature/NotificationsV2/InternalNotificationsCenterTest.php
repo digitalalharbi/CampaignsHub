@@ -122,11 +122,15 @@ final class InternalNotificationsCenterTest extends TestCase
         $owner = $this->member($this->tenant, 'tenant-owner');
 
         $this->events()->raise('sync.failed', $this->tenant->id, $archived->id);
-        $this->events()->raise('budget.overrun', $this->tenant->id, $paused->id);
         $this->assertSame([], $this->outbox($owner));
 
-        $this->events()->raise('sync.failed', $this->tenant->id, $live->id);
+        // PROJECT-LIFECYCLE-001 §5 — live = active + paused, from ONE scope: a paused project's notices keep arriving like its alerts.
+        $this->events()->raise('budget.overrun', $this->tenant->id, $paused->id);
         $this->assertNotEmpty($this->outbox($owner));
+
+        $this->events()->raise('sync.failed', $this->tenant->id, $live->id);
+        $this->assertNotEmpty($this->outbox($owner, 'sync.failed'));
+        $this->assertSame([$live->id], array_values(array_unique(array_map(static fn ($r): string => (string) $r->project_id, $this->outbox($owner, 'sync.failed')))));
     }
 
     public function test_a_client_portal_user_gets_their_project_without_sensitive_events_and_in_positive_words(): void
