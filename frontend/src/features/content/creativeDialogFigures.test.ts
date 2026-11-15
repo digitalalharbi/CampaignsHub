@@ -10,7 +10,7 @@ import { creativeMoney } from './creativeMoney'
  *
  * On the Analytics content table's dialog: «CPM 65.65%» and «CPC 125.38%». The figures are a cost
  * per thousand and a cost per click — amounts of money — printed by `rateOrDash`, which multiplies
- * by a hundred and appends a percent sign. A cost per click of 1.2538 USD read as «125.38%».
+ * by a hundred and appends a percent sign. A cost per click of 1.2538 $ read as «125.38%».
  *
  * ROAS went the same way: a return of 4.2× printed as «420.00%».
  *
@@ -23,7 +23,7 @@ import { creativeMoney } from './creativeMoney'
  * row. Only the DIALOG reached for the percentage reader.
  *
  * Which makes it the one thing the dialog's own docblock promises cannot happen — «the modal cannot
- * disagree with the line the reader clicked». The reader clicked a row saying «1.25 USD» and opened
+ * disagree with the line the reader clicked». The reader clicked a row saying «1.25 $» and opened
  * a panel saying «125.38%» about the same click.
  *
  * ## Why this is a module and not an inline array
@@ -168,7 +168,7 @@ describe('the figures a creative’s dialog carries', () => {
    * «The same creative and same scope must reconcile across card → popup → Content Analytics →
    * Analytics table → Report.» The card and the popup are one click apart and were using two
    * readers: `creativeMoney` formats exactly and `rowMoney` compacts, both from the same provenance
-   * decision. A creative whose card read «1,284,663 SAR» opened a panel reading «1.28M SAR» — the
+   * decision. A creative whose card read «1,284,663 ر.س» opened a panel reading «1.28M ر.س» — the
    * defect the observation register already carries as row 14, recurring one click away.
    *
    * Asserted against `creativeMoney` itself rather than a literal, so the two cannot drift apart
@@ -223,7 +223,7 @@ describe('the objective’s own figures in the dialog', () => {
     expect(labels).toContain('Leads')
     expect(labels).toContain('Cost per lead')
     // And the cost carries its currency, because a cost without one reads as a count.
-    expect(figures.find((f) => f.label === 'Cost per lead')?.value).toContain('SAR')
+    expect(figures.find((f) => f.label === 'Cost per lead')?.value).toContain('ر.س')
   })
 
   it('shows an app creative its installs and its cost per install', () => {

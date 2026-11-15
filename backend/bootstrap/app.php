@@ -23,7 +23,9 @@ use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
 use App\Domains\Delivery\Console\RemindDeliveryReviewers;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
+use App\Domains\Identity\Middleware\EnsureTwoFactorPassed;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\AccountOwnershipAuditCommand;
@@ -327,6 +329,8 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(append: [
             RejectRevokedSessions::class,
+            // TWO-STEP-001 — a session for a person with a second step on must have passed it.
+            EnsureTwoFactorPassed::class,
             EnsureAccountActive::class,
             // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
             WithholdMoneyForMember::class,
@@ -416,6 +420,10 @@ return Application::configure(basePath: dirname(__DIR__))
                     __('api.validation'),
                     $e->errors(),
                     status: 422,
+                ),
+                // TWO-STEP-001 — a guest holding a pending second step is told what is missing, so the page can ask for it.
+                $e instanceof AuthenticationException && EstablishSession::pending($request) !== null => ApiResponse::error(
+                    __('auth.two_factor_required'), null, ['two_factor_required' => true], 401,
                 ),
                 $e instanceof AuthenticationException => ApiResponse::error(
                     __('api.unauthenticated'), status: 401,

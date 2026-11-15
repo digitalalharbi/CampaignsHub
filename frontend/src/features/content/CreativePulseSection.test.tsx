@@ -749,7 +749,7 @@ describe('CreativePulseSection', () => {
    *
    * This section's formatter appended a hard-coded «SAR» / «ر.س» to whatever number it was handed.
    * `creative_daily_metrics` carried no currency at all, so on production it was labelling USD
-   * figures as Saudi riyals — 4,128.93 USD rendered «4,129 SAR», understating spend by roughly
+   * figures as Saudi riyals — 4,128.93 $ rendered «4,129 ر.س», understating spend by roughly
    * 3.75× and reading as a measured fact. A wrong number is worse than a withheld one: nothing
    * about it looks wrong.
    */
@@ -780,8 +780,8 @@ describe('CreativePulseSection', () => {
     await screen.findByText('Spend by ad type')
 
     // Exact, in the currency it was actually spent in — not rounded into a figure it never was.
-    expect(screen.getByText(/4,128\.93 USD/)).toBeInTheDocument()
-    expect(screen.queryByText(/4,129 SAR/)).not.toBeInTheDocument()
+    expect(screen.getByText(/4,128\.93 \$/)).toBeInTheDocument()
+    expect(screen.queryByText(/4,129 ر.س/)).not.toBeInTheDocument()
   })
 
   /** Two unconvertible currencies cannot be added, so no single figure may be printed. */
@@ -805,8 +805,8 @@ describe('CreativePulseSection', () => {
     const strip = (await screen.findByText('Spend by ad type')).parentElement!
 
     expect(strip).not.toHaveTextContent('900')
-    expect(strip).not.toHaveTextContent('USD')
-    expect(strip).not.toHaveTextContent('SAR')
+    expect(strip).not.toHaveTextContent(/USD|\$/)
+    expect(strip).not.toHaveTextContent(/SAR|ر\.س/)
   })
 
   /** A converted figure still renders in the reporting currency the SERVER named. */
@@ -825,7 +825,7 @@ describe('CreativePulseSection', () => {
     await screen.findByText('Spend by ad type')
 
     expect(screen.getByText(/1,800 AED/)).toBeInTheDocument()
-    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
   })
 
 })

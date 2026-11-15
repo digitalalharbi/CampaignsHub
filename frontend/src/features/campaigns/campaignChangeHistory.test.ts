@@ -6,7 +6,7 @@ describe('campaign change history', () => {
   it('names the audited fields and says their values the way the product does', () => {
     expect(changeFieldLabel('total_budget', 'ar')).toBe('الميزانية الإجمالية')
     expect(changeFieldLabel('status', 'en')).toBe('Status')
-    expect(changeValueLabel('total_budget', '2000', 'ar', 'SAR')).toBe('2,000 SAR')
+    expect(changeValueLabel('total_budget', '2000', 'ar', 'SAR')).toBe('2,000 ر.س')
     expect(changeValueLabel('status', 'paused', 'ar', null)).not.toBe('paused')
     expect(changeValueLabel('status', 'paused', 'en', null)).toMatch(/Paused/i)
     expect(changeValueLabel('objective', 'sales', 'ar', null)).not.toBe('sales')

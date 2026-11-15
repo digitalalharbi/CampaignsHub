@@ -289,7 +289,7 @@ describe('a cost-per carries its currency', () => {
     /* Read from the table's text: the figure and its currency can sit in sibling elements. */
     const text = screen.getByTestId('objective-decision-sales').textContent ?? ''
 
-    expect(text).toMatch(/75(\.\d+)?\s*SAR/)
+    expect(text).toMatch(/75(\.\d+)?\s*ر\.س/)
   })
 
   it('never prints the word undefined where a currency belongs', () => {
@@ -298,7 +298,7 @@ describe('a cost-per carries its currency', () => {
     /* Anchored on the rendered table, so an empty document cannot satisfy it. */
     const grid = screen.getByTestId('objective-decision-sales')
 
-    expect(grid.textContent ?? '').toMatch(/SAR/)
+    expect(grid.textContent ?? '').toMatch(/ر.س/)
     expect(grid.textContent ?? '').not.toMatch(/undefined/)
   })
 })

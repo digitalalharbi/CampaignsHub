@@ -151,7 +151,7 @@ final class ReportObjectiveLayoutTest extends TestCase
 
         $this->assertSame('cpm', $data['best']['basis']['key']);
         $this->assertSame('snapchat', $data['best']['platform']);
-        $this->assertSame('2.50 SAR', $data['best']['platform_value']);
+        $this->assertSame('2.50 ر.س', $data['best']['platform_value']);
         $this->assertStringContainsString('تكلفة الألف ظهور', $data['summary'][0]);
     }
 

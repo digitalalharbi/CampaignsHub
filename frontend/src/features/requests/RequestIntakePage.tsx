@@ -18,6 +18,7 @@ import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
 
 const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, step, ts}
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
@@ -531,7 +532,7 @@ function DefaultIntake() {
                 <Row k={ar ? 'البريد' : 'Email'} v={form.contact_email} />
                 {form.company_name && <Row k={ar ? 'الشركة' : 'Company'} v={form.company_name} />}
                 <Row k={ar ? 'الهدف' : 'Objective'} v={form.objective} />
-                {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={`${form.budget} ${form.currency}`} />}
+                {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={withMark(String(form.budget), form.currency)} />}
                 <Row k={ar ? 'الأولوية' : 'Priority'} v={form.priority} />
                 <Row k={ar ? 'الملفات' : 'Files'} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join('، ') : (ar ? 'لا يوجد' : 'None')} />
               </dl>

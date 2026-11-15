@@ -105,6 +105,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/salla/open',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         'GET api/v1/webhooks/{kind}/{provider}',
+        'GET api/v1/auth/two-factor',
+        'DELETE api/v1/auth/two-factor',
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
         'POST api/v1/auth/login',
@@ -122,6 +124,9 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/auth/registration/{registration}/verify-mobile',
         'POST api/v1/auth/reset-password',
         'POST api/v1/auth/tokens',
+        // TWO-STEP-001 — answering the second step: the person is not signed in yet; the pending state in the session is the authorisation.
+        'POST api/v1/auth/two-factor/send',
+        'POST api/v1/auth/two-factor/verify',
         'POST api/v1/billing/webhook/{provider}',
         'POST api/v1/client/invoices/{invoice}/pay',
         'POST api/v1/client/approvals/{approval}/approve',

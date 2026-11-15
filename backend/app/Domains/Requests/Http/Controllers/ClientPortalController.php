@@ -24,6 +24,7 @@ use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
@@ -315,9 +316,9 @@ final class ClientPortalController
             // path and any non-browser client. Those keep the token engine and lose nothing — the
             // shared session is an ADDITION for browsers, not a new requirement.
             if ($holdsPortalMembership && $request->hasSession()) {
-                // Regenerated so an OTP login cannot be fixed to a session id an attacker planted.
-                $request->session()->regenerate();
-                Auth::guard('web')->login($user);
+                // TWO-STEP-001 — through the one place a session opens (it regenerates the id). An account with a second step
+                // on is NOT given the shared session by a contact code: it is held at the second step like every other door.
+                app(EstablishSession::class)->open($request, $user);
             }
         }
 

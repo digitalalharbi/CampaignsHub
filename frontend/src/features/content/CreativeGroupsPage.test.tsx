@@ -163,7 +163,7 @@ describe('CreativeGroupsPage', () => {
     expect(await screen.findByText('The film')).toBeInTheDocument()
     expect(screen.getByText(/Meta.*TikTok/)).toBeInTheDocument()
     // The total is the group's, not one platform's — 500, not 400.
-    expect(screen.getByText('500 SAR')).toBeInTheDocument()
+    expect(screen.getByText('500 ر.س')).toBeInTheDocument()
   })
 
   /**
@@ -195,7 +195,7 @@ describe('CreativeGroupsPage', () => {
     expect(await screen.findByText('Mixed objectives in this group')).toBeInTheDocument()
     expect(screen.getByText('The members of this group do not share one objective.')).toBeInTheDocument()
     // The additive figures still show; what is withheld is the judgement, not the arithmetic.
-    expect(screen.getByText('500 SAR')).toBeInTheDocument()
+    expect(screen.getByText('500 ر.س')).toBeInTheDocument()
     expect(screen.queryByText('8.40×')).not.toBeInTheDocument()
   })
 
@@ -221,8 +221,8 @@ describe('CreativeGroupsPage', () => {
     const table = within(panel).getByRole('table')
     expect(within(table).getByRole('rowheader', { name: 'Meta' })).toBeInTheDocument()
     expect(within(table).getByRole('rowheader', { name: 'TikTok' })).toBeInTheDocument()
-    expect(within(table).getByText('400 SAR')).toBeInTheDocument()
-    expect(within(table).getByText('100 SAR')).toBeInTheDocument()
+    expect(within(table).getByText('400 ر.س')).toBeInTheDocument()
+    expect(within(table).getByText('100 ر.س')).toBeInTheDocument()
 
     // Each member links into its own detail page, carrying the window it was read in.
     const link = within(panel).getByRole('link', { name: 'The film · Meta' })

@@ -4,7 +4,7 @@ import { readMetricValue } from './metricValue'
 /**
  * NUMBER-PRESENTATION-001 §58 — one law for how a figure is written, everywhere it is written.
  *
- * The owner's screenshot is the case this exists for: «29,210», «4,127,676» and «5.54K USD» in one
+ * The owner's screenshot is the case this exists for: «29,210», «4,127,676» and «5.54K $» in one
  * row of six cards on the page a client reads. Three notations for one idea, because the cards took a
  * pre-formatted string and each surface chose its own.
  */
@@ -24,14 +24,14 @@ describe('the product’s one value law', () => {
   it('compacts money and keeps its exact amount', () => {
     const read = readMetricValue('money', 5535, { currency: 'USD' })
 
-    expect(read.text).toBe('5.54K USD')
+    expect(read.text).toBe('5.54K $')
     expect(read.exact).toContain('5,535')
   })
 
   /**
    * **Precision IS the decision, and these are never compacted.**
    *
-   * A CPC of «0.19 USD» is a decision; «0.2 USD» is a different one. The owner's correction names
+   * A CPC of «0.19 $» is a decision; «0.2 $» is a different one. The owner's correction names
    * this exception outright — CPC, CPL, CPA, ROAS and percentages where precision matters — so it is
    * asserted rather than left to the formatter's own rounding to preserve by luck.
    */
@@ -45,7 +45,7 @@ describe('the product’s one value law', () => {
   it('leaves a small cost-per figure as it is', () => {
     const read = readMetricValue('money', 0.19, { currency: 'USD' })
 
-    expect(read.text).toBe('0.19 USD')
+    expect(read.text).toBe('0.19 $')
     expect(read.exact).toBeNull()
   })
 

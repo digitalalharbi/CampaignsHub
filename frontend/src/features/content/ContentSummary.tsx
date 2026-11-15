@@ -4,6 +4,7 @@ import { creatives as countedCreatives } from '@/lib/counted'
 import { Num } from '@/components/ui/Num'
 import type { FormatRow } from './api'
 import type { Locale } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * CONTENT-SUMMARY-COMPACT-001 — a compact, content-specific head, not a dashboard duplicate.
@@ -211,8 +212,8 @@ export function ContentSummary({
             {mixScoped && (
               <span data-testid="content-summary-mix-scope" className="text-[10px] text-text-muted">
                 {ar
-                  ? `يخص ${scopeName ?? 'المشروع الحالي'} فقط — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${Math.round(mixSpend).toLocaleString('en-US')} ${currency}` : ''}؛ الأرقام أعلاه تشمل ${countedCreatives(creativesInScope, locale)}`
-                  : `${scopeName ?? 'The current project'} only — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${Math.round(mixSpend).toLocaleString('en-US')} ${currency}` : ''}; the figures above span ${countedCreatives(creativesInScope, locale)}`}
+                  ? `يخص ${scopeName ?? 'المشروع الحالي'} فقط — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${withMark(Math.round(mixSpend).toLocaleString('en-US'), currency)}` : ''}؛ الأرقام أعلاه تشمل ${countedCreatives(creativesInScope, locale)}`
+                  : `${scopeName ?? 'The current project'} only — ${countedCreatives(creativesRead, locale)}${currency ? ` · ${withMark(Math.round(mixSpend).toLocaleString('en-US'), currency)}` : ''}; the figures above span ${countedCreatives(creativesInScope, locale)}`}
               </span>
             )}
             {mix.withheld.length > 0 && (
@@ -242,7 +243,7 @@ export function ContentSummary({
                 <span className="font-semibold text-text-primary">{creativeKindLabel(s.format, ar)}</span>
                 <span className="tnum" dir="ltr">{Math.round(s.share * 100)}%</span>
                 <span className="text-text-muted">
-                  · {currency ? `${Math.round(s.spend).toLocaleString('en-US')} ${currency}` : Math.round(s.spend).toLocaleString('en-US')}
+                  · {currency ? withMark(Math.round(s.spend).toLocaleString('en-US'), currency) : Math.round(s.spend).toLocaleString('en-US')}
                 </span>
               </li>
             ))}

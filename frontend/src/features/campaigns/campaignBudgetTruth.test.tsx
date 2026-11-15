@@ -16,7 +16,7 @@ import { getData } from '@/lib/api/client'
  * CAMPAIGN-BUDGET-TRUTH-001 — a budget comparison is made only from a comparable spend figure, and
  * what it finds is said as it is.
  *
- * Observed on the preview: a campaign that had spent 17,448.75 SAR of a 16,666.67 SAR budget, every
+ * Observed on the preview: a campaign that had spent 17,448.75 ر.س of a 16,666.67 ر.س budget, every
  * platform reported through the same day, printed «المتبقي —» and «أكبر خطر: ضمن الحدود». The
  * summary's currency was in the envelope's meta and not in its body, so the comparison was refused;
  * and the refusal fell through to the all-clear.
@@ -69,7 +69,7 @@ describe('a campaign that has spent past its budget', () => {
   it('KPIs: «المتبقي» states the overrun, with the utilisation beside it', async () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />, { locale: 'ar' })
     const card = (await screen.findByText('المتبقي')).closest('div.rounded-2xl') as HTMLElement
-    expect(card).toHaveTextContent('−782 SAR')
+    expect(card).toHaveTextContent('−782 ر.س')
     expect(card).toHaveTextContent('تجاوزت الميزانية')
     expect(card).toHaveTextContent('105%')
   })
@@ -85,7 +85,7 @@ describe('a campaign that has spent past its budget', () => {
     const risk = (await screen.findByText('خطر الميزانية')).closest('div.rounded-xl') as HTMLElement
     expect(risk).toHaveTextContent('تجاوزت الميزانية')
     const remaining = screen.getByText('المتبقي').closest('div.rounded-xl') as HTMLElement
-    expect(remaining).toHaveTextContent('−782 SAR')
+    expect(remaining).toHaveTextContent('−782 ر.س')
   })
 })
 
@@ -110,6 +110,6 @@ describe('a budget comparison nobody can make', () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />, { locale: 'ar' })
     const card = (await screen.findByText('المتبقي')).closest('div.rounded-2xl') as HTMLElement
     expect(card).toHaveTextContent('—')
-    expect(card).not.toHaveTextContent('SAR')
+    expect(card).not.toHaveTextContent(/SAR|ر\.س/)
   })
 })

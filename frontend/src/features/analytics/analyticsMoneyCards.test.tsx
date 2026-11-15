@@ -18,7 +18,7 @@ import { getData } from '@/lib/api/client'
  * `ratio(cur?.roas ?? null)` — the contract existed and the product did not use it. A helper test
  * cannot catch that; only rendering the page can. This is that test.
  *
- * The figures are production's: 4,128.93 USD spend and 12,969.03 USD revenue withheld for want of a
+ * The figures are production's: 4,128.93 $ spend and 12,969.03 $ revenue withheld for want of a
  * USD→SAR rate, which the aggregator coalesces to 0.
  */
 const WITHHELD_TOTALS = {
@@ -86,11 +86,11 @@ describe('the board\'s money cards obey one provenance', () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
     // Revenue carries the platform's own figure, in its own currency.
-    expect(await screen.findByText('12,969.03 USD')).toBeInTheDocument()
+    expect(await screen.findByText('12,969.03 $')).toBeInTheDocument()
 
     // And nothing on the row reads as a zero in the project currency.
-    expect(screen.queryByText('0 SAR')).not.toBeInTheDocument()
-    expect(screen.queryByText('0.00 SAR')).not.toBeInTheDocument()
+    expect(screen.queryByText('0 ر.س')).not.toBeInTheDocument()
+    expect(screen.queryByText('0.00 ر.س')).not.toBeInTheDocument()
   })
 
   /**
@@ -102,7 +102,7 @@ describe('the board\'s money cards obey one provenance', () => {
     route(WITHHELD_TOTALS)
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
 
-    await screen.findByText('12,969.03 USD')
+    await screen.findByText('12,969.03 $')
 
     // The aggregator's own roas was 0. The card must not show it.
     expect(screen.queryByText(/^0(\.00)?×$/)).not.toBeInTheDocument()
@@ -112,9 +112,9 @@ describe('the board\'s money cards obey one provenance', () => {
 
     /*
      * MONEY-TRUTH-003 — cost per result is spend over a count, so it carried spend's withholding and
-     * printed «0 SAR» beside a revenue card reading the truth. 4,128.93 / 102 = 40.48.
+     * printed «0 ر.س» beside a revenue card reading the truth. 4,128.93 / 102 = 40.48.
      */
-    expect(screen.getByText('40.48 USD')).toBeInTheDocument()
+    expect(screen.getByText('40.48 $')).toBeInTheDocument()
   })
 
   it('refuses ROAS when the originals are in different currencies', async () => {
@@ -127,7 +127,7 @@ describe('the board\'s money cards obey one provenance', () => {
     expect(screen.queryByText(/3\.1/)).not.toBeInTheDocument()
 
     // And neither is a cost derived from the same ambiguous originals.
-    expect(screen.queryByText('40.48 USD')).not.toBeInTheDocument()
+    expect(screen.queryByText('40.48 $')).not.toBeInTheDocument()
   })
 
   it('leaves genuinely converted money alone', async () => {
@@ -136,13 +136,13 @@ describe('the board\'s money cards obey one provenance', () => {
 
     // Wait for the LOADED strip, not for page chrome: a label exists before the data arrives, and
     // asserting on it passes for the wrong reason.
-    await screen.findByText('46K SAR')
+    await screen.findByText('46K ر.س')
 
     // The aggregator's own ratio is used verbatim when the money converted cleanly.
     expect(document.body.textContent).toContain('2.97×')
 
     // Nothing claims the figure came from an unconvertible original.
-    expect(screen.queryByText(/USD/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:USD|\$)/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Conversion to the project currency/)).not.toBeInTheDocument()
   })
 })

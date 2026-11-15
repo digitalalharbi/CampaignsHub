@@ -83,8 +83,8 @@ describe('the page says what nothing else on it can', () => {
     route([reading()])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('spend-limit-l1-amount')).toHaveTextContent('10K SAR')
-    expect(screen.getByTestId('spend-limit-l1-consumed')).toHaveTextContent('4.5K SAR')
+    expect(await screen.findByTestId('spend-limit-l1-amount')).toHaveTextContent('10K ر.س')
+    expect(screen.getByTestId('spend-limit-l1-consumed')).toHaveTextContent('4.5K ر.س')
     expect(screen.getByTestId('spend-limit-l1-utilisation')).toHaveTextContent('45%')
   })
 })
@@ -156,7 +156,7 @@ describe('what it refuses to show', () => {
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
 
     expect(await screen.findByTestId('spend-limit-l1-state')).toHaveTextContent('Over the limit')
-    expect(screen.getByText('-1.2K SAR')).toBeInTheDocument()
+    expect(screen.getByText('-1.2K ر.س')).toBeInTheDocument()
   })
 })
 

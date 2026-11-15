@@ -6,7 +6,7 @@ import { readMetric } from './metricCatalog'
  * MONEY-TRUTH-001 — the same scope must not read differently on two screens.
  *
  * The dashboard read spend through `readMetric()` and Analytics through `money(raw)`. For the same
- * account and window one showed 4,128.93 USD and the other «0 SAR», because the aggregator coalesces
+ * account and window one showed 4,128.93 $ and the other «0 ر.س», because the aggregator coalesces
  * a withheld sum to 0 and a bare number cannot carry the difference.
  */
 const WITHHELD = {
@@ -27,8 +27,8 @@ describe('money truth', () => {
     const analytics = moneyFromTotals(WITHHELD, 'spend', false)
     const dashboard = readMetric('spend', spendSpec, WITHHELD as never, undefined)
 
-    expect(analytics.text).toBe('4,128.93 USD')
-    expect(dashboard).toEqual({ kind: 'withheld', original: '4,128.93 USD' })
+    expect(analytics.text).toBe('4,128.93 $')
+    expect(dashboard).toEqual({ kind: 'withheld', original: '4,128.93 $' })
     // The figure a reader sees is identical on both surfaces.
     expect(analytics.text).toBe((dashboard as { original: string }).original)
   })
@@ -36,7 +36,7 @@ describe('money truth', () => {
   it('never presents withheld money as 0', () => {
     const r = moneyFromTotals(WITHHELD, 'spend', true)
 
-    expect(r.text).not.toBe('0 SAR')
+    expect(r.text).not.toBe('0 ر.س')
     expect(r.text).not.toMatch(/^0\b/)
     expect(r.withheld).toBe(true)
     expect(r.note).toMatch(/التحويل/)
@@ -54,31 +54,31 @@ describe('money truth', () => {
   it('a genuinely measured zero stays zero', () => {
     const r = moneyFromTotals({ spend: 0, spend_withheld_rows: 0, spend_original: 0 }, 'spend', false, 'SAR')
 
-    expect(r.text).toBe('0 SAR')
+    expect(r.text).toBe('0 ر.س')
     expect(r.withheld).toBe(false)
   })
 
   it('a converted figure is shown in the currency the scope states', () => {
     const sar = moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false, 'SAR')
-    expect(sar.text).toContain('SAR')
+    expect(sar.text).toContain('ر.س')
     expect(sar.withheld).toBe(false)
 
     // The same figure in a USD scope is USD. It used to be «SAR» either way.
-    expect(moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false, 'USD').text).toContain('USD')
+    expect(moneyFromTotals({ spend: 15480.5, spend_withheld_rows: 0 }, 'spend', false, 'USD').text).toContain('$')
   })
 
   /**
    * MONEY-USD-001 — a scope that states no currency gets no currency, not the market's.
    *
    * `money()` defaulted to `'SAR'`, so a reading with no currency was stamped with the market this
-   * product sells in — «تكلفة النتيجة 18.05 SAR» on an account denominated in USD, with nothing
+   * product sells in — «تكلفة النتيجة 18.05 ر.س» on an account denominated in USD, with nothing
    * converted and no rate claimed. A bare figure is incomplete; a figure wearing the wrong unit is
    * a different number, and the reader cannot tell.
    */
   it('states no currency where the scope stated none, rather than the market’s', () => {
     const r = moneyFromTotals({ spend: 18.05, spend_withheld_rows: 0 }, 'spend', false)
 
-    expect(r.text).not.toContain('SAR')
+    expect(r.text).not.toMatch(/SAR|ر\.س/)
     expect(r.text).toContain('18')
   })
 
@@ -157,7 +157,7 @@ import { money, rowCostPer, rowMoney, rowRoas } from './format'
  * MONEY-TRUTH-002 — breakdown rows obey the same contract as the summary cards.
  *
  * Platform comparison and campaign ranking were the last surfaces calling `money()` on a raw figure.
- * A platform that spent 4,128.93 USD ranked as having spent nothing, in a table sitting directly
+ * A platform that spent 4,128.93 $ ranked as having spent nothing, in a table sitting directly
  * beneath a card that showed the real amount.
  */
 describe('breakdown rows', () => {
@@ -170,15 +170,15 @@ describe('breakdown rows', () => {
   }
 
   it('a row shows the withheld original, not a zero', () => {
-    expect(rowMoney(withheldRow, 'spend')).toBe('4,128.93 USD')
-    expect(rowMoney(withheldRow, 'spend')).not.toContain('0 SAR')
+    expect(rowMoney(withheldRow, 'spend')).toBe('4,128.93 $')
+    expect(rowMoney(withheldRow, 'spend')).not.toContain('0 ر.س')
   })
 
   it('a row CPA is derived from the original rather than the coalesced zero', () => {
     const text = rowCostPer(withheldRow, 'cpa', 'conversions')
 
-    expect(text).toContain('USD')
-    expect(text).not.toBe('0 SAR')
+    expect(text).toContain('$')
+    expect(text).not.toBe('0 ر.س')
   })
 
   it('a row ROAS survives one shared currency and is refused across two', () => {
@@ -197,9 +197,9 @@ describe('breakdown rows', () => {
 
   /** A row that genuinely spent nothing must still say zero — this is a measurement. */
   it('a row that spent nothing still reads zero', () => {
-    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend', 'SAR')).toBe('0 SAR')
+    expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend', 'SAR')).toBe('0 ر.س')
 
-    // And a row in a scope that stated no currency reads «0», not «0 SAR» (MONEY-USD-001).
+    // And a row in a scope that stated no currency reads «0», not «0 ر.س» (MONEY-USD-001).
     expect(rowMoney({ spend: 0, spend_withheld_rows: 0 }, 'spend')).toBe('0')
   })
 })
@@ -217,13 +217,13 @@ describe('campaign detail money', () => {
   }
 
   it('spend, CPA, CPC and CPM all follow the withheld provenance', () => {
-    expect(rowMoney(k, 'spend', 'SAR')).toBe('4,128.93 USD')
-    expect(rowCostPer(k, 'cpa', 'conversions', 'SAR')).toContain('USD')
-    expect(rowCostPer(k, 'cpc', 'clicks', 'SAR')).toContain('USD')
+    expect(rowMoney(k, 'spend', 'SAR')).toBe('4,128.93 $')
+    expect(rowCostPer(k, 'cpa', 'conversions', 'SAR')).toContain('$')
+    expect(rowCostPer(k, 'cpc', 'clicks', 'SAR')).toContain('$')
 
     // CPM divides by impressions per THOUSAND — 4128.93 / 2884.062 ≈ 1.43
     const cpm = rowCostPer(k, 'cpm', k.impressions / 1000, 'SAR')
-    expect(cpm).toContain('USD')
+    expect(cpm).toContain('$')
     expect(cpm).toMatch(/1\.4/)
   })
 
@@ -233,7 +233,7 @@ describe('campaign detail money', () => {
    * have — so it must keep reading as an ordinary amount.
    */
   it('budget is not a provider figure and keeps its own currency', () => {
-    expect(money(50000, 'SAR')).toContain('SAR')
-    expect(money(50000, 'SAR')).not.toContain('USD')
+    expect(money(50000, 'SAR')).toContain('ر.س')
+    expect(money(50000, 'SAR')).not.toMatch(/USD|\$/)
   })
 })

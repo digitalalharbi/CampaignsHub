@@ -57,9 +57,9 @@ describe('the agency headline', () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).toHaveTextContent('61.2K SAR')
+    expect(spend).toHaveTextContent('61.2K ر.س')
     expect(screen.getByTestId('agency-kpi-results')).toHaveTextContent('741')
-    expect(screen.getByTestId('agency-kpi-cpa')).toHaveTextContent('SAR')
+    expect(screen.getByTestId('agency-kpi-cpa')).toHaveTextContent('ر.س')
     expect(screen.getByTestId('agency-kpi-roas')).toHaveTextContent('4.00×')
     // Movement against the previous window, shown because both windows are complete.
     expect(within(spend).getByText(/22/)).toBeInTheDocument()
@@ -90,7 +90,7 @@ describe('the agency headline', () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ current: totals(40_000, 500, truncated) }))
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).toHaveTextContent('40K SAR')
+    expect(spend).toHaveTextContent('40K ر.س')
     expect(within(spend).queryByText(/%/)).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-compared-with')).not.toBeInTheDocument()
     expect(screen.getByTestId('agency-coverage-note')).toHaveTextContent('2026-09-27')
@@ -100,7 +100,7 @@ describe('the agency headline', () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ currency: null }))
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).not.toHaveTextContent('SAR')
+    expect(spend).not.toHaveTextContent(/SAR|ر\.س/)
     expect(screen.getByTestId('agency-currency-note')).toBeInTheDocument()
   })
 
@@ -109,7 +109,7 @@ describe('the agency headline', () => {
     renderWithProviders(<AgencyTrendAndPlatforms ar={false} />, { locale: 'en' })
     const google = await screen.findByTestId('agency-platform-google')
     expect(google).toHaveAttribute('href', '/agency/content?providers=google')
-    expect(screen.getByTestId('agency-platforms')).toHaveTextContent('24.7K SAR')
+    expect(screen.getByTestId('agency-platforms')).toHaveTextContent('24.7K ر.س')
   })
 
   it('lists the open alerts most severe first, each opening its campaign', async () => {

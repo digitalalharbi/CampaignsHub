@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Audit\AuditLogger;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Actions\SignInWithPassword;
 use App\Domains\Identity\Http\Requests\LoginRequest;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Services\PasswordResetService;
+use App\Domains\Identity\Services\TwoFactorMethods;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Http\Controllers\Controller;
@@ -17,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -42,13 +46,18 @@ final class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         // LOGIN-004 — the sign-in itself lives in one place, shared with linking a Google account in place.
-        $user = $this->signIn->execute(
+        ['user' => $user, 'challenge' => $challenge] = $this->signIn->execute(
             $request,
             (string) $request->string('email'),
             (string) $request->string('password'),
             (bool) $request->boolean('remember'),
             (string) $request->string('portal'),
         );
+
+        // TWO-STEP-001 — the password was right and the person turned on a second step: nobody is signed in yet.
+        if ($challenge !== null) {
+            return EstablishSession::challengeResponse($challenge);
+        }
 
         return ApiResponse::success(
             ['user' => new UserResource($user)],
@@ -154,11 +163,60 @@ final class AuthController extends Controller
         // SALLA-REVIEW-001 — a review account is never issued an API token (this route has no tenant context to restrict it by).
         abort_if(ReviewAccess::isReviewer($user), 403, 'API tokens are not available in the Salla review account.');
 
+        $this->assertTokenSecondStep($request, $user);
+
         $token = $user->createToken((string) $request->input('device_name', 'api'))->plainTextToken;
 
         return ApiResponse::success(
             ['user' => new UserResource($user), 'token' => $token],
             __('auth.token_issued'),
         );
+    }
+
+    /**
+     * TWO-STEP-001 — a token is a session that never expires, so it needs the second step too.
+     *
+     * Without a code the answer is 401 with what the challenge accepts; asking for `two_factor_method: email|sms` without a code
+     * sends one and returns its `two_factor_verification_id`. The code is then posted with the same credentials.
+     */
+    private function assertTokenSecondStep(LoginRequest $request, User $user): void
+    {
+        $methods = app(TwoFactorMethods::class);
+        if (! $methods->required($user)) {
+            return;
+        }
+
+        $method = (string) $request->input('two_factor_method', (string) $methods->defaultMethod($user));
+        $code = (string) $request->input('two_factor_code', '');
+
+        if ($code === '') {
+            $challenge = $methods->challengeFor($user);
+            if (in_array($method, ['email', 'sms'], true) && in_array($method, $methods->active($user), true)) {
+                $sent = $methods->sendCode($user, $method, TwoFactorMethods::SIGN_IN_PURPOSE);
+                $challenge['verification_id'] = $sent['verification_id'];
+                $challenge['delivery_status'] = $sent['delivery_status'];
+            }
+
+            abort(ApiResponse::error((string) __('auth.two_factor_required'), null, ['two_factor_required' => true, 'two_factor' => $challenge], 401));
+        }
+
+        // The same per-account bound the browser challenge has, shared with it: ten wrong answers in fifteen minutes, then wait.
+        $limiterKey = 'two-factor-challenge:'.$user->getKey();
+        abort_if(RateLimiter::tooManyAttempts($limiterKey, 10), 429, (string) __('auth.two_factor_locked'));
+
+        $passed = $methods->verify($user, $method, $code, $request->filled('two_factor_verification_id') ? (string) $request->input('two_factor_verification_id') : null);
+        $passed ? RateLimiter::clear($limiterKey) : RateLimiter::hit($limiterKey, 900);
+
+        app(AuditLogger::class)->log(
+            action: $passed ? 'security.two_factor.challenge_passed' : 'security.two_factor.challenge_failed',
+            entityType: 'user',
+            entityId: (string) $user->uuid,
+            after: ['method' => $method, 'via' => 'token'],
+            userId: (int) $user->getKey(),
+        );
+
+        if (! $passed) {
+            throw ValidationException::withMessages(['two_factor_code' => [__('auth.code_incorrect')]]);
+        }
     }
 }

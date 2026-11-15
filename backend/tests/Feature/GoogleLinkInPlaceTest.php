@@ -268,17 +268,21 @@ final class GoogleLinkInPlaceTest extends TestCase
 
     public function test_an_account_with_two_factor_is_treated_exactly_as_the_password_form_treats_it(): void
     {
-        // There is no second-factor step at sign-in anywhere in this product yet (password or Google), so parity is the
-        // property: linking in place may open no door the password form keeps shut, and none that it holds open.
+        // TWO-STEP-001 — parity is still the property, and now it is a second step on both: linking in place may open no door the
+        // password form keeps shut. Both answers hold the session at the second step and sign nobody in.
         $user = $this->person('twofa@link.test', ['two_factor_enabled' => true, 'two_factor_secret' => 'JBSWY3DPEHPK3PXP']);
 
         $form = $this->withHeaders($this->spa)->postJson('/api/v1/auth/login', ['email' => 'twofa@link.test', 'password' => self::PASSWORD]);
-        $this->withHeaders($this->spa)->postJson('/api/v1/auth/logout');
+        $this->assertGuest('web');
+        $this->withHeaders($this->spa)->deleteJson('/api/v1/auth/two-factor');
         $this->offered($user);
         $linked = $this->pendingPassword(self::PASSWORD);
 
         $this->assertSame($form->getStatusCode(), $linked->getStatusCode());
-        $this->assertSame($form->json('data.user.two_factor_enabled'), $linked->json('data.user.two_factor_enabled'));
+        $this->assertTrue($form->json('data.two_factor.required'));
+        $this->assertTrue($linked->json('data.two_factor.required'));
+        $this->assertNull($linked->json('data.user'));
+        $this->assertGuest('web');
     }
 
     public function test_a_suspended_account_is_not_signed_in_and_nothing_is_linked(): void

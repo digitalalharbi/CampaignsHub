@@ -172,14 +172,15 @@ final class EmailWebMetricParityScopeTest extends TestCase
 
         // And the inbox prints exactly that: SAR beside the SAR project, USD beside the USD one, no unit on the mixed total.
         $html = (new DailyDigestMail($digest, 'en', 'Reader'))->render();
-        $this->assertStringContainsString('3,750 SAR', $html);
-        $this->assertStringContainsString('1,000 USD', $html);
-        $this->assertStringNotContainsString('4,750 USD', $html);
-        $this->assertStringNotContainsString('4,750 SAR', $html);
+        $this->assertStringContainsString('3,750 ر.س', $html);
+        $this->assertStringContainsString('1,000 $', $html);
+        $this->assertStringNotContainsString('4,750 $', $html);
+        $this->assertStringNotContainsString('4,750 ر.س', $html);
         $this->assertStringContainsString('4,750', $html);
         $subject = (new DailyDigestMail($digest, 'en', 'Reader'))->envelope()->subject;
         $this->assertStringContainsString('4,750', (string) $subject);
         $this->assertStringNotContainsString('USD', (string) $subject);
+        $this->assertStringNotContainsString('$', (string) $subject);
     }
 
     public function test_a_single_sar_project_is_printed_in_sar_not_the_reporting_default(): void
@@ -195,9 +196,9 @@ final class EmailWebMetricParityScopeTest extends TestCase
 
         $this->assertSame($web['currency'], $digest['currency']);
         $en = (new DailyDigestMail($digest, 'en', 'Reader'));
-        $this->assertStringContainsString('12,400 SAR', (string) $en->envelope()->subject);
+        $this->assertStringContainsString('12,400 ر.س', (string) $en->envelope()->subject);
         $this->assertStringContainsString('Currency: SAR', $en->render());
-        $this->assertStringNotContainsString('12,400 USD', $en->render());
+        $this->assertStringNotContainsString('12,400 $', $en->render());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────

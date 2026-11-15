@@ -12,6 +12,7 @@ import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
 import { DataFreshnessAlert } from './DataFreshnessAlert'
+import { currencyMark } from '@/lib/money/mark'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -347,7 +348,7 @@ export function SiteMeasurementSection({ payload, ar }: { payload: LivePayload; 
               <Num className="tnum">
                 {measured.totals.revenue.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { maximumFractionDigits: 2 })}
                 {/* The PROPERTY's currency, which is frequently not the report's. Stated, never converted. */}
-                {measured.currency ? ` ${measured.currency}` : ''}
+                {measured.currency ? ` ${currencyMark(measured.currency)}` : ''}
               </Num>
             </dd>
           </div>

@@ -369,9 +369,6 @@ export function useSecurityActions() {
   return {
     changePassword: useMutation({ meta: { feedback: 'none' }, mutationFn: (b: { current_password: string; password: string; password_confirmation: string }) => postData('/settings/security/password', b) }),
     savePolicy: useMutation({ mutationFn: (policy: SecurityPolicy) => putData('/settings/security/policy', { policy }), onSuccess: inv }),
-    mfaSetup: useMutation({ meta: { feedback: 'none' }, mutationFn: () => postData<{ secret: string; otpauth_uri: string }>('/settings/security/mfa/setup') }),
-    mfaConfirm: useMutation({ meta: { feedback: 'none' }, mutationFn: (code: string) => postData('/settings/security/mfa/confirm', { code }), onSuccess: inv }),
-    mfaDisable: useMutation({ meta: { feedback: 'none' }, mutationFn: (password: string) => postData('/settings/security/mfa/disable', { password }), onSuccess: inv }),
   }
 }
 

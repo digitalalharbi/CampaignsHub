@@ -289,7 +289,7 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $this->assertSame('on_track', $b(['pace' => 1.0])['band']);
         $this->assertSame('ahead', $b(['pace' => 1.25])['band']);
         $this->assertSame('behind', $b(['pace' => 0.7])['band']);
-        $this->assertSame('6,000 SAR', $b(['pace' => 1.0])['remaining']);
+        $this->assertSame('6,000 ر.س', $b(['pace' => 1.0])['remaining']);
         $this->assertSame(40, $b(['pace' => 1.0])['used']);
 
         $over = $b(['spent' => 11000.0, 'pace' => 1.1]);
