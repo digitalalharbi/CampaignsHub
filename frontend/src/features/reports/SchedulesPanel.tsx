@@ -99,7 +99,10 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-text-primary">{s.name}</span>
-                    <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>
+                    {/* CONS-SCHEDULE-ONE — a copy switched off because another schedule builds the same report. */}
+                    {s.disabled_reason === 'duplicate_schedule'
+                      ? <Badge tone="warning" data-testid={`schedule-copy-${s.id}`}>نسخة غير مجدولة</Badge>
+                      : <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>}
                     {s.is_demo && <Badge tone="warning">تجريبية</Badge>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">

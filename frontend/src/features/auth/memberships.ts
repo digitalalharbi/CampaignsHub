@@ -53,6 +53,8 @@ export interface MembershipState {
    * «no membership» is never taken to mean «has a registration». When present, `destination` already points at it.
    */
   pending_registration?: { id: string; state: string } | null
+  /** CONS-ADMIN-SWITCH — this account also holds the admin panel (the platform flag), so the menu offers it. */
+  platform_admin?: boolean
 }
 
 /**
