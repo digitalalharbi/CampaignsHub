@@ -11,6 +11,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
 use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\ReportFxFacts;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -42,6 +43,9 @@ final class ReportExporter
     private const CREATIVE_COLUMNS = [
         'impressions', 'clicks', 'ctr', 'conversions', 'spend', 'revenue', 'cpc', 'cpm', 'cpa', 'roas',
     ];
+
+    /** @var array<string, array<string, mixed>> FX-APPLY-001 — rate facts per report and period, read once per export */
+    private array $fxMemo = [];
 
     public function __construct(
         private readonly ExportReadinessGate $gate,
@@ -227,6 +231,44 @@ final class ReportExporter
         foreach ($rows as $i => $row) {
             $event = (array) ($byPlatform[AdPlatforms::canonical((string) ($platforms[$i]['provider'] ?? ''))] ?? []);
             $rows[$i] = [...$row, $event['results'] ?? null, ...($money ? [$event['cost'] ?? null] : [])];
+        }
+
+        return [$head, $rows];
+    }
+
+    /**
+     * FX-APPLY-001 — the stored rate facts for this file's period (memoised per report and period).
+     *
+     * @param  array<string,mixed>  $data
+     * @return array{currency: string, includes_converted: bool, stale: bool, withheld_rows: int, by_currency: list<array<string, mixed>>, by_provider: array<string, list<string>>, header: string}
+     */
+    private function fxFacts(Report $report, array $data): array
+    {
+        $from = is_string($data['period']['from'] ?? null) ? $data['period']['from'] : null;
+        $to = is_string($data['period']['to'] ?? null) ? $data['period']['to'] : null;
+        $key = $report->getKey().'|'.$from.'|'.$to;
+
+        return $this->fxMemo[$key] ??= ReportFxFacts::for($report, $from, $to);
+    }
+
+    /**
+     * FX-APPLY-001 — every platform row says the currency its platform reported in, beside the converted figures, so the file
+     * reconciles with the screen («253 EUR» → 283.36 in the reporting currency). Codes only — never an amount, never a name.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     * @param  array<string, list<string>>  $byProvider
+     * @return array{0: list<string>, 1: list<array<int,mixed>>}
+     */
+    private static function withOriginalCurrency(array $data, array $head, array $rows, array $byProvider): array
+    {
+        $platforms = array_values((array) ($data['platforms'] ?? []));
+        $head[] = 'Original currency / العملة الأصلية';
+        foreach ($rows as $i => $row) {
+            $provider = (string) ($platforms[$i]['provider'] ?? '');
+            $codes = $byProvider[$provider] ?? $byProvider[AdPlatforms::canonical($provider)] ?? [];
+            $rows[$i] = [...$row, implode(', ', $codes)];
         }
 
         return [$head, $rows];
@@ -438,6 +480,9 @@ final class ReportExporter
         $put(["Report: {$report->name}", $report->type]);
         // The currency the figures are IN — a live report's figures come from the page, which names its own.
         $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', (string) ($data['currency'] ?? $report->currency)]);
+        // FX-APPLY-001 — the rates behind the figures: original currencies, rate, dates, kind, withheld.
+        $fx = $this->fxFacts($report, $data);
+        $put(['Exchange rates / أسعار الصرف', $fx['header']]);
         $put([]);
         $put(['KPIs']);
         foreach (self::kpiRows($data) as $k => $v) {
@@ -448,6 +493,7 @@ final class ReportExporter
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? ''],
             array_values((array) ($data['platforms'] ?? [])),
         )));
+        [$platHead, $platRows] = self::withOriginalCurrency($data, $platHead, $platRows, $fx['by_provider']);
         $put($platHead);
         foreach ($platRows as $row) {
             $put($row);
@@ -683,6 +729,7 @@ final class ReportExporter
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null],
             array_values((array) ($data['platforms'] ?? [])),
         )));
+        [$platHead, $platRows] = self::withOriginalCurrency($data, $platHead, $platRows, $this->fxFacts($report, $data)['by_provider']);
         $ps->fromArray($platHead, null, 'A1');
         $row = 2;
         foreach ($platRows as $platRow) {
@@ -1086,6 +1133,7 @@ final class ReportExporter
             $rows[] = ['Attribution window / نافذة الإسناد', (string) ($report->attribution_window ?? '—')];
         }
         $rows[] = ['Currency / العملة', (string) ($data['currency'] ?? $report->currency)];
+        $rows[] = ['Exchange rates / أسعار الصرف', $this->fxFacts($report, $data)['header']];
         $rows[] = ['Timezone / المنطقة الزمنية', (string) $report->timezone];
         $live = ($data['mode'] ?? null) === 'live' || ($report->config['mode'] ?? 'snapshot') === 'live' || (($report->config['live'] ?? false) === true);
         $rows[] = ['Report mode / وضع التقرير', $live ? 'Live' : 'Snapshot'];
