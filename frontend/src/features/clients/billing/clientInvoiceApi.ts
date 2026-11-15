@@ -21,6 +21,8 @@ export type InvoiceAction = 'review' | 'issue' | 'send' | 'payment' | 'correct'
 export const getBillingProfile = (clientId: string) => getData<BillingProfile | null>(`/billing/clients/${clientId}/profile`)
 export const saveBillingProfile = (clientId: string, body: Partial<BillingProfile>) => putData<BillingProfile>(`/billing/clients/${clientId}/profile`, body)
 export const draftInvoice = (clientId: string, body: { from: string; to: string; amount?: number }) => postData<{ id: number; number: string }>(`/billing/clients/${clientId}/invoices/draft`, body)
+/** FIN-WALLET-001 — a draft invoice of type «شحن رصيد إعلاني» for one project; a confirmed payment of it tops up that project's budget. */
+export const draftTopUpInvoice = (clientId: string, body: { project_id: string; amount: number }) => postData<{ id: number; number: string }>(`/billing/clients/${clientId}/invoices/wallet-top-up`, body)
 export const invoiceAction = (id: number | string, action: InvoiceAction, body?: { amount?: number; reason?: string }) => postData<{ id: number; status: string }>(`/billing/invoices/${id}/${action}`, body)
 export const invoicePdfUrl = (id: number | string, lang: 'ar' | 'en') => `/api/v1/billing/invoices/${id}/pdf?lang=${lang}`
 

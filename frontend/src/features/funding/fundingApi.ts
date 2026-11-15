@@ -111,6 +111,8 @@ export interface BudgetPayment {
   added_at: string
   plan_before?: { provider: string; percent: number }[] | null
   plan_after?: { provider: string; percent: number }[] | null
+  /** FIN-WALLET-001 — where a deposit came from: a payment in the system (an invoice), or a manual entry with its reference. */
+  source?: { type: 'invoice_payment'; invoice_number?: string; via?: 'manual' | 'gateway' } | { type: 'manual'; reference: string | null } | { type: 'spend_limit' } | null
 }
 
 export interface BudgetPoint { date: string; approved: number; spent: number; remaining: number | null; added: number }

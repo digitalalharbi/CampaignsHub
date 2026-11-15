@@ -111,6 +111,8 @@ final class FundingController extends Controller
             'remaining_after' => $p->remaining_after === null ? null : (float) $p->remaining_after,
             'added_by' => $p->author?->name, 'added_at' => $p->created_at->toIso8601String(),
             'plan_before' => $p->meta['plan_before'] ?? null, 'plan_after' => $p->meta['plan_after'] ?? null,
+            // FIN-WALLET-001 — every deposit says where it came from: a payment in the system, or a manual entry with its reference.
+            'source' => in_array($p->kind, ['initial', 'top_up'], true) ? ($p->meta['source'] ?? ['type' => 'manual', 'reference' => $p->reference]) : null,
         ])->values()->all();
 
         return ApiResponse::success(['project_name' => $funding->project?->name] + $this->balance->of($funding) + [
