@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domains\Access\Http\Controllers\MyAccessController;
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
@@ -195,6 +196,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
 // The signed-in user's own account (self-only; no user id is ever accepted from the client).
 Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(function (): void {
     Route::get('/', [MeController::class, 'show'])->name('show');
+    // ACCESS-SECTIONS-001 — the signed-in member's effective role, sections and clients, from the one resolver.
+    Route::get('/access', MyAccessController::class)->name('access');
     Route::patch('/profile', [MeController::class, 'updateProfile'])->name('profile.update');
     Route::get('/sessions', [MeController::class, 'sessions'])->name('sessions');
 

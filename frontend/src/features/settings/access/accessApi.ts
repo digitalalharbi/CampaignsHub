@@ -15,6 +15,9 @@ export type AreaLevels = Record<string, AreaLevel>
 
 export interface Area { key: string; ar: string; en: string }
 
+/** ACCESS-SECTIONS-001 — the seven sections switched per member (layer three); on/off per section. */
+export type SectionStates = Record<string, boolean>
+
 export interface Category {
   slug: string
   name_ar: string
@@ -41,6 +44,7 @@ export interface AccessMember {
   is_owner: boolean
   is_self: boolean
   areas: AreaLevels | null
+  sections?: SectionStates | null
   overrides: { allow: number; deny: number }
   override_areas: string[]
   scope: Scope
@@ -56,6 +60,7 @@ export interface AccessInvitation {
   category_name_ar: string | null
   category_name_en: string | null
   areas: AreaLevels | null
+  sections?: SectionStates | null
   overrides: { allow: number; deny: number }
   override_areas: string[]
   scope: Scope
@@ -67,6 +72,7 @@ export interface AccessInvitation {
 
 export interface AccessData {
   areas: Area[]
+  sections?: Area[]
   categories: Category[]
   members: AccessMember[]
   invitations: AccessInvitation[]
@@ -78,6 +84,10 @@ export interface AccessData {
 }
 
 export interface HistoryEntry { action: string; by: string | null; at: string; reason: string | null }
+
+/** One field of a logged change: a scalar as from → to, a list as added / removed. */
+export interface AuditChange { field: string; from?: string | number | boolean | null; to?: string | number | boolean | null; added?: string[]; removed?: string[] }
+export interface AuditEntry { action: string; by: string | null; target: string | null; at: string; reason: string | null; changes: AuditChange[] }
 
 const KEY = ['settings', 'access'] as const
 
@@ -93,6 +103,11 @@ export function useAccessHistory(type: 'member' | 'invitation' | 'category', id:
   })
 }
 
+/** ACCESS-SECTIONS-001 — the workspace's recent permission changes: who, whom, when, what. */
+export function useAccessAudit() {
+  return useQuery({ queryKey: [...KEY, 'audit'], queryFn: () => getData<{ entries: AuditEntry[] }>('/settings/access/audit?limit=30') })
+}
+
 export function useAccessActions() {
   const qc = useQueryClient()
   const inv = () => {
@@ -102,7 +117,7 @@ export function useAccessActions() {
   }
   return {
     invite: useMutation({
-      mutationFn: (b: { email: string; category: string; areas?: Record<string, Level>; client_ids?: string[] }) =>
+      mutationFn: (b: { email: string; category: string; areas?: Record<string, Level>; sections?: SectionStates; client_ids?: string[] }) =>
         postData<{ id: string; delivery_status: string; dev_link: string | null }>('/settings/access/invitations', b),
       onSuccess: inv,
     }),
@@ -112,13 +127,19 @@ export function useAccessActions() {
       onSuccess: inv,
     }),
     updateInvitation: useMutation({
-      mutationFn: (b: { id: string; category?: string; areas?: Record<string, Level>; client_ids?: string[] }) => putData(`/settings/access/invitations/${b.id}`, b),
+      mutationFn: (b: { id: string; category?: string; areas?: Record<string, Level>; sections?: SectionStates; client_ids?: string[] }) => putData(`/settings/access/invitations/${b.id}`, b),
       onSuccess: inv,
     }),
     resend: useMutation({ mutationFn: (id: string) => postData(`/settings/access/invitations/${id}/resend`), onSuccess: inv }),
     revoke: useMutation({ mutationFn: (id: string) => deleteData(`/settings/team/invitations/${id}`), onSuccess: inv }),
     setCategory: useMutation({ mutationFn: (b: { id: string; role: string }) => putData(`/settings/team/${b.id}/role`, { role: b.role }), onSuccess: inv }),
     setOverrides: useMutation({ mutationFn: (b: { id: string; areas: Record<string, Level> }) => putData(`/settings/access/members/${b.id}/overrides`, { areas: b.areas }), onSuccess: inv }),
+    /** ACCESS-SECTIONS-001 — one save for a member after the invitation: category, areas, sections, clients. */
+    updateMember: useMutation({
+      mutationFn: (b: { id: string; category?: string; areas?: Record<string, Level>; sections?: SectionStates; client_ids?: string[] }) =>
+        putData(`/settings/access/members/${b.id}`, { category: b.category, areas: b.areas, sections: b.sections, client_ids: b.client_ids }),
+      onSuccess: () => { inv(); void qc.invalidateQueries({ queryKey: ['me', 'access'] }) },
+    }),
     setScope: useMutation({ mutationFn: (b: { membership: string; client_ids: string[] }) => putData(`/agency/team/${b.membership}/scopes`, { client_ids: b.client_ids }), onSuccess: inv }),
     toggle: useMutation({ mutationFn: (id: string) => postData(`/settings/team/${id}/toggle`), onSuccess: inv }),
     remove: useMutation({ mutationFn: (id: string) => deleteData(`/settings/team/${id}`), onSuccess: inv }),
@@ -132,6 +153,13 @@ export function useAccessActions() {
     }),
     deleteCategory: useMutation({ mutationFn: (slug: string) => deleteData(`/settings/access/categories/${slug}`), onSuccess: inv }),
   }
+}
+
+/** Only the sections that differ from where the person stands now. */
+export function diffSections(base: SectionStates, chosen: SectionStates): SectionStates {
+  const out: SectionStates = {}
+  for (const [k, v] of Object.entries(chosen)) if ((base[k] ?? false) !== v) out[k] = v
+  return out
 }
 
 /** The area levels a category starts from, flattened to what the toggles edit. */

@@ -22,6 +22,7 @@ import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
+import { useSectionAllowed } from '@/lib/accessSections'
 import { SidebarNav } from './SidebarNav'
 import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
@@ -78,6 +79,8 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
    * would empty somebody's rail on a slow network and look like an outage.
    */
   const { can } = useProjectCapabilities()
+  // ACCESS-SECTIONS-001 — a section the member lacks is hidden, not drawn disabled.
+  const sectionAllowed = useSectionAllowed()
 
   return (
     <SidebarNav
@@ -85,7 +88,7 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       ar={ar}
       collapsed={collapsed}
       onNavigate={onNavigate}
-      allow={(leaf) => can(leaf.cap)}
+      allow={(leaf) => can(leaf.cap) && sectionAllowed(leaf.to)}
       label={ar ? 'أقسام الوكالة' : 'Agency sections'}
       storageKey="nav.collapsed.agency"
     />
@@ -161,7 +164,8 @@ function useAgencyAccent(): CSSProperties | undefined {
 export function AgencyShell() {
   const agencyAccent = useAgencyAccent()
   const { can } = useProjectCapabilities()
-  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string }) => can(leaf.cap) }
+  const sectionAllowed = useSectionAllowed()
+  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string; to: string }) => can(leaf.cap) && sectionAllowed(leaf.to) }
   const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
     useUi()
   const ar = locale === 'ar'
@@ -175,7 +179,7 @@ export function AgencyShell() {
       testId="agency-shell"
       railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
       tabs={AGENCY_TABS}
-      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap))}
+      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap) && sectionAllowed(leaf.to))}
       // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
       // below it is read through that choice, and the drawer is no longer the phone's way in.
       moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" workspace={workspace} /></div>}

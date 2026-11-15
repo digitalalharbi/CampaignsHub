@@ -7,6 +7,7 @@ namespace App\Domains\Access\Services;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Access\Support\AccessCatalogue;
+use App\Domains\Access\Support\AccessSections;
 use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Models\User;
@@ -138,13 +139,16 @@ final class AccessCenter
     public function writeOverrides(string $tenantId, int $userId, array $allow, array $deny, ?int $by): void
     {
         $switchable = AccessCatalogue::switchableKeys();
+        // ACCESS-SECTIONS-001 — a switched-off section is a `section:<key>` deny row in the same store.
+        $sectionMarkers = array_map(fn (string $s) => AccessSections::PREFIX.$s, AccessSections::keys());
         $now = now();
 
         DB::table('member_access_overrides')->where('tenant_id', $tenantId)->where('user_id', $userId)->delete();
 
         $rows = [];
         foreach ([['allow', $allow], ['deny', $deny]] as [$effect, $keys]) {
-            foreach (array_unique(array_intersect($keys, $switchable)) as $key) {
+            $writable = $effect === 'deny' ? [...$switchable, ...$sectionMarkers] : $switchable;
+            foreach (array_unique(array_intersect($keys, $writable)) as $key) {
                 $rows[] = ['tenant_id' => $tenantId, 'user_id' => $userId, 'permission_key' => $key, 'effect' => $effect, 'set_by' => $by, 'created_at' => $now, 'updated_at' => $now];
             }
         }

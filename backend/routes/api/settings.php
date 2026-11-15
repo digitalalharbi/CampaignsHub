@@ -78,6 +78,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::put('access/invitations/{invitation}', [AccessCenterController::class, 'updateInvitation'])->where('invitation', '[0-9A-Za-z]+')->name('access.invitations.update');
     Route::post('access/invitations/{invitation}/resend', [AccessCenterController::class, 'resend'])->where('invitation', '[0-9A-Za-z]+')->middleware('throttle:10,1')->name('access.invitations.resend');
     Route::put('access/members/{user}/overrides', [AccessCenterController::class, 'updateOverrides'])->whereUuid('user')->name('access.members.overrides');
+    // ACCESS-SECTIONS-001 — edit a member after the invitation (category, areas, sections, clients) in one save; the access log.
+    Route::put('access/members/{user}', [AccessCenterController::class, 'updateMember'])->whereUuid('user')->name('access.members.update');
+    Route::get('access/audit', [AccessCenterController::class, 'audit'])->name('access.audit');
     Route::get('access/history', [AccessCenterController::class, 'history'])->name('access.history');
 
     // Notification preferences (per-user).
