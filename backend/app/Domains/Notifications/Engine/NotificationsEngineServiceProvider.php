@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
+use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\EventRegistry;
+use App\Domains\Notifications\Engine\Contracts\UsageCounter;
 use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
+use App\Domains\Notifications\Engine\Entitlements\PlanEntitlementGate;
+use App\Domains\Notifications\Engine\Usage\MonthlyUsageCounter;
 use App\Domains\Notifications\Engine\Workspace\ConfigWorkspaceTypes;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use Illuminate\Support\ServiceProvider;
@@ -24,5 +28,7 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
         $this->app->scoped(EventRegistry::class, ConfigEventRegistry::class);
         $this->app->scoped(WorkspaceTypes::class, ConfigWorkspaceTypes::class);
         $this->app->scoped(WorkspaceSettingsRepository::class);
+        $this->app->scoped(EntitlementGate::class, PlanEntitlementGate::class);
+        $this->app->scoped(UsageCounter::class, MonthlyUsageCounter::class);
     }
 }

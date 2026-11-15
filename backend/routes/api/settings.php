@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\AccessCenterController;
@@ -125,6 +126,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // EMAIL-SETTINGS-DEPTH-001 — what was actually sent, and what failed, from the ledgers that
     // already record it.
     Route::get('notifications/deliveries', [TeamNotificationsController::class, 'deliveries'])->name('notifications.deliveries');
+    // NOTIF-V2-ENGINE-001 — the shared notifications engine, workspace level (one component for every workspace type).
+    Route::get('workspace/notifications/entitlements', [WorkspacePlanUsageController::class, 'entitlements'])->name('workspace.notifications.entitlements');
+    Route::get('workspace/notifications/usage', [WorkspacePlanUsageController::class, 'usage'])->name('workspace.notifications.usage');
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');
