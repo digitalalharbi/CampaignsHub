@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Skeleton } from '@/components/ui/States'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
@@ -56,9 +57,10 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
 
   return (
     <div ref={ref} data-testid="role-dashboard" data-view={d?.view} className="grid min-w-0 grid-cols-1 content-start gap-2 lg:grid-rows-[auto_auto_minmax(0,1fr)_auto_auto]">
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-extrabold tracking-tight text-text-primary" data-testid="role-dashboard-title">{ar ? HOME.ar : HOME.en}</h1>
-        {d && d.available_views.length > 1 && (
+      <PageIntro
+        testid="role-dashboard-intro"
+        title={ar ? HOME.ar : HOME.en}
+        actions={d && d.available_views.length > 1 ? (
           <div role="tablist" aria-label={ar ? 'عرض الدور' : 'Role view'} data-testid="role-dashboard-views" className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
             {d.available_views.map((v) => (
               <button key={v} type="button" role="tab" aria-selected={d.view === v} data-testid={`role-view-${v}`} onClick={() => setChosen(v)}
@@ -67,8 +69,8 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
               </button>
             ))}
           </div>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
       {q.isError && <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل الرئيسية' : 'Could not load Home'} />}
