@@ -41,7 +41,7 @@ final class ExternalSettings
 
     /** Action-request phrases an external message must never carry (spec §7). */
     public const ACTION_PHRASES = [
-        'مطلوب منك', 'يرجى الرد', 'نرجو الرد', 'يرجى التأكيد', 'يرجى الموافقة', 'آخر موعد', 'قبل تاريخ', 'خلال 24 ساعة', 'اعتمد', 'أقرّ', 'أقر بالاستلام',
+        'مطلوب منك', 'يرجى الرد', 'نرجو الرد', 'يرجى التأكيد', 'يرجى الموافقة', 'آخر موعد', 'خلال 24 ساعة', 'أقر بالاستلام', 'وقّع',
         'action required', 'please reply', 'please confirm', 'please approve', 'deadline', 'acknowledge', 'respond by', 'due by',
     ];
 

@@ -3,6 +3,7 @@
 use App\Domains\Campaigns\Http\Controllers\AppMediaController;
 use App\Domains\Influencers\Http\Controllers\AttributionController;
 use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
+use App\Domains\Notifications\External\Http\PublicLinksController;
 use App\Domains\Notifications\Http\Controllers\MailChartController;
 use App\Domains\Notifications\Http\Controllers\MailUnsubscribeController;
 use App\Domains\Reports\Http\Controllers\SharePreviewController;
@@ -79,6 +80,10 @@ Route::post('/mail/unsubscribe/{token}', [MailUnsubscribeController::class, 'lea
  */
 Route::get('/n/confirm/{token}', [ConsentController::class, 'showConfirm'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:60,1')->name('notifications.confirm');
 Route::post('/n/confirm/{token}', [ConsentController::class, 'confirm'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:60,1')->name('notifications.confirm.post');
+// NOTIF-V2-EXTERNAL-001 — the external messages' own public links: unsubscribe (signed, bound to workspace + recipient) and the footprint click.
+Route::get('/n/u/{token}', [PublicLinksController::class, 'show'])->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]{32}')->middleware('throttle:60,1')->name('notifications.unsubscribe');
+Route::post('/n/u/{token}', [PublicLinksController::class, 'apply'])->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]{32}')->middleware('throttle:60,1')->name('notifications.unsubscribe.post');
+Route::get('/n/f/{token}', [PublicLinksController::class, 'footprint'])->where('token', '[A-Za-z0-9_\-]+\.[a-f0-9]{32}')->middleware('throttle:120,1')->name('notifications.footprint');
 
 /*
  * AD-MEDIA-RECOVERY-001 — the app's own media, served by the app so a film can be SEEKED.

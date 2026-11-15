@@ -297,6 +297,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
             'mail/unsubscribe/*',
             'n/confirm/*',
+            'n/u/*', // NOTIF-V2-EXTERNAL-001: one-click unsubscribe (RFC 8058 POST from the mail client)
         ]);
 
         /*
