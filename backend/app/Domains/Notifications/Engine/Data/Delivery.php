@@ -30,6 +30,16 @@ final class Delivery
         public readonly int $groupCount = 1,
     ) {}
 
+    /** The same delivery read in another language (the in-app row stores both). */
+    public function withLocale(string $locale): self
+    {
+        $r = $this->recipient;
+
+        return new self($this->id, $this->reference, $this->tenantId, $this->eventKey, $this->scope, $this->channel, $this->priority,
+            new Recipient($r->kind, $r->userId, $r->externalId, $r->address, $locale, $r->roleKey),
+            $this->projectId, $this->subscriptionId, $this->payload, $this->contentVersion, $this->attempts, $this->groupCount);
+    }
+
     public static function fromRow(object $row): self
     {
         $kind = RecipientKind::from((string) $row->recipient_kind);

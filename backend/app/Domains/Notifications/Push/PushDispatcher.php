@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Push;
 
+use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
+use App\Domains\Notifications\Engine\Enums\EntitlementKey;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Services\AlertQuietHours;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -39,7 +41,9 @@ final class PushDispatcher
     /** Cheap, in-memory: could this notification ring a phone at all? The queue is only touched when it could. */
     public function wants(AppNotification $n): bool
     {
-        return PushTypes::of($n) !== null && $this->transport->configured() && $this->anyDevice();
+        return PushTypes::of($n) !== null && $this->transport->configured() && $this->anyDevice()
+            // NOTIF-V2-ENGINE-001 — the plan, server-side: a workspace without `notifications.push` rings no phone.
+            && app(EntitlementGate::class)->allows((string) $n->tenant_id, EntitlementKey::Push);
     }
 
     /**
@@ -162,10 +166,13 @@ final class PushDispatcher
     }
 
     /**
+     * Every device of one person: success stamps the device, 404 / 410 deletes it. Public since NOTIF-V2-ENGINE-001 so the
+     * shared engine's push channel sends through the same device handling instead of a second copy of it.
+     *
      * @param  array<string, mixed>  $payload
      * @return array{sent: int, removed: int}
      */
-    private function deliver(User $user, array $payload, string $urgency): array
+    public function deliver(User $user, array $payload, string $urgency): array
     {
         $json = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $sent = 0;

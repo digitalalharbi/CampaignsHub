@@ -6,9 +6,12 @@ namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
 use App\Domains\Notifications\Engine\Console\RunDigestsCommand;
+use App\Domains\Notifications\Engine\Console\SendOutboxCommand;
+use App\Domains\Notifications\Engine\Content\CatalogMessageComposer;
 use App\Domains\Notifications\Engine\Contracts\DeliveryLog;
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\EventRegistry;
+use App\Domains\Notifications\Engine\Contracts\MessageComposer;
 use App\Domains\Notifications\Engine\Contracts\QuietHoursPolicy;
 use App\Domains\Notifications\Engine\Contracts\Router;
 use App\Domains\Notifications\Engine\Contracts\Scheduler;
@@ -21,9 +24,14 @@ use App\Domains\Notifications\Engine\Log\ImmutableSubscriptionLog;
 use App\Domains\Notifications\Engine\Routing\EngineRouter;
 use App\Domains\Notifications\Engine\Routing\WorkspaceQuietHours;
 use App\Domains\Notifications\Engine\Scheduling\SubscriptionScheduler;
+use App\Domains\Notifications\Engine\Sending\InAppSender;
+use App\Domains\Notifications\Engine\Sending\MailSender;
+use App\Domains\Notifications\Engine\Sending\PushSender;
+use App\Domains\Notifications\Engine\Sending\SenderPipeline;
 use App\Domains\Notifications\Engine\Usage\MonthlyUsageCounter;
 use App\Domains\Notifications\Engine\Workspace\ConfigWorkspaceTypes;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -47,6 +55,20 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
         $this->app->bind(SubscriptionLog::class, ImmutableSubscriptionLog::class);
         $this->app->scoped(NotificationEngine::class);
         $this->app->scoped(Scheduler::class, SubscriptionScheduler::class);
+        $this->app->bind(MessageComposer::class, CatalogMessageComposer::class);
+
+        // Channel senders and pre-send checks are tagged, so a later builder adds one without touching the pipeline.
+        $this->app->tag([InAppSender::class, MailSender::class, PushSender::class], 'notifications.senders');
+        $this->app->bind(SenderPipeline::class, fn ($app): SenderPipeline => new SenderPipeline(
+            $app->tagged('notifications.senders'),
+            $app->tagged('notifications.presend'),
+            $app->make(DeliveryLog::class),
+            $app->make(EntitlementGate::class),
+            $app->make(UsageCounter::class),
+            $app->make(EventRegistry::class),
+            $app->make(MessageComposer::class),
+            $app->make(TenantContext::class),
+        ));
     }
 
     public function boot(): void
@@ -54,6 +76,7 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 RunDigestsCommand::class,
+                SendOutboxCommand::class,
             ]);
         }
     }

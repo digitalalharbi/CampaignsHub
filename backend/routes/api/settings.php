@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Accounts\Http\Controllers\CapabilityController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
+use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
 use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
@@ -129,6 +130,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     // NOTIF-V2-ENGINE-001 — the shared notifications engine, workspace level (one component for every workspace type).
     Route::get('workspace/notifications/entitlements', [WorkspacePlanUsageController::class, 'entitlements'])->name('workspace.notifications.entitlements');
     Route::get('workspace/notifications/usage', [WorkspacePlanUsageController::class, 'usage'])->name('workspace.notifications.usage');
+    // The proof of notice: read-only, no write route exists (the tables refuse UPDATE/DELETE too).
+    Route::get('workspace/notifications/log', [DeliveryLogController::class, 'index'])->name('workspace.notifications.log');
+    Route::get('workspace/notifications/log/export', [DeliveryLogController::class, 'export'])->middleware('throttle:10,1')->name('workspace.notifications.log.export');
+    Route::get('workspace/notifications/subscription-log', [DeliveryLogController::class, 'subscriptions'])->name('workspace.notifications.subscription-log');
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');
