@@ -116,6 +116,18 @@ export function syncStatusMeaning(status: string | null | undefined): SyncStatus
   }
 }
 
+/**
+ * X-NO-ACTIVITY-001 — a successful run in which every stored figure was zero reads «ناجحة — لا نشاط».
+ * The status itself stays `success`; the run carries `no_activity`. `failed` is for real errors only.
+ */
+export const NO_ACTIVITY_LABEL = { ar: 'ناجحة — لا نشاط', en: 'Succeeded — no activity' } as const
+
+export function syncRunLabel(status: string | null | undefined, noActivity: boolean | null | undefined, ar: boolean): string {
+  if (status === 'success' && noActivity) return ar ? NO_ACTIVITY_LABEL.ar : NO_ACTIVITY_LABEL.en
+
+  return syncStatusLabel(status, ar)
+}
+
 /** The label in the reader's language. */
 export function syncStatusLabel(status: string | null | undefined, ar: boolean): string {
   const meaning = syncStatusMeaning(status)

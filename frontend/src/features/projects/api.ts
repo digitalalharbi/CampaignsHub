@@ -399,6 +399,8 @@ export interface SyncRun {
   started_at: string | null
   finished_at: string | null
   error: string | null
+  /** X-NO-ACTIVITY-001 — success where every stored figure was zero. */
+  no_activity?: boolean
   is_demo: boolean
   /** §8 — consecutive identical answers are said once, with how many times they were said. */
   repeats: number
