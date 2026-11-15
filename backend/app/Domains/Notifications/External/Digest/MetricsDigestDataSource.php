@@ -8,6 +8,7 @@ use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Notifications\Services\DigestRecommendations;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -25,6 +26,7 @@ final class MetricsDigestDataSource implements DigestDataSource
     public function __construct(
         private readonly MetricsAggregator $metrics,
         private readonly FxEngine $fx,
+        private readonly SpendLedger $ledger,
         private readonly ProjectBudgetReader $budgets,
         private readonly DigestRecommendations $recommendations,
     ) {}
@@ -88,12 +90,23 @@ final class MetricsDigestDataSource implements DigestDataSource
 
         $top = array_slice(array_values(array_filter($campaigns, static fn (array $c): bool => (float) ($c['spend'] ?? 0) > 0)), 0, 3);
 
+        // RELEASE-INTEGRATION — PROJECT-LIFECYCLE-001 §7 rule 9: the headline spend is THE spend ledger's reading (the figure the
+        // campaigns page, budgets, clients list and dashboards show), each account-day converted from its original currency for
+        // its own date. A part with no rate is excluded there and named; here it marks the conversion withheld, so the message
+        // waits for review instead of mailing a total the screen qualifies.
+        $reading = $this->ledger->read([$projectId], $f->copy()->startOfDay(), $t->copy()->startOfDay(), $displayCurrency);
+        $previousReading = $this->ledger->read([$projectId], $pf->copy()->startOfDay(), $pt->copy()->startOfDay(), $displayCurrency);
+        if (($reading['excluded'] ?? []) !== []) {
+            $fxRows['ledger_excluded'] = ['from' => implode(',', array_values(array_unique(array_map(static fn (array $e): string => (string) $e['currency'], (array) $reading['excluded'])))),
+                'to' => $displayCurrency, 'rate' => null, 'rate_date' => null, 'kind' => null, 'withheld' => true];
+        }
+
         return [
             'complete' => $complete,
             'missing' => $complete ? [] : array_values(array_unique(array_merge((array) ($coverage['failed_contributors'] ?? []), (array) ($coverage['stale_contributors'] ?? []), (array) ($coverage['partial_contributors'] ?? [])))),
             'currency' => $displayCurrency,
-            'spend' => $money($current['spend'] ?? null),
-            'previous_spend' => $money($previous['spend'] ?? null),
+            'spend' => $reading['amount'] === null ? null : round((float) $reading['amount'], 2),
+            'previous_spend' => $previousReading['amount'] === null ? null : round((float) $previousReading['amount'], 2),
             'objectives' => $objectives,
             'platforms' => $platforms,
             'series' => $series($scope->timeseries($f, $t)),

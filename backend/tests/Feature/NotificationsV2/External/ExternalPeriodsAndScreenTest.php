@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\NotificationsV2\External;
 
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Fx\FxEngine;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Notifications\Engine\Scheduling\DigestRunner;
 use App\Domains\Notifications\Engine\Scheduling\SubscriptionScheduler;
 use App\Domains\Notifications\External\Digest\DigestDataSource;
@@ -77,7 +82,11 @@ final class ExternalPeriodsAndScreenTest extends TestCase
         $this->app->instance(DigestDataSource::class, app(MetricsDigestDataSource::class));
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $campaign = UnifiedCampaign::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'name' => 'Store sales', 'objective' => 'sales', 'status' => 'active']);
-        $account = (string) Str::uuid();
+        // The project's selected ad account (rows of an unselected account are no project's figure: BoundAccountVisibility).
+        $connection = app(TokenVault::class)->open(tenantId: (string) $this->tenant->id, provider: 'meta', tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addHour()), connectionName: 'meta-screen');
+        $account = (string) ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(), 'provider' => 'meta',
+            'account_type' => 'ad_account', 'external_id' => 'act-screen', 'name' => 'Screen account', 'currency' => 'USD', 'timezone' => 'Asia/Riyadh', 'status' => 'active'])->id;
+        ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account, 'provider' => 'meta', 'purpose' => 'ads', 'is_active' => true]);
         foreach (range(1, 14) as $day) {
             foreach (['spend' => 123.457 + $day, 'conversions' => 3 + $day % 4, 'revenue' => 800.0 + $day] as $key => $value) {
                 DB::table('daily_metrics')->insert([
@@ -101,12 +110,36 @@ final class ExternalPeriodsAndScreenTest extends TestCase
 
         $data = app(MetricsDigestDataSource::class)->project($this->tenant->id, $this->project->id, '2026-11-01', '2026-11-14', 'SAR');
         $this->assertEqualsWithDelta((float) $screenSar->converted, (float) $data['spend'], 0.01);
+        // RELEASE-INTEGRATION — and the headline equals THE spend ledger (N4: the campaigns page, budgets, clients list, dashboards).
+        $ledger = app(SpendLedger::class)->read([$this->project->id], Carbon::parse('2026-11-01'), Carbon::parse('2026-11-14'), 'SAR');
+        $this->assertTrue($ledger['complete']);
+        $this->assertEqualsWithDelta((float) $ledger['amount'], (float) $data['spend'], 0.01);
         $text = (string) $this->sent()[0]['email']->getTextBody();
         $this->assertStringContainsString(number_format((float) $screenSar->converted, 2, '.', ',').' ر.س', $text);
         $this->assertStringContainsString('1 USD = 3.75 SAR', $text);
         $purchases = (float) $totals['conversions']; // the system's sales result (ObjectiveResult)
         $this->assertEqualsWithDelta($purchases, (float) $data['objectives'][0]['result'], 0.01);
         $this->assertEqualsWithDelta(round((float) $screenSar->converted / $purchases, 2), (float) $data['objectives'][0]['cost_per_result'], 0.01);
+    }
+
+    public function test_spend_the_ledger_cannot_convert_withholds_the_message_instead_of_shrinking_its_total(): void
+    {
+        // RELEASE-INTEGRATION — a EUR account with no EUR rate: the ledger excludes and names it; the message marks it withheld.
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $connection = app(TokenVault::class)->open(tenantId: (string) $this->tenant->id, provider: 'google', tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addHour()), connectionName: 'google-eur');
+        $account = (string) ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(), 'provider' => 'google',
+            'account_type' => 'ad_account', 'external_id' => 'eur-1', 'name' => 'EUR account', 'currency' => 'XEU', 'timezone' => 'Asia/Riyadh', 'status' => 'active'])->id;
+        ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account, 'provider' => 'google', 'purpose' => 'ads', 'is_active' => true]);
+        DB::table('daily_metrics')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account,
+            'external_campaign_id' => (string) Str::uuid(), 'provider' => 'google', 'metric_key' => 'spend', 'metric_date' => '2026-11-05',
+            'value' => null, 'original_amount' => 400.0, 'original_currency' => 'XEU', 'project_currency' => 'USD', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $data = app(MetricsDigestDataSource::class)->project($this->tenant->id, $this->project->id, '2026-11-01', '2026-11-14', 'SAR');
+        $withheld = array_values(array_filter($data['fx'], static fn (array $r): bool => $r['withheld'] === true));
+        $this->assertNotSame([], $withheld, 'the excluded part is reported, so the pre-send check holds the message for review');
+        $this->assertStringContainsString('XEU', (string) $withheld[0]['from']);
     }
 
     public function test_the_daily_detector_raises_continuity_planning_and_month_events_for_subscribed_projects_only(): void
