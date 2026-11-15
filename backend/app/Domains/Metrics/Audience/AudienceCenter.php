@@ -41,7 +41,7 @@ final class AudienceCenter
     private string $project = '';
 
     /** Only these keys of a stored targeting summary ever leave the server (an audience name or id list never does). */
-    private const TARGETING_KEYS = ['countries', 'cities', 'locations', 'age_min', 'age_max', 'age_groups', 'genders', 'gender', 'languages', 'platforms', 'placements', 'product_type'];
+    private const TARGETING_KEYS = ['countries', 'regions', 'postal_codes', 'radius_m', 'excluded_countries', 'excluded_regions', 'cities', 'locations', 'age_min', 'age_max', 'age_groups', 'genders', 'gender', 'languages', 'platforms', 'placements', 'product_type'];
 
     /**
      * @param  list<string>|null  $providers  a narrower link's platforms, or null for all
@@ -106,13 +106,12 @@ final class AudienceCenter
                 'kind' => 'targeting',
                 'provider' => (string) $r->provider,
                 'level' => 'ad_set',
-                'ad_set_id' => (string) $r->id,
                 'settings' => is_array($settings) ? (array_intersect_key($settings, array_flip(self::TARGETING_KEYS)) ?: null) : null,
                 'not_stored' => $cap['targeting_lost'] ?? [],
                 'synced_at' => $r->last_synced_at === null ? null : Carbon::parse((string) $r->last_synced_at)->toIso8601String(),
             ];
             if (! $clientFacing) {
-                $item += ['ad_set' => (string) $r->name, 'campaign' => (string) $r->campaign_name, 'account_id' => (string) $r->external_account_id];
+                $item += ['ad_set_id' => (string) $r->id, 'ad_set' => (string) $r->name, 'campaign' => (string) $r->campaign_name, 'account_id' => (string) $r->external_account_id];
             }
             $items[] = $item;
         }

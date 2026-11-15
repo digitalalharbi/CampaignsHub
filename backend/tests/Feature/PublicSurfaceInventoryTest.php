@@ -40,6 +40,7 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/auth/registration-policy',
         'GET api/v1/brand',
         'GET api/v1/client/approvals',
+        'GET api/v1/client/audience',
         'GET api/v1/client/branding',
         'GET api/v1/client/branding/logo',
         'GET api/v1/client/campaigns',

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
@@ -827,6 +828,80 @@ final class ReportExporter
      * @param  list<array<int,mixed>>  $rows
      */
     /**
+     * AUDIENCE-001 — the audience parts as file tables, one per kind, the same rows the page draws.
+     *
+     * Read from `$data` after the report's sections and the link's switches were applied, so a part somebody hid is not
+     * here to write. Every share keeps its numerator and denominator; a measure not reported is an EMPTY cell, never 0;
+     * spend appears only where the part carries it (never on a client's file), per currency, never converted.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{title: string, sheet: string, head: list<string>, rows: list<list<mixed>>}>
+     */
+    private static function audienceTables(array $data): array
+    {
+        $out = [];
+        $delivery = [];
+        $money = false;
+        foreach (AudienceReportSections::DELIVERY as $key => $_) {
+            foreach ((array) (((array) ($data[$key] ?? []))['groups'] ?? []) as $g) {
+                foreach ((array) ($g['rows'] ?? []) as $r) {
+                    $money = $money || array_key_exists('spend', (array) $r);
+                    $delivery[] = [$g, (array) $r];
+                }
+            }
+        }
+        if ($delivery !== []) {
+            $head = ['Platform / المنصة', 'Dimension / التقسيم', 'Value / القيمة', 'Impressions / الظهور', 'Numerator / البسط', 'Denominator / المقام', 'Share / النسبة', 'Clicks / النقرات', 'Source / المصدر'];
+            if ($money) {
+                $head[] = 'Spend (original currency) / الإنفاق بعملته';
+            }
+            $rows = [];
+            foreach ($delivery as [$g, $r]) {
+                $share = is_array($r['share'] ?? null) ? $r['share'] : null;
+                $row = [
+                    (string) ($g['provider'] ?? ''), (string) ($g['dimension'] ?? ''), (string) ($r['value'] ?? ''),
+                    $r['impressions'] ?? '', $share['numerator'] ?? '', $share['denominator'] ?? '', $share['ratio'] ?? '',
+                    $r['clicks'] ?? '', (string) ($g['source_field'] ?? ''),
+                ];
+                if ($money) {
+                    $row[] = implode(' · ', array_map(static fn ($m): string => ((array) $m)['amount'].' '.((array) $m)['currency'], (array) ($r['spend'] ?? [])));
+                }
+                $rows[] = $row;
+            }
+            $rows[] = ['Basis / الأساس', 'Paid delivery as each platform reported it; platforms are never added together / التسليم المدفوع كما أبلغت كل منصة، ولا تُجمع المنصات'];
+            $out[] = ['title' => 'Audience — paid delivery / الجمهور — التسليم المدفوع', 'sheet' => 'Audience delivery', 'head' => $head, 'rows' => $rows];
+        }
+
+        $items = (array) (((array) ($data['audience_targeting'] ?? []))['items'] ?? []);
+        if ($items !== []) {
+            $rows = array_map(static function ($i): array {
+                $i = (array) $i;
+                $settings = [];
+                foreach ((array) ($i['settings'] ?? []) as $k => $v) {
+                    $settings[] = $k.': '.(is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v);
+                }
+
+                return [(string) ($i['provider'] ?? ''), (string) ($i['ad_set'] ?? ''), implode(' | ', $settings), implode(', ', (array) ($i['not_stored'] ?? []))];
+            }, array_values($items));
+            $out[] = ['title' => 'Audience — targeting settings / الجمهور — إعدادات الاستهداف', 'sheet' => 'Audience targeting', 'head' => ['Platform / المنصة', 'Ad set / المجموعة', 'Settings (not delivery) / الإعدادات (ليست تسليمًا)', 'Not stored / غير محفوظ'], 'rows' => $rows];
+        }
+
+        $site = (array) (((array) ($data['audience_site'] ?? []))['groups'] ?? []);
+        if ($site !== []) {
+            $rows = [];
+            foreach ($site as $g) {
+                foreach ((array) ($g['rows'] ?? []) as $r) {
+                    $r = (array) $r;
+                    $rows[] = [(string) ($g['dimension'] ?? ''), (string) ($r['value'] ?? ''), $r['sessions'] ?? '', ((array) ($r['share'] ?? []))['ratio'] ?? ''];
+                }
+            }
+            $out[] = ['title' => 'Site visitors (not ad delivery) / زوار الموقع (ليس تسليم الإعلان)', 'sheet' => 'Audience site', 'head' => ['Dimension / التقسيم', 'Value / القيمة', 'Sessions / الجلسات', 'Share / النسبة'], 'rows' => $rows];
+        }
+
+        return $out;
+    }
+
+    /**
      * WIDGET-REGISTRY-001 — the tables a link's widgets become in a file.
      *
      * Built ONLY from `$data['widgets']`, which `ShareService::downloadDocument` fills from the same client-safe
@@ -839,7 +914,8 @@ final class ReportExporter
      */
     private static function widgetTables(array $data): array
     {
-        $out = [];
+        // AUDIENCE-001 — the audience parts the page carries become tables of their own; a hidden part is absent from $data.
+        $out = self::audienceTables($data);
         foreach ((array) ($data['widgets'] ?? []) as $widget) {
             if (! is_array($widget) || ! is_array($widget['data'] ?? null)) {
                 continue;

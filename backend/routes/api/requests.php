@@ -69,6 +69,10 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/overview', [ClientPortalController::class, 'overview'])->name('overview.show')
         ->middleware('throttle:60,1');
 
+    // AUDIENCE-001 — the audience under the performance dashboard: no money, no campaign or ad-set names.
+    Route::get('/audience', [ClientPortalController::class, 'audience'])->name('audience.show')
+        ->middleware('throttle:60,1');
+
     // CP-VISIBILITY-001: what the agency lets this client see and do, per space.
     Route::get('/visibility', [ClientPortalController::class, 'visibility'])->name('visibility.show')
         ->middleware('throttle:120,1');
