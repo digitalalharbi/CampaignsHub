@@ -59,8 +59,11 @@ use App\Domains\Metrics\Console\FxMonitorCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\BackfillBellKind;
 use App\Domains\Notifications\Console\ConfirmMailDelivery;
 use App\Domains\Notifications\Console\EnrolMembers;
+use App\Domains\Notifications\Console\FlushDeferredPush;
+use App\Domains\Notifications\Console\GenerateVapidKeys;
 use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
@@ -151,6 +154,11 @@ return Application::configure(basePath: dirname(__DIR__))
         RetryFailedDigests::class,
         // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
         SendSpendSummaries::class,
+        // NOTIF-BELL-001 — names the old bell rows; manual, run once after the migration.
+        BackfillBellKind::class,
+        // NOTIF-PUSH-001 — a VAPID pair printed to the console (nothing written), and the quiet-hours summary sweep.
+        GenerateVapidKeys::class,
+        FlushDeferredPush::class,
         // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
         EnrolMembers::class,
         ConfirmMailDelivery::class,

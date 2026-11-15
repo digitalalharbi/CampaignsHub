@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck } from 'lucide-react'
+import { Bell, CheckCheck, ExternalLink } from 'lucide-react'
 import { BellVisual } from './BellVisual'
-import { listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from './api'
+import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification, type BellFilter } from './api'
+import { badgeText, FILTERS } from './bellFormat'
+import { useBellSound } from './useBellSound'
+import { usePushRefresh } from './pushRefresh'
 import {
   bucketLabel,
   groupByTime,
@@ -53,6 +56,27 @@ function named(type: string, ar: boolean): string | null {
   return TYPE_LABELS[type] ? words(TYPE_LABELS, type, ar) : null
 }
 
+/**
+ * NOTIF-BELL-001 — the row's heading is what the finding REALLY is.
+ *
+ * `kind_label` comes from the server, derived from the alert's own type and figures. `type` is only the preference category and
+ * five different findings share `budget_risk`, so it must never name a row: a budget_risk row the server could not name is called
+ * «تنبيه الميزانية», not «تجاوز حدود الميزانية». The server's sentence is kept beneath as the specifics.
+ */
+function heading(n: AppNotification, ar: boolean): string {
+  if (n.kind_label) return n.kind_label
+  if (n.type === 'budget_risk') return ar ? 'تنبيه الميزانية' : 'Budget alert'
+
+  return named(n.type, ar) ?? n.title
+}
+
+function detail(n: AppNotification, ar: boolean): string | null {
+  const h = heading(n, ar)
+  const line = n.message ?? (h === n.title ? null : n.title)
+
+  return line && line !== h ? line : null
+}
+
 export function NotificationCenter() {
   const t = useT()
   const ar = useUi((s) => s.locale) === 'ar'
@@ -62,9 +86,31 @@ export function NotificationCenter() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  const q = useQuery({ queryKey: ['notifications'], queryFn: listNotifications, refetchInterval: 60_000 })
-  const markRead = useMutation({ meta: { feedback: 'none' }, mutationFn: markNotificationRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
-  const markAll = useMutation({ meta: { feedback: 'none' }, mutationFn: markAllNotificationsRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
+  const [filter, setFilter] = useState<BellFilter>('all')
+
+  /*
+   * NOTIF-BELL-001 — the number is live and the list is lazy.
+   *
+   * The bell asks a tiny summary every 30 s, only while the tab is visible (TanStack pauses interval refetching in a hidden tab
+   * unless told otherwise) and again the moment the tab regains focus. The 100-row list is fetched only while the panel is open.
+   * That is the whole realtime mechanism: no socket, no per-second polling, and a pushed message from the service worker asks
+   * for the same refetch (see `pushRefresh.ts`).
+   */
+  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0 })
+  useBellSound(summary.data)
+  usePushRefresh()
+  const q = useQuery({ queryKey: ['notifications', 'list', filter], queryFn: () => listNotifications(filter), enabled: open, refetchInterval: open ? 30_000 : false })
+  const refresh = () => qc.invalidateQueries({ queryKey: ['notifications'] })
+  const markRead = useMutation({ meta: { feedback: 'none' }, mutationFn: markNotificationRead, onSuccess: refresh })
+  const markAll = useMutation({
+    meta: { feedback: 'none' },
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => {
+      // The server cleared EVERYTHING for this reader; show it at once instead of waiting for the next poll.
+      qc.setQueryData(['notifications', 'summary'], (old: { unread: number; attention: unknown[] } | undefined) => (old ? { ...old, unread: 0, attention: [] } : old))
+      void refresh()
+    },
+  })
 
   useEffect(() => {
     if (!open) return
@@ -73,7 +119,8 @@ export function NotificationCenter() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
-  const unread = q.data?.unread ?? 0
+  // The summary is the number of record; the list's own figure is the fallback until the first summary lands.
+  const unread = summary.data?.unread ?? q.data?.unread ?? 0
   const items = q.data?.items ?? []
   const withheld = q.data?.withheld ?? 0
   const total = q.data?.total ?? items.length
@@ -83,7 +130,8 @@ export function NotificationCenter() {
     // Resolved against the CURRENT portal (REG-011): a notification is written once for a tenant
     // whose readers may be in different portals, so it names a section rather than a full path.
     // An action_url that already names a portal is returned untouched, so older rows still work.
-    if (n.action_url) { setOpen(false); navigate(portalPath(n.action_url)) }
+    const target = n.open_url ?? n.action_url
+    if (target) { setOpen(false); navigate(portalPath(target)) }
   }
 
   return (
@@ -95,7 +143,7 @@ export function NotificationCenter() {
       >
         <Bell size={18} />
         {unread > 0 && (
-          <span className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white ring-2 ring-surface">{unread > 9 ? '9+' : unread}</span>
+          <span className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white ring-2 ring-surface"><span data-testid="bell-badge" dir="ltr" className="tnum">{badgeText(unread)}</span></span>
         )}
       </button>
 
@@ -106,6 +154,20 @@ export function NotificationCenter() {
             {unread > 0 && (
               <button onClick={() => markAll.mutate()} className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"><CheckCheck size={13} /> {t('nc_mark_all')}</button>
             )}
+          </div>
+          <div role="tablist" aria-label={t('nc_title')} className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                role="tab"
+                aria-selected={filter === f.key}
+                data-testid={`bell-filter-${f.key}`}
+                onClick={() => setFilter(f.key)}
+                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${filter === f.key ? 'bg-brand-500 text-white' : 'bg-surface-secondary text-text-secondary hover:bg-surface-hover'}`}
+              >
+                {ar ? f.ar : f.en}
+              </button>
+            ))}
           </div>
           <div className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (
@@ -132,13 +194,14 @@ export function NotificationCenter() {
                         const isUnread = n.status === 'unread'
 
                         return (
-                          <li key={n.id}>
+                          <li key={n.id} className="relative">
                             <button
                               data-testid={`notification-${n.id}`}
+                              data-kind={n.kind ?? ''}
                               data-severity={tone}
                               data-scope={scope}
                               onClick={() => openItem(n)}
-                              className={`relative flex w-full items-start gap-2.5 border-b border-border/60 py-2.5 pe-3 ps-4 text-start transition-colors last:border-0 hover:bg-surface-secondary ${isUnread ? 'bg-brand-primary-soft/40' : ''}`}
+                              className={`relative flex w-full items-start gap-2.5 border-b border-border/60 py-2.5 pe-12 ps-4 text-start transition-colors last:border-0 hover:bg-surface-secondary ${isUnread ? 'bg-brand-primary-soft/40' : ''}`}
                             >
                               {/* The rail keeps its colour whether the row has been read or not. */}
                               <span
@@ -162,14 +225,15 @@ export function NotificationCenter() {
                                   message beneath, it takes that line instead of being lost.
                                 */}
                                 <span
+                                  data-testid="notification-title"
                                   title={n.title}
                                   className={`block truncate text-sm text-text-primary ${isUnread ? 'font-bold' : 'font-semibold'}`}
                                 >
-                                  {named(n.type, ar) ?? n.title}
+                                  {heading(n, ar)}
                                 </span>
-                                {(n.message ?? (named(n.type, ar) === null ? null : n.title)) && (
-                                  <span className="block truncate text-xs text-text-secondary" title={n.message ?? n.title}>
-                                    {n.message ?? n.title}
+                                {detail(n, ar) && (
+                                  <span className="block truncate text-xs text-text-secondary" title={detail(n, ar) ?? undefined}>
+                                    {detail(n, ar)}
                                   </span>
                                 )}
                                 <BellVisual visual={n.visual} ar={ar} />
@@ -184,6 +248,11 @@ export function NotificationCenter() {
                                     {scopeLabel(scope, ar)}
                                   </span>
                                   <span className={`font-semibold ${SEVERITY_CHIP[tone]}`}>{severityLabel(n.severity, ar)}</span>
+                                  {(n.repeat_count ?? 1) > 1 && (
+                                    <span data-testid="notification-repeat" dir="ltr" className="tnum rounded-full bg-surface-secondary px-1.5 py-0.5 font-semibold" title={ar ? 'تكرّر اليوم' : 'Raised again today'}>
+                                      ×{n.repeat_count}
+                                    </span>
+                                  )}
                                   {n.created_at && (
                                     <span dir="ltr" className="tnum" title={new Date(n.created_at).toLocaleString('en-CA')}>
                                       {new Date(n.created_at).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}
@@ -192,6 +261,18 @@ export function NotificationCenter() {
                                 </span>
                               </span>
                             </button>
+                            {(n.open_url ?? n.action_url) && (
+                              <button
+                                type="button"
+                                data-testid={`notification-open-${n.id}`}
+                                aria-label={ar ? 'افتح' : 'Open'}
+                                title={ar ? 'افتح' : 'Open'}
+                                onClick={() => openItem(n)}
+                                className="absolute end-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-brand-600"
+                              >
+                                <ExternalLink size={15} />
+                              </button>
+                            )}
                           </li>
                         )
                       })}

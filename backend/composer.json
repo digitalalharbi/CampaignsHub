@@ -13,6 +13,7 @@
         "laravel/horizon": "^5.48",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
+        "minishlink/web-push": "^11.0",
         "phpoffice/phpspreadsheet": "^5.9",
         "predis/predis": "^3.5"
     },
