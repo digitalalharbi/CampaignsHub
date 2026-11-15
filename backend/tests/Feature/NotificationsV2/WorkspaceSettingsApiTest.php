@@ -100,6 +100,20 @@ final class WorkspaceSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('sender', (array) $saved);
     }
 
+    public function test_a_sub_feature_the_plan_no_longer_includes_locks_only_its_own_setting(): void
+    {
+        $tenant = $this->tenant('Alpha');
+        $owner = $this->member($tenant, 'tenant-owner');
+        DB::table('workspace_entitlement_states')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'key' => EntitlementKey::ExternalCcBcc->value, 'mode' => 'view_only', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->actingAs($owner)->putJson(self::URL, ['settings' => ['cc_bcc' => ['default_cc' => ['a@x.test']], 'sender' => ['name' => 'Kept']]])
+            ->assertOk()->assertJsonPath('data.refused.0', EntitlementKey::ExternalCcBcc->value)
+            ->assertJsonPath('data.settings.settings.sender.name', 'Kept');
+        $saved = json_decode((string) DB::table('workspace_notification_settings')->where('tenant_id', $tenant->id)->value('settings'), true);
+        $this->assertArrayNotHasKey('cc_bcc', $saved);
+    }
+
     public function test_a_member_without_settings_permission_is_refused(): void
     {
         $tenant = $this->tenant('Alpha');
