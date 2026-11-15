@@ -25,7 +25,11 @@ const row = (over: Partial<ClientBudgetRow>): ClientBudgetRow => ({
 
 const rows = [
   row({}),
-  row({ client_id: 'c2', client_name: 'Beta', project_budget: approved(100, 2900, 29), projects_breakdown: [] }),
+  row({ client_id: 'c2', client_name: 'Beta', projects_breakdown: [], project_budget: { ...approved(100, 2900, 29), fx: {
+    complete: false, excluded: [{ currency: 'EUR', original_amount: 400, days: 4 } as never], excluded_label: 'سعر صرف غير متوفر',
+    statement: 'سعر صرف غير متوفر: EUR — Account (400.00 EUR، 4 أيام) — مستبعد من الإجمالي.', statement_en: 'Exchange rate unavailable: EUR — Account (400.00 EUR, 4 days) — left out of the total.',
+    stale: [], stale_label: null, rates_page: null,
+  } } }),
   row({
     client_id: 'c3', client_name: 'Gamma', projects_breakdown: [], daily_spend_7d: null,
     project_budget: { currency: 'SAR', budgeted: 0, unbudgeted: 1, without_balance: 0, approved: null, spent: null, remaining: null, used_ratio: null, pace_per_day: null, cover_days: null },
@@ -74,6 +78,9 @@ describe('«كل العملاء»', () => {
     const order = screen.getAllByTestId(/overview-client-/).map((el) => el.getAttribute('data-testid'))
     expect(order).toEqual(['overview-client-c1', 'overview-client-c2', 'overview-client-c3'])
     expect(screen.getByTestId('overview-client-c1').textContent).toContain('6 days left')
+    // N4 — spend the ledger could not convert is named on the card, not silently dropped.
+    expect(screen.getByTestId('overview-fx-c2-excluded').textContent).toContain('Exchange rate unavailable: EUR')
+    expect(screen.queryByTestId('overview-fx-c1')).toBeNull()
   })
 
   it('opens one client at the second level, with a trail that returns', async () => {

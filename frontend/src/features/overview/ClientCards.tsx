@@ -11,6 +11,7 @@ import { days as countedDays } from '@/lib/counted'
 import { NoBudget, SpentOfApproved } from '@/features/funding/ApprovedBudget'
 import { useAuth } from '@/stores/auth'
 import { budgetRatio, coverDays, hasBudget, isNearEnd, orderClients, totalsOf } from './overviewMath'
+import { FxSpendNote } from '@/components/money/FxAmount'
 
 /**
  * «الرئيسية › كل العملاء» — four figures, then one card per client (NAV-HOME-PLANS-001, master task 13).
@@ -104,6 +105,8 @@ function ClientCard({ row, ar, onOpen, alerts, canAdd }: { row: ClientBudgetRow;
               {days === null ? t.noCover : t.cover(days)}
             </span>
             <SpentOfApproved ar={ar} spent={pb?.spent ?? null} approved={pb?.approved ?? null} className="block truncate text-xs text-text-muted" />
+            {/* PROJECT-LIFECYCLE-001 §7 (N4) — the spend the ledger could not convert is named, never silently dropped. */}
+            <FxSpendNote note={pb?.fx} ar={ar} testId={`overview-fx-${row.client_id}`} />
           </>
         ) : (
           <NoBudget ar={ar} canAdd={canAdd} clientName={row.client_name} projectName={firstUnbudgeted?.project_name} className="mt-0.5" />

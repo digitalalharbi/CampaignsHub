@@ -6,7 +6,7 @@ namespace App\Domains\Notifications\Followup;
 
 use App\Domains\Notifications\Internal\ActiveProjects;
 
-/** One seam for «may a task exist for this project» — the active-projects adapter today, N1's live scope after the merge. */
+/** One seam for «may a task exist for this project» — N1's live scope, through the ActiveProjects adapter. */
 final class ActiveProjectsGate
 {
     public static function allows(string $tenantId, string $projectId): bool
