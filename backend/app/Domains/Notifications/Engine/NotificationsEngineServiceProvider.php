@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
+use App\Domains\Notifications\Engine\Console\RunDigestsCommand;
 use App\Domains\Notifications\Engine\Contracts\DeliveryLog;
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\EventRegistry;
 use App\Domains\Notifications\Engine\Contracts\QuietHoursPolicy;
 use App\Domains\Notifications\Engine\Contracts\Router;
+use App\Domains\Notifications\Engine\Contracts\Scheduler;
 use App\Domains\Notifications\Engine\Contracts\SubscriptionLog;
 use App\Domains\Notifications\Engine\Contracts\UsageCounter;
 use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
@@ -18,6 +20,7 @@ use App\Domains\Notifications\Engine\Log\ImmutableDeliveryLog;
 use App\Domains\Notifications\Engine\Log\ImmutableSubscriptionLog;
 use App\Domains\Notifications\Engine\Routing\EngineRouter;
 use App\Domains\Notifications\Engine\Routing\WorkspaceQuietHours;
+use App\Domains\Notifications\Engine\Scheduling\SubscriptionScheduler;
 use App\Domains\Notifications\Engine\Usage\MonthlyUsageCounter;
 use App\Domains\Notifications\Engine\Workspace\ConfigWorkspaceTypes;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
@@ -43,5 +46,15 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
         $this->app->bind(DeliveryLog::class, ImmutableDeliveryLog::class);
         $this->app->bind(SubscriptionLog::class, ImmutableSubscriptionLog::class);
         $this->app->scoped(NotificationEngine::class);
+        $this->app->scoped(Scheduler::class, SubscriptionScheduler::class);
+    }
+
+    public function boot(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                RunDigestsCommand::class,
+            ]);
+        }
     }
 }
