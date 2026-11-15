@@ -255,7 +255,9 @@ final class FollowupBriefAndRerouteTest extends TestCase
         $this->assertSame('finance@client.test', $sent[0]->getTo()[0]->getAddress());
         $this->assertStringContainsString('Launch', (string) $sent[0]->getSubject());
         $this->assertTrue($sent[0]->getHeaders()->has('List-Unsubscribe'));
-        $this->assertStringContainsString('شاركه معك الفريق', (string) $sent[0]->getHtmlBody(), 'the event line is worded, not a missing-string key');
+        // Owner 2026-11-15: the external message IS the approved template in its external mode (summary only) — it carries no event sentence;
+        // the subject names the project and the workspace, and no missing-string key may reach the recipient (checked below).
+        $this->assertStringContainsString('Alpha Agency', (string) $sent[0]->getSubject());
         preg_match_all('/notifications_external\.[a-z_.]+/', (string) $sent[0]->getHtmlBody(), $m);
         $this->assertSame([], $m[0], 'no missing-string key reaches the recipient');
         $this->assertSame('sent', DB::table('notification_delivery_log')->where('event_key', 'report.rerouted')->where('status', 'sent')->value('status'));

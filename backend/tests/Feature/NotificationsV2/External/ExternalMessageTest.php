@@ -89,7 +89,9 @@ final class ExternalMessageTest extends TestCase
         $html = (string) $this->sent()[0]['email']->getHtmlBody();
 
         $this->assertStringContainsString('تنبيه المنصة من Alpha Agency للاطلاع.', $html);
-        $this->assertStringContainsString('جرّب المنصة لفريقك', $html);
+        // Owner 2026-11-15 («مع تذييل التقارير المعتاد»): the external message ends with the usual footer; the footprint invitation sentence is
+        // not rendered any more (the platform text stays editable in the admin page for a later use).
+        $this->assertStringNotContainsString('جرّب المنصة لفريقك', $html);
         $this->assertContains('كلمةمحظورةللاختبار', app(ExternalSettings::class)->forbiddenWords($this->tenant->id));
     }
 
