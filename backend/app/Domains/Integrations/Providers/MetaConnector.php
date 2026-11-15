@@ -1278,12 +1278,17 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
         return ['region'];
     }
 
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
     public function audienceSourceField(string $dimension): string
     {
         return 'meta:insights.level=adset.breakdowns='.$dimension;
     }
 
-    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to): SyncResult
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
     {
         if (! in_array($dimension, $this->audienceDimensions(), true)) {
             return SyncResult::failed("Meta audience dimension «{$dimension}» is not asked for by this product.");

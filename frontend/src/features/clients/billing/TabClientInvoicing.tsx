@@ -10,6 +10,7 @@ import {
   displayStatus, draftInvoice, getBillingProfile, invoiceAction, invoicePdfUrl, previousIsoWeek, saveBillingProfile,
   type BillingProfile, type InvoiceAction,
 } from './clientInvoiceApi'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * INV-PROFILE-001, INV-LIFECYCLE-001, INV-IMMUTABLE-001, INV-PDF-001 — how this client is billed, and the
@@ -194,7 +195,7 @@ function InvoiceRow({ invoice, t, canManage, onChange }: { invoice: FeeInvoice; 
         </span>
         <span className="flex items-center gap-2">
           <span data-testid={`fee-status-${invoice.id}`} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{t.status[shown] ?? shown}</span>
-          <span className="tnum font-bold" dir="ltr"><Num>{Number(invoice.total).toLocaleString('en-US')} {invoice.currency}</Num></span>
+          <span className="tnum font-bold" dir="ltr"><Num>{withMark(Number(invoice.total).toLocaleString('en-US'), invoice.currency)}</Num></span>
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

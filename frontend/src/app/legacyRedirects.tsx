@@ -219,6 +219,7 @@ const MOVED_TO_PORTAL = [
   'requests/:reference',
   'quotes',
   'quotes/:id',
+  'approvals',
   'invoices',
   'invoices/:id',
   'messages',

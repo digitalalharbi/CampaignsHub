@@ -6,7 +6,6 @@ namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Audit\Models\AuditLog;
-use App\Domains\Settings\Services\Totp;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -17,14 +16,12 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
 /**
- * Account security: password change, real TOTP two-factor, sign-in history (from the audit trail — the
+ * Account security: password change, sign-in history (from the audit trail — the
  * source of truth we already record), and the organisation session/security policy. We never fabricate
  * a live-session list; "recent activity" is derived from actual audited login events.
  */
 final class SecurityController extends Controller
 {
-    public function __construct(private readonly Totp $totp) {}
-
     /** Sign-in activity + distinct recent devices, from real audit events for the current user. */
     public function activity(Request $request): JsonResponse
     {
@@ -69,42 +66,6 @@ final class SecurityController extends Controller
         $audit->log(action: 'security.password_changed', entityType: 'user', entityId: $request->user()->uuid);
 
         return ApiResponse::success(null, 'Password updated.');
-    }
-
-    /** Begin 2FA setup: generate a secret (stored, not yet enabled) + otpauth URI for the authenticator. */
-    public function mfaSetup(Request $request): JsonResponse
-    {
-        $secret = $this->totp->generateSecret();
-        $request->user()->forceFill(['two_factor_secret' => $secret, 'two_factor_enabled' => false])->save();
-
-        return ApiResponse::success([
-            'secret' => $secret,
-            'otpauth_uri' => $this->totp->uri($secret, $request->user()->email, 'CampaignsHub'),
-        ], 'Two-factor setup started.');
-    }
-
-    public function mfaConfirm(Request $request, AuditLogger $audit): JsonResponse
-    {
-        $data = $request->validate(['code' => ['required', 'string']]);
-        $secret = $request->user()->two_factor_secret;
-        abort_if($secret === null, 422, 'Start two-factor setup first.');
-        abort_unless($this->totp->verify($secret, $data['code']), 422, 'Invalid verification code.');
-
-        $request->user()->forceFill(['two_factor_enabled' => true])->save();
-        $audit->log(action: 'security.mfa_enabled', entityType: 'user', entityId: $request->user()->uuid);
-
-        return ApiResponse::success(['two_factor_enabled' => true], 'Two-factor enabled.');
-    }
-
-    public function mfaDisable(Request $request, AuditLogger $audit): JsonResponse
-    {
-        $data = $request->validate(['password' => ['required', 'string']]);
-        abort_unless(Hash::check($data['password'], $request->user()->password), 422, 'Password is incorrect.');
-
-        $request->user()->forceFill(['two_factor_secret' => null, 'two_factor_enabled' => false])->save();
-        $audit->log(action: 'security.mfa_disabled', entityType: 'user', entityId: $request->user()->uuid);
-
-        return ApiResponse::success(['two_factor_enabled' => false], 'Two-factor disabled.');
     }
 
     /** Organisation-wide security policy (session timeout, new-device alerts). settings.manage. */

@@ -17,16 +17,20 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
+use App\Domains\ClientWorkspaces\Services\ContentApprovals;
 use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
+use App\Domains\Metrics\Audience\AudienceCenter;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Mail\CredentialMail;
@@ -43,6 +47,7 @@ use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
 use App\Domains\Requests\Services\ClientPortalIdentity;
 use App\Domains\Requests\Services\ClientRequestCreator;
+use App\Domains\Requests\Services\ClientRequestManagerNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
@@ -311,9 +316,9 @@ final class ClientPortalController
             // path and any non-browser client. Those keep the token engine and lose nothing — the
             // shared session is an ADDITION for browsers, not a new requirement.
             if ($holdsPortalMembership && $request->hasSession()) {
-                // Regenerated so an OTP login cannot be fixed to a session id an attacker planted.
-                $request->session()->regenerate();
-                Auth::guard('web')->login($user);
+                // TWO-STEP-001 — through the one place a session opens (it regenerates the id). An account with a second step
+                // on is NOT given the shared session by a contact code: it is held at the second step like every other door.
+                app(EstablishSession::class)->open($request, $user);
             }
         }
 
@@ -452,6 +457,8 @@ final class ClientPortalController
 
         // EMAIL-GAPS — the team is told. Off by default, and it cannot change this answer.
         app(RequestMailer::class)->newRequestToTeam($created);
+        // CLIENT-REQUEST-PM-NOTICE-001 — and THIS client's project manager specifically (owner when none).
+        app(ClientRequestManagerNotifier::class)->notify($created);
 
         if (! empty($data['upload_token'])) {
             $this->uploads->attach($created, $data['upload_token']);
@@ -621,6 +628,97 @@ final class ClientPortalController
         $model->update(['status' => 'rejected']);
 
         return response()->json(['data' => ['quote' => $this->quoteShape($model->refresh())]]);
+    }
+
+    // ============================================================================================
+    // CLIENT-CONTENT-APPROVAL-001 — «بانتظار اعتمادك»: content the agency put before this client.
+    // Read with the `content` section on; answered by an approver/admin (never a viewer) where the agency
+    // granted `approve_content`. A project-confined user reads and answers only their projects' asks.
+    // ============================================================================================
+
+    /** GET /client/approvals — open asks first, then the latest answered ones. */
+    public function contentApprovals(Request $request, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(ContentApproval::query()->with('creative')
+                ->whereIn('client_workspace_id', $ids)
+                ->where('status', '!=', 'withdrawn')
+                ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+                ->orderByRaw("case when status = 'pending' then 0 else 1 end")
+                ->latest('created_at'));
+
+        $models = $this->ownedWorkspaceModels($token);
+        $canDecide = $this->identity->clientRole($request, $token) !== 'client_viewer';
+
+        return response()->json(['data' => [
+            'approvals' => $page['rows']->map(fn (ContentApproval $a) => $approvals->clientShape($a) + [
+                'can_decide' => $canDecide && $a->status === 'pending'
+                    && isset($models[(string) $a->client_workspace_id])
+                    && (PortalVisibility::capabilitiesFor($models[(string) $a->client_workspace_id])['approve_content'] ?? false) === true,
+            ])->values(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
+    }
+
+    /** POST /client/approvals/{approval}/approve */
+    public function approveContent(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'approved', $approvals);
+    }
+
+    /** POST /client/approvals/{approval}/request-changes — a note saying what should change is required. */
+    public function requestContentChanges(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'changes_requested', $approvals);
+    }
+
+    private function decideContent(Request $request, string $approval, string $decision, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->requireActor($token);
+        $this->bindTenant($token);
+        $model = $this->ownedContentApproval($token, $approval);
+
+        $workspace = $this->ownedWorkspaceModels($token)[(string) $model->client_workspace_id] ?? null;
+        abort_if($workspace === null, 404);
+        abort_unless((PortalVisibility::capabilitiesFor($workspace)['approve_content'] ?? false) === true, 403, 'Your agency has not enabled content approval here.');
+
+        $data = $request->validate([
+            'note' => [$decision === 'changes_requested' ? 'required' : 'nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            // The person is recorded only when the MEMBERSHIP engine opened this session — a staff account that happens
+            // to be signed in beside a contact's cookie is not the one answering.
+            $actor = $this->identity->reach($request, $token)['engine'] === 'membership' ? $request->user() : null;
+            $decided = $approvals->decide($model, $decision, $data['note'] ?? null, $actor, $token->contact_email, $request->ip(), $request->userAgent());
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['data' => ['error' => $e->getMessage()]], 422);
+        }
+
+        return response()->json(['data' => ['approval' => $approvals->clientShape($decided->load('creative'))]]);
+    }
+
+    private function ownedContentApproval(ClientPortalToken $token, string $id): ContentApproval
+    {
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+        /** @var ContentApproval|null $model */
+        $model = $ids === [] || ! PortalIdShape::uuid($id) ? null : ContentApproval::query()
+            ->whereIn('client_workspace_id', $ids)
+            ->where('status', '!=', 'withdrawn')
+            ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+            ->whereKey($id)->first();
+        abort_if($model === null, 404);
+
+        return $model;
     }
 
     /**
@@ -1932,6 +2030,52 @@ final class ClientPortalController
         abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
         return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay(), $this->restrictedProjectIds($token))]);
+    }
+
+    /**
+     * GET /client/audience — AUDIENCE-001: the audience of this space's projects, under the performance dashboard.
+     *
+     * Two switches, both the agency's: the dashboard and the audience (off until switched on). The reading is the
+     * client-facing one — no money, no campaign or ad-set names, no internal ids — for the projects this contact may
+     * reach (a project-restricted user reads only theirs). Each project is its own reading: projects are never added.
+     */
+    public function audience(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $models = $this->ownedWorkspaceModels($token);
+        abort_if($models === [], 404);
+        abort_if(count($models) > 1, 422, 'Choose a client space first.');
+
+        /** @var ClientWorkspace $workspace */
+        $workspace = array_values($models)[0];
+        abort_unless(PortalVisibility::allows($workspace, 'dashboard') && PortalVisibility::allows($workspace, 'audience'), 403, 'The audience is not available for this space.');
+        $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
+
+        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
+        $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
+        abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $only = $this->restrictedProjectIds($token);
+        $projects = Project::query()->where('client_workspace_id', $workspace->getKey())
+            ->when($only !== null, fn ($q) => $q->whereIn('id', $only))
+            ->orderBy('name')->get(['id', 'name', 'tenant_id']);
+
+        $out = [];
+        foreach ($projects as $project) {
+            $reading = app(AudienceCenter::class)->build((string) $project->tenant_id, (string) $project->getKey(), $from->copy()->startOfDay(), $to->copy()->startOfDay(), clientFacing: true, hideMoney: true);
+            unset($reading['capabilities']);
+            // No internal identifiers on a client's screen.
+            $reading['targeting']['items'] = array_map(static function (array $i): array {
+                unset($i['ad_set_id']);
+
+                return $i;
+            }, $reading['targeting']['items']);
+            $out[] = ['project' => ['id' => (string) $project->getKey(), 'name' => (string) $project->name], 'reading' => $reading];
+        }
+
+        return response()->json(['data' => ['period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'projects' => $out]]);
     }
 
     /**

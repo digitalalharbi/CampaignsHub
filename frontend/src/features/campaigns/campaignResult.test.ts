@@ -69,7 +69,7 @@ describe('the result an objective is judged on', () => {
     expect(aware.per).toBe(1000)
     expect(resultCostText(aware, { reach: null, impressions: 50000, spend: 500 }, 'SAR')).toMatch(/10/)
 
-    expect(resultCostText(campaignResult('traffic', COFFEE), { ...COFFEE, spend: 0, spend_original: 400, spend_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 }, 'SAR')).toBe('0.14 USD')
+    expect(resultCostText(campaignResult('traffic', COFFEE), { ...COFFEE, spend: 0, spend_original: 400, spend_withheld_rows: 2, money_original_currency: 'USD', money_original_currencies: 1 }, 'SAR')).toBe('0.14 $')
   })
 
   it('gives revenue and ROAS to sales only', () => {

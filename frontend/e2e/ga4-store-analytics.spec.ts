@@ -33,8 +33,8 @@ test.describe('GA4 store analytics', () => {
       await expect(page.getByTestId(`ga4-tile-${key}`)).toBeVisible()
     }
     // Money reads in USD with the property's own currency kept beside it.
-    await expect(page.getByTestId('ga4-tile-revenue')).toContainText('USD')
-    await expect(page.getByTestId('ga4-tile-revenue')).toContainText('SAR')
+    await expect(page.getByTestId('ga4-tile-revenue')).toContainText(/\$|USD/)
+    await expect(page.getByTestId('ga4-tile-revenue')).toContainText(/ر\.س|SAR/)
     await expect(page.getByTestId('ga4-channels')).toBeVisible()
     await expect(page.getByTestId('ga4-devices')).toBeVisible()
     // The match section below replaces the older comparison card on this tab.

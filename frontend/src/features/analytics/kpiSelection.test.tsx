@@ -98,7 +98,7 @@ describe('the dashboard KPI cards', () => {
     const strip = screen.getByTestId('dashboard-kpis')
 
     await waitFor(() => expect(strip.textContent).toMatch(/13\.1K|13,100/))
-    expect(strip.textContent).toContain('USD')
+    expect(strip.textContent).toContain('$')
     expect(strip.textContent).not.toMatch(/undefined|NaN/)
   })
 

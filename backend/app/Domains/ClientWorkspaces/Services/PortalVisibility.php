@@ -37,6 +37,8 @@ final class PortalVisibility
         'dashboard', 'projects', 'campaigns', 'content', 'reports', 'recommendations',
         'spend', 'revenue', 'platform_evidence', 'requests', 'invoices', 'messages', 'files',
         'campaign_names', 'ad_account_names',
+        // AUDIENCE-001 — the audience under the performance dashboard. OFF until the agency switches it on.
+        'audience',
     ];
 
     /** Everything a client could be allowed to CHANGE. Off for Managed, and never implied by visibility. */

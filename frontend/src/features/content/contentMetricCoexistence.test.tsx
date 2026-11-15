@@ -180,7 +180,7 @@ describe('the popup reads money the way the card reads it', () => {
   /**
    * A withheld revenue is real money in its own currency, and the popup dropped it.
    *
-   * `readMoney` calls this `withheld`, not `absent`, and the card prints «1,980.25 USD» from exactly
+   * `readMoney` calls this `withheld`, not `absent`, and the card prints «1,980.25 $» from exactly
    * these fields. A `typeof … === 'number'` check cannot tell the two apart, so the figure vanished
    * one click from where it was shown.
    */
@@ -189,14 +189,14 @@ describe('the popup reads money the way the card reads it', () => {
     const labels = figures.map((f) => f.label)
 
     expect(labels).toContain('Revenue')
-    expect(figures.find((f) => f.label === 'Revenue')?.value).toMatch(/1,980\.25 USD/)
+    expect(figures.find((f) => f.label === 'Revenue')?.value).toMatch(/1,980\.25 \$/)
   })
 
   /** The price is read the same way, and was already right — asserted so the pair cannot drift. */
   it('carries a withheld spend in its own currency', () => {
     const figures = creativeDialogFigures(WITHHELD_BOTH as never, 'SAR', false, ['spend'])
 
-    expect(figures.find((f) => f.label === 'Spend')?.value).toMatch(/412\.50 USD/)
+    expect(figures.find((f) => f.label === 'Spend')?.value).toMatch(/412\.50 \$/)
   })
 
   /**
@@ -253,11 +253,11 @@ describe('one reader answers a creative figure, whatever kind it is', () => {
   } as never
 
   it('states a withheld spend as the amount the platform reported', () => {
-    expect(creativeFigureText(WITHHELD, 'spend', 'SAR', 'en')).toMatch(/412\.50 USD/)
+    expect(creativeFigureText(WITHHELD, 'spend', 'SAR', 'en')).toMatch(/412\.50 \$/)
   })
 
   it('states a withheld revenue as the amount the platform reported', () => {
-    expect(creativeFigureText(WITHHELD, 'revenue', 'SAR', 'en')).toMatch(/1,980\.25 USD/)
+    expect(creativeFigureText(WITHHELD, 'revenue', 'SAR', 'en')).toMatch(/1,980\.25 \$/)
   })
 
   /**

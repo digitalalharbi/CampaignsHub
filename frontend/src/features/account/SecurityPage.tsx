@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Monitor, ShieldCheck } from 'lucide-react'
+import { Monitor } from 'lucide-react'
 import { getOAuthIdentities, getSessions, logoutOtherSessions, startOAuthLink } from './api'
 import { PhoneCredentialCard } from './PhoneCredential'
+import { TwoStepCard } from './TwoStepCard'
 import { Button } from '@/components/ui/Button'
 import { PasswordInput } from '@/components/ui/form'
 import { toApiError } from '@/lib/api/client'
@@ -96,17 +97,8 @@ export function SecurityPage() {
           </div>
         </section>
 
-        {/* Two-factor — honestly gated until the external verification/mailer is wired. */}
-        <section className="rounded-2xl border border-border bg-surface p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-secondary text-text-muted"><ShieldCheck size={18} /></div>
-            <div>
-              <h2 className="text-sm font-bold text-text-primary">{t('two_factor_auth')}</h2>
-              <p className="text-xs text-text-muted">{t('awaiting_external_dependency')}</p>
-            </div>
-            <span className="ms-auto rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning">{t('awaiting_external_dependency')}</span>
-          </div>
-        </section>
+        {/* TWO-STEP-001 — the second step: three methods, enforced at every sign-in. */}
+        <TwoStepCard />
       </div>
     </div>
   )

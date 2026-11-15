@@ -32,7 +32,7 @@ describe('DeliveryOverviewPage', () => {
     expect(rows[0]).toHaveAttribute('data-testid', 'delivery-row-hot')
     expect(within(rows[0]).getByText('Follow up the payment')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Overdue')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('1K SAR')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('1K ر.س')).toBeInTheDocument()
     expect(within(rows[1]).getByText('Nothing needed')).toBeInTheDocument()
   })
 
@@ -41,7 +41,7 @@ describe('DeliveryOverviewPage', () => {
     renderWithProviders(<DeliveryOverviewPage />, { locale: 'en' })
 
     expect(await screen.findByText('No invoice')).toBeInTheDocument()
-    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
   })
 
   it('speaks Arabic', async () => {

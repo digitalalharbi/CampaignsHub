@@ -400,7 +400,8 @@ export async function untranslatedChrome(page: Page): Promise<string[]> {
         .map((n) => n.textContent ?? '')
         .join(' ')
 
-      const arabic = own.match(/[؀-ۿ]+/g)
+      // «ر.س» is the SAR currency mark, the same in both languages (MONEY-MARKS-001) — not untranslated copy.
+      const arabic = own.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g)
       if (arabic) out.push(arabic.join(' '))
     }
 

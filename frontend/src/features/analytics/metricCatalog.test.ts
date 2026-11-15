@@ -157,7 +157,7 @@ describe('the headline follows what is in scope, not what the filter says', () =
 /**
  * NUMBER-PRESENTATION-001 — the compact figure is the display; the exact one stays reachable.
  *
- * A card shows «4.85M SAR» because a card has room for six characters and not for eleven. That is a
+ * A card shows «4.85M ر.س» because a card has room for six characters and not for eleven. That is a
  * presentation decision, and a presentation decision must not destroy the figure: two campaigns
  * reading «4.85M» can be forty thousand riyals apart, and the reader comparing them has nowhere to
  * look. The reading now carries the full number, and the strip hangs it on the value as a title.
@@ -179,12 +179,12 @@ describe('the exact figure travels with the compact one', () => {
   }
 
   it('carries the full number when the display abbreviated it', () => {
-    expect(read('spend', 4_850_321)).toEqual({ kind: 'value', text: '4.85M SAR', exact: '4,850,321 SAR' })
+    expect(read('spend', 4_850_321)).toEqual({ kind: 'value', text: '4.85M ر.س', exact: '4,850,321 ر.س' })
   })
 
   it('says nothing extra when the display already showed every digit', () => {
     /* Under a thousand there is nothing to reveal, so no title is attached at all. */
-    expect(read('spend', 940)).toEqual({ kind: 'value', text: '940 SAR' })
+    expect(read('spend', 940)).toEqual({ kind: 'value', text: '940 ر.س' })
   })
 
   /**
@@ -208,23 +208,23 @@ describe('the exact figure travels with the compact one', () => {
    * «Do NOT compact figures where the exact figure itself is the decision-critical value, such as:
    * CPC / CPL / CPA / ROAS / percentages where precision matters.»
    *
-   * The owner's rule, and the defect that prompted it: a cost per click of 1.50 printed «2 SAR» on
+   * The owner's rule, and the defect that prompted it: a cost per click of 1.50 printed «2 ر.س» on
    * Analytics — `money()` keeps three significant digits, which is generous for a total and
    * destructive for a figure whose whole value is in the decimals. Every cost-per metric is read in
    * full, and a percentage keeps its two places.
    */
   it('never abbreviates a cost per result, a return or a rate', () => {
     // The decimals that carry the decision, kept.
-    expect(textOf('cpc', 1.5)).toBe('1.50 SAR')
-    expect(textOf('cpl', 88.72)).toBe('88.72 SAR')
-    expect(textOf('cpm', 3.03)).toBe('3.03 SAR')
+    expect(textOf('cpc', 1.5)).toBe('1.50 ر.س')
+    expect(textOf('cpl', 88.72)).toBe('88.72 ر.س')
+    expect(textOf('cpm', 3.03)).toBe('3.03 ر.س')
     expect(textOf('roas', 12.0836)).toBe('12.08×')
     expect(textOf('ctr', 0.0226)).toBe('2.26%')
 
     /*
      * And no K/M/B on any of them, whatever the magnitude. That is the rule the owner stated —
      * «do not compact» — and it is distinct from rounding: a cost per result above a thousand still
-     * writes its digits out, where `money()` would have abbreviated it to «1.23K SAR».
+     * writes its digits out, where `money()` would have abbreviated it to «1.23K ر.س».
      */
     for (const key of ['cpa', 'cpc', 'cpl', 'cpi', 'cpe', 'cpm']) {
       expect(textOf(key, 1_234.56), `${key} was abbreviated`).not.toMatch(/[KMB]/)

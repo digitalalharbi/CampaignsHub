@@ -135,13 +135,13 @@ describe('the platform comparison table', () => {
     const text = table.getByRole('table').textContent ?? ''
     expect(text).not.toMatch(/Infinity|NaN/)
     // The amount, where it appears at all, carries the currency it was recorded in.
-    if (text.includes('4,128.93')) expect(text).toContain('USD')
-    expect(text).not.toMatch(/4,128\.93 SAR/)
+    if (text.includes('4,128.93')) expect(text).toContain('$')
+    expect(text).not.toMatch(/4,128\.93 ر.س/)
 
     // The resolver withholds a cost over withheld money: the cell says so, and never prints an amount under this report's currency.
     const cost = cellUnder(table, 'Cost per result')
     expect(cost).toMatch(/Not available/)
-    expect(cost).not.toContain('SAR')
+    expect(cost).not.toMatch(/SAR|ر\.س/)
   })
 
   it('has no Results or cost-per-result column where the link defines no Results — not generic conversions, not clicks', () => {

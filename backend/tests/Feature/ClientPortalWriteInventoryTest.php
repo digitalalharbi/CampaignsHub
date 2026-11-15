@@ -32,6 +32,8 @@ final class ClientPortalWriteInventoryTest extends TestCase
         'POST api/v1/client/requests/{reference}/reply' => 'requestScope (requests visibility, project reach) + not a viewer',
         'POST api/v1/client/messages' => 'messages visibility (whole space) + not a viewer',
         'POST api/v1/client/messages/{thread}' => 'ownedThread (messages visibility) + not a viewer',
+        'POST api/v1/client/approvals/{approval}/approve' => 'ownedContentApproval (content visibility, project ceiling) + not a viewer + approve_content',
+        'POST api/v1/client/approvals/{approval}/request-changes' => 'ownedContentApproval (content visibility, project ceiling) + not a viewer + approve_content',
         'POST api/v1/client/quotes/{quote}/approve' => 'ownedQuote (invoices visibility, whole space) + not a viewer',
         'POST api/v1/client/quotes/{quote}/reject' => 'ownedQuote (invoices visibility, whole space) + not a viewer',
         'POST api/v1/client/invoices/{invoice}/pay' => 'ownedInvoice (invoices visibility, issued only) + not a viewer',

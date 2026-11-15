@@ -55,8 +55,8 @@ final class EmailKpiHierarchyTest extends TestCase
 
         $this->assertSame(0, substr_count($html, 'class="ch-kpi-lead"'));
         // The figures stay, small, under the drawing: the amounts with their currency.
-        $this->assertStringContainsString('10,000.00 USD', $html);
-        $this->assertStringContainsString('8,000.00 USD', $html);
+        $this->assertStringContainsString('10,000.00 $', $html);
+        $this->assertStringContainsString('8,000.00 $', $html);
         $this->assertStringContainsString('data-block="figures"', $html);
         $this->assertStringContainsString('data-viz="pace"', $html);
         $this->assertStringContainsString('data-viz="before_now"', $html);

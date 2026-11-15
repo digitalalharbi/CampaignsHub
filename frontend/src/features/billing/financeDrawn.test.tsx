@@ -64,7 +64,7 @@ describe('the finance overview draws its receivables through the product’s own
     renderWithProviders(<FinanceOverviewPage />, { locale: 'en' })
 
     const legend = await screen.findByTestId('aging-legend')
-    expect(legend).toHaveTextContent(/SAR/)
+    expect(legend).toHaveTextContent(/ر.س/)
     expect(legend).not.toHaveTextContent(/\b7500\b/)
   })
 

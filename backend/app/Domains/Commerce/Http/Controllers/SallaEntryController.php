@@ -6,6 +6,7 @@ namespace App\Domains\Commerce\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Commerce\Install\SallaMagicLink;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Tenancy\Services\PortalResolver;
@@ -14,7 +15,6 @@ use App\Models\User;
 use App\Support\Frontend;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * SALLA-ONBOARD-001 — the two public doors a Salla merchant uses.
@@ -63,8 +63,10 @@ final class SallaEntryController extends Controller
             return redirect()->away(Frontend::origin().'/login?salla=expired');
         }
 
-        Auth::guard('web')->login($user, true);
-        $request->session()->regenerate();
+        // TWO-STEP-001 — through the one place a session opens; a person with a second step on answers it on /login.
+        if (app(EstablishSession::class)->open($request, $user, true) !== null) {
+            return redirect()->away(Frontend::origin().'/login?two_step=1');
+        }
 
         $this->audit->log(
             action: 'salla.magic_link.signed_in',

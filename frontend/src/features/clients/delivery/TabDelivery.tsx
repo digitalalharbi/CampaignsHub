@@ -16,6 +16,7 @@ import {
   preparePack, setComponents, setRecommendationStatus, uploadEvidence, whatsappText,
   type DeliveryPack, type PackDetail, type PackRecommendation,
 } from './deliveryApi'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * WD-PACK-001, WD-DRAFTS-001, WD-WHATSAPP-001, WD-EVIDENCE-001 — the periodic delivery, as the Owner works it.
@@ -363,7 +364,7 @@ function InvoiceLink({ pack, clientId, t, open, onChange }: { pack: PackDetail; 
       <h4 className="mb-2 font-bold text-text-primary">{t.invoice}</h4>
       <select data-testid="pack-invoice" value={pack.invoice_id ?? ''} disabled={attach.isPending} onChange={(e) => e.target.value && attach.mutate(Number(e.target.value))} aria-label={t.pickInvoice} className="rounded-lg border border-border bg-surface px-2 py-2 text-xs">
         <option value="">{t.pickInvoice}</option>
-        {mine.map((i) => <option key={i.id} value={i.id}>{i.number} — {Number(i.total).toLocaleString('en-US')} {i.currency}</option>)}
+        {mine.map((i) => <option key={i.id} value={i.id}>{i.number} — {withMark(Number(i.total).toLocaleString('en-US'), i.currency)}</option>)}
       </select>
     </div>
   )

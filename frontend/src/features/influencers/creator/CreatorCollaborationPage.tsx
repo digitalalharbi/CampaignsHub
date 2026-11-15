@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * `/influencers/me/:id` — one agreement, from the creator's side (INFL-002).
@@ -32,7 +33,7 @@ import { Num } from '@/components/ui/Num'
  */
 
 const money = (amount: string | null, currency: string) =>
-  amount === null ? null : `${Number(amount).toLocaleString('en-US')} ${currency}`
+  amount === null ? null : withMark(Number(amount).toLocaleString('en-US'), currency)
 
 /**
  * A Latin-script run inside Arabic text, isolated.
