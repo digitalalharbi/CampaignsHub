@@ -108,10 +108,18 @@ final class AdminNotificationsApiTest extends TestCase
         DB::table('usage_counters')->insert(['tenant_id' => $a->id, 'metric' => 'notif.external_messages', 'period' => now()->format('Y-m'), 'count' => 7, 'created_at' => now(), 'updated_at' => now()]);
         $row = fn (string $status): array => ['id' => (string) Str::uuid(), 'tenant_id' => $a->id, 'delivery_id' => (string) Str::uuid(), 'reference' => 'R'.Str::random(8), 'event_key' => 'x', 'scope' => 'external', 'channel' => 'email', 'recipient_kind' => 'external', 'recipient_address' => 'secret@example.com', 'status' => $status, 'created_at' => now()];
         DB::table('notification_delivery_log')->insert([$row('sent'), $row('sent'), $row('sent'), $row('failed')]);
+        // Builder Q's click table (merged): counted per message type, nothing about the reader; last month's click is outside.
+        DB::table('notification_footprint_clicks')->insert([
+            ['tenant_id' => $a->id, 'message_type' => 'digest.periodic', 'reference' => 'R1', 'clicked_at' => now()],
+            ['tenant_id' => $a->id, 'message_type' => 'digest.periodic', 'reference' => 'R2', 'clicked_at' => now()],
+            ['tenant_id' => $a->id, 'message_type' => 'target.reached', 'reference' => 'R3', 'clicked_at' => now()],
+            ['tenant_id' => $a->id, 'message_type' => 'target.reached', 'reference' => 'R4', 'clicked_at' => now()->subMonthNoOverflow()->startOfMonth()],
+        ]);
 
         $res = $this->actingAs($this->admin)->getJson(self::URL.'/stats')->assertOk()
             ->assertJsonPath('data.messages_sent', 3)->assertJsonPath('data.messages_failed', 1)->assertJsonPath('data.failure_rate', 0.25)
-            ->assertJsonPath('data.per_workspace.0.messages', 7)->assertJsonPath('data.footprint_clicks', null);
+            ->assertJsonPath('data.per_workspace.0.messages', 7)->assertJsonPath('data.footprint_clicks', 3)
+            ->assertJsonPath('data.footprint_clicks_by_type', ['digest.periodic' => 2, 'target.reached' => 1]);
         $this->assertStringNotContainsString('secret@example.com', $res->getContent());
     }
 }

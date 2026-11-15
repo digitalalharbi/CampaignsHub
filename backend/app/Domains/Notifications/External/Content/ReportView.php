@@ -121,7 +121,9 @@ final class ReportView
             's' => $c->subscriptionId, 'p' => $c->projectId, 'e' => $c->eventKey,
         ]), $c->locale);
         $disclaimer = $c->settings['external']['disclaimer'][$c->locale] ?? null;
-        $disclaimer = is_string($disclaimer) && trim($disclaimer) !== '' ? $disclaimer : $c->t('disclaimer_default', ['workspace' => $c->workspaceName]);
+        $platform = PlatformTexts::localised('disclaimer.default', $c->locale);
+        $disclaimer = is_string($disclaimer) && trim($disclaimer) !== '' ? $disclaimer
+            : ($platform !== null ? str_replace('{workspace}', $c->workspaceName, $platform) : $c->t('disclaimer_default', ['workspace' => $c->workspaceName]));
         $invitation = Footprint::settings()['invitation_'.$c->locale] ?? null;
         $signature = $c->settings['sender']['signature'] ?? null;
 

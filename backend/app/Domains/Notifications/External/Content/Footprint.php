@@ -31,9 +31,10 @@ final class Footprint
         $s = is_string($raw) ? (array) json_decode($raw, true) : (array) ($raw ?? []);
         $site = isset($s['site_url']) && is_string($s['site_url']) && str_starts_with($s['site_url'], 'https://') ? $s['site_url'] : self::DEFAULT_SITE;
 
+        // The admin page (builder R) edits the invitation line as the platform text `footprint.invitation`; a saved text wins.
         return [
-            'invitation_ar' => isset($s['invitation_ar']) && is_string($s['invitation_ar']) && $s['invitation_ar'] !== '' ? $s['invitation_ar'] : null,
-            'invitation_en' => isset($s['invitation_en']) && is_string($s['invitation_en']) && $s['invitation_en'] !== '' ? $s['invitation_en'] : null,
+            'invitation_ar' => PlatformTexts::localised('footprint.invitation', 'ar') ?? (isset($s['invitation_ar']) && is_string($s['invitation_ar']) && $s['invitation_ar'] !== '' ? $s['invitation_ar'] : null),
+            'invitation_en' => PlatformTexts::localised('footprint.invitation', 'en') ?? (isset($s['invitation_en']) && is_string($s['invitation_en']) && $s['invitation_en'] !== '' ? $s['invitation_en'] : null),
             'site_url' => rtrim($site, '/'),
         ];
     }

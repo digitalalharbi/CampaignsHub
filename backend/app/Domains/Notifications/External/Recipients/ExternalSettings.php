@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\External\Recipients;
 
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettings;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
+use App\Domains\Notifications\External\Content\PlatformTexts;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -68,7 +69,7 @@ final class ExternalSettings
     {
         $extra = array_map('strval', (array) ($this->for($tenantId)['external']['forbidden_words'] ?? []));
 
-        return array_values(array_unique(array_filter(array_merge(self::FORBIDDEN_DEFAULT_AR, self::FORBIDDEN_DEFAULT_EN, $extra))));
+        return array_values(array_unique(array_filter(array_merge(self::FORBIDDEN_DEFAULT_AR, self::FORBIDDEN_DEFAULT_EN, PlatformTexts::forbiddenWords(), $extra))));
     }
 
     /**

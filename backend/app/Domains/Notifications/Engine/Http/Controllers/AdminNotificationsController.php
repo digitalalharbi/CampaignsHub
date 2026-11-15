@@ -11,6 +11,7 @@ use App\Domains\Notifications\Engine\Enums\Channel;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
 use App\Domains\Notifications\Engine\Enums\Priority;
 use App\Domains\Notifications\Engine\Enums\Scope;
+use App\Domains\Notifications\External\Content\Footprint;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Models\Tenant;
@@ -223,6 +224,9 @@ final class AdminNotificationsController extends Controller
 
         // The footprint link is built with the external pipeline; its click table, when it exists, is read as (clicked_at).
         $clicks = Schema::hasTable('notification_footprint_clicks') ? DB::table('notification_footprint_clicks')->where('clicked_at', '>=', $monthStart)->count() : null;
+        // Builder Q's per-type counts of the same table (message type only — nothing about the reader).
+        $clicksByType = $clicks === null ? [] : Footprint::clicksByType($monthStart->toDateTimeString());
+        uksort($clicksByType, static fn (string $a, string $b): int => [$clicksByType[$b], $a] <=> [$clicksByType[$a], $b]);
 
         return ApiResponse::success([
             'period' => $period,
@@ -232,6 +236,7 @@ final class AdminNotificationsController extends Controller
             'unsubscribed' => $unsub,
             'unsubscribe_rate' => $sent > 0 ? round($unsub / $sent, 4) : null,
             'footprint_clicks' => $clicks,
+            'footprint_clicks_by_type' => $clicksByType,
             'per_workspace' => array_slice($rows, 0, 100),
         ]);
     }

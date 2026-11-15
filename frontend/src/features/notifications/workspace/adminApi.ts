@@ -25,7 +25,7 @@ export interface AdminData {
 }
 export interface AdminStats {
   period: string; messages_sent: number; messages_failed: number; failure_rate: number | null; unsubscribed: number
-  unsubscribe_rate: number | null; footprint_clicks: number | null
+  unsubscribe_rate: number | null; footprint_clicks: number | null; footprint_clicks_by_type?: Record<string, number>
   per_workspace: { workspace: string; plan: string | null; messages: number; recipients: number; push: number; charts: number }[]
 }
 

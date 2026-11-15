@@ -72,6 +72,24 @@ final class ExternalMessageTest extends TestCase
         $this->assertSame(1, DB::table('usage_counters')->where('tenant_id', $this->tenant->id)->where('metric', 'notif.external_messages')->value('count'));
     }
 
+    public function test_the_admin_platform_texts_reach_the_message_disclaimer_invitation_and_forbidden_words(): void
+    {
+        // RELEASE-INTEGRATION — builder R's admin page saves `notification_platform_texts`; builder Q's message reads them.
+        $put = static fn (string $key, array $value) => DB::table('notification_platform_texts')->insert(['key' => $key, 'value' => json_encode($value, JSON_UNESCAPED_UNICODE), 'created_at' => now(), 'updated_at' => now()]);
+        $put('disclaimer.default', ['ar' => 'تنبيه المنصة من {workspace} للاطلاع.', 'en' => 'Platform note from {workspace}.']);
+        $put('footprint.invitation', ['ar' => 'جرّب المنصة لفريقك', 'en' => 'Try it for your team']);
+        $put('phrasing.dictionary', ['forbidden' => ['كلمةمحظورةللاختبار']]);
+
+        [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
+        $this->raise('digest.periodic', $this->project->id, $s);
+        $this->assertSame(1, $this->drain()['sent']);
+        $html = (string) $this->sent()[0]['email']->getHtmlBody();
+
+        $this->assertStringContainsString('تنبيه المنصة من Alpha Agency للاطلاع.', $html);
+        $this->assertStringContainsString('جرّب المنصة لفريقك', $html);
+        $this->assertContains('كلمةمحظورةللاختبار', app(\App\Domains\Notifications\External\Recipients\ExternalSettings::class)->forbiddenWords($this->tenant->id));
+    }
+
     public function test_a_long_custom_subject_is_cut_in_its_custom_part_only(): void
     {
         [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id], ['subject_template' => str_repeat('ملخص طويل جدًا {period} ', 8)]);
