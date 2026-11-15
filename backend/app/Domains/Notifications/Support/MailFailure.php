@@ -16,8 +16,11 @@ use Throwable;
  */
 final class MailFailure
 {
-    /** A retry cannot help these: the same template breaks the same way, and the address is still wrong. */
-    private const PERMANENT = ['template_error', 'recipient_rejected'];
+    /**
+     * A retry cannot help these: the same template breaks the same way, the address is still wrong, and a server that
+     * refuses our From address refuses it again a minute later (NOTIF-V2-ENGINE-001: retrying it kept rows «queued»).
+     */
+    private const PERMANENT = ['template_error', 'recipient_rejected', 'sender_rejected'];
 
     /** @return array{code: string, safe: string} */
     public static function from(Throwable $e): array
@@ -38,6 +41,9 @@ final class MailFailure
             preg_match('~authenticat|\b535\b|\b534\b~i', $message) === 1 => 'auth_failed',
             preg_match('~ssl|tls|certificate|crypto~i', $message) === 1 => 'tls_failed',
             preg_match('~\b(421|450|451|452)\b|too many|rate limit|throttl~i', $message) === 1 => 'throttled',
+            // Before the 55x rule: Hostinger answers «553 5.7.1 Sender address rejected: not owned by user» when From is not the
+            // authenticated mailbox. That is OUR address being refused, not the recipient's (NOTIF-V2-ENGINE-001).
+            preg_match('~sender address rejected|not owned by user|sender .{0,20}(denied|refused|not allowed)~i', $message) === 1 => 'sender_rejected',
             preg_match('~\b(550|551|552|553)\b|user unknown|mailbox|no such user|recipient~i', $message) === 1 => 'recipient_rejected',
             preg_match('~\b554\b|sender|not allowed to send|relay access~i', $message) === 1 => 'sender_rejected',
             preg_match('~connection|could not be established|timed out|stream_socket|getaddrinfo|refused|smtp~i', $message) === 1 => 'connection_failed',

@@ -147,6 +147,13 @@ return [
     */
     'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', true),
 
+    /*
+    | NOTIF-V2-ENGINE-001 — when the SMTP username is an address and From differs, every message carries a Sender header
+    | with the authenticated mailbox, so the SMTP envelope is the address the provider verified (Hostinger refuses any other
+    | with «553 Sender address rejected: not owned by user»). See App\Domains\Notifications\Engine\Mail\AlignEnvelopeSender.
+    */
+    'align_envelope_sender' => true,
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

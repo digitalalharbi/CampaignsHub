@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Engine;
 
 use App\Domains\Notifications\Engine\Catalog\ConfigEventRegistry;
+use App\Domains\Notifications\Engine\Console\MailDnsCheckCommand;
 use App\Domains\Notifications\Engine\Console\RunDigestsCommand;
 use App\Domains\Notifications\Engine\Console\SendOutboxCommand;
 use App\Domains\Notifications\Engine\Content\CatalogMessageComposer;
@@ -21,6 +22,9 @@ use App\Domains\Notifications\Engine\Contracts\WorkspaceTypes;
 use App\Domains\Notifications\Engine\Entitlements\PlanEntitlementGate;
 use App\Domains\Notifications\Engine\Log\ImmutableDeliveryLog;
 use App\Domains\Notifications\Engine\Log\ImmutableSubscriptionLog;
+use App\Domains\Notifications\Engine\Mail\AlignEnvelopeSender;
+use App\Domains\Notifications\Engine\Mail\DnsResolver;
+use App\Domains\Notifications\Engine\Mail\SystemDnsResolver;
 use App\Domains\Notifications\Engine\Routing\EngineRouter;
 use App\Domains\Notifications\Engine\Routing\WorkspaceQuietHours;
 use App\Domains\Notifications\Engine\Scheduling\SubscriptionScheduler;
@@ -32,6 +36,8 @@ use App\Domains\Notifications\Engine\Usage\MonthlyUsageCounter;
 use App\Domains\Notifications\Engine\Workspace\ConfigWorkspaceTypes;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
 use App\Domains\Tenancy\Context\TenantContext;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -56,6 +62,7 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
         $this->app->scoped(NotificationEngine::class);
         $this->app->scoped(Scheduler::class, SubscriptionScheduler::class);
         $this->app->bind(MessageComposer::class, CatalogMessageComposer::class);
+        $this->app->bind(DnsResolver::class, SystemDnsResolver::class);
 
         // Channel senders and pre-send checks are tagged, so a later builder adds one without touching the pipeline.
         $this->app->tag([InAppSender::class, MailSender::class, PushSender::class], 'notifications.senders');
@@ -73,10 +80,13 @@ final class NotificationsEngineServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Event::listen(MessageSending::class, [AlignEnvelopeSender::class, 'handle']);
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 RunDigestsCommand::class,
                 SendOutboxCommand::class,
+                MailDnsCheckCommand::class,
             ]);
         }
     }
