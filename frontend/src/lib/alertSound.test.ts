@@ -121,3 +121,52 @@ describe('playPing', () => {
     expect(playPing(0)).toBe(false)
   })
 })
+
+/**
+ * Firefox's order of things (CI PR #1071, notifications-bell «the ping»): the gesture reaches the page as mouse events,
+ * and a context resumed inside it still reads `suspended` until its audio thread starts. The ping must still ring once,
+ * after the context is running — never before the first gesture.
+ */
+describe('playPing, the Firefox way', () => {
+  const stops: number[] = []
+  let ctxState: AudioContextState = 'suspended'
+  let release: () => void = () => undefined
+
+  class SlowContext {
+    get state() { return ctxState }
+    currentTime = 0
+    destination = {}
+    resume() { return new Promise<void>((r) => { release = () => { ctxState = 'running'; r() } }) }
+    createOscillator() {
+      return { type: '', frequency: { setValueAtTime: () => undefined }, connect: () => undefined, disconnect: () => undefined,
+        start: () => undefined, stop: (w: number) => { stops.push(w) }, onended: null }
+    }
+    createGain() {
+      return { gain: { setValueAtTime: () => undefined, linearRampToValueAtTime: () => undefined, exponentialRampToValueAtTime: () => undefined },
+        connect: () => undefined, disconnect: () => undefined }
+    }
+  }
+
+  beforeEach(() => {
+    stops.length = 0
+    ctxState = 'suspended'
+    vi.resetModules()
+    vi.stubGlobal('AudioContext', SlowContext)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('unlocks on a mouse-only gesture and rings once the context is running', async () => {
+    const sound = await import('./alertSound')
+    expect(sound.playPing(40)).toBe(false) // no gesture yet: nothing attempted
+
+    sound.installAudioUnlock()
+    window.dispatchEvent(new Event('mousedown')) // no pointer events, as Firefox under automation delivers them
+    expect(sound.audioReady()).toBe(false) // still starting
+
+    expect(sound.playPing(40)).toBe(true)
+    expect(stops).toHaveLength(0) // not counted before it can sound
+    release()
+    await Promise.resolve(); await Promise.resolve()
+    expect(stops).toHaveLength(1) // one ping, after the start
+  })
+})

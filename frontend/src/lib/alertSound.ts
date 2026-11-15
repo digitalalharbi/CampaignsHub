@@ -38,7 +38,11 @@ function create(): Ctx | null {
 }
 
 /** Create and resume the context. Only ever called from inside a user gesture. */
+/** A person has interacted with the page at least once — the browser's own condition for sound. */
+let gestured = false
+
 function unlock(): void {
+  gestured = true
   if (unlocked) return
   context ??= create()
   if (!context) return
@@ -51,7 +55,12 @@ function unlock(): void {
 export function installAudioUnlock(): void {
   if (installed || typeof window === 'undefined') return
   installed = true
-  const events = ['pointerdown', 'keydown', 'touchstart'] as const
+  /*
+   * `mousedown` and `click` as well as `pointerdown` (CI PR #1071, Firefox): a gesture that reaches the page as mouse events
+   * only — Firefox driven by automation, an older engine — is still the person's first interaction, and without it the
+   * context was never resumed and the bell never rang.
+   */
+  const events = ['pointerdown', 'mousedown', 'click', 'keydown', 'touchstart'] as const
   const handler = () => {
     unlock()
     if (unlocked) events.forEach((e) => window.removeEventListener(e, handler, true))
@@ -75,8 +84,24 @@ export function playPing(volume: number, opts: { fromGesture?: boolean } = {}): 
 
   if (opts.fromGesture) unlock()
   const ctx = context
-  if (!ctx || ctx.state !== 'running') return false
+  if (!ctx) return false
+  if (ctx.state !== 'running') {
+    /*
+     * Firefox reports a context resumed inside a gesture as `suspended` until its audio thread starts, and may suspend it
+     * again when the tab goes to the background. After a real gesture that is a delay, not a refusal: resume, and ring
+     * once it is actually running. Before any gesture nothing is attempted, so no autoplay warning is ever logged.
+     */
+    if (!gestured || ctx.state === 'closed') return false
+    void ctx.resume().then(() => { if (ctx.state === 'running') tone(ctx, level) }).catch(() => undefined)
 
+    return true
+  }
+
+  return tone(ctx, level)
+}
+
+/** One short, soft sine — started only on a running context. */
+function tone(ctx: Ctx, level: number): boolean {
   try {
     const now = ctx.currentTime
     const osc = ctx.createOscillator()
