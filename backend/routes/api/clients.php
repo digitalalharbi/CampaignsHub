@@ -35,6 +35,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::post('/{client}/logo', [ScopedLogoController::class, 'storeClient'])->name('logo.store');
     Route::delete('/{client}/logo', [ScopedLogoController::class, 'destroyClient'])->name('logo.destroy');
     Route::post('/{client}/archive', [ClientManagementController::class, 'archive'])->name('archive');
+    Route::get('/{client}/archive-impact', [ClientManagementController::class, 'archiveImpact'])->name('archive-impact');
     // Restoring takes a slot back — guarded like `client-workspaces/{id}/restore`.
     Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore')
         ->middleware(EnsureWithinPlanLimit::class.':clients');

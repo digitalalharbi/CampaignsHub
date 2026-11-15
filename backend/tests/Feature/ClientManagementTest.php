@@ -154,7 +154,9 @@ final class ClientManagementTest extends TestCase
     {
         $c = $this->client();
 
-        $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/app/clients/{$c->id}/archive")
+        // PROJECT-LIFECYCLE-001 §8 — the client's name must be typed (server-checked).
+        $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/app/clients/{$c->id}/archive")->assertUnprocessable();
+        $this->actingAs($this->owner, 'sanctum')->postJson("/api/v1/app/clients/{$c->id}/archive", ['confirm_name' => $c->name])
             ->assertOk()->assertJsonPath('data.is_archived', true);
         $this->assertDatabaseHas('client_workspaces', ['id' => $c->id, 'client_status' => 'archived']);
         $this->assertNotNull($c->fresh()->archived_at);
