@@ -24,7 +24,7 @@ final class CurrencyConverter
      * otherwise run the same two failing queries sixty times, and the answer cannot change inside one
      * request. `array_key_exists` rather than `isset` is what makes a cached null readable.
      *
-     * @var array<string, array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null>
+     * @var array<string, array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null>
      */
     private array $cache = [];
 
@@ -58,13 +58,14 @@ final class CurrencyConverter
      *  3. else the nearest earlier dated rate older than that — used, but flagged `stale` (⚠);
      *  4. else the inverse pair by the same rule; else, for two non-USD currencies, a cross THROUGH USD
      *     (EUR→SAR = EUR→USD × USD→SAR); else null — the figure is WITHHELD, never zero, never the raw number.
-     * A rate past its `effective_to` is not in force. A manual rate wins over an automatic one for the same day at
+     * A rate past its `effective_to` is not in force; when nothing else is, the last one recorded is used, flagged stale and
+     * `expired` (N4 — an expired manual rate never withholds the spend). A manual rate wins over an automatic one for the same day at
      * write time ({@see RateLedger}), so the live row of a day is already the winner.
      *
      * The date and the source travel with the rate so a historical conversion is checkable by somebody who was not
      * there. An inverse pair says so in its source (`…:inverse`): calling it anything else would misattribute it.
      *
-     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
+     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
      */
     public function resolve(string $from, string $to, Carbon $date): ?array
     {
@@ -96,6 +97,7 @@ final class CurrencyConverter
                     'source' => $in['source'].' × '.$out['source'],
                     'kind' => 'cross',
                     'stale' => $in['stale'] || $out['stale'],
+                    'expired' => ($in['expired'] ?? false) || ($out['expired'] ?? false),
                     'recorded_by' => $in['recorded_by'] ?? $out['recorded_by'],
                     'legs' => [$in + ['from' => $from, 'to' => self::BASE], $out + ['from' => self::BASE, 'to' => $to]],
                 ];
@@ -128,7 +130,7 @@ final class CurrencyConverter
     /**
      * The direct pair by the selection rule above, else its inverse.
      *
-     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
+     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
      */
     private function pair(string $from, string $to, Carbon $date): ?array
     {
@@ -148,7 +150,7 @@ final class CurrencyConverter
     /**
      * One stored direction only.
      *
-     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
+     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
      */
     private function leg(string $base, string $quote, Carbon $date): ?array
     {
@@ -183,10 +185,28 @@ final class CurrencyConverter
             return $this->row($peg, false);
         }
 
+        /*
+         * PROJECT-LIFECYCLE-001 §7 (N4) — a rate past its `effective_to` (an EXPIRED manual rate) is no longer «in force», but it
+         * is still the last rate anybody recorded for this pair: it is USED, flagged stale and expired («سعر قديم — بتاريخ …»),
+         * never left to withhold the spend. The newer of it and an old in-force rate wins. Only a pair with no rate at all on or
+         * before the day is withheld.
+         */
+        $expired = CurrencyRate::query()
+            ->where('base_currency', $base)->where('quote_currency', $quote)
+            ->whereRaw("{$kind} <> 'pegged'")
+            ->whereDate('rate_date', '<=', $day)
+            ->whereNotNull('effective_to')->whereDate('effective_to', '<', $day)
+            ->orderByDesc('rate_date')
+            ->first($columns);
+
+        if ($expired !== null && ($dated === null || Carbon::parse((string) $expired->rate_date)->gt(Carbon::parse((string) $dated->rate_date)))) {
+            return ['expired' => true] + $this->row($expired, true);
+        }
+
         return $dated === null ? null : $this->row($dated, true);
     }
 
-    /** @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>} */
+    /** @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>} */
     private function row(CurrencyRate $r, bool $stale): array
     {
         return [
@@ -205,7 +225,7 @@ final class CurrencyConverter
      * workspace no longer has its own USD→SAR override. Kept as a name for the budget and spend-limit callers; the answer
      * is the platform engine's (the SAR peg is a platform pegged row).
      *
-     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
+     * @return array{rate: float, rate_date: string, source: string, kind: string, stale: bool, expired?: bool, recorded_by: ?string, legs: list<array<string, mixed>>}|null
      */
     public function resolveForWorkspace(string $tenantId, string $from, string $to, Carbon $date): ?array
     {

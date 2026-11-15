@@ -30,7 +30,21 @@ final readonly class FxConversion
         public bool $stale,
         public bool $withheld,
         public array $legs = [],
+        public bool $expired = false,
     ) {}
+
+    /**
+     * PROJECT-LIFECYCLE-001 §7 (N4) — «سعر قديم — بتاريخ 2026-11-09»: the one wording for a figure converted at a rate older
+     * than the stale window or past its validity (an expired manual rate is used, never left to withhold the spend).
+     */
+    public function staleLabel(bool $ar = true): ?string
+    {
+        if (! $this->stale || $this->withheld) {
+            return null;
+        }
+
+        return $ar ? "سعر قديم — بتاريخ {$this->rateDate}" : "Old rate — dated {$this->rateDate}";
+    }
 
     /** «بانتظار سعر صرف (EUR)» — the one wording for a withheld figure. */
     public function pendingLabel(bool $ar = true): ?string
@@ -47,7 +61,7 @@ final readonly class FxConversion
      *   original_amount: float, original_currency: string, date: string, currency: string,
      *   converted_amount: ?float, rate: ?float, rate_date: ?string, source: ?string, kind: ?string,
      *   recorded_by: ?string, stale: bool, withheld: bool, pending_label: ?string, rates_page: ?string,
-     *   legs: list<array<string, mixed>>, via: string
+     *   legs: list<array<string, mixed>>, via: string, expired: bool, stale_label: ?string
      * }
      */
     public function toArray(): array
@@ -70,6 +84,8 @@ final readonly class FxConversion
             'legs' => $this->legs,
             // The serializer's guard stamp: a money payload without it did not pass through convert().
             'via' => 'fx.convert',
+            'expired' => $this->expired,
+            'stale_label' => $this->staleLabel(),
         ];
     }
 }

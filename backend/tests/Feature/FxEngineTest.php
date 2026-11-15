@@ -104,12 +104,24 @@ final class FxEngineTest extends TestCase
         $this->assertNull($c->toArray()['converted_amount']);
     }
 
-    public function test_a_rate_past_its_end_date_is_not_in_force(): void
+    /**
+     * PROJECT-LIFECYCLE-001 §7 (Owner spec 2026-11-15) supersedes «past its end date → withheld»: an expired manual rate is the
+     * last rate recorded, so it is USED, flagged stale + expired («سعر قديم — بتاريخ …»), never left to withhold the spend.
+     */
+    public function test_a_rate_past_its_end_date_is_used_and_flagged_as_an_old_rate(): void
     {
         app(RateLedger::class)->record('EUR', 'USD', 1.12, '2026-11-01', CurrencyRate::MANUAL, effectiveTo: '2026-11-03');
 
-        $this->assertFalse($this->engine()->convert(1, 'EUR', 'USD', '2026-11-03')->withheld);
-        $this->assertTrue($this->engine()->convert(1, 'EUR', 'USD', '2026-11-04')->withheld);
+        $inForce = $this->engine()->convert(1, 'EUR', 'USD', '2026-11-03');
+        $this->assertFalse($inForce->withheld);
+        $this->assertFalse($inForce->expired);
+
+        $expired = $this->engine()->convert(100, 'EUR', 'USD', '2026-11-04');
+        $this->assertFalse($expired->withheld);
+        $this->assertTrue($expired->stale);
+        $this->assertTrue($expired->expired);
+        $this->assertEqualsWithDelta(112.0, $expired->converted, 0.0001);
+        $this->assertSame('سعر قديم — بتاريخ 2026-11-01', $expired->staleLabel());
     }
 
     public function test_a_pegged_rate_applies_to_every_date_and_is_never_stale(): void

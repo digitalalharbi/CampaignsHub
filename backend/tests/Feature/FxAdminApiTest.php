@@ -121,18 +121,23 @@ final class FxAdminApiTest extends TestCase
         $stale = $this->fxSpendRow($eur, 100, '2026-11-09', rate: 1.05);
         app(RateLedger::class)->record('EUR', 'USD', 1.12, '2026-11-09', CurrencyRate::MANUAL, by: $admin);
 
+        // PROJECT-LIFECYCLE-001 §7 (N4) — recording the rate RELEASES the withheld figure at once (a NULL is never left
+        // convertible); a figure already converted (the 1.05 one) is re-priced only by «إعادة حساب».
+        $this->assertSame(283.36, round((float) DB::table('daily_metrics')->where('id', $withheld)->value('value'), 2));
+        $this->assertSame(105.0, round((float) DB::table('daily_metrics')->where('id', $stale)->value('value'), 2), 'not re-priced by the release');
+
         $dry = $this->actingAs($admin)->postJson(self::BASE.'/recompute', ['from' => '2026-11-01', 'to' => '2026-11-15'])
             ->assertOk()->json('data');
         $this->assertFalse($dry['applied']);
-        $this->assertSame(2, $dry['changed']);
-        $this->assertSame(1, $dry['released']);
-        $this->assertNull(DB::table('daily_metrics')->where('id', $withheld)->value('value'), 'a dry run writes nothing');
+        $this->assertSame(1, $dry['changed']);
+        $this->assertSame(0, $dry['released']);
+        $this->assertSame(105.0, round((float) DB::table('daily_metrics')->where('id', $stale)->value('value'), 2), 'a dry run writes nothing');
 
         $done = $this->actingAs($admin)->postJson(self::BASE.'/recompute', ['from' => '2026-11-01', 'to' => '2026-11-15', 'apply' => true])
             ->assertOk()->json('data');
         $this->assertTrue($done['applied']);
         $eurRow = collect($done['by_currency'])->firstWhere('currency', 'EUR');
-        $this->assertEqualsWithDelta(105.0, $eurRow['before'], 0.001);
+        $this->assertEqualsWithDelta(388.36, $eurRow['before'], 0.001);
         $this->assertEqualsWithDelta(395.36, $eurRow['after'], 0.001);
 
         $row = DB::table('daily_metrics')->where('id', $withheld)->first();
