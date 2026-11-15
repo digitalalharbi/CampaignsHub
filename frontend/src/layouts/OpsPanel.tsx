@@ -19,6 +19,7 @@ import { listTasks, OPEN_STATUSES } from '@/features/tasks/api'
 import { useProjectCampaignActivity } from '@/features/campaigns/metrics'
 import { listNotifications } from '@/features/notifications/api'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
+import { formatWholePercent } from '@/lib/percent'
 
 /**
  * OPS-PANEL-001 — the operational side panel of the advertiser shell.
@@ -425,7 +426,7 @@ function WorkspaceSection({ ar, projectId }: { ar: boolean; projectId: string | 
       <Row label={ar ? 'المشروع الحالي' : 'Current project'} value={project?.name ?? (ar ? 'لم يُختر' : 'None selected')} />
       {project && (
         <>
-          <Row label={ar ? 'اكتمال الإعداد' : 'Setup'} value={`${project.setup_completion}%`} tone={project.setup_completion >= 100 ? 'success' : 'warning'} />
+          <Row label={ar ? 'اكتمال الإعداد' : 'Setup'} value={formatWholePercent(project.setup_completion)} tone={project.setup_completion >= 100 ? 'success' : 'warning'} />
           <Link to={portalPath(`projects/${project.id}`)} className="font-semibold text-brand-600 hover:underline">{ar ? 'فتح المشروع' : 'Open project'}</Link>
         </>
       )}
