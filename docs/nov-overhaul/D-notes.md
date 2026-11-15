@@ -21,6 +21,10 @@ Branch `feature/nov-overhaul-d`, based on `feature/nov-overhaul` (builders A and
   (`sidebarCollapsed`, expanded by default). Switching them is `useRail` + `railCompact` + the same header block (see
   `AgencyShell`); deferred because each has its own e2e rail walks to re-baseline.
 
+- The agency's **client → project switcher** used to render nothing on the strip; it is now one icon (`RailPopover`,
+  `agency-scope-collapsed`) that opens the control beside it. Specs that read names or the scope control from the rail
+  call `openRail()` (`e2e/helpers.ts`) first.
+
 ## Task 5 — fit the screen (NOV-FIT-001)
 
 ### Primitives (`src/components/fit/`)
@@ -98,3 +102,12 @@ npx playwright test shell.spec.ts --project=chromium   # and --project=webkit
 (`browserType.launch` fails for the installed Nightly build on this macOS), so it was not run; CI runs it.
 WebKit found one real defect — Safari does not Tab to links/buttons by default, so the drawer's focus trap let focus
 out — fixed in `useFocusTrap` (it now checks where the browser's Tab went and brings focus back).
+
+## Verification (this tree, local)
+
+- `tsc -b` clean; full `vitest`: 740 files / 5,103 tests pass.
+- chromium: `shell.spec.ts` + `first-viewport-sweep` (clients/team/tasks) + `responsive-sweep` = 136 pass;
+  339 tests across 54 agency-touching specs = 338 pass, 1 skipped (a full-suite attempt was stopped at spec 170 to
+  triage; the failures it found were the rail ones fixed above and `auth-visual` macOS baselines that do not exist
+  locally, which is environmental).
+- webkit: `shell.spec.ts` 55 pass. Firefox could not be launched here (see above).
