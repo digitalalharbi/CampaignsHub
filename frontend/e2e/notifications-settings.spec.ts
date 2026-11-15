@@ -64,14 +64,32 @@ async function migratedRecipients(page: Page) {
   }))
 }
 
+const isSettingsGet = (r: { url(): string; request(): { method(): string } }) => r.url().includes('/notifications/settings') && r.request().method() === 'GET'
+
+/**
+ * A workspace that never completed notification setup meets the first-run wizard (by design). These specs are about the
+ * page, so it is dismissed — but only when the server actually said `first_run`, so nothing waits on a dialog that is not coming.
+ */
+async function dismissFirstRun(page: Page, response: { json(): Promise<unknown> }) {
+  const body = (await response.json()) as { data?: { first_run?: boolean } }
+  if (body.data?.first_run !== true) return
+  const skip = page.getByTestId('first-run-skip')
+  await skip.click({ timeout: 20_000 })
+  await expect(skip).toHaveCount(0)
+}
+
 async function open(page: Page, query = '') {
+  const settings = page.waitForResponse(isSettingsGet, { timeout: 30_000 })
   await page.goto(`${BASE}${query}`)
   await expect(page.getByTestId('workspace-notifications')).toBeVisible({ timeout: 30_000 })
-  await page.waitForLoadState('networkidle').catch(() => undefined)
-  // A workspace that never saved notification settings meets the first-run wizard (by design); these specs are about the page.
-  const skip = page.getByTestId('first-run-skip')
-  await skip.waitFor({ state: 'visible', timeout: 12_000 }).then(() => skip.click()).catch(() => undefined)
-  await expect(skip).toHaveCount(0)
+  await dismissFirstRun(page, await settings)
+}
+
+async function reload(page: Page) {
+  const settings = page.waitForResponse(isSettingsGet, { timeout: 30_000 })
+  await page.reload()
+  await expect(page.getByTestId('workspace-notifications')).toBeVisible({ timeout: 30_000 })
+  await dismissFirstRun(page, await settings)
 }
 
 test.describe('deep links and structure', () => {
@@ -115,7 +133,7 @@ test.describe('deep links and structure', () => {
     await start.fill('22:30')
     await page.getByTestId('delivery-save').click()
     await expect(page.getByTestId('delivery-save')).toContainText(/تم الحفظ|Saved/)
-    await page.reload()
+    await reload(page)
     await expect(page.getByTestId('delivery-panel').locator('input[type="time"]').first()).toHaveValue('22:30')
     // restore the seeded default so other specs see the same workspace
     await page.getByTestId('delivery-panel').locator('input[type="time"]').first().fill('21:00')

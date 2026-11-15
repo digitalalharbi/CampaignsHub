@@ -75,7 +75,7 @@ export function Modal({
        * (see CLICK-STABLE-001 below). A fade changes nothing a pointer can land on, and nothing waits
        * for it — the dialog is interactive from its first frame.
        */
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
+      className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 sm:items-center sm:p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
