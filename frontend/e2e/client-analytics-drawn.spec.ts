@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH, openFilters, switchToEnglish } from './helpers'
 
 /**
  * VIZ-CLIENT-001 — a client's analytics tab served a full daily series and drew none of it.
@@ -17,6 +17,15 @@ test.use({ storageState: AUTH.owner })
 async function openAnalytics(page: import('@playwright/test').Page) {
   await page.goto('/agency/clients')
   await switchToEnglish(page)
+  /*
+   * NOV-FIT-001 (builder D) — the roster now holds only the clients that fit the screen, a page at a time, so a client
+   * created by an earlier spec in the same gate can push Demo Store to page two (CI shard 1, PR #1071). The roster's own
+   * search finds it wherever it sorts; the client opened, and everything asserted about its analytics, is unchanged.
+   */
+  const search = page.getByTestId('clients-search')
+  await search.waitFor({ state: 'attached', timeout: 30000 })
+  await openFilters(page, 'clients') // on a phone the search sits behind the «Filters» toggle
+  await search.fill('Demo Store')
   await page.getByRole('link', { name: /Demo Store/ }).first().click()
   await page.getByRole('button', { name: 'Analytics', exact: true }).click()
 }
