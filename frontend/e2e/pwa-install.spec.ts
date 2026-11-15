@@ -63,12 +63,20 @@ test.describe('the manifest and icons', () => {
 test.describe('signed in', () => {
   test.use({ storageState: AUTH.owner })
 
-  test('the start URL opens the agency dashboard, and /agency still reaches the role home', async ({ page }) => {
+  test('the start URL opens the agency dashboard, and the role home is still reachable', async ({ page }) => {
     await page.goto('/agency/dashboard')
     await expect(page).toHaveURL(/\/agency\/dashboard/)
 
+    /*
+     * CI-REPAIR (PR #1071): `/agency` is the server-named landing, and the landing stays the dashboard until the Owner
+     * flips it (builder E's deferral) — so `/agency` reaches the dashboard, and the role home is reached at its own
+     * address. Both facts this test made are still asserted: the start URL is the dashboard, the role home exists.
+     */
     await page.goto('/agency')
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
+    await page.goto('/agency/home')
     await expect(page).toHaveURL(/\/agency\/home/)
+    await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
   })
 
   test('the worker takes control, and its caches never hold an API or auth response', async ({ page }) => {

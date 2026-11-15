@@ -361,8 +361,15 @@ export const router = createBrowserRouter(withErrorBoundary([
            * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
            * the advertiser portal simply never got one.
            */
-          { index: true, element: <Navigate to="/app/home" replace /> },
-          // ROLE-DASHBOARD-001 — the landing page per role. `dashboard` below stays the detailed board it always was.
+          /*
+           * The landing stays the dashboard (CI-REPAIR, PR #1071). `/app` and `/agency` are where the server sends a person
+           * after sign-in, onboarding and an accepted invitation (`Portal::landingPath`), so redirecting them to `/home` made
+           * the role dashboard the landing — the flip builder E deferred on purpose ("flip three things together: the server's
+           * destination, the rail's Home leaf, and the assertions"; E-notes §Deferred). Until the Owner takes that decision
+           * the role dashboard is reached at its own address, `/…/home`.
+           */
+          { index: true, element: <Navigate to="/app/dashboard" replace /> },
+          // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
           { path: 'home', element: <RoleDashboardPage portal="app" /> },
           { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
@@ -617,7 +624,8 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
-            { index: true, element: <Navigate to="/agency/home" replace /> },
+            // The landing stays the dashboard until the Owner flips it (see the `/app` index above).
+            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
             { path: 'home', element: <RoleDashboardPage portal="agency" /> },
             { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
