@@ -673,7 +673,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           onChange={setCurrentProjectId}
         />
 
-        <DateRangePicker projectId={currentProjectId} testId={`${surface}-period`} />
+        <DateRangePicker projectId={currentProjectId} budgetHint testId={`${surface}-period`} />
 
         {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
             charts below key off. One filter bar, one vocabulary, across both pages. */}

@@ -24,7 +24,9 @@ import { resolveSelection, type Selection } from '@/lib/period/periodState'
  *
  * The period is Riyadh time and the footer says so. Days after today cannot be picked.
  */
-export function DateRangePicker({ projectId, earliest, className = '', testId = 'date-range' }: {
+export function DateRangePicker({ projectId, earliest, budgetHint = false, className = '', testId = 'date-range' }: {
+  /** The page shows budgets or spend limits: say they are counted on their own period, not on this one. */
+  budgetHint?: boolean
   /** When given, the «جاري» / «بيانات غير مكتملة» badges are shown beside the button for this project. */
   projectId?: string | null
   /** First day the page has data — «طوال المدة» starts there. */
@@ -62,6 +64,11 @@ export function DateRangePicker({ projectId, earliest, className = '', testId = 
         </button>
       </div>
       <PeriodStatus projectId={projectId} period={period} testId={`${testId}-status`} />
+      {budgetHint && (
+        <p className="w-full text-xs text-text-muted" data-testid={`${testId}-budget-hint`}>
+          {ar ? 'الميزانية تُحسب على فترتها، لا على فترة العرض' : 'Budgets are counted on their own period, not on the viewing period'}
+        </p>
+      )}
 
       {open && (
         <PickerPanel

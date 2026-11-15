@@ -843,7 +843,7 @@ export function CampaignsPage() {
               row pushes everything after it onto a line of its own. */}
           <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-          <DateRangePicker projectId={projectId} testId="campaigns-period-picker" />
+          <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
           {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }

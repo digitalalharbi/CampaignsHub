@@ -122,7 +122,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   return (
     <section data-testid="agency-headline" className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
-        <DateRangePicker testId="agency-period-picker" />
+        <DateRangePicker budgetHint testId="agency-period-picker" />
         <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
         {/*
           The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),

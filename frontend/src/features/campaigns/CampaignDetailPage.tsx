@@ -340,7 +340,7 @@ export function CampaignDetailPage() {
           {/* CMC-2 — KPIs + executive summary (this campaign only). */}
           <div className="mb-4 flex items-center justify-between gap-2">
             <CardTitle>{t('cmc_performance')}</CardTitle>
-            <DateRangePicker projectId={projectId} testId="campaign-period-picker" />
+            <DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" />
           </div>
           <CampaignKpis campaign={c} projectId={projectId} range={range} />
           <div className="my-4">
@@ -379,7 +379,7 @@ export function CampaignDetailPage() {
 
       {tab === 'platforms' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           {linkedQuery.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -395,7 +395,7 @@ export function CampaignDetailPage() {
 
       {tab === 'performance' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
 
           {/*
@@ -419,13 +419,13 @@ export function CampaignDetailPage() {
 
       {tab === 'budget' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignBudgetTab campaign={c} projectId={projectId} range={range} locale={locale} />
         </TabPanel>
       )}
       {tab === 'funnel' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
         </TabPanel>
       )}
@@ -447,7 +447,7 @@ export function CampaignDetailPage() {
 
       {tab === 'creatives' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
         </TabPanel>
       )}
@@ -463,7 +463,7 @@ export function CampaignDetailPage() {
       )}
       {tab === 'events' && (
         <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} testId="campaign-period-picker" /></div>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
           <CampaignEventsTab campaign={c} projectId={projectId} range={range} />
         </TabPanel>
       )}
