@@ -37,9 +37,17 @@ final class AlertSettingsController extends Controller
         $data = $request->validate([
             'sound_enabled' => ['sometimes', 'boolean'],
             'sound_volume' => ['sometimes', 'integer', 'between:0,100'],
+            // NOTIF-PUSH-001 — which of the five push types this person wants.
+            'push_types' => ['sometimes', 'array'],
+            'push_types.*' => ['boolean'],
         ]);
 
-        $this->sound->save($request->user(), $data['sound_enabled'] ?? null, $data['sound_volume'] ?? null);
+        if (array_key_exists('sound_enabled', $data) || array_key_exists('sound_volume', $data)) {
+            $this->sound->save($request->user(), $data['sound_enabled'] ?? null, $data['sound_volume'] ?? null);
+        }
+        if (isset($data['push_types'])) {
+            $this->sound->savePushTypes($request->user(), array_map('boolval', $data['push_types']));
+        }
 
         return ApiResponse::success($this->payload($request), 'Alert settings saved.');
     }
@@ -54,6 +62,7 @@ final class AlertSettingsController extends Controller
         return [
             'sound_enabled' => $stored['enabled'],
             'sound_volume' => $stored['volume'],
+            'push_types' => $this->sound->pushTypes($user),
             'quiet_hours' => $this->quiet->window((int) $user->id, $tenantId),
         ];
     }
