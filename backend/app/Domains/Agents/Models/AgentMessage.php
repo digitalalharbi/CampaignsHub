@@ -18,7 +18,7 @@ final class AgentMessage extends Model
 
     protected $table = 'agent_messages';
 
-    protected $fillable = ['tenant_id', 'thread_id', 'role', 'content', 'text', 'tool_calls', 'usage', 'model'];
+    protected $fillable = ['tenant_id', 'thread_id', 'role', 'content', 'text', 'tool_calls', 'usage', 'model', 'specialist', 'meta'];
 
-    protected $casts = ['content' => 'array', 'tool_calls' => 'array', 'usage' => 'array', 'created_at' => 'datetime'];
+    protected $casts = ['content' => 'array', 'tool_calls' => 'array', 'usage' => 'array', 'meta' => 'array', 'created_at' => 'datetime'];
 }
