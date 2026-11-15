@@ -49,6 +49,8 @@ final class AICredentialController extends Controller
             'monthly_token_limit' => ['nullable', 'integer', 'min:0'],
             'allowed_models' => ['nullable', 'array'],
             'allowed_features' => ['nullable', 'array'],
+            // AGENTS-ASSISTANT-001 — a new key REPLACES the previous active key of the same provider and scope (rotated, kept for audit).
+            'replace_existing' => ['nullable', 'boolean'],
         ]);
 
         /*
@@ -73,6 +75,14 @@ final class AICredentialController extends Controller
         ]);
         $credential->setSecret($validated['secret']); // encrypts + keeps last_four only
         $credential->save();
+
+        if (($validated['replace_existing'] ?? false) === true) {
+            AIProviderCredential::query()->whereKeyNot($credential->getKey())->where('provider', $credential->provider)
+                ->where('status', 'active')->where('credential_scope', $credential->credential_scope)
+                ->where(fn ($q) => $clientId === null ? $q->whereNull('client_workspace_id') : $q->where('client_workspace_id', $clientId))
+                ->where(fn ($q) => $projectId === null ? $q->whereNull('project_id') : $q->where('project_id', $projectId))
+                ->update(['status' => 'rotated', 'rotated_at' => now()]);
+        }
 
         // Audit records metadata only — never the secret.
         $audit->log(

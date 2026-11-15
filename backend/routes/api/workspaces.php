@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domains\Agency\Http\Controllers\ClientBudgetController;
 use App\Domains\Agents\Http\Controllers\AgentChatRetentionController;
+use App\Domains\Agents\Http\Controllers\AssistantController;
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
@@ -56,6 +57,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     // AGENT-CHAT-RETENTION-001 — how long this workspace keeps agent conversations.
     Route::get('ai/chat-retention', [AgentChatRetentionController::class, 'show'])->name('ai.chat-retention.show');
     Route::put('ai/chat-retention', [AgentChatRetentionController::class, 'update'])->name('ai.chat-retention.update');
+    // AGENTS-ASSISTANT-001 — the assistant's settings (model, daily cap), my usage today, a key's connection test, my memory.
+    Route::get('ai/assistant', [AssistantController::class, 'show'])->name('ai.assistant.show');
+    Route::put('ai/assistant', [AssistantController::class, 'update'])->name('ai.assistant.update');
+    Route::post('ai/credentials/{credential}/test', [AssistantController::class, 'testConnection'])->name('ai.credentials.test');
+    Route::get('ai/memories', [AssistantController::class, 'memories'])->name('ai.memories.index');
+    Route::get('ai/memories/export', [AssistantController::class, 'exportMemories'])->name('ai.memories.export');
+    Route::post('ai/memories', [AssistantController::class, 'storeMemory'])->name('ai.memories.store');
+    Route::put('ai/memories/{memory}', [AssistantController::class, 'updateMemory'])->name('ai.memories.update');
+    Route::delete('ai/memories/{memory}', [AssistantController::class, 'destroyMemory'])->name('ai.memories.destroy');
+    Route::delete('ai/memories', [AssistantController::class, 'forgetAll'])->name('ai.memories.forget');
     Route::get('ai/credentials/{credential}/health', [AICredentialController::class, 'health'])->name('ai.credentials.health');
 
     // Alerting: rules + firing ledger (resolve / snooze).

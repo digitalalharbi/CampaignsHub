@@ -201,6 +201,43 @@ final class ProposalService
         }
     }
 
+    /**
+     * AGENTS-ASSISTANT-001 — a person edits the AMOUNT of a pending daily-budget proposal before deciding it («تعديل» on the card).
+     *
+     * Only a pending `set_daily_budget` changes, only its amount, only by someone who could approve it; every rule is read again on
+     * the new amount (a breach blocks it, visibly). Nothing is executed: the edited proposal still waits for an approval, and the log
+     * keeps the amount before and after and who changed it.
+     */
+    public function amend(ActionProposal $proposal, User $by, float $dailyBudget, ?string $note = null): ActionProposal
+    {
+        $this->authorise($proposal, $by);
+
+        return DB::transaction(function () use ($proposal, $by, $dailyBudget, $note): ActionProposal {
+            $row = ActionProposal::withoutGlobalScopes()->whereKey($proposal->getKey())->lockForUpdate()->firstOrFail();
+            if ($row->status !== ActionProposal::PENDING) {
+                throw new HttpException(409, 'This proposal is no longer waiting for a decision.');
+            }
+            if ($row->action !== ProposalAction::SetDailyBudget->value) {
+                throw new HttpException(422, 'Only a daily budget amount can be edited.');
+            }
+            $before = $row->payload['daily_budget'] ?? null;
+            $payload = $this->cleanPayload(['daily_budget' => $dailyBudget]);
+            $row->forceFill([
+                'payload' => $payload,
+                'evidence' => [...(array) $row->evidence, 'amended_by' => $by->getKey(), 'amended_from' => $before],
+            ])->save();
+            $this->record($row, 'amended', $by, note: trim(sprintf('daily_budget %s -> %s %s', (string) $before, (string) $payload['daily_budget'], (string) $note)));
+
+            $violations = $this->rules->violations($row);
+            if ($violations !== []) {
+                return $this->block($row, $by, $violations);
+            }
+            $this->audit->log(action: 'agents.proposal.amended', entityType: ActionProposal::class, entityId: (string) $row->getKey(), before: ['daily_budget' => $before], after: ['daily_budget' => $payload['daily_budget']]);
+
+            return $row;
+        });
+    }
+
     public function reject(ActionProposal $proposal, User $by, ?string $note = null): ActionProposal
     {
         $this->authorise($proposal, $by, forReject: true);

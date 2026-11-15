@@ -264,6 +264,9 @@ final class AgentToolbox
             'payload' => isset($input['daily_budget']) ? ['daily_budget' => $input['daily_budget']] : [],
             'reason' => mb_substr((string) ($input['reason'] ?? ''), 0, 1000),
             'evidence' => ['conversation_user_id' => $user?->getKey()],
+            // AGENTS-ASSISTANT-001 — a change asked for in a CONVERSATION always waits for a person, whatever an owner granted the
+            // ladder: only a scheduled routine (no person in the loop) is ever eligible for the owner's standing grant.
+            'allow_auto' => $user === null,
         ]);
 
         return [

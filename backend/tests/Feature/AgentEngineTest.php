@@ -98,11 +98,12 @@ final class AgentEngineTest extends TestCase
         return $this->actingAs($this->user)->getJson("/api/v1/projects/{$this->project->id}/agent-threads/{$id}")->assertOk()->json('data');
     }
 
-    public function test_the_six_agents_are_listed_and_leads_says_why_it_is_off(): void
+    public function test_the_assistant_and_its_specialists_are_listed_and_leads_says_why_it_is_off(): void
     {
         $agents = collect($this->actingAs($this->user)->getJson("/api/v1/projects/{$this->project->id}/agents")->assertOk()->json('data.agents'))->keyBy('key');
 
-        $this->assertSame(['orchestrator', 'campaign', 'analyst', 'creative', 'leads', 'reports'], $agents->keys()->all());
+        // AGENTS-ASSISTANT-001 — one assistant in front; the earlier orchestrator is no longer offered for a new conversation.
+        $this->assertSame(['assistant', 'campaign', 'analyst', 'creative', 'leads', 'reports', 'builder'], $agents->keys()->all());
         $this->assertFalse($agents['leads']['enabled']);
         $this->assertSame('needs_lead_sources', $agents['leads']['why_disabled']);
     }
