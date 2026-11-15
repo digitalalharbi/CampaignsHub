@@ -10,7 +10,7 @@ use App\Domains\Notifications\Engine\Contracts\MessageComposer;
 use App\Domains\Notifications\Engine\Contracts\PreSendCheck;
 use App\Domains\Notifications\Engine\Data\Delivery;
 use App\Domains\Notifications\Engine\Enums\DeliveryStatus;
-use App\Domains\Notifications\Engine\Sending\EngineMail;
+use App\Domains\Notifications\External\Digest\DigestDataSource;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
@@ -23,7 +23,10 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mime\Email;
 use Tests\Feature\NotificationsV2\Concerns\BuildsWorkspaces;
+use Tests\Feature\NotificationsV2\External\Support\FakeDigestData;
 use Tests\Support\ConfiguredDigestEmailProvider;
 use Tests\TestCase;
 
@@ -220,7 +223,9 @@ final class FollowupBriefAndRerouteTest extends TestCase
     public function test_a_report_is_rerouted_to_a_confirmed_subscribed_recipient_through_the_same_pipeline_and_log(): void
     {
         [$recipient, $n, $owner] = $this->reroutable();
-        $this->externalReadyComposer();
+        // RELEASE-INTEGRATION — builder Q's composer and mailer are bound now: the re-routed report is Q's designed external
+        // message (identity, footer, disclaimer, unsubscribe), over figures from a fake data source, sent on the array transport.
+        $this->app->instance(DigestDataSource::class, new FakeDigestData);
 
         $list = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/followup/reroute/recipients?notification_id='.$n->id)->assertOk()->json('data');
         $this->assertTrue($list['allowed']);
@@ -230,11 +235,30 @@ final class FollowupBriefAndRerouteTest extends TestCase
         app()->forgetScopedInstances();
         Artisan::call('notifications:v2-send');
 
-        Mail::assertSent(EngineMail::class, fn (EngineMail $m) => $m->hasTo('finance@client.test'));
-        $log = DB::table('notification_delivery_log')->where('event_key', 'report.rerouted')->first();
-        $this->assertSame('sent', $log->status);
-        $this->assertSame('Launch', $log->project_name);
-        $this->assertSame('Alpha Agency', $log->workspace_name);
+        // A new recipient's first messages wait for a person (Q's review): held, logged, nothing sent yet.
+        $held = DB::table('notification_delivery_log')->where('event_key', 'report.rerouted')->first();
+        $this->assertSame('held_for_review', $held->status);
+        $this->assertSame('Launch', $held->project_name);
+        $this->assertSame('Alpha Agency', $held->workspace_name);
+        $review = DB::table('notification_external_reviews')->where('reference', $held->reference)->value('id');
+        $this->assertNotNull($review);
+
+        // «أرسل» on the review releases it through the same pipeline: Q's designed message, logged sent.
+        $this->actingAs($owner, 'sanctum')->postJson('/api/v1/settings/workspace/notifications/external/reviews/'.$review.'/send')->assertOk();
+        app()->forgetScopedInstances();
+        Artisan::call('notifications:v2-send');
+
+        $sent = app('mailer')->getSymfonyTransport()->messages()
+            ->filter(static fn (SentMessage $m): bool => $m->getOriginalMessage() instanceof Email && $m->getOriginalMessage()->getHeaders()->has('X-CH-Reference'))
+            ->map(static fn (SentMessage $m): Email => $m->getOriginalMessage())->values()->all();
+        $this->assertCount(1, $sent);
+        $this->assertSame('finance@client.test', $sent[0]->getTo()[0]->getAddress());
+        $this->assertStringContainsString('Launch', (string) $sent[0]->getSubject());
+        $this->assertTrue($sent[0]->getHeaders()->has('List-Unsubscribe'));
+        $this->assertStringContainsString('شاركه معك الفريق', (string) $sent[0]->getHtmlBody(), 'the event line is worded, not a missing-string key');
+        preg_match_all('/notifications_external\.[a-z_.]+/', (string) $sent[0]->getHtmlBody(), $m);
+        $this->assertSame([], $m[0], 'no missing-string key reaches the recipient');
+        $this->assertSame('sent', DB::table('notification_delivery_log')->where('event_key', 'report.rerouted')->where('status', 'sent')->value('status'));
 
         // Same item, same recipient, same day: once.
         $this->actingAs($owner, 'sanctum')->postJson('/api/v1/followup/reroute', ['notification_id' => $n->id, 'recipient_id' => $recipient])->assertStatus(202)->assertJsonPath('data.queued', 0);

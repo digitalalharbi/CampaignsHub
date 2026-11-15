@@ -10,6 +10,7 @@ return [
     'subject' => [
         'structure' => ':project — :workspace | :custom · CampaignsHub',
         'digest_periodic' => 'Summary of :period',
+        'report_rerouted' => 'A report shared by the team',
         'digest_month_end' => 'Month summary: :highlight',
         'digest_month_start' => 'A new month begins',
         'target_reached' => 'Target reached: :highlight',
@@ -82,6 +83,7 @@ return [
         'digest_month_end' => 'Summary of the month that ended for :project.',
         'digest_month_start' => 'A new month: this month\'s approved budgets and the continuity plan.',
         'digest_periodic' => 'Summary of :project for the period.',
+        'report_rerouted' => 'A report on :project, shared with you by the team.',
     ],
     'month_start' => ['approved' => 'Approved budget for this month', 'awaiting' => 'The budget will be planned as the month starts.'],
     'chart_alt' => [

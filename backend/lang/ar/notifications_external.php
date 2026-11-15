@@ -11,6 +11,7 @@ return [
     'subject' => [
         'structure' => ':project — :workspace | :custom · CampaignsHub',
         'digest_periodic' => 'ملخص :period',
+        'report_rerouted' => 'تقرير شاركه الفريق',
         'digest_month_end' => 'ملخص الشهر: :highlight',
         'digest_month_start' => 'بداية شهر جديد',
         'target_reached' => 'تحقق الهدف: :highlight',
@@ -83,6 +84,7 @@ return [
         'digest_month_end' => 'ملخص الشهر المنتهي لـ :project.',
         'digest_month_start' => 'بداية شهر جديد: الميزانيات المعتمدة لهذا الشهر وخطة الاستمرار.',
         'digest_periodic' => 'ملخص :project للفترة.',
+        'report_rerouted' => 'تقرير عن :project شاركه معك الفريق.',
     ],
     'month_start' => ['approved' => 'الميزانية المعتمدة لهذا الشهر', 'awaiting' => 'سيُخطط للميزانية مع بداية الشهر.'],
     'chart_alt' => [
