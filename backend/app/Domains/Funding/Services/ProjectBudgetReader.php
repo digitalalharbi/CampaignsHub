@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Metrics\Fx\FxConversion;
+use App\Domains\Metrics\Spend\SpendLedger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -117,6 +119,33 @@ final class ProjectBudgetReader
             'crossed_threshold' => $crossed === [] ? null : max($crossed),
             'complete' => (bool) $f['complete'],
             'last_spend_day' => $f['last_spend_day'],
+            // PROJECT-LIFECYCLE-001 §7 — the parts the spend excludes (no rate) and the old rates it used, named (SpendLedger).
+            'fx' => self::fxNote(isset($f['fx']) && is_array($f['fx']) ? [$f['fx']] : []),
+        ];
+    }
+
+    /**
+     * The exclusions and old rates of several budgets, merged: the same statement on every surface that adds them.
+     *
+     * @param  list<array<string, mixed>>  $notes  `FundingBalance::of()['fx']`
+     * @return array{complete: bool, excluded: list<array<string, mixed>>, excluded_label: ?string, statement: ?string, statement_en: ?string, stale: list<array<string, mixed>>, stale_label: ?string, rates_page: ?string}
+     */
+    public static function fxNote(array $notes): array
+    {
+        $excluded = array_values(array_merge(...array_map(static fn (array $n): array => array_values((array) ($n['excluded'] ?? [])), $notes ?: [[]])));
+        $stale = array_values(array_merge(...array_map(static fn (array $n): array => array_values((array) ($n['stale'] ?? [])), $notes ?: [[]])));
+        $statements = array_values(array_filter(array_map(static fn (array $n): ?string => $n['statement'] ?? null, $notes)));
+        $statementsEn = array_values(array_filter(array_map(static fn (array $n): ?string => $n['statement_en'] ?? null, $notes)));
+
+        return [
+            'complete' => $excluded === [],
+            'excluded' => $excluded,
+            'excluded_label' => $excluded === [] ? null : SpendLedger::EXCLUDED_AR,
+            'statement' => $statements === [] ? null : implode(' ', $statements),
+            'statement_en' => $statementsEn === [] ? null : implode(' ', $statementsEn),
+            'stale' => $stale,
+            'stale_label' => $stale === [] ? null : (string) ($stale[0]['label'] ?? ''),
+            'rates_page' => $excluded === [] ? null : FxConversion::RATES_PAGE,
         ];
     }
 
@@ -146,6 +175,7 @@ final class ProjectBudgetReader
             'remaining' => $remaining,
             'used_ratio' => $approved > 0 ? round($spent / $approved, 4) : null,
             'pace_per_day' => $pace > 0 ? round($pace, 2) : null,
+            'fx' => self::fxNote(array_values(array_filter(array_map(static fn (array $r): ?array => isset($r['fx']) && is_array($r['fx']) ? $r['fx'] : null, $with)))),
             'cover_days' => match (true) {
                 $remaining === null => null,
                 $remaining <= 0 => 0,

@@ -101,8 +101,30 @@ final class RateLedger
                 userId: $by?->id,
             );
 
+            if (! $shadowed) {
+                // After the commit: the release reads the rate it is about to use, and a rolled-back write releases nothing.
+                DB::afterCommit(fn () => $this->release($day));
+            }
+
             return ['rate' => $live->refresh(), 'outcome' => $shadowed ? 'shadowed' : 'applied', 'version' => $version];
         });
+    }
+
+    /**
+     * PROJECT-LIFECYCLE-001 §7 (N4) — a stored figure withheld for want of a rate converts itself the day the rate exists
+     * (`ReportingCurrency`'s promise, kept): from the rate's own day (at most {@see FxRecompute::MAX_DAYS} back) to today,
+     * every NULL whose original is now convertible is filled, and the budgets of the projects touched are refreshed. Figures
+     * already converted are never re-priced here. Nothing is written for a rate dated in the future.
+     */
+    private function release(string $day): void
+    {
+        $today = Carbon::today();
+        $from = Carbon::parse($day)->max($today->copy()->subDays(FxRecompute::MAX_DAYS - 1));
+        if ($from->gt($today)) {
+            return;
+        }
+
+        app(FxRecompute::class)->run($from, $today, apply: true, onlyWithheld: true);
     }
 
     /**

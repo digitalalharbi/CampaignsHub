@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Fx;
 
+use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Platform\Models\PlatformAlert;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -14,7 +15,8 @@ use Illuminate\Support\Carbon;
  *
  * - `fx_rate_missing`: an ad account is linked in a currency with no rate (raised at link time by the ExternalAccount
  *   hook and by the daily sweep);
- * - `fx_rate_stale`: a used currency's latest rate is older than 7 days.
+ * - `fx_rate_stale`: a used currency's latest rate is older than 7 days (or past its validity — then it is still used);
+ * - `fx_rate_expiring`: a rate's validity (`effective_to`) ends within 3 days — the admin hears it BEFORE the rate expires.
  *
  * Filed in the platform inbox (`platform_alerts`, in-app only — never mailed), one open alert per currency, and closed
  * by the sweep once the rate exists. Nothing here touches an ad account.
@@ -25,7 +27,16 @@ final class FxMonitor
 
     public const STALE = 'fx_rate_stale';
 
-    public const KINDS = [self::MISSING, self::STALE];
+    /** PROJECT-LIFECYCLE-001 §7 (N4) — a manual rate ends (`effective_to`) within {@see expiryWarningDays()} days. */
+    public const EXPIRING = 'fx_rate_expiring';
+
+    public const KINDS = [self::MISSING, self::STALE, self::EXPIRING];
+
+    /** The internal admin is told this many days before a manual rate's validity ends (Owner: 3). */
+    public static function expiryWarningDays(): int
+    {
+        return max(1, (int) config('fx.rates.expiry_warning_days', 3));
+    }
 
     public function __construct(private readonly CurrencyCoverage $coverage, private readonly FxEngine $fx) {}
 
@@ -46,11 +57,58 @@ final class FxMonitor
             $raised += $this->file($kind, $key, $row, $now) ? 1 : 0;
         }
 
+        foreach ($this->expiring($now) as $row) {
+            $key = 'fx:'.self::EXPIRING.':'.$row['base'].'-'.$row['quote'];
+            $keep[] = $key;
+            $raised += $this->file(self::EXPIRING, $key, $row, $now) ? 1 : 0;
+        }
+
         $cleared = PlatformAlert::query()->open()->whereIn('kind', self::KINDS)
             ->when($keep !== [], static fn ($q) => $q->whereNotIn('dedup_key', $keep))
             ->update(['resolved_at' => $now]);
 
         return ['raised' => $raised, 'cleared' => $cleared, 'open' => PlatformAlert::query()->open()->whereIn('kind', self::KINDS)->count()];
+    }
+
+    /**
+     * The live rates whose validity ends within the warning window (today included): one per pair, the soonest end first.
+     *
+     * @return list<array{currency: string, base: string, quote: string, effective_to: string, rate_date: string, accounts: int, providers: list<string>, withheld: int}>
+     */
+    public function expiring(?Carbon $now = null): array
+    {
+        $today = ($now ?? Carbon::now())->copy()->startOfDay();
+        $until = $today->copy()->addDays(self::expiryWarningDays());
+
+        $rows = CurrencyRate::query()
+            ->whereNotNull('effective_to')
+            ->whereDate('effective_to', '>=', $today->toDateString())
+            ->whereDate('effective_to', '<=', $until->toDateString())
+            ->orderBy('effective_to')
+            ->get(['base_currency', 'quote_currency', 'rate_date', 'effective_to']);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $pair = strtoupper((string) $r->base_currency).'-'.strtoupper((string) $r->quote_currency);
+            // A newer rate for the pair that is not expiring makes this end harmless.
+            $later = CurrencyRate::query()->where('base_currency', $r->base_currency)->where('quote_currency', $r->quote_currency)
+                ->whereDate('rate_date', '>', Carbon::parse((string) $r->rate_date)->toDateString())
+                ->where(static fn ($q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>', $until->toDateString()))
+                ->exists();
+            if ($later || isset($out[$pair])) {
+                continue;
+            }
+            $base = strtoupper((string) $r->base_currency);
+            $out[$pair] = [
+                'currency' => $base === CurrencyConverter::BASE ? strtoupper((string) $r->quote_currency) : $base,
+                'base' => $base, 'quote' => strtoupper((string) $r->quote_currency),
+                'effective_to' => Carbon::parse((string) $r->effective_to)->toDateString(),
+                'rate_date' => Carbon::parse((string) $r->rate_date)->toDateString(),
+                'accounts' => 0, 'providers' => [], 'withheld' => 0,
+            ];
+        }
+
+        return array_values($out);
     }
 
     /** At link time: one cheap lookup for the account's currency, an alert only when it has no rate today. */
@@ -76,6 +134,7 @@ final class FxMonitor
                 'id' => (string) $a->getKey(), 'kind' => (string) $a->kind, 'severity' => (string) $a->severity,
                 'currency' => (string) ($a->facts['currency'] ?? ''), 'accounts' => (int) ($a->facts['accounts'] ?? 0),
                 'withheld' => (int) ($a->facts['withheld'] ?? 0), 'rate_date' => $a->facts['rate_date'] ?? null,
+                'effective_to' => $a->facts['effective_to'] ?? null,
                 'since' => $a->first_seen_at?->toIso8601String(),
             ])->all();
     }
@@ -86,7 +145,7 @@ final class FxMonitor
         $facts = [
             'currency' => $row['currency'], 'accounts' => $row['accounts'], 'providers' => $row['providers'] ?? [],
             'withheld' => $row['withheld'] ?? 0, 'rate_date' => $row['rate_date'] ?? null, 'rates_page' => FxConversion::RATES_PAGE,
-        ];
+        ] + (isset($row['effective_to']) ? ['effective_to' => $row['effective_to'], 'pair' => $row['base'].'→'.$row['quote']] : []);
         $existing = PlatformAlert::query()->where('dedup_key', $key)->first();
         if ($existing !== null) {
             $existing->forceFill(['facts' => $facts, 'last_seen_at' => $now, 'resolved_at' => null])->save();
