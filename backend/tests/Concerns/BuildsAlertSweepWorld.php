@@ -243,17 +243,18 @@ trait BuildsAlertSweepWorld
             'error' => 'token expired', 'started_at' => $now->copy()->subMinutes(5), 'created_at' => $now, 'updated_at' => $now,
         ]);
 
-        // `sync_outage`: the other project's account, whose only run failed.
+        // `sync_outage`: the other project's account, whose only recent run failed. LIFECYCLE-6 — the runs carry the account's own
+        // platform (meta): the outage is judged per bound account, and a run filed under another platform proves nothing about it.
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->otherProject->id, 'connection_id' => (string) Str::uuid(),
-            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'google', 'status' => 'failed', 'window_start' => $now->copy()->subDay()->toDateString(),
+            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'meta', 'status' => 'failed', 'window_start' => $now->copy()->subDay()->toDateString(),
             'window_end' => $now->toDateString(), 'error' => 'quota', 'started_at' => $now->copy()->subMinutes(9), 'finished_at' => $now->copy()->subMinutes(8),
             'created_at' => $now->copy()->subMinutes(9), 'updated_at' => $now->copy()->subMinutes(8),
         ]);
 
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->otherProject->id, 'connection_id' => (string) Str::uuid(),
-            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'google', 'status' => 'success', 'window_start' => $now->copy()->subDays(9)->toDateString(),
+            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'meta', 'status' => 'success', 'window_start' => $now->copy()->subDays(9)->toDateString(),
             'window_end' => $now->copy()->subDays(8)->toDateString(), 'started_at' => $now->copy()->subDays(8), 'finished_at' => $now->copy()->subDays(8),
             'created_at' => $now->copy()->subDays(8), 'updated_at' => $now->copy()->subDays(8),
         ]);

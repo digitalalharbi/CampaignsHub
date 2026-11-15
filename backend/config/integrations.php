@@ -145,6 +145,25 @@ return [
         'stale_after_hours' => (int) env('INTEGRATIONS_STALE_AFTER_HOURS', 48),
     ],
 
+    'data_coverage' => [
+        /*
+         * LIFECYCLE-6 (Owner spec 2026-11-15 §6) — when a day counts as «arrived» for an ad account.
+         *
+         * Day D is covered when a successful sync whose window includes D finished at least `settle_hours` after the
+         * end of D in the ACCOUNT's own time zone (platforms keep restating the day for a few hours after it ends).
+         * A rule may override it with `threshold.settle_hours`.
+         */
+        'settle_hours' => (int) env('DATA_COVERAGE_SETTLE_HOURS', 6),
+
+        /*
+         * The verdict on D waits one more sync cycle after the settle window (the half-hourly sweep twice), so the
+         * sweep that should have covered D has run before anyone is told it did not. It is also how long a failing
+         * sync must have gone without a success before «آخر مزامنة فشلت» is said (§7أ: never instant, after twice
+         * the cycle).
+         */
+        'cycle_minutes' => (int) env('DATA_COVERAGE_CYCLE_MINUTES', 60),
+    ],
+
     'locking' => [
         /*
          * How long one account's sync may hold its lock before another attempt may proceed.

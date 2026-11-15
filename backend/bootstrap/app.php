@@ -12,6 +12,7 @@ use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Alerts\Console\ReevaluateDataArrivalAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
 use App\Domains\Billing\Console\RedactWebhookSecretsCommand;
 use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
@@ -143,6 +144,7 @@ return Application::configure(basePath: dirname(__DIR__))
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        ReevaluateDataArrivalAlerts::class,
         EvaluateAutomationRules::class,
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.

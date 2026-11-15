@@ -222,6 +222,11 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? null
+  // LIFECYCLE-6 — a project outside the list (e.g. archived) is named from what the rule recorded, never the bare «المشروع».
+  const recordedProjectName = (e: AlertEvent): string | null => {
+    const n = e.context?.project_name
+    return typeof n === 'string' && n !== '' ? n : null
+  }
   const scope = project === 'all' ? null : project
   const [filter, setFilter] = useState<EventFilter>('open')
   /* OPERATIONAL-INTELLIGENCE-P1-001 — the alert whose decision drawer is open. */
@@ -530,7 +535,7 @@ function AlertsTab({ c, locale }: { c: Copy; locale: 'ar' | 'en' }) {
                       row on the page that is deliberately not about this client.
                     */}
                     <span data-testid={`alert-scope-${e.id}`} className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-text-muted">
-                      {e.project_id === null ? c.account_wide : (projectName(e.project_id) ?? c.project)}
+                      {e.project_id === null ? c.account_wide : (projectName(e.project_id) ?? recordedProjectName(e) ?? c.project)}
                     </span>
                   </div>
                   <p className="text-sm text-text-secondary">{messageFor(e, locale)}</p>
