@@ -105,7 +105,7 @@ jobs:
             while IFS='|' read -r PROV ACC; do
               N=$((N+1))
               echo "-- account #$N platform=$PROV"
-              $DC exec -T backend php artisan audience:breakdown-probe "$ACC" --project="$PID" --from=2026-11-12 --to=2026-11-12 --dimension=region 2>&1 | awk -F' [|] ' '
+              $DC exec -T backend php artisan audience:breakdown-probe "$ACC" --project="$PID" --from=2026-11-12 --to=2026-11-12 --dimension=region </dev/null 2>&1 | awk -F' [|] ' '
                 /^UNAVAILABLE|^BLOCKED|^FAILED/ {print substr($0,1,60); next}
                 /^rows:/ {print "summary: " $0; next}
                 / [|] ad sets [0-9]+ [|] impressions / {
