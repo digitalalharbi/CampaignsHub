@@ -72,6 +72,7 @@ import { AnnotationsPanel } from './AnnotationsPanel'
 import { KeptCopyNote, ReportVersionHistory } from './ReportVersionHistory'
 import { AttentionDecisionsPanel } from './AttentionDecisionsPanel'
 import { useProject } from '@/stores/project'
+import { useClientProjectAutoSelect } from '@/features/agency/clientProject'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
@@ -117,6 +118,8 @@ export function ReportsPage() {
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
   useProjectFromUrl()
   const { currentProjectId } = useProject()
+  // CONS-CLIENT-PROJECT — a client chosen in the sidebar brings its project with it.
+  useClientProjectAutoSelect()
   const locale = useUi((s) => s.locale)
   const qc = useQueryClient()
   // Report-type labels come from the taxonomy engine (report.type) — no hardcoded type array.

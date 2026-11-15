@@ -167,6 +167,9 @@ describe('changing the client in the side menu', () => {
     await waitFor(() => expect(useAgencyClient.getState().currentClientId).toBe('k2'))
     expect(screen.getByTestId('where')).toHaveTextContent('/agency/integrations')
     expect(screen.queryByTestId('elsewhere')).toBeNull()
-    expect(await screen.findByTestId('hub-project-chooser')).toBeInTheDocument()
+    // CONS-CLIENT-PROJECT — a client with several projects now opens in its most recently active one (picker kept),
+    // where it used to open on the chooser. Still on the same page.
+    await waitFor(() => expect(useProject.getState().currentProjectId).toBe('p-2'))
+    expect(screen.getByTestId('where')).toHaveTextContent('/agency/integrations')
   })
 })
