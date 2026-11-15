@@ -55,6 +55,7 @@ use App\Domains\Integrations\Console\SyncCensusCommand;
 use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
 use App\Domains\Metrics\Console\AudienceBreakdownProbeCommand;
+use App\Domains\Metrics\Console\FxConversionReportCommand;
 use App\Domains\Metrics\Console\FxMonitorCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
 use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
@@ -229,6 +230,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,
         FxMonitorCommand::class,
+        // FX-APPLY-001 — read-only, count-only post-deploy check: raw vs converted spend per non-USD account (anonymous indexes).
+        FxConversionReportCommand::class,
         // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
         // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
         MoneyCurrencyAuditCommand::class,
