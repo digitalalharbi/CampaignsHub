@@ -74,6 +74,7 @@ use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
+use App\Domains\Reports\Console\DedupeReportSchedulesCommand;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\DownloadCheckCommand;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -136,6 +137,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ReportsHealthCommand::class,
         ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
+        DedupeReportSchedulesCommand::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
