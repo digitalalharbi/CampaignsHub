@@ -53,11 +53,11 @@ final class WorkspaceSettingsApiTest extends TestCase
             'org_domains' => ['Alpha.example'],
             'quiet_hours' => ['enabled' => true, 'start' => '22:00', 'end' => '07:00'],
             'routing' => ['budget.threshold_75' => ['roles' => ['finance'], 'channels' => ['in_app'], 'enabled' => true]],
-            'settings' => ['sender' => ['name' => 'Alpha Team'], 'contact_request' => true, 'first_run_completed' => true, 'not_owned_by_page' => 'x'],
+            'settings' => ['role_labels' => ['admin' => 'Alpha Team'], 'default_sound' => false, 'first_run_completed' => true, 'not_owned_by_page' => 'x'],
         ])->assertOk()
             ->assertJsonPath('data.settings.org_domains.0', 'alpha.example')
             ->assertJsonPath('data.settings.quiet_hours.start', '22:00')
-            ->assertJsonPath('data.settings.settings.sender.name', 'Alpha Team')
+            ->assertJsonPath('data.settings.settings.role_labels.admin', 'Alpha Team')
             ->assertJsonPath('data.first_run', false);
 
         $stored = DB::table('workspace_notification_settings')->where('tenant_id', $a->id)->value('settings');
@@ -88,16 +88,16 @@ final class WorkspaceSettingsApiTest extends TestCase
             'id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'key' => EntitlementKey::External->value, 'mode' => 'view_only', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->actingAs($owner)->putJson(self::URL, ['settings' => ['sender' => ['name' => 'X']]])
+        $this->actingAs($owner)->putJson(self::URL, ['settings' => ['role_labels' => ['admin' => 'X']]])
             ->assertForbidden()->assertJsonPath('meta.upgrade', true);
 
         $this->actingAs($owner)->putJson(self::URL, [
             'quiet_hours' => ['enabled' => false, 'start' => '21:00', 'end' => '08:00'],
-            'settings' => ['sender' => ['name' => 'X']],
+            'settings' => ['role_labels' => ['admin' => 'X']],
         ])->assertOk()->assertJsonPath('data.refused.0', EntitlementKey::External->value)
             ->assertJsonPath('data.settings.quiet_hours.enabled', false);
         $saved = json_decode((string) DB::table('workspace_notification_settings')->where('tenant_id', $tenant->id)->value('settings'), true);
-        $this->assertArrayNotHasKey('sender', (array) $saved);
+        $this->assertArrayNotHasKey('role_labels', (array) $saved);
     }
 
     public function test_a_sub_feature_the_plan_no_longer_includes_locks_only_its_own_setting(): void
@@ -107,9 +107,9 @@ final class WorkspaceSettingsApiTest extends TestCase
         DB::table('workspace_entitlement_states')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'key' => EntitlementKey::ExternalCcBcc->value, 'mode' => 'view_only', 'created_at' => now(), 'updated_at' => now(),
         ]);
-        $this->actingAs($owner)->putJson(self::URL, ['settings' => ['cc_bcc' => ['default_cc' => ['a@x.test']], 'sender' => ['name' => 'Kept']]])
+        $this->actingAs($owner)->putJson(self::URL, ['settings' => ['cc_bcc' => ['default_cc' => ['a@x.test']], 'role_labels' => ['admin' => 'Kept']]])
             ->assertOk()->assertJsonPath('data.refused.0', EntitlementKey::ExternalCcBcc->value)
-            ->assertJsonPath('data.settings.settings.sender.name', 'Kept');
+            ->assertJsonPath('data.settings.settings.role_labels.admin', 'Kept');
         $saved = json_decode((string) DB::table('workspace_notification_settings')->where('tenant_id', $tenant->id)->value('settings'), true);
         $this->assertArrayNotHasKey('cc_bcc', $saved);
     }

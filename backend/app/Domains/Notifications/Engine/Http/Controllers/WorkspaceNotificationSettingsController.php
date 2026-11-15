@@ -32,7 +32,7 @@ use Illuminate\Support\Str;
  * ## Writes and the plan
  *
  * The internal part (routing, quiet hours, priorities, follow-up) needs `notifications.internal`; the external part
- * (sender, CC/BCC, phrasing, subject templates, disclaimer, currency, «طلب تواصل») needs `notifications.external`. A key
+ *  needs `notifications.external`. A key
  * that is view-only or off refuses its own part with 403 and `meta.upgrade`, and leaves the rest of the request
  * applied: settings stay visible and the other part stays editable (spec §1: never break).
  */
@@ -44,14 +44,9 @@ final class WorkspaceNotificationSettingsController extends Controller
         'priorities' => [EntitlementKey::Internal, 'map'],
         'followup' => [EntitlementKey::Internal, 'map'],
         'grouping_window_minutes' => [EntitlementKey::Internal, 'int'],
-        'sender' => [EntitlementKey::External, 'map'],
         'cc_bcc' => [EntitlementKey::ExternalCcBcc, 'map'],
         'phrasing' => [EntitlementKey::External, 'map'],
-        'currency' => [EntitlementKey::External, 'string'],
-        'disclaimer' => [EntitlementKey::External, 'map'],
-        'subject_templates' => [EntitlementKey::ExternalCustomSubject, 'map'],
         'role_labels' => [EntitlementKey::External, 'map'],
-        'contact_request' => [EntitlementKey::External, 'bool'],
         'first_run_completed' => [EntitlementKey::Internal, 'bool'],
     ];
 

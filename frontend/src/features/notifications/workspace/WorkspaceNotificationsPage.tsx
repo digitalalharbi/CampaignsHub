@@ -7,7 +7,7 @@ import { TabStrip } from '@/components/fit/TabStrip'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useAuth } from '@/stores/auth'
-import { useKpis, useUsage, useWorkspaceSettings, useEntitlements } from './api'
+import { useExternalKpis, useKpis, useUsage, useWorkspaceSettings, useEntitlements } from './api'
 import { useTypeWords } from './typeWords'
 import { UsagePanel } from './UsagePanel'
 
@@ -62,7 +62,10 @@ export function WorkspaceNotificationsPage() {
 
 function Kpis({ section, data }: { section: SectionKey; data: NonNullable<ReturnType<typeof useWorkspaceSettings>['data']> }) {
   const { t } = useTypeWords(data.workspace.type)
-  const k = useKpis().data
+  const mine = useKpis().data
+  const q = useExternalKpis().data
+  // The external pipeline's own figures win (its «held for review» counts the review queue); ours are the fallback.
+  const k = mine ? { ...mine, external: q ?? mine.external } : undefined
   const n = (v: number | null | undefined) => (v === null || v === undefined ? '-' : v)
   if (section === 'usage') return null
   if (section === 'internal') {

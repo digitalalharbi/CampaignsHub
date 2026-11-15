@@ -38,5 +38,5 @@ export function checkPeriod(period: DigestPeriodKey, frequency: DigestFrequency)
   return { ok: rule === null, alternative: rule }
 }
 
-export const DIGEST_TYPE_KEYS = ['performance', 'spend', 'budgets', 'top_campaigns', 'suggestions', 'achievements'] as const
+export const DIGEST_TYPE_KEYS = ['performance', 'spend', 'budgets', 'top_campaigns', 'growth_suggestions', 'achievements'] as const
 export type DigestTypeKey = (typeof DIGEST_TYPE_KEYS)[number]

@@ -15,6 +15,7 @@ vi.mock('./api', async (orig) => {
     ...actual,
     useWorkspaceSettings: () => q(fixtures.settings),
     useSaveWorkspaceSettings: m,
+    useExternalKpis: () => ({ data: undefined }),
     useKpis: () => q({
       internal: { team_unread: 4, open_followup_tasks: null, push_failures: 1 },
       external: { held_for_review: 2, held_for_privacy: 1, sent_this_week: 9, failed: 0, awaiting_confirmation: 3, unsubscribed_this_month: 1 },

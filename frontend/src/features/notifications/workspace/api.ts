@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getData, getEnvelope, patchData, postData, putData, deleteData } from '@/lib/api/client'
+import { getData, getEnvelope, patchData, postData, putData } from '@/lib/api/client'
 import type {
   Channel, DeliveryLogRow, EntitlementState, ExternalRecipient, NotificationSubscription, Priority, Scope,
   SubscriptionLogAction, SubscriptionStatus, UsageMonth, WorkspaceTypeProfile,
@@ -164,7 +164,9 @@ export function useApproveInternally() {
   })
 }
 
-// ---- Recipients and subscriptions (CONTRACT served by builder Q) ------------------------------------
+// ---- Recipients and subscriptions (builder Q: /settings/workspace/notifications/external, Q-notes.md) ----------
+
+const EXT = `${BASE}/external`
 
 export interface SubscriptionRow extends Omit<NotificationSubscription, 'status'> {
   status: SubscriptionStatus
@@ -179,6 +181,7 @@ export interface RecipientRow extends ExternalRecipient {
   subscriptions: SubscriptionRow[]
 }
 
+/** What the wizard edits: one recipient and the ONE subscription it creates or changes. */
 export interface RecipientInput {
   email: string
   name?: string | null
@@ -203,22 +206,85 @@ export interface RecipientInput {
   }
 }
 
+/** The server's own remarks on a save: «archived projects excluded», «CC moved to BCC», a role-mailbox hint… */
+export interface SaveRemarks { notes: string[]; hints: string[] }
+
 export function useRecipients() {
-  return useQuery({ queryKey: KEYS.recipients, queryFn: () => getData<RecipientRow[]>(`${BASE}/recipients`) })
+  return useQuery({ queryKey: KEYS.recipients, queryFn: () => getData<RecipientRow[]>(`${EXT}/recipients`) })
 }
+
+const recipientFields = (d: RecipientInput) => ({
+  email: d.email, name: d.name || null, salutation: d.salutation || null, role_key: d.role_key, language: d.language,
+  display_currency: d.display_currency ?? null, is_role_mailbox: d.is_role_mailbox,
+})
 
 export function useRecipientActions() {
   const qc = useQueryClient()
   const inv = () => qc.invalidateQueries({ queryKey: ['nv2'] })
 
   return {
-    create: useMutation({ mutationFn: (b: RecipientInput) => postData<RecipientRow>(`${BASE}/recipients`, b), onSuccess: inv }),
-    update: useMutation({ mutationFn: (b: { id: string; body: Partial<RecipientInput> }) => patchData<RecipientRow>(`${BASE}/recipients/${b.id}`, b.body), onSuccess: inv }),
-    pause: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${BASE}/subscriptions/${subscriptionId}/pause`), onSuccess: inv }),
-    resume: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${BASE}/subscriptions/${subscriptionId}/resume`), onSuccess: inv }),
-    duplicate: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${BASE}/subscriptions/${subscriptionId}/duplicate`), onSuccess: inv }),
-    remove: useMutation({ mutationFn: (subscriptionId: string) => deleteData<unknown>(`${BASE}/subscriptions/${subscriptionId}`), onSuccess: inv }),
+    create: useMutation({
+      mutationFn: async (d: RecipientInput): Promise<SaveRemarks> => {
+        const r = await postData<{ notes?: string[]; hints?: string[] }>(`${EXT}/recipients`, { ...recipientFields(d), subscriptions: [d.subscription] })
+
+        return { notes: r.notes ?? [], hints: r.hints ?? [] }
+      },
+      onSuccess: inv,
+    }),
+    // Editing changes the recipient's own fields and the subscription being edited (two calls; the server owns each rule).
+    update: useMutation({
+      mutationFn: async (b: { id: string; subscriptionId: string | null; draft: RecipientInput }): Promise<SaveRemarks> => {
+        const { email: _email, ...fields } = recipientFields(b.draft)
+        void _email
+        await patchData<unknown>(`${EXT}/recipients/${b.id}`, fields)
+        const r = b.subscriptionId
+          ? await patchData<{ notes?: string[] }>(`${EXT}/subscriptions/${b.subscriptionId}`, b.draft.subscription)
+          : await postData<{ notes?: string[] }>(`${EXT}/recipients/${b.id}/subscriptions`, b.draft.subscription)
+
+        return { notes: r.notes ?? [], hints: [] }
+      },
+      onSuccess: inv,
+    }),
+    pause: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${EXT}/subscriptions/${subscriptionId}/pause`), onSuccess: inv }),
+    resume: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${EXT}/subscriptions/${subscriptionId}/resume`), onSuccess: inv }),
+    duplicate: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${EXT}/subscriptions/${subscriptionId}/duplicate`), onSuccess: inv }),
+    // «delete» is a confirmed cancel: the row is kept (the immutable log points at it), nothing is sent to it again.
+    remove: useMutation({ mutationFn: (subscriptionId: string) => postData<unknown>(`${EXT}/subscriptions/${subscriptionId}/cancel`, { confirm: true }), onSuccess: inv }),
   }
+}
+
+/** builder Q's external general settings (sender signature and reply-to, disclaimer, extra forbidden words, «طلب تواصل», subject templates, …). */
+export interface ExternalSettingsData {
+  sender: { reply_to: string | null; signature: string | null }
+  external: {
+    disclaimer: { ar: string | null; en: string | null }
+    forbidden_words: string[]
+    contact_link: string | null
+    subject_templates: Record<string, string>
+    continuity_days: number
+    improvement_pct: number
+    copy_delivery: 'all' | 'events' | 'digest'
+    review_window_hours: number
+    display_currency: string | null
+  }
+}
+
+export function useExternalSettings() {
+  return useQuery({ queryKey: ['nv2', 'external-settings'], queryFn: () => getData<ExternalSettingsData>(`${EXT}/settings`) })
+}
+
+export function useSaveExternalSettings() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: (b: { sender?: Partial<ExternalSettingsData['sender']>; external?: Partial<ExternalSettingsData['external']> }) => putData<ExternalSettingsData>(`${EXT}/settings`, b),
+    onSuccess: (d) => { qc.setQueryData(['nv2', 'external-settings'], d) },
+  })
+}
+
+/** Q's KPI strip for the external section — «held for review» counts its review queue. Falls back to ours while Q is not deployed. */
+export function useExternalKpis() {
+  return useQuery({ queryKey: ['nv2', 'external-kpis'], queryFn: () => getData<Kpis['external']>(`${EXT}/kpis`), retry: false, refetchInterval: 60_000 })
 }
 
 export interface PreviewResult { subject: string; sender_name: string; html: string }

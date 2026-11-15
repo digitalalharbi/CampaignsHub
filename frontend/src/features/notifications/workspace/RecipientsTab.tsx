@@ -28,7 +28,7 @@ export function RecipientsTab({ data, userEmail, isOwner }: { data: WorkspaceSet
   const list = useRecipients()
   const actions = useRecipientActions()
   const approve = useApproveInternally()
-  const [wizard, setWizard] = useState<{ open: boolean; row: RecipientRow | null }>({ open: false, row: null })
+  const [wizard, setWizard] = useState<{ open: boolean; row: RecipientRow | null; subscriptionId: string | null }>({ open: false, row: null, subscriptionId: null })
   const [removing, setRemoving] = useState<Line | null>(null)
   const [askConfirm, setAskConfirm] = useState(false)
   const [page, setPage] = useState(1)
@@ -59,7 +59,7 @@ export function RecipientsTab({ data, userEmail, isOwner }: { data: WorkspaceSet
       {l.recipient.status === 'pending' && isOrg(l.recipient.email) && l.recipient.role_key !== type.client_role && (
         <IconBtn label={t('approveInternally')} testid={`approve-${l.key}`} onClick={() => approve.mutate(l.recipient.id, guard)}><ShieldCheck size={15} /></IconBtn>
       )}
-      <IconBtn label={t('edit')} testid={`edit-${l.key}`} onClick={() => setWizard({ open: true, row: l.recipient })}><Pencil size={15} /></IconBtn>
+      <IconBtn label={t('edit')} testid={`edit-${l.key}`} onClick={() => setWizard({ open: true, row: l.recipient, subscriptionId: l.sub?.id ?? null })}><Pencil size={15} /></IconBtn>
       {l.sub && <IconBtn label={t('duplicate')} testid={`dup-${l.key}`} onClick={() => actions.duplicate.mutate(l.sub!.id, guard)}><Copy size={15} /></IconBtn>}
       {l.sub && <IconBtn label={t('delete')} testid={`del-${l.key}`} onClick={() => setRemoving(l)}><Trash2 size={15} /></IconBtn>}
     </div>
@@ -71,7 +71,7 @@ export function RecipientsTab({ data, userEmail, isOwner }: { data: WorkspaceSet
     <div data-testid="recipients-tab" className="flex min-h-0 flex-1 flex-col gap-2">
       <LockedNote entitlement="notifications.external" />
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={!gate.editable} onClick={() => setWizard({ open: true, row: null })} data-testid="add-recipient"><Plus size={15} aria-hidden /> {t('addRecipient')}</Button>
+        <Button size="sm" disabled={!gate.editable} onClick={() => setWizard({ open: true, row: null, subscriptionId: null })} data-testid="add-recipient"><Plus size={15} aria-hidden /> {t('addRecipient')}</Button>
         {isOwner && pending > 0 && <Button size="sm" variant="secondary" disabled={!gate.editable} onClick={() => setAskConfirm(true)} data-testid="send-confirmations">{t('sendConfirmations')}</Button>}
         {error && <span role="alert" className="text-xs text-danger">{error}</span>}
       </div>
@@ -102,7 +102,7 @@ export function RecipientsTab({ data, userEmail, isOwner }: { data: WorkspaceSet
         <Pager page={page} pages={pages} onPage={setPage} total={lines.length} ar={ar} testid="recipients-pager" hideWhenSingle />
       </div>
 
-      {wizard.open && <RecipientWizard key={wizard.row?.id ?? 'new'} open data={data} editing={wizard.row} userEmail={userEmail} onClose={() => setWizard({ open: false, row: null })} />}
+      {wizard.open && <RecipientWizard key={wizard.subscriptionId ?? wizard.row?.id ?? 'new'} open data={data} editing={wizard.row} editingSubscriptionId={wizard.subscriptionId} userEmail={userEmail} onClose={() => setWizard({ open: false, row: null, subscriptionId: null })} />}
 
       <Modal open={removing !== null} onClose={() => setRemoving(null)} size="sm" title={t('confirmDelete')}
         footer={<><Button variant="ghost" onClick={() => setRemoving(null)}>{t('cancel')}</Button>

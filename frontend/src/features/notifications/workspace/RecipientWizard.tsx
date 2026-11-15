@@ -5,7 +5,7 @@ import { Alert } from '@/components/ui/Alert'
 import { checkPeriod, DIGEST_FREQUENCIES, DIGEST_PERIOD_KEYS, DIGEST_TYPE_KEYS, type DigestFrequency, type DigestPeriodKey } from '@/lib/notifications'
 import { toApiError } from '@/lib/api/client'
 import {
-  useBindableProjects, usePreviewMessage, useRecipientActions, useTestSend, type RecipientInput, type RecipientRow, type WorkspaceSettingsData,
+  useBindableProjects, usePreviewMessage, useRecipientActions, useTestSend, type RecipientInput, type RecipientRow, type SaveRemarks, type WorkspaceSettingsData,
 } from './api'
 import { PhonePreview } from './PhonePreview'
 import { fill, type WordKey } from './strings'
@@ -16,7 +16,7 @@ const TEMPLATES = [
   { key: 'monthly_review', ar: 'مراجعة شهرية', en: 'Monthly review', frequency: 'monthly' as DigestFrequency, period: 'last_month' as DigestPeriodKey, types: ['performance', 'spend', 'budgets', 'achievements'] },
   { key: 'weekly_progress', ar: 'متابعة أسبوعية', en: 'Weekly progress', frequency: 'weekly' as DigestFrequency, period: 'last_week' as DigestPeriodKey, types: ['performance', 'top_campaigns'] },
   { key: 'continuity', ar: 'استمرارية الميزانية', en: 'Budget continuity', frequency: 'weekly' as DigestFrequency, period: 'active_budget_period' as DigestPeriodKey, types: ['budgets'] },
-  { key: 'achievements', ar: 'الإنجازات', en: 'Achievements', frequency: 'weekly' as DigestFrequency, period: 'last_7' as DigestPeriodKey, types: ['achievements', 'suggestions'] },
+  { key: 'achievements', ar: 'الإنجازات', en: 'Achievements', frequency: 'weekly' as DigestFrequency, period: 'last_7' as DigestPeriodKey, types: ['achievements', 'growth_suggestions'] },
 ]
 const PERIOD_AR: Record<DigestPeriodKey, string> = {
   yesterday: 'أمس', last_7: 'آخر 7 أيام', this_week_to_yesterday: 'هذا الأسبوع حتى أمس', last_week: 'الأسبوع الماضي',
@@ -26,13 +26,24 @@ const PERIOD_EN: Record<DigestPeriodKey, string> = {
   yesterday: 'yesterday', last_7: 'the last 7 days', this_week_to_yesterday: 'this week until yesterday', last_week: 'last week',
   this_month_to_yesterday: 'this month until yesterday', last_month: 'last month', last_30: 'the last 30 days', active_budget_period: 'the active budget period', ytd: 'the year to date',
 }
-const TYPE_AR: Record<string, string> = { performance: 'النمو والأداء', spend: 'الإنفاق حسب المنصة', budgets: 'الميزانيات والاستمرارية', top_campaigns: 'أفضل الحملات', suggestions: 'اقتراحات للنمو', achievements: 'الإنجازات' }
-const TYPE_EN: Record<string, string> = { performance: 'Growth and performance', spend: 'Spend by platform', budgets: 'Budgets and continuity', top_campaigns: 'Top campaigns', suggestions: 'Growth suggestions', achievements: 'Achievements' }
+const TYPE_AR: Record<string, string> = { performance: 'النمو والأداء', spend: 'الإنفاق حسب المنصة', budgets: 'الميزانيات والاستمرارية', top_campaigns: 'أفضل الحملات', growth_suggestions: 'اقتراحات للنمو', achievements: 'الإنجازات' }
+const TYPE_EN: Record<string, string> = { performance: 'Growth and performance', spend: 'Spend by platform', budgets: 'Budgets and continuity', top_campaigns: 'Top campaigns', growth_suggestions: 'Growth suggestions', achievements: 'Achievements' }
 const FREQ_WORD: Record<DigestFrequency, WordKey> = { daily: 'fDaily', weekly: 'fWeekly', monthly: 'fMonthly' }
+const REMARK_WORDS: Record<string, { ar: string; en: string }> = {
+  archived_projects_excluded: { ar: 'استُبعدت المشاريع المؤرشفة تلقائيًا.', en: 'Archived projects were excluded automatically.' },
+  client_role_review_stays_on: { ar: 'المراجعة قبل الإرسال تبقى مفعّلة لهذا الدور.', en: 'Review before send stays on for this role.' },
+  cc_moved_to_bcc: { ar: 'نُقلت نسخة ظاهرة إلى نسخة مخفية لحماية الخصوصية.', en: 'A visible copy was moved to BCC to protect privacy.' },
+  suggest_role_mailbox: { ar: 'يُفضَّل بريد دور مثل finance@ بدل بريد شخصي.', en: 'A role mailbox such as finance@ is preferable to a personal address.' },
+  already_workspace_user_suggest_internal: { ar: 'هذا العنوان لمستخدم في المساحة. فكّر في الإشعارات الداخلية له.', en: 'This address belongs to a workspace user. Consider internal notifications for them.' },
+  confirmation_email_required: { ar: 'لن يُرسل شيء قبل أن يؤكد المستلم عبر رسالة التأكيد.', en: 'Nothing is sent before the recipient confirms by email.' },
+  can_approve_internally: { ar: 'عنوان على نطاق المؤسسة: يمكن اعتماده داخليًا بدل رسالة التأكيد.', en: 'An organisation-domain address: it can be approved internally instead of a confirmation email.' },
+}
+/** `cc_moved_to_bcc:addr` carries the address after the colon; the sentence is the part before it. */
+const remarkText = (key: string, lang: 'ar' | 'en'): string => REMARK_WORDS[key.split(':')[0]]?.[lang] ?? key
 const STEPS: WordKey[] = ['wizStep1', 'wizStep2', 'wizStep3', 'wizStep4']
 
-function draftFrom(row: RecipientRow | null, responsible: string): RecipientInput {
-  const sub = row?.subscriptions[0]
+function draftFrom(row: RecipientRow | null, subscriptionId: string | null, responsible: string): RecipientInput {
+  const sub = row?.subscriptions.find((x) => x.id === subscriptionId) ?? row?.subscriptions[0]
 
   return {
     email: row?.email ?? '', name: row?.name ?? '', salutation: row?.salutation ?? '', role_key: row?.role_key ?? responsible,
@@ -46,19 +57,20 @@ function draftFrom(row: RecipientRow | null, responsible: string): RecipientInpu
 }
 
 /** The 4-step wizard (spec §14). `editing` prefills it from an existing recipient. */
-export function RecipientWizard({ open, onClose, data, editing, userEmail }: {
-  open: boolean; onClose: () => void; data: WorkspaceSettingsData; editing: RecipientRow | null; userEmail?: string
+export function RecipientWizard({ open, onClose, data, editing, editingSubscriptionId = null, userEmail }: {
+  open: boolean; onClose: () => void; data: WorkspaceSettingsData; editing: RecipientRow | null; editingSubscriptionId?: string | null; userEmail?: string
 }) {
   const type = data.workspace.type
   const { t, ar, lang } = useTypeWords(type)
   const [step, setStep] = useState(0)
-  const [draft, setDraft] = useState<RecipientInput>(() => draftFrom(editing, type.responsible_role))
+  const [draft, setDraft] = useState<RecipientInput>(() => draftFrom(editing, editingSubscriptionId, type.responsible_role))
   const [advanced, setAdvanced] = useState(false)
   const [previewProject, setPreviewProject] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [plang, setPlang] = useState<'ar' | 'en'>(ar ? 'ar' : 'en')
   const [confirmSend, setConfirmSend] = useState(false)
   const [error, setError] = useState('')
+  const [remarks, setRemarks] = useState<SaveRemarks | null>(null)
   const projects = useBindableProjects()
   const actions = useRecipientActions()
   const previewM = usePreviewMessage()
@@ -83,9 +95,14 @@ export function RecipientWizard({ open, onClose, data, editing, userEmail }: {
 
   const save = () => {
     setError('')
-    const onError = (e: unknown) => setError(toApiError(e).message)
-    if (editing) actions.update.mutate({ id: editing.id, body: draft }, { onSuccess: onClose, onError })
-    else actions.create.mutate(draft, { onSuccess: onClose, onError })
+    const onError = (e: unknown) => {
+      const api = toApiError(e)
+      const first = api.errors ? Object.values(api.errors).flat()[0] : undefined
+      setError(first ?? api.message)
+    }
+    const onSuccess = (r: SaveRemarks) => { if (r.notes.length + r.hints.length > 0) setRemarks(r); else onClose() }
+    if (editing) actions.update.mutate({ id: editing.id, subscriptionId: editingSubscriptionId ?? editing.subscriptions[0]?.id ?? null, draft }, { onSuccess, onError })
+    else actions.create.mutate(draft, { onSuccess, onError })
   }
 
   return (
@@ -103,6 +120,12 @@ export function RecipientWizard({ open, onClose, data, editing, userEmail }: {
           {STEPS.map((s, i) => <li key={s} aria-current={i === step ? 'step' : undefined} className={`rounded-full px-2.5 py-1 ${i === step ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-text-muted'}`}>{i + 1}. {t(s)}</li>)}
         </ol>
         {error && <Alert severity="danger" title={error} />}
+        {remarks && (
+          <div data-testid="wiz-remarks" className="space-y-1 rounded-lg border border-border bg-surface-secondary p-3 text-sm">
+            {[...remarks.notes, ...remarks.hints].map((n) => <p key={n}>{remarkText(n, lang)}</p>)}
+            <Button size="sm" onClick={onClose} data-testid="wiz-remarks-close">{t('close')}</Button>
+          </div>
+        )}
 
         {step === 0 && (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -199,6 +222,9 @@ export function RecipientWizard({ open, onClose, data, editing, userEmail }: {
                 <Button size="sm" variant="secondary" disabled={!previewProject} loading={testM.isPending} data-testid="wiz-send-me" onClick={() => testM.mutate({ draft, project_id: previewProject, to: 'self' })}>{t('sendMe')}</Button>
                 <Button size="sm" variant="secondary" disabled={!previewProject} data-testid="wiz-send-recipient" onClick={() => setConfirmSend(true)}>{t('sendRecipient')}</Button>
               </div>
+              {testM.isSuccess && <p data-testid="wiz-test-state" className="text-xs text-success">{testM.data?.state}</p>}
+              {testM.isError && <p role="alert" className="text-xs text-danger">{toApiError(testM.error).message}</p>}
+              {previewM.isError && <p role="alert" className="text-xs text-danger">{toApiError(previewM.error).message}</p>}
               {confirmSend && (
                 <div role="alertdialog" className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning-soft p-2 text-sm" data-testid="wiz-send-confirm">
                   <span className="min-w-0 flex-1">{t('sendRecipientConfirm')}</span>
