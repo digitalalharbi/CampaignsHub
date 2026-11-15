@@ -70,6 +70,7 @@ return [
         'external_held_for_review' => ['internal' => ['title' => 'An external message awaits review', 'body' => 'A message to :recipient about :project awaits your review.']],
         'external_recipient_reduced' => ['internal' => ['title' => 'A recipient reduced frequency', 'body' => ':recipient reduced :project report frequency on :date.']],
         'external_recipient_unconfirmed_7d' => ['internal' => ['title' => 'A recipient has not confirmed in 7 days', 'body' => ':recipient has not confirmed :project reports within 7 days.']],
+        'external_review_skipped' => ['internal' => ['title' => 'An external message was skipped', 'body' => 'Message :reference about :project was not reviewed within the window and was not sent.']],
         'external_recipient_unsubscribed' => ['internal' => ['title' => 'A recipient unsubscribed', 'body' => ':recipient stopped receiving :project reports on :date.']],
         'followup_morning_brief' => ['internal' => ['title' => 'Morning brief', 'body' => 'What needs follow-up today in your projects.']],
         'performance_improved' => ['external' => ['title' => 'Performance improved in :project', 'body' => ':project performance improved during :period.']],

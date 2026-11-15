@@ -16,6 +16,7 @@ use App\Domains\Notifications\Engine\Enums\Channel;
 use App\Domains\Notifications\Engine\NotificationEngine;
 use App\Domains\Notifications\Engine\Sending\EngineMail;
 use App\Domains\Notifications\Engine\Sending\SenderPipeline;
+use App\Domains\Notifications\External\Mail\ExternalMailer;
 use App\Domains\Notifications\Services\SoundPreferences;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -206,6 +207,10 @@ final class SenderPipelineTest extends TestCase
 
     public function test_external_mail_needs_an_external_ready_template_counts_usage_and_names_the_workspace(): void
     {
+        // Builder Q installs the external composer + mailer; this test keeps proving the engine's own guard with the bare
+        // catalog composer (never external-ready) and the legacy single-message path.
+        app()->bind(MessageComposer::class, CatalogMessageComposer::class);
+        unset(app()[ExternalMailer::class]);
         $this->externalSubscription();
         $this->raise('target.reached');
         $this->assertSame(1, $this->drain()['skipped']);

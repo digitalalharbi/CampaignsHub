@@ -71,4 +71,19 @@ return [
     'consent' => [
         'unconfirmed_notice_days' => 7,
     ],
+
+    // NOTIF-V2-EXTERNAL-001 (builder Q) — the external pipeline.
+    'external' => [
+        'charts' => [
+            'enabled' => env('NOTIF_CHARTS_ENABLED', true),
+            'node' => env('NOTIF_CHARTS_NODE', 'node'),
+            // package.json beside a node_modules holding @resvg/resvg-js; empty = the reports renderer's base (/opt/print in production).
+            'require_base' => env('NOTIF_CHARTS_REQUIRE_BASE'),
+            'max_ms' => 300,                 // per chart; slower → table
+            'max_png_bytes' => 400 * 1024,   // all images of one message
+            'cache_hours' => 24,
+            'timeout_seconds' => 10,
+        ],
+        'data_retry_minutes' => 120,         // incomplete data: defer once, then «قيد التحديث»
+    ],
 ];

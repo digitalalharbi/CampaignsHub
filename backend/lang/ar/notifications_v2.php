@@ -70,6 +70,7 @@ return [
         'external_held_for_review' => ['internal' => ['title' => 'رسالة خارجية بانتظار المراجعة', 'body' => 'رسالة إلى :recipient عن :project بانتظار مراجعتك.']],
         'external_recipient_reduced' => ['internal' => ['title' => 'خفّض مستلم التكرار', 'body' => ':recipient خفّض تكرار تقارير :project بتاريخ :date.']],
         'external_recipient_unconfirmed_7d' => ['internal' => ['title' => 'مستلم لم يؤكد خلال 7 أيام', 'body' => ':recipient لم يؤكد استلام تقارير :project خلال 7 أيام.']],
+        'external_review_skipped' => ['internal' => ['title' => 'تُخطيت رسالة خارجية', 'body' => 'رسالة :reference عن :project لم تُراجع خلال المهلة فلم تُرسل.']],
         'external_recipient_unsubscribed' => ['internal' => ['title' => 'ألغى مستلم الاشتراك', 'body' => ':recipient ألغى استلام تقارير :project بتاريخ :date.']],
         'followup_morning_brief' => ['internal' => ['title' => 'موجز الصباح', 'body' => 'ما يحتاج متابعة اليوم في مشاريعك.']],
         'performance_improved' => ['external' => ['title' => 'تحسن في أداء :project', 'body' => 'تحسن أداء :project خلال :period.']],

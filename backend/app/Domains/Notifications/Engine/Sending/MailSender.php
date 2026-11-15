@@ -12,6 +12,7 @@ use App\Domains\Notifications\Engine\Data\SendResult;
 use App\Domains\Notifications\Engine\Enums\Channel;
 use App\Domains\Notifications\Engine\Enums\Scope;
 use App\Domains\Notifications\Engine\Workspace\WorkspaceSettingsRepository;
+use App\Domains\Notifications\External\Mail\ExternalMailer;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Notifications\Support\MailFailure;
@@ -47,6 +48,11 @@ final class MailSender implements Sender
         }
         if (! $this->providers->isConfigured('email')) {
             return SendResult::failed('provider_not_configured', permanent: true);
+        }
+
+        // External (spec §8–§13): the full service-report message with its own envelope per address and CC/BCC copies.
+        if ($delivery->scope === Scope::External && app()->bound(ExternalMailer::class)) {
+            return app(ExternalMailer::class)->send($delivery);
         }
 
         $message = $this->composer->compose($delivery);

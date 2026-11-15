@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Engine\Content;
 
-/** The words of one delivery. `externalReady` is true only for a composer that carries the mandatory external parts (§8, §12, §13). */
+/**
+ * The words of one delivery. `externalReady` is true only for a composer that carries the mandatory external parts (§8, §12, §13).
+ */
 final class ComposedMessage
 {
     public function __construct(
@@ -17,5 +19,9 @@ final class ComposedMessage
         public readonly bool $externalReady = false,
         public readonly ?string $senderName = null,
         public readonly ?string $replyTo = null,
+        /** @var array<string, string> inline images by Content-ID (`cid:<key>`), e.g. the external charts: cid => PNG bytes */
+        public readonly array $inline = [],
+        /** @var array<string, mixed> facts the external pre-send checks read (figures, project ids, currencies); never rendered */
+        public readonly array $facts = [],
     ) {}
 }

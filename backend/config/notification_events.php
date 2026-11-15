@@ -73,6 +73,8 @@ return [
         'external.recipient_unsubscribed' => $i('info', $ops, ['internal_only' => true, 'channels' => $quiet]),
         'external.recipient_reduced' => $i('info', $ops, ['internal_only' => true, 'channels' => $quiet]),
         'external.recipient_unconfirmed_7d' => $i('info', $ops, ['internal_only' => true, 'channels' => $quiet]),
+        // NOTIF-V2-EXTERNAL-001 — a held message nobody decided on within the review window was skipped.
+        'external.review_skipped' => $i('info', $ops, ['internal_only' => true, 'channels' => $quiet, 'groupable' => false]),
 
         // ── §5 projects ──
         'project.created' => $i('info', $everyone, ['channels' => ['in_app']]),

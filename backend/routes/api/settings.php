@@ -7,6 +7,9 @@ use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Notifications\Engine\Http\Controllers\ConsentController;
 use App\Domains\Notifications\Engine\Http\Controllers\DeliveryLogController;
 use App\Domains\Notifications\Engine\Http\Controllers\WorkspacePlanUsageController;
+use App\Domains\Notifications\External\Http\ExternalPreviewController;
+use App\Domains\Notifications\External\Http\ExternalRecipientsController;
+use App\Domains\Notifications\External\Http\ExternalReviewsController;
 use App\Domains\Notifications\Http\Controllers\NotificationRecipientController;
 use App\Domains\Notifications\Http\Controllers\TeamNotificationsController;
 use App\Domains\Settings\Http\Controllers\AccessCenterController;
@@ -139,6 +142,28 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
     Route::get('workspace/notifications/confirmation-requests', [ConsentController::class, 'preview'])->name('workspace.notifications.confirmation-requests.preview');
     Route::post('workspace/notifications/confirmation-requests', [ConsentController::class, 'send'])->middleware(['plan.feature:notifications.external', 'throttle:3,1'])->name('workspace.notifications.confirmation-requests.send');
     Route::post('workspace/notifications/recipients/{recipient}/approve-internally', [ConsentController::class, 'approveInternally'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('workspace.notifications.recipients.approve-internally');
+    // NOTIF-V2-EXTERNAL-001 — the external pipeline's JSON API for the settings tabs and the wizard (Q-notes.md).
+    Route::prefix('workspace/notifications/external')->name('workspace.notifications.external.')->group(function (): void {
+        Route::get('options', [ExternalRecipientsController::class, 'options'])->name('options');
+        Route::post('period-check', [ExternalRecipientsController::class, 'periodCheck'])->name('period-check');
+        Route::get('kpis', [ExternalRecipientsController::class, 'kpis'])->name('kpis');
+        Route::get('settings', [ExternalRecipientsController::class, 'showSettings'])->name('settings.show');
+        Route::put('settings', [ExternalRecipientsController::class, 'updateSettings'])->middleware('plan.feature:notifications.external')->name('settings.update');
+        Route::get('recipients', [ExternalRecipientsController::class, 'index'])->name('recipients.index');
+        Route::post('recipients', [ExternalRecipientsController::class, 'store'])->middleware('plan.feature:notifications.external')->name('recipients.store');
+        Route::get('recipients/{recipient}', [ExternalRecipientsController::class, 'show'])->whereUuid('recipient')->name('recipients.show');
+        Route::patch('recipients/{recipient}', [ExternalRecipientsController::class, 'update'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('recipients.update');
+        Route::post('recipients/{recipient}/{action}', [ExternalRecipientsController::class, 'recipientAction'])->whereUuid('recipient')->whereIn('action', ['pause', 'resume', 'cancel'])->middleware('plan.feature:notifications.external')->name('recipients.action');
+        Route::post('recipients/{recipient}/subscriptions', [ExternalRecipientsController::class, 'storeSubscription'])->whereUuid('recipient')->middleware('plan.feature:notifications.external')->name('subscriptions.store');
+        Route::patch('subscriptions/{subscription}', [ExternalRecipientsController::class, 'updateSubscription'])->whereUuid('subscription')->middleware('plan.feature:notifications.external')->name('subscriptions.update');
+        Route::post('subscriptions/{subscription}/{action}', [ExternalRecipientsController::class, 'subscriptionAction'])->whereUuid('subscription')->whereIn('action', ['pause', 'resume', 'cancel', 'duplicate'])->middleware('plan.feature:notifications.external')->name('subscriptions.action');
+        Route::post('preview', [ExternalPreviewController::class, 'preview'])->middleware('throttle:30,1')->name('preview');
+        Route::post('test-send', [ExternalPreviewController::class, 'testSend'])->middleware(['plan.feature:notifications.external', 'throttle:5,1'])->name('test-send');
+        Route::post('send-now', [ExternalPreviewController::class, 'sendNow'])->middleware(['plan.feature:notifications.external', 'throttle:10,1'])->name('send-now');
+        Route::get('reviews', [ExternalReviewsController::class, 'index'])->name('reviews.index');
+        Route::post('reviews/{review}/send', [ExternalReviewsController::class, 'send'])->whereUuid('review')->middleware('plan.feature:notifications.external')->name('reviews.send');
+        Route::post('reviews/{review}/skip', [ExternalReviewsController::class, 'skip'])->whereUuid('review')->name('reviews.skip');
+    });
 
     // Security (account + org policy).
     Route::get('security/activity', [SecurityController::class, 'activity'])->name('security.activity');
