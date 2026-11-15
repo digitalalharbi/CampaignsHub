@@ -6,6 +6,7 @@ namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Support\BudgetFx;
+use App\Domains\Metrics\Spend\SpendLedger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -28,6 +29,7 @@ final class FundingBalance
         private readonly FundingMonth $months,
         private readonly BudgetFx $fx,
         private readonly SourceFreshness $freshness,
+        private readonly SpendLedger $ledger,
     ) {}
 
     /**
@@ -163,6 +165,15 @@ final class FundingBalance
             default => 'ok',
         };
 
+        /*
+         * PROJECT-LIFECYCLE-001 §7 — what the budget's spend could NOT include, and why, in the one reading every page shares
+         * (`SpendLedger`, through FxEngine): each excluded part with its currency, account and original amount, the explicit
+         * «مستبعد من الإجمالي» statement, and every old rate used («سعر قديم — بتاريخ …»). Read over the budget's own period;
+         * the budget keeps its history, so this ledger is not narrowed to live projects (the budgets list itself is).
+         */
+        $reading = $from === null ? null : $this->ledger->read([(string) $funding->project_id], $from, $to, 'SAR', liveOnly: false);
+        $fx = $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'stale_label', 'rates_page', 'currencies', 'includes_converted']));
+
         return [
             'project_id' => $funding->project_id,
             'client_workspace_id' => $funding->client_workspace_id,
@@ -202,6 +213,7 @@ final class FundingBalance
             'last_spend_day' => $lastDay,
             'by_platform' => $byPlatform,
             'status' => $status,
+            'fx' => $fx,
         ];
     }
 }
