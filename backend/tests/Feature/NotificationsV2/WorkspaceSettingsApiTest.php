@@ -143,6 +143,13 @@ final class WorkspaceSettingsApiTest extends TestCase
             ->assertJsonPath('data.external.held_for_privacy', 1)
             ->assertJsonPath('data.external.failed', 1)
             ->assertJsonPath('data.internal.push_failures', 1)
-            ->assertJsonPath('data.external.awaiting_confirmation', 0);
+            ->assertJsonPath('data.external.awaiting_confirmation', 0)
+            ->assertJsonPath('data.internal.open_followup_tasks', 0);
+
+        // RELEASE-INTEGRATION — builder P's task list: open tasks of this workspace only (snoozed and closed are not «open»).
+        $task = fn (Tenant $t, string $status): array => ['id' => (string) Str::uuid(), 'tenant_id' => $t->id, 'kind' => 'set_budget', 'reason' => 'r',
+            'dedup_key' => Str::random(12), 'status' => $status, 'opened_at' => now(), 'created_at' => now(), 'updated_at' => now()];
+        DB::table('followup_tasks')->insert([$task($a, 'open'), $task($a, 'open'), $task($a, 'snoozed'), $task($a, 'done'), $task($b, 'open')]);
+        $this->actingAs($ownerA)->getJson('/api/v1/settings/workspace/notifications/kpis')->assertOk()->assertJsonPath('data.internal.open_followup_tasks', 2);
     }
 }

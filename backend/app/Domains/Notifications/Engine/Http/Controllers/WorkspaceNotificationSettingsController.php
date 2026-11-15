@@ -190,7 +190,6 @@ final class WorkspaceNotificationSettingsController extends Controller
         return ApiResponse::success([
             'internal' => [
                 'team_unread' => DB::table('app_notifications')->where('tenant_id', $tenantId)->where('status', 'unread')->count(),
-                // The follow-up task list ships with the notification centre (builder P); until its table exists the figure is unknown, not zero.
                 'open_followup_tasks' => $this->followupOpenTasks($tenantId),
                 'push_failures' => $log()->where('scope', 'internal')->where('channel', 'push')->where('status', 'failed')->where('created_at', '>=', $weekAgo)->count(),
             ],
@@ -205,15 +204,10 @@ final class WorkspaceNotificationSettingsController extends Controller
         ]);
     }
 
-    private function followupOpenTasks(string $tenantId): ?int
+    /** RELEASE-INTEGRATION — builder P's task list (`followup_tasks`), open tasks of this workspace (snoozed ones are not «open»). */
+    private function followupOpenTasks(string $tenantId): int
     {
-        foreach (['notification_followup_tasks', 'followup_tasks'] as $table) {
-            if (Schema::hasTable($table) && Schema::hasColumn($table, 'tenant_id') && Schema::hasColumn($table, 'status')) {
-                return DB::table($table)->where('tenant_id', $tenantId)->where('status', 'open')->count();
-            }
-        }
-
-        return null;
+        return DB::table('followup_tasks')->where('tenant_id', $tenantId)->where('status', 'open')->count();
     }
 
     private function coerce(string $kind, mixed $value): mixed
