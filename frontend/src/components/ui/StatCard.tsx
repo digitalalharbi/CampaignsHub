@@ -197,32 +197,44 @@ export function StatCard({
         beside a two-word label: it overflowed its card by 10px and scrolled the whole page sideways on Firefox and WebKit — found the day
         the seeded comparison window slid and every PR went red on the same two specs. Wrapping costs nothing on a card whose pill fits.
       */}
-      <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-        <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
+      {/*
+        ONE wrapping row holds the label, the value and the movement, and the DOM order is label → value → movement while
+        the screen keeps label and movement on the first line (CSS `order`). The DOM order is a reader's order too — page
+        text, a copied block, a screen reader — and label → movement → value read «CPA ↑5% 40 SAR», «تكلفة النتيجة 0% 40 ر.س»:
+        a percentage trailing a cost label, the unit defect `owner-acceptance-content.spec.ts` guards. It surfaced on
+        Analytics → content (CI, PR #1071) the day the default period's comparison window (DATE-RANGE-001) gave the format
+        cards a measured baseline. Pixel layout unchanged: the label line keeps `min-h-6`, a wrapped movement keeps its 2px
+        gap, the value keeps its 6px gap (2 + `mt-1`) and its full row.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+        <span className={`order-1 flex min-h-6 items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
         </span>
-        {delta ? (
-          <Delta
-            metric={delta.metric}
-            current={delta.current}
-            previous={delta.previous}
-            since={delta.since}
-            testid={testid ? `${testid}-delta` : undefined}
-          />
-        ) : (
-          trailing
-        )}
-      </div>
 
-      <span
-        dir="ltr"
-        title={exact}
-        data-testid={testid ? `${testid}-value` : undefined}
-        className={`min-h-9 text-start ${lead ? METRIC_VALUE : METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
-      >
-        {value}
-      </span>
+        <span
+          dir="ltr"
+          title={exact}
+          data-testid={testid ? `${testid}-value` : undefined}
+          className={`order-3 mt-1 min-h-9 basis-full text-start ${lead ? METRIC_VALUE : METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
+        >
+          {value}
+        </span>
+
+        {delta ? (
+          <span className="order-2 inline-flex">
+            <Delta
+              metric={delta.metric}
+              current={delta.current}
+              previous={delta.previous}
+              since={delta.since}
+              testid={testid ? `${testid}-delta` : undefined}
+            />
+          </span>
+        ) : trailing ? (
+          <span className="order-2 inline-flex">{trailing}</span>
+        ) : null}
+      </div>
 
       {/*
         RESERVED whether or not it draws — the same rule `MetricStrip` follows for its chart row.

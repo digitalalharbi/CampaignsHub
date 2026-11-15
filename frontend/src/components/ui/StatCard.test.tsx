@@ -198,8 +198,16 @@ describe('a card is the same height whether or not it carries a hint or a pill',
     const withPill = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
     const without = cardOf({ label: 'Budget', value: '250K SAR' })
 
-    expect(withPill.firstElementChild?.className).toMatch(/min-h-6/)
-    expect(without.firstElementChild?.className).toMatch(/min-h-6/)
+    // The label line is reserved on the LABEL itself since the label, value and movement share one wrapping row
+    // (label → value → movement in the DOM, CI-REPAIR PR #1071) — the first child of that row is the label.
+    expect(withPill.firstElementChild?.firstElementChild?.className).toMatch(/min-h-6/)
+    expect(without.firstElementChild?.firstElementChild?.className).toMatch(/min-h-6/)
+  })
+
+  it('reads label, value, then movement — a percentage never trails a cost label in the page text', () => {
+    const card = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
+
+    expect(card.textContent).toBe('CPA33 SAR2%')
   })
 
   it('reserves the hint row, so a card without a hint matches one with', () => {
