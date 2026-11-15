@@ -11,7 +11,11 @@ in `CLAUDE.md` stands: Git outranks
 [`docs/RESUME_STATE.md`](RESUME_STATE.md), which outranks this file. Where this file and Git
 disagree, **Git is right and this file is stale.**
 
-Updated 2026-11-08. The per-item record is the section `Cumulative execution record 2026-11-05` of the matrix; `docs/CampaignsHub_Cumulative_Execution_Reconciliation_2026-11-05.md` governs priority.
+Updated 2026-11-15. **This file is a checkpoint that POINTS to the repository's own records and does not compete with
+them:** the per-item record is the matrix (`docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`), the live narrative is
+[`docs/RESUME_STATE.md`](RESUME_STATE.md) (history in `RESUME_STATE_HISTORY.md`), the execution log is
+[`docs/ACTIVE_EXECUTION_STATE.md`](ACTIVE_EXECUTION_STATE.md), landing is [`docs/MERGE_QUEUE.md`](MERGE_QUEUE.md).
+Sections below dated before 2026-11-15 are snapshots.
 
 ## Last verified commit
 
@@ -19,17 +23,45 @@ Updated 2026-11-08. The per-item record is the section `Cumulative execution rec
 |---|---|
 | Repository | `digitalalharbi/CampaignsHub` |
 | Branch | `main` |
-| Commit | `1769c5307` — batch: every content format opens with a live cover + sync-side media for ChatGPT, Google, X, LinkedIn (#989) |
-| Full sha | `1769c530773e9b72ab1d403d821579d49d1f69ca` |
-| Deployed | Deploy Production run 42456226278, success (conclusion read from GitHub; not a user-facing check by itself) |
+| Written against (full sha) | `fa816e663afcc918e3f1e67e8795af4536a56164` — feat(team): one access center for every invitation (#1067) |
+| Deployed | not re-read for this checkpoint; confirm with the Deploy Production run and the served-asset marker before claiming it |
 
-Verify, do not trust:
+Verify, do not trust: `git fetch origin && git log --oneline -10 origin/main && git status`; stale if `origin/main` has moved past the sha above.
 
-```bash
-git fetch origin && git log --oneline -10 origin/main && git status
-```
+## Landed 2026-11-13 to 2026-11-15 (the overnight queue; 35 PRs, merged on main)
 
-## Landed since the 2026-11-05 entry (merged on main; deployed as noted above)
+- **Results by objective and alerts:** ALERT-CRITERIA checks 4-6 («توقفت أمس», «ما تصرف»), delivering-yesterday rule, manage alert rules (#1060), budget-ran-out alert, objective-aware KPIs that never drop a campaign or a riyal, Google conversion bidding = Sales with `objectives:reclassify`, X/Snap/ChatGPT objective mappings, digests by real objective, ChatGPT content rankable (#1062), report-settings audit and one content-type comparison.
+- **Finance and budgets v2:** FIN-LOOP-001 (one budget per project, spend deducted once, notices to project manager and finance), one-screen budgets with XLSX/CSV, budget periods, payment modes, platform plan, edit/delete/undo ledger entries, PDF «البيان المالي», one disclaimer (#1063, #1064).
+- **Money marks system-wide:** MONEY-MARKS-001 short currency mark beside every money figure (#1065).
+- **Two-step verification:** TWO-STEP-001 enforced at every sign-in (authenticator, email, SMS) (#1066). SMS is AWAITING_CREDENTIALS.
+- **Access center:** one center for every invitation, categories, per-invitation areas, role presets, «المجموعات» rename everywhere (#1067, #1029).
+- **Agents center:** one assistant with its team, chat, settings drawer, memory (AGENTS-ASSISTANT-001, #1068). The provider key is AWAITING_CREDENTIALS.
+- **Audience center:** slices 1 and 2, GEO-001, Snapchat location targeting, TikTok audience report, portal «الجمهور» (#1037, #1069).
+- **Client portal:** three sections, client content approval, project-manager notice (#1038 series).
+- **Content and integrations:** media for Meta/TikTok/Snapchat, X promoted tweets, LinkedIn scopes, TikTok campaign status, SHARE-COPY-LEAK-001, plan usage meter, approved sidebar/home/plans, platform payment alerts.
+- **CI tiering and deploy speed:** CI-TIER-001/002/003 (chromium on every PR, firefox+webkit on the PR being landed, 5 shards), local paratest, flake root-causes. Measured times are in `docs/MERGE_QUEUE.md`.
+
+Every new matrix row from this batch is IMPLEMENTED_NOT_VERIFIED until live evidence is recorded; nothing here is LIVE_VERIFIED.
+
+## Commands that verify (current)
+
+- Backend: `~/Developer/ch-scripts/ptest.sh <worktree> --parallel [filter]` (one suite per test DB; never two at once), plus `vendor/bin/pint --test` and `vendor/bin/phpstan analyse`.
+- Frontend: `cd frontend && npx tsc -b` then `npx vitest run` (CI type-checks test files; `tsc --noEmit` is a no-op).
+- Browser: Playwright specs for the touched surface (`npm run gate` for all three browsers); ports 8100/5273/5373 and DB `mediabuying_e2e` must be free first.
+- Landing: `~/Developer/ch-scripts/lander/lander.sh status`.
+
+## Outstanding tasks
+
+Owner actions: reconnect Meta, X and LinkedIn; Anthropic key for the assistant; Twilio for SMS (and WhatsApp); AI Connect decisions D1-D14 parked to December; Meta #930 stays under OWNER HOLD (not for the Lander); the Owner verifies the budgets page numbers; TikTok Asset Library re-grant.
+Engineering: record live evidence per new matrix row, then flip its status; nothing else is queued by this checkpoint.
+
+## Safe next actions
+
+1. Fetch, compare `origin/main` to the sha above, read `RESUME_STATE.md`.
+2. Cut a fresh worktree from `origin/main`; never reuse another session's.
+3. Take a defect with a reproduced failure or an Owner-supplied item; do not reopen verified work.
+
+## Snapshot 2026-11-08 — landed since the 2026-11-05 entry (merged on main; deployed as noted above)
 
 #973 Meta diagnostics · #975 sync checkpoints and budget · #976 stores/GA4 link · #978 mail test send, logo, footer ·
 #979 GA4 store analytics · #980 Google link in place · #981 notification channels · #982 attribution match ·

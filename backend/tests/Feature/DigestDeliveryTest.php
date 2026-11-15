@@ -10,7 +10,6 @@ use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
-use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\Project;
@@ -25,6 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Ramsey\Uuid\Uuid;
+use Tests\Support\ConfiguredDigestEmailProvider;
 use Tests\TestCase;
 
 /**
@@ -585,25 +585,5 @@ final class DigestDeliveryTest extends TestCase
 
         // It falls back to UTC, where the hour DOES match — so the sweep completes and delivers.
         Mail::assertSent(DailyDigestMail::class, 1);
-    }
-}
-
-/** A stand-in for a real, credentialed provider — the registry's own honest mapping is what is tested. */
-final class ConfiguredDigestEmailProvider implements MessageProvider
-{
-    public function channel(): string
-    {
-        return 'email';
-    }
-
-    public function isConfigured(): bool
-    {
-        return true;
-    }
-
-    /** @param  array<string,mixed>  $payload */
-    public function send(string $destination, array $payload): array
-    {
-        return ['status' => 'sent', 'provider_message_id' => 'digest-ack', 'error' => null];
     }
 }

@@ -14,7 +14,7 @@ import { moneyParts, type MoneyTotals } from '@/lib/money/contract'
 import { PendingConversionChip } from '../PendingConversionChip'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
-import type { LivePayload } from '../api'
+import type { AdsBasis, LivePayload } from '../api'
 import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
 import { BusinessStreamsSection } from '../BusinessStreamsSection'
@@ -109,7 +109,9 @@ function ContentStrip({
   empty,
   columns = 4,
   note,
+  basis,
 }: {
+  basis?: AdsBasis | null
   note?: string | null
   columns?: 3 | 4
   title: string
@@ -133,7 +135,7 @@ function ContentStrip({
       ) : (
         <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${columns === 4 ? 'xl:grid-cols-4' : ''}`}>
           {items.map((c, i) => (
-            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} />
+            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} rankedBy={ranked ? basis : undefined} />
           ))}
         </div>
       )}
@@ -231,6 +233,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent,
             title={`${ar ? 'أفضل المحتوى' : 'Best content'}${basisLine(payload.ads_basis, ar) ? ` — ${basisLine(payload.ads_basis, ar)}` : ''}`}
             items={(payload.ads ?? []).slice(0, 6)}
             testid="standard-best-content"
+            basis={payload.ads_basis}
             currency={currency}
             locale={locale}
             onOpen={onOpenContent}
@@ -640,6 +643,7 @@ function PlatformDetail({
             onOpen={onOpenContent}
             ranked
             note={basisLine(payload.ads_basis, ar)}
+            basis={payload.ads_basis}
             action={goToContent ? <GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} /> : undefined}
             empty={ar ? 'لا يوجد محتوى بأرقام على هذه المنصة في هذه الفترة.' : 'No content with figures on this platform in this period.'}
           />

@@ -39,6 +39,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
+use Tests\Support\ConfiguredDigestEmailProvider;
 use Tests\TestCase;
 
 /**
@@ -61,10 +62,6 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        // The test mail channel lives beside its first user; loaded here so this file passes when it runs alone.
-        if (! class_exists(ConfiguredDigestEmailProvider::class, false)) {
-            require_once __DIR__.'/DigestDeliveryTest.php';
-        }
         Carbon::setTestNow(Carbon::parse(self::NOW_UTC, 'UTC'));
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-yd-'.uniqid(), 'status' => 'active']);

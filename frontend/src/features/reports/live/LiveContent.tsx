@@ -3,13 +3,14 @@ import { ProviderName } from '@/components/ProviderMark'
 import { AdPoster } from '@/features/content/AdPoster'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { canonicalPlatform } from '@/lib/platforms'
+import { numberFormatter } from '@/lib/numerals'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import { figuresFor, type ReportAd } from '../ReportAdsSection'
 import { PendingConversionChip } from '../PendingConversionChip'
 import type { RosterRow } from '../ReportCreativeRoster'
 import { ReportAdDetail } from '../ReportAdDetail'
-import { fetchLiveContent, type LiveContentPayload } from '../api'
+import { fetchLiveContent, type AdsBasis, type LiveContentPayload } from '../api'
 
 /**
  * One shape for a piece of content, whichever list it came from.
@@ -35,6 +36,25 @@ export function asContent(row: RosterRow | ReportAd): ReportAd {
  * row object comes from a memoised sort, the open handler is memoised in `LiveSharedReport` — so a
  * shallow comparison lets the grid skip the fifty poster + figures re-renders that changed nothing.
  */
+/** Counts a card can print beside its rank. Money and ratio metrics keep their own rules in `figuresFor`. */
+const RANKED_COUNTS = new Set(['impressions', 'reach', 'clicks', 'landing_page_views', 'engagements', 'video_views', 'video_completions', 'leads', 'qualified_leads', 'purchases', 'conversions', 'installs', 'registrations', 'in_app_events'])
+
+/**
+ * The figure a card is ranked by must be on the card. ChatGPT ads are ranked by clicks (fallback ladder) and printed only
+ * «Spend», so the order read as arbitrary. The ranked count leads; the card keeps three figures. Latin digits, no currency mark.
+ */
+export function withRankedFigure(figures: { label: string; value: string; pending?: string | null }[], content: ReportAd, basis: AdsBasis | null | undefined, ar: boolean) {
+  const metric = basis?.metric
+  if (!metric || !RANKED_COUNTS.has(metric)) return figures
+  const raw = (content as Record<string, unknown>)[metric]
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return figures
+  const label = (ar ? basis?.label_ar : basis?.label_en) ?? metric
+  if (figures.some((f) => f.label === label)) return figures
+  const value = numberFormatter('en-US', { maximumFractionDigits: 0 }).format(raw)
+
+  return [{ label, value }, ...figures].slice(0, 3)
+}
+
 export const ContentTile = memo(function ContentTile({
   content,
   locale,
@@ -42,6 +62,7 @@ export const ContentTile = memo(function ContentTile({
   onOpen,
   rank,
   resultsOnly = false,
+  rankedBy,
 }: {
   content: ReportAd
   locale: Locale
@@ -50,10 +71,12 @@ export const ContentTile = memo(function ContentTile({
   rank?: number
   /** CLIENT-REPORT-FRAMING-001 — the summary's tiles state results, never spend or cost. */
   resultsOnly?: boolean
+  /** The ranking basis of the list this tile sits in: the figure the card is ranked by is shown on it (counts only, never a money mark). */
+  rankedBy?: AdsBasis | null
 }) {
   const ar = locale === 'ar'
   const provider = content.provider ? canonicalPlatform(content.provider) : null
-  const figures = figuresFor(content, ar, currency, { resultsOnly })
+  const figures = withRankedFigure(figuresFor(content, ar, currency, { resultsOnly }), content, rankedBy, ar)
   const openable = onOpen !== undefined && !!content.content_key
 
   const body = (
