@@ -20,6 +20,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
@@ -51,6 +52,18 @@ trait FundingFixtures
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'V', 'slug' => 'v-'.uniqid()]);
         $role->givePermissionTo(...Permission::query()->whereIn('key', $permissions)->pluck('key')->all());
         $user = User::create(['name' => 'V '.uniqid(), 'email' => 'v-'.uniqid().'@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
+        $this->grantMembership($user, $this->tenant);
+        $user->assignRole($role);
+
+        return $user;
+    }
+
+    /** An owner of the tenant with every permission, for the project-scoped endpoints. */
+    private function owner(): User
+    {
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Owner', 'slug' => 'tenant-owner']);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $user = User::create(['name' => 'O', 'email' => 'o-'.uniqid().'@a.test', 'password' => Hash::make('secret1234'), 'email_verified_at' => now()]);
         $this->grantMembership($user, $this->tenant);
         $user->assignRole($role);
 
@@ -146,5 +159,14 @@ trait FundingFixtures
         return SpendLimit::create(['tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'scope' => $scope->value, 'scope_id' => $scopeId,
             'amount' => $amount, 'currency' => $currency, 'starts_on' => $this->day($fromAgo), 'ends_on' => $this->day(-$toAhead),
             'thresholds' => $thresholds, 'active' => true]);
+    }
+
+    /** Select an account for a project — the deny-by-default rule every figure follows. */
+    private function bind(Project $project, ExternalAccount $account): void
+    {
+        $exists = DB::table('project_integration_bindings')->where('project_id', $project->id)->where('external_account_id', $account->id)->exists();
+        if ($exists) {
+            DB::table('project_integration_bindings')->where('project_id', $project->id)->where('external_account_id', $account->id)->update(['is_active' => true]);
+        }
     }
 }

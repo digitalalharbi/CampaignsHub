@@ -93,4 +93,19 @@ final class NovBudgetFxDefaultTest extends TestCase
         $this->assertSame('unknown', $row['state']);
         $this->assertSame('currency_mismatch', $row['basis']);
     }
+
+    public function test_the_limits_list_tells_the_page_which_currency_a_new_limit_starts_in(): void
+    {
+        $owner = $this->owner();
+        $project = $this->newProject('Palm');
+        $this->limitSpend($project, 2, 750, 'SAR', 'SAR');
+
+        $this->actingAs($owner, 'sanctum')->getJson('/api/v1/projects/'.$project->id.'/spend-limits')->assertOk()
+            ->assertJsonPath('meta.project_currency', 'SAR');
+
+        $other = $this->newProject('Dollar');
+        $this->limitSpend($other, 2, 100, 'USD', 'USD');
+        $this->actingAs($owner, 'sanctum')->getJson('/api/v1/projects/'.$other->id.'/spend-limits')->assertOk()
+            ->assertJsonPath('meta.project_currency', 'USD');
+    }
 }

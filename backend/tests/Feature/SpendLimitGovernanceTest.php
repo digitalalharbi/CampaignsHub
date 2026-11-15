@@ -411,7 +411,8 @@ final class SpendLimitGovernanceTest extends TestCase
             'the alert was refreshed and re-notified for a threshold that was already announced',
         );
 
-        $event = SpendLimitEvent::withoutGlobalScopes()->where('spend_limit_id', $limit->id)->firstOrFail();
+        // 75% is always announced too (BUDGET-LIMIT-ALERTS-001), so the ledger holds 75 and 80; the announced one is the highest.
+        $event = SpendLimitEvent::withoutGlobalScopes()->where('spend_limit_id', $limit->id)->orderByDesc('threshold')->firstOrFail();
         $this->assertSame(80, $event->threshold);
         $this->assertEqualsWithDelta(8_500.0, $event->consumed, 0.01, 'the figures are kept as they stood, not recomputed later');
         $this->assertEqualsWithDelta(10_000.0, $event->limit_amount, 0.01);

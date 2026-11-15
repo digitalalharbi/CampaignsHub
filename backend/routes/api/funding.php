@@ -18,6 +18,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('fund
     Route::get('disclaimer', [FundingController::class, 'disclaimer'])->name('disclaimer');
     Route::get('rate', [FundingRateController::class, 'show'])->name('rate.show');
     Route::put('rate', [FundingRateController::class, 'update'])->middleware('throttle:30,1')->name('rate.update');
+    Route::get('renew-next-month', [FundingRateController::class, 'renewPreview'])->name('renew.preview');
+    Route::post('renew-next-month', [FundingRateController::class, 'renewApply'])->middleware('throttle:10,1')->name('renew.apply');
     Route::get('/', [FundingController::class, 'index'])->name('index');
     Route::post('payments', [FundingController::class, 'store'])->middleware('throttle:30,1')->name('payments.store');
     Route::get('projects/{funded}', [FundingController::class, 'show'])->whereUuid('funded')->name('projects.show');

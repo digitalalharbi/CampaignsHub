@@ -67,8 +67,8 @@ const T = {
   amount: { ar: 'المبلغ', en: 'Amount' },
   currency: { ar: 'العملة', en: 'Currency' },
   currencyHint: {
-    ar: 'يُقارَن الحد بإنفاق المشروع بعملته. عملة مختلفة تعني أن الأرقام تُحجب وتُقرأ الحالة «غير معروف».',
-    en: 'The limit is compared against the project’s own reported spend. A different currency means the figures are withheld and the limit reads «unknown».',
+    ar: 'عملة المشروع هي الافتراضية. لو اخترت عملة ثانية يُحوَّل الإنفاق إليها بسعر الصرف؛ وبلا سعر صرف تُحجب الأرقام.',
+    en: 'The project’s currency is the default. Another currency converts the spend at the exchange rate; with no rate the figures are withheld.',
   },
   from: { ar: 'من', en: 'From' },
   to: { ar: 'إلى', en: 'To' },
@@ -182,7 +182,7 @@ export function NewSpendLimitDialog({
 
   return (
     <>
-      <Button data-testid="spend-limit-new" onClick={() => setOpen(true)}>
+      <Button data-testid="spend-limit-new" onClick={() => { setCurrency(suggestedCurrency); setOpen(true) }}>
         {t('new', ar)}
       </Button>
 

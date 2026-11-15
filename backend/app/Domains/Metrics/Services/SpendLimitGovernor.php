@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Services;
 
+use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Funding\Services\SourceFreshness;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\MoneyState;
 use App\Domains\Metrics\Enums\SpendLimitScope;
@@ -53,14 +55,15 @@ final class SpendLimitGovernor
     public function __construct(
         private readonly MetricsAggregator $metrics,
         private readonly CurrencyConverter $fx,
+        private readonly SourceFreshness $freshness,
     ) {}
 
     /**
-     * One limit, read against today.
+     * One limit, read against today. `$detail` adds the run-out day and the data-freshness marker: only the limits page wants them, so a sweep, a digest or a launch check pays no statement for them.
      *
      * @return array<string, mixed>
      */
-    public function read(SpendLimit $limit, Carbon $today): array
+    public function read(SpendLimit $limit, Carbon $today, bool $detail = false): array
     {
         $from = $limit->starts_on->copy()->startOfDay();
         $to = $limit->ends_on->copy()->startOfDay();
@@ -150,10 +153,57 @@ final class SpendLimitGovernor
                 ? round($consumed / $elapsedFraction, 2)
                 : null,
             'projected_exhaustion' => $this->projectExhaustion($limit, $consumed, $comparable, $elapsedDays, $today, $to),
+            // `$detail` false is the alert sweep, which needs neither: it must not spend statements on what it never reads.
+            'run_out' => $detail ? $this->runOut($limit, $comparable, $remaining, $today, $to, $conversion['rate'] ?? 1.0) : null,
+            'freshness' => $detail ? $this->freshnessOf($limit) : null,
             'thresholds' => $limit->thresholdPercents(),
             'state' => $this->state($limit, $utilisation, $comparable)->value,
             'basis' => $this->basis($scope, $limit, $comparable, $currency),
         ];
+    }
+
+    /**
+     * BUDGET-RUNOUT-001 — the day the limit runs out at the spend rate of the LAST 3 full days, in the limit's currency.
+     * Withheld (with the reason) when nothing comparable was spent in those days, or the limit is already reached.
+     *
+     * @return array{date: string|null, reason: string, per_day: float|null}
+     */
+    private function runOut(SpendLimit $limit, bool $comparable, ?float $remaining, Carbon $today, Carbon $to, float $rate): array
+    {
+        if (! $comparable || $remaining === null) {
+            return ['date' => null, 'reason' => 'no_comparable_spend', 'per_day' => null];
+        }
+        if ($remaining <= 0) {
+            return ['date' => null, 'reason' => 'already_reached', 'per_day' => null];
+        }
+        $from = $today->copy()->subDays(3)->startOfDay();
+        $totals = $this->scoped($limit)->totals($from, $today->copy()->subDay()->startOfDay());
+        $perDay = ((float) ($totals['spend'] ?? 0)) * $rate / 3;
+        if ($perDay <= 0) {
+            return ['date' => null, 'reason' => 'no_spend_rate', 'per_day' => null];
+        }
+        $date = $today->copy()->startOfDay()->addDays((int) floor($remaining / $perDay));
+
+        return ['date' => $date->toDateString(), 'reason' => 'projected', 'per_day' => round($perDay, 2)];
+    }
+
+    /** @return array{stale: bool, items: list<array<string, mixed>>} */
+    private function freshnessOf(SpendLimit $limit): array
+    {
+        return match ($limit->scope) {
+            SpendLimitScope::Project => $this->freshness->forProject((string) $limit->project_id),
+            SpendLimitScope::Platform => $this->freshness->forProject((string) $limit->project_id, [(string) $limit->scope_id]),
+            SpendLimitScope::Account => $this->freshness->forProject((string) $limit->project_id, null, [(string) $limit->scope_id]),
+            // A campaign belongs to ONE account: its own account is the platform it rests on.
+            SpendLimitScope::Campaign => $this->freshness->forProject((string) $limit->project_id, null, $this->campaignAccountIds($limit)),
+        };
+    }
+
+    /** @return list<string> */
+    private function campaignAccountIds(SpendLimit $limit): array
+    {
+        return ExternalCampaign::query()->where('project_id', $limit->project_id)
+            ->where('unified_campaign_id', $limit->scope_id)->pluck('external_account_id')->map(static fn ($i): string => (string) $i)->unique()->values()->all() ?: ['none'];
     }
 
     /**

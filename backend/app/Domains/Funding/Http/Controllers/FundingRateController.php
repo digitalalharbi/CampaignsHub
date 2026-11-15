@@ -7,6 +7,7 @@ namespace App\Domains\Funding\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Services\FundingSpendRefresher;
+use App\Domains\Funding\Services\RenewNextMonth;
 use App\Domains\Funding\Services\WorkspaceFxDefault;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -65,5 +66,35 @@ final class FundingRateController extends Controller
     private function tenantId(): string
     {
         return (string) app(TenantContext::class)->tenantId();
+    }
+
+    /** GET funding/renew-next-month — what «جدّد كل الميزانيات للشهر القادم» would copy, with amounts to confirm. Writes nothing. */
+    public function renewPreview(Request $request, RenewNextMonth $renew): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User && $user->hasPermission('funding.manage'), 403);
+
+        return ApiResponse::success($renew->preview($user), 'Renewal preview.');
+    }
+
+    /** POST funding/renew-next-month — creates only what was confirmed, with the amounts confirmed. */
+    public function renewApply(Request $request, RenewNextMonth $renew, AuditLogger $audit): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User && $user->hasPermission('funding.manage'), 403);
+        $data = $request->validate([
+            'confirmed' => ['required', 'accepted'],
+            'budgets' => ['present', 'array', 'max:500'],
+            'budgets.*.project_id' => ['required', 'uuid'],
+            'budgets.*.amount' => ['required', 'numeric', 'gt:0', 'max:1000000000'],
+            'limits' => ['present', 'array', 'max:500'],
+            'limits.*.id' => ['required', 'uuid'],
+            'limits.*.amount' => ['required', 'numeric', 'gt:0', 'max:1000000000'],
+        ]);
+
+        $made = $renew->apply($user, $data['budgets'], $data['limits']);
+        $audit->log(action: 'funding.renewed_next_month', entityType: 'workspace', entityId: null, before: null, after: $made);
+
+        return ApiResponse::success($made, 'Renewed.', status: 201);
     }
 }

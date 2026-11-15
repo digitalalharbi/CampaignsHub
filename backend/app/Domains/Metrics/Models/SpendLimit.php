@@ -36,6 +36,9 @@ final class SpendLimit extends Model
      */
     public const ENFORCEMENT = 'internal_monitoring';
 
+    /** BUDGET-LIMIT-ALERTS-001 — the thresholds every limit announces, in the system and by mail, whatever it was created with. */
+    public const ALERT_THRESHOLDS = [75, 90, 100];
+
     protected $fillable = [
         'tenant_id', 'project_id', 'scope', 'scope_id', 'amount', 'currency',
         'starts_on', 'ends_on', 'thresholds', 'active', 'created_by',

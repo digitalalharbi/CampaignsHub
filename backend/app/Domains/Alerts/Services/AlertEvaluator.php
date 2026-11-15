@@ -184,6 +184,7 @@ final class AlertEvaluator
         private readonly DataFreshnessService $freshness,
         private readonly AlertEventMailer $mailer,
         private readonly LinkHealth $linkHealth,
+        private readonly SpendLimitThresholdMail $thresholdMail,
     ) {}
 
     /**
@@ -1430,28 +1431,37 @@ final class AlertEvaluator
                     return;
                 }
 
-                $crossed = $this->highestCrossedThreshold($limit, (float) $reading['utilisation']);
-
-                if ($crossed === null) {
-                    return;
+                /*
+                 * BUDGET-LIMIT-ALERTS-001 — every threshold crossed is recorded once (the ledger's unique key is the dedup);
+                 * the HIGHEST one newly crossed is announced, in the system and by mail. 75%, 90% and 100% are always among
+                 * them, whatever the limit was created with, so a jump from 70% to 95% still leaves 75 and 90 on record.
+                 */
+                $newest = null;
+                $recorded = null;
+                foreach ($this->crossedThresholds($limit, (float) $reading['utilisation']) as $threshold) {
+                    $event = SpendLimitEvent::query()->firstOrCreate(
+                        ['spend_limit_id' => $limit->getKey(), 'threshold' => $threshold],
+                        [
+                            'tenant_id' => $limit->tenant_id,
+                            'consumed' => $reading['consumed'],
+                            'limit_amount' => $reading['amount'],
+                            'currency' => $limit->currency,
+                            'crossed_at' => $now,
+                        ],
+                    );
+                    if ($event->wasRecentlyCreated) {
+                        $newest = $threshold;
+                        $recorded = $event;
+                    }
                 }
-
-                $recorded = SpendLimitEvent::query()->firstOrCreate(
-                    ['spend_limit_id' => $limit->getKey(), 'threshold' => $crossed],
-                    [
-                        'tenant_id' => $limit->tenant_id,
-                        'consumed' => $reading['consumed'],
-                        'limit_amount' => $reading['amount'],
-                        'currency' => $limit->currency,
-                        'crossed_at' => $now,
-                    ],
-                );
 
                 // Already announced. The ledger is the dedup; re-raising would be a second alert for
                 // one event, which is the shape MAIL-006's cooldown exists to prevent.
-                if (! $recorded->wasRecentlyCreated) {
+                if ($newest === null || $recorded === null) {
                     return;
                 }
+                $crossed = $newest;
+                $this->thresholdMail->send($limit, $reading, $crossed, $now);
 
                 $out[] = [
                     'entity_type' => SpendLimit::class,
@@ -1476,15 +1486,17 @@ final class AlertEvaluator
         return $out;
     }
 
-    /** The highest configured threshold this utilisation has passed, or null for none. */
-    private function highestCrossedThreshold(SpendLimit $limit, float $utilisation): ?int
+    /**
+     * Every threshold this utilisation has passed, ascending: the limit's own plus the always-on 75, 90 and 100.
+     *
+     * @return list<int>
+     */
+    private function crossedThresholds(SpendLimit $limit, float $utilisation): array
     {
-        $crossed = array_filter(
-            $limit->thresholdPercents(),
-            static fn (int $t): bool => $utilisation * 100 >= $t,
-        );
+        $all = array_values(array_unique(array_merge($limit->thresholdPercents(), SpendLimit::ALERT_THRESHOLDS)));
+        sort($all);
 
-        return $crossed === [] ? null : max($crossed);
+        return array_values(array_filter($all, static fn (int $t): bool => $utilisation * 100 >= $t));
     }
 
     /**

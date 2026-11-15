@@ -1,3 +1,4 @@
+import { FreshnessChip } from './FreshnessChip'
 import { useEffect, useState } from 'react'
 import { Pencil, RefreshCw, Trash2, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
@@ -81,6 +82,13 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
               </div>
             </div>
           )}
+
+          {data.run_out_date && (
+            <p className="text-xs font-semibold text-text-secondary" data-testid="budget-run-out" title={ar ? 'من متوسط إنفاق آخر 3 أيام' : 'From the average spend of the last 3 days'}>
+              {ar ? 'تخلص تقريبًا في' : 'Runs out about'} <bdi dir="ltr" className="tnum">{data.run_out_date}</bdi>
+            </p>
+          )}
+          <FreshnessChip freshness={data.freshness} testid="budget-freshness" />
 
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">

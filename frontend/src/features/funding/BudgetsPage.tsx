@@ -10,6 +10,7 @@ import { AddBudgetDialog } from './AddBudgetDialog'
 import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { FxRateBar } from './FxRateBar'
+import { RenewAllButton } from './RenewAllDialog'
 import { BudgetDrawer } from './BudgetDrawer'
 import { DeleteBudgetDialog, EditBudgetDialog } from './EditBudgetDialog'
 import { UndoToast } from './UndoToast'
@@ -83,6 +84,7 @@ export function BudgetsPage() {
                   {showDeleted ? tx(L.back) : `${tx(L.deleted)} · ${data?.deletedCount ?? 0}`}
                 </Button>
               ) : null}
+              {canManage && !showDeleted && <RenewAllButton />}
               {canManage && !showDeleted && (
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="budgets-add"><Plus className="h-4 w-4" aria-hidden /> {tx(L.add)}</Button>
               )}
