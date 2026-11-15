@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fmtClock, fmtDate, fmtDateTime } from './datetime'
+import { fmtClock, fmtDate, fmtDateTime, parseDate } from './datetime'
 
 /**
  * DATE-FORMAT-002 — a bare `toLocaleTimeString()` takes the READER's locale.
@@ -35,5 +35,22 @@ describe('canonical date and time formatting', () => {
       expect(fmtDate(bad as never)).toBe('—')
       expect(fmtDateTime(bad as never)).toBe('—')
     }
+  })
+})
+
+describe('NOV-SAFARI-001 — a spaced timestamp is read the way Safari needs it', () => {
+  it('turns «YYYY-MM-DD HH:mm:ss» into the ISO form before parsing', () => {
+    const spaced = parseDate('2026-11-15 10:30:00')
+    const iso = new Date('2026-11-15T10:30:00')
+
+    expect(spaced.getTime()).toBe(iso.getTime())
+    expect(fmtDateTime('2026-11-15 10:30:00')).toBe('2026-11-15 10:30')
+    expect(fmtDate('2026-11-15 10:30:00')).toBe('2026-11-15')
+    expect(fmtClock('2026-11-15 10:30:45')).toBe('10:30:45')
+  })
+
+  it('leaves a value that is already ISO, and a number, alone', () => {
+    expect(parseDate('2026-11-15T10:30:00Z').toISOString()).toBe('2026-11-15T10:30:00.000Z')
+    expect(parseDate(0).getTime()).toBe(0)
   })
 })

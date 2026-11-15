@@ -237,7 +237,7 @@ export function AgencyShell() {
         </>
       }
       header={
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
