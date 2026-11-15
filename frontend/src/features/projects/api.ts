@@ -38,6 +38,8 @@ export interface ProjectSummary {
 export interface Project {
   id: string
   client_workspace_id: string
+  /** PROJECT-LIFECYCLE-001 §8 — the client's name, on the listing (every portal). */
+  client_name?: string | null
   name: string
   status: string
   /** PROJECT-LIFECYCLE-001 — the stored lifecycle state; `status` is the display one (may derive «onboarding»). */
@@ -78,6 +80,8 @@ export interface Binding {
   is_active: boolean
   account: ExternalAccount | null
   created_at: string | null
+  /** PROJECT-LIFECYCLE-001 §8 — other projects this account is ALSO actively linked to («مشترك»). Absent from an older server. */
+  shared_with?: { id: string; name: string }[]
 }
 
 /**

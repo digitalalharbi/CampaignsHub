@@ -155,7 +155,8 @@ export async function updateSettings(id: string, patch: ClientSettingsPatch) {
   return res.data
 }
 
-export const archiveClient = (id: string, reason?: string) => api.post(`/app/clients/${id}/archive`, { reason })
+/** PROJECT-LIFECYCLE-001 §8 — the server requires the typed client name (it archives the client's projects too). */
+export const archiveClient = (id: string, confirmName: string, reason?: string) => api.post(`/app/clients/${id}/archive`, { confirm_name: confirmName, reason })
 export const restoreClient = (id: string) => api.post(`/app/clients/${id}/restore`, {})
 
 export interface ClientAnalytics {
