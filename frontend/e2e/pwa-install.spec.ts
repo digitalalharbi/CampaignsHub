@@ -105,27 +105,113 @@ test.describe('signed in', () => {
     }
   })
 
+  /*
+   * The title keeps « — chromium» because the gate matches tests by name; it now RUNS in every browser (CI PR #1071).
+   *
+   * Chromium: the real thing — offline emulation reaches the service worker, the navigation fails, the worker answers it.
+   * Firefox and WebKit: Playwright's offline emulation and `page.route` do not reach a service worker's own fetches there,
+   * so a failed navigation cannot be produced faithfully. What CAN be asserted in the real browser is everything the
+   * worker's offline branch depends on: the worker is active and controls the page, `/offline.html` is precached in the
+   * worker's cache, and the cached page is the one a person must see (heading + retry button, rendered). The branch
+   * decision itself — network failed → that cached page, never a half-loaded app — is the worker's `navigate()`, covered
+   * for every branch in `src/app/sw.test.ts` («opens offline to the offline page…»).
+   */
   test('with no connection it shows the offline page — chromium', async ({ page, context, browserName }) => {
-    test.skip(browserName !== 'chromium', 'Playwright only emulates offline faithfully for a service worker in Chromium; the worker logic itself is unit-tested for every branch.')
-
     await page.goto('/agency/dashboard')
     await workerReady(page)
-    await context.setOffline(true)
-    await page.goto('/agency/dashboard')
 
+    if (browserName === 'chromium') {
+      await context.setOffline(true)
+      await page.goto('/agency/dashboard')
+
+      await expect(page.getByRole('heading', { name: 'لا يوجد اتصال بالإنترنت' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'حاول مرة ثانية' })).toBeVisible()
+      await context.setOffline(false)
+
+      return
+    }
+
+    const worker = await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.getRegistration()
+      return { active: reg?.active?.state ?? null, controlled: navigator.serviceWorker.controller !== null }
+    })
+    expect(worker).toEqual({ active: 'activated', controlled: true })
+
+    // Precached by the worker, as an HTML document — what its offline branch answers with.
+    const cached = await page.evaluate(async () => {
+      const hit = await caches.match('/offline.html')
+      return hit ? { status: hit.status, type: hit.headers.get('content-type') ?? '', html: await hit.text() } : null
+    })
+    expect(cached, '/offline.html is not in the worker\'s cache').not.toBeNull()
+    expect(cached!.status).toBe(200)
+    expect(cached!.type).toMatch(/text\/html/)
+
+    // And it is the page a person must see: rendered from the cached bytes, it says so and offers a retry.
+    await page.setContent(cached!.html)
     await expect(page.getByRole('heading', { name: 'لا يوجد اتصال بالإنترنت' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'حاول مرة ثانية' })).toBeVisible()
-    await context.setOffline(false)
   })
 
+  /*
+   * The title keeps « — chromium» because the gate matches tests by name; it now RUNS in every browser (CI PR #1071).
+   * Chromium asks the browser's own installability audit (a CDP call). Firefox and WebKit have no such audit, so the same
+   * criteria are checked from the page itself: the manifest the page links, its identity and display, start_url inside
+   * scope, the 192/512 icons (any + maskable) served as PNG, the colours and language, an active service worker
+   * controlling the page, and the apple-touch-icon Safari installs from.
+   */
   test('Chromium finds nothing wrong with installing it — chromium', async ({ page, context, browserName }) => {
-    test.skip(browserName !== 'chromium', 'The installability audit is a Chrome DevTools Protocol call.')
-
     await page.goto('/login')
     await workerReady(page)
-    const cdp = await context.newCDPSession(page)
-    const { installabilityErrors } = (await cdp.send('Page.getInstallabilityErrors')) as { installabilityErrors: Array<{ errorId: string }> }
 
-    expect(installabilityErrors.map((e) => e.errorId)).toEqual([])
+    if (browserName === 'chromium') {
+      const cdp = await context.newCDPSession(page)
+      const { installabilityErrors } = (await cdp.send('Page.getInstallabilityErrors')) as { installabilityErrors: Array<{ errorId: string }> }
+
+      expect(installabilityErrors.map((e) => e.errorId)).toEqual([])
+
+      return
+    }
+
+    const audit = await page.evaluate(async () => {
+      const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
+      if (!link) throw new Error('the page links no manifest')
+      const res = await fetch(link.href)
+      const m = await res.json() as Record<string, unknown> & { icons?: Array<{ src: string; sizes: string; type?: string; purpose?: string }> }
+      const scope = new URL(String(m.scope ?? '/'), link.href).href
+      const start = new URL(String(m.start_url ?? ''), link.href).href
+      const icons: string[] = []
+      for (const icon of m.icons ?? []) {
+        const r = await fetch(new URL(icon.src, link.href).href)
+        if (r.ok && (r.headers.get('content-type') ?? '').includes('image/png')) {
+          for (const purpose of String(icon.purpose ?? 'any').split(/\s+/)) icons.push(`${purpose}:${icon.sizes}`)
+        }
+      }
+      const reg = await navigator.serviceWorker.getRegistration()
+      const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')
+      const appleRes = apple ? await fetch(apple.href) : null
+
+      return {
+        manifestType: res.headers.get('content-type') ?? '',
+        named: typeof m.name === 'string' && m.name !== '' && typeof m.short_name === 'string' && m.short_name !== '',
+        display: m.display,
+        startInScope: start.startsWith(scope) && new URL(start).origin === location.origin,
+        icons,
+        theme: m.theme_color, background: m.background_color, lang: m.lang, dir: m.dir,
+        worker: reg?.active?.state ?? null,
+        controlled: navigator.serviceWorker.controller !== null,
+        apple: appleRes ? { ok: appleRes.ok, type: appleRes.headers.get('content-type') ?? '' } : null,
+      }
+    })
+
+    expect(audit.manifestType).toMatch(/application\/(manifest\+)?json/)
+    expect(audit.named, 'name and short_name').toBe(true)
+    expect(audit.display).toBe('standalone')
+    expect(audit.startInScope, 'start_url inside scope, same origin').toBe(true)
+    for (const needed of ['any:192x192', 'any:512x512', 'maskable:192x192', 'maskable:512x512']) expect(audit.icons, needed).toContain(needed)
+    expect(audit.theme).toMatch(/^#[0-9a-f]{6}$/i)
+    expect(audit.background).toMatch(/^#[0-9a-f]{6}$/i)
+    expect({ lang: audit.lang, dir: audit.dir }).toEqual({ lang: 'ar', dir: 'rtl' })
+    expect({ worker: audit.worker, controlled: audit.controlled }).toEqual({ worker: 'activated', controlled: true })
+    expect(audit.apple).toEqual({ ok: true, type: expect.stringContaining('image/png') })
   })
 })

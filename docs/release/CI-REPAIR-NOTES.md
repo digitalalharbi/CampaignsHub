@@ -106,3 +106,14 @@ Round 3 local evidence (run at 00:4x–01:xx Riyadh, i.e. the same clock window 
 webkit **63/63** on notifications-bell, campaign-write-control, project-lifecycle, analytics-normalization,
 live-link-builder, live-link-creation, period-picker, campaigns, entity-workspace, role-dashboard, budgets-ledger,
 spend-limits-drawn, ga4-print-fit. Vitest 775 files / 5365 tests; `tsc -b`, oxlint clean; pint, phpstan clean.
+
+## Round 4 — CI run 43766287018 (HEAD `127c87870`): every test green in all three browsers; gate policy red
+
+| # | Gate finding | Cause | Fix |
+|---|---|---|---|
+| 20 | `gate-verdict.py`: «with no connection it shows the offline page — chromium» and «Chromium finds nothing wrong with installing it — chromium» (`pwa-install.spec.ts`, builder L) SKIPPED in firefox/webkit but ran in the pre-sharding baseline | both bodies called `test.skip(browserName !== 'chromium')` | both now RUN in every browser; titles unchanged (the gate matches by name); Chromium assertions untouched. **Installability** in firefox/webkit: the manifest the page links (manifest content-type, name + short_name, `display: standalone`, start_url inside scope and same origin, any + maskable 192/512 icons served as PNG, theme and background colours, `lang: ar`/`dir: rtl`), an activated service worker controlling the page, and the apple-touch-icon served as PNG. **Offline** in firefox/webkit: Playwright's offline emulation and `page.route` do not reach a service worker's own fetches there, so the failed navigation itself is not produced; the test asserts the worker is activated and controlling, `/offline.html` is in its cache as HTML 200, and the cached page renders the heading and the retry button; the branch decision (network failed → that cached page) is the worker's `navigate()`, unit-tested in `src/app/sw.test.ts` — said in the test comment. `gate-allowed-skips.json` not touched |
+
+Evidence: `pwa-install` chromium 12/12, webkit 12/12 (both formerly-skipped tests ran and passed in webkit). Firefox not
+runnable here; it uses only APIs Firefox ships (Cache Storage, `navigator.serviceWorker.getRegistration`, fetch, `setContent`),
+and the same spec's «the worker takes control…» test, which uses the same `workerReady` and `caches` calls, passed on
+Firefox in run 43766287018. `tsc -b`, oxlint clean; `sw.test.ts` passes.
