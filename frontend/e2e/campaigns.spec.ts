@@ -234,6 +234,17 @@ test('the campaigns overview paces the portfolio budget', async ({ page }) => {
      */
     // Three refusals now, each naming its fact: no comparable budget, different currencies, or a
     // window nobody measured (Owner directive 2026-10-09 §19) — never a blank row.
-    await expect(refusal).toContainText(/comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
+    /*
+     * ONE-BUDGET-001 (builder H) — the line now reads the project's ONE approved budget (`ApprovedBudgetPacing`, same
+     * test ids). A project with none says so in its own words, «No budget / بدون ميزانية», and offers «Add budget»; it
+     * never falls back to a platform's campaign budget. That is a fourth named fact, asserted as one: the words AND the
+     * offer, not a blank row.
+     */
+    await expect(refusal).toContainText(/No budget|بدون ميزانية|comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
+    if (/No budget|بدون ميزانية/.test(await refusal.innerText())) {
+      await expect(refusal.getByTestId('no-budget')).toBeVisible()
+      // The owner may add one, so the offer is there — a refusal that names the fact and the way out.
+      await expect(refusal.getByTestId('no-budget-add')).toBeVisible()
+    }
   }
 })
