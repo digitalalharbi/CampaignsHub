@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { AgencyTeamPage } from './AgencyTeamPage'
 import type { AgencyTeam } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -29,13 +29,17 @@ describe('team page client coverage', () => {
     vi.mocked(fetchAgencyTeam).mockResolvedValue(team)
     renderWithProviders(<AgencyTeamPage />, { route: '/agency/team', locale: 'ar' })
 
+    // Coverage is its own tab (NOV-FIT-001); the tab carries the count of clients without a manager.
+    const tab = await screen.findByRole('tab', { name: /متابعة العملاء/ })
+    expect(tab).toHaveTextContent('1')
+    fireEvent.click(tab)
+
     const section = await screen.findByTestId('team-coverage')
-    expect(within(section).getByTestId('team-coverage-missing')).toHaveTextContent('1')
     expect(within(section).getByTestId('coverage-flag-c2')).toHaveTextContent('بدون مدير')
     expect(within(section).queryByTestId('coverage-flag-c1')).not.toBeInTheDocument()
-    expect(within(section).getByTestId('coverage-c1')).toHaveTextContent('خالد')
+    expect(section).toHaveTextContent('خالد')
     // The unattended client leads the list.
-    const rows = within(section).getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('coverage-'))
+    const rows = within(section).getAllByTestId(/^coverage-c\d+$/)
     expect(rows[0].dataset.testid).toBe('coverage-c2')
   })
 
@@ -45,5 +49,6 @@ describe('team page client coverage', () => {
 
     await waitFor(() => expect(screen.getByTestId('team-intro')).toBeInTheDocument())
     expect(screen.queryByTestId('team-coverage')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /متابعة العملاء/ })).not.toBeInTheDocument()
   })
 })

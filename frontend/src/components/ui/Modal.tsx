@@ -75,7 +75,7 @@ export function Modal({
        * (see CLICK-STABLE-001 below). A fade changes nothing a pointer can land on, and nothing waits
        * for it — the dialog is interactive from its first frame.
        */
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -102,7 +102,14 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[88vh] w-full flex-col rounded-[16px] border border-border bg-surface shadow-[var(--shadow-large)] ${sizes[size]}`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        /*
+          NOV-MOBILE-001 — a bottom sheet on a phone, a centred dialog from `sm` up.
+          A centred card on a 360px screen leaves a 16px frame of page around a form that wants the whole
+          width; a sheet that rises from the bottom reads as «this is a layer», keeps the thumb's reach, and
+          clears the home indicator. `dvh`, not `vh`: the latter is the height WITHOUT the browser bars.
+        */
+        className={`flex max-h-[92dvh] w-full flex-col rounded-t-[20px] border border-border bg-surface shadow-[var(--shadow-large)] sm:max-h-[88dvh] sm:rounded-[16px] ${sizes[size]}`}
       >
         {title && (
           <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">

@@ -109,6 +109,8 @@ export interface ClientFilters {
   include_archived?: boolean
   sort?: string
   page?: number
+  /** How many a page holds — a fitted page asks for exactly what fits the screen (NOV-FIT-001). */
+  per_page?: number
 }
 
 export async function listClients(filters: ClientFilters): Promise<ClientListResult> {
@@ -125,6 +127,7 @@ export async function listClients(filters: ClientFilters): Promise<ClientListRes
   set('include_archived', filters.include_archived)
   set('sort', filters.sort)
   set('page', filters.page)
+  set('per_page', filters.per_page)
   const qs = params.toString()
   const res = await api.get<ClientListResult>(`/app/clients${qs ? `?${qs}` : ''}`)
   return res.data

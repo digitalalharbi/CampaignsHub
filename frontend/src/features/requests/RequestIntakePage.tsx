@@ -19,6 +19,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { withMark } from '@/lib/money/mark'
+import { uuid } from '@/lib/uuid'
 
 const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, step, ts}
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
@@ -229,7 +230,7 @@ function DefaultIntake() {
     const token = await ensureSession()
     if (!token) return
     for (const file of selected) {
-      const localId = crypto.randomUUID()
+      const localId = uuid()
       setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
       await uploadOne(token, localId, file)
     }
