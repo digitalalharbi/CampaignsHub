@@ -42,7 +42,23 @@ final class ClientPortfolioStats
             ->pluck('client_workspace_id', 'id'); // [project_id => client_id]
         $projectIds = $projectMap->keys()->all();
 
-        $projectsPerClient = $projectMap->groupBy(fn ($clientId) => $clientId)->map->count();
+        /*
+         * A-8 — «المشاريع» counts the projects the Projects list shows. That list hides `archived` ones by default
+         * (ProjectController::index) and the integrations hub only names projects holding an active link, so a client
+         * with one live and one archived project read «2» here and one there. Spend and freshness below still fold in
+         * archived projects: their history is real and is not deleted or hidden by this count.
+         */
+        $archivedIds = DB::table('projects')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('client_workspace_id', $clientIds)
+            ->whereNull('deleted_at')
+            ->where('status', 'archived')
+            ->pluck('id')
+            ->map(strval(...))
+            ->all();
+        $projectsPerClient = $projectMap
+            ->reject(fn ($clientId, $projectId) => in_array((string) $projectId, $archivedIds, true))
+            ->groupBy(fn ($clientId) => $clientId)->map->count();
 
         $activeCampaigns = DB::table('unified_campaigns')
             ->where('tenant_id', $tenantId)->whereIn('client_workspace_id', $clientIds)

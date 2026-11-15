@@ -208,6 +208,18 @@ final class UnifiedDataSourceTest extends TestCase
     }
 
     /**
+     * A-8 — «آخر مزامنة» is the latest successful run even when that run stored no figure.
+     */
+    public function test_last_sync_by_project_counts_a_successful_run_that_stored_nothing(): void
+    {
+        $this->seedSuccessfulRun('snapchat', Carbon::now()->subHours(3));
+
+        $out = app(DataFreshnessService::class)->lastSyncByProject((string) $this->tenant->id, [(string) $this->project->id]);
+
+        $this->assertArrayHasKey((string) $this->project->id, $out, 'no stored figure, yet the column must not read «—»');
+    }
+
+    /**
      * The dashboard strip, the client link's footer and the client analytics header say the same thing.
      *
      * Not «similar things» — the same verdict, from one call. This is the assertion that would have
