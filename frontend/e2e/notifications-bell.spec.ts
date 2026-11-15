@@ -55,6 +55,9 @@ test.describe('the bell', () => {
   test('names a finding by what it is, filters, opens the object, and clears everything in one call', async ({ page }) => {
     // The 110 come first: the panel lists the newest 100, so the three findings below must be newer than the bulk.
     raise(['--count=110', '--kind=cost_up', '--type=budget_risk', '--severity=warning'])
+    // The list is newest first at second precision (`created_at`), capped at 100 rows: the single «no_results» must be
+    // NEWER than the 110, not raised in the same second (a tie there is in no particular order and may fall past row 100).
+    await new Promise((r) => setTimeout(r, 1100))
     raise(['--count=1', '--kind=no_results', '--type=budget_risk', '--severity=warning'])
     raise(['--count=1', '--kind=budget_90', '--type=budget_risk', '--severity=warning'])
     raise(['--count=1', '--kind=sync_failed', '--type=sync_failed', '--severity=critical'])
