@@ -166,6 +166,8 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
 Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh')->withoutOverlapping();
 // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق»: hourly, acting from 08:00 in the reader's timezone; idempotent per period. At :10, after the digests.
 Schedule::command('notifications:send-spend-summaries')->hourlyAt(10)->timezone('Asia/Riyadh')->withoutOverlapping();
+// NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person, once their window has ended.
+Schedule::command('notifications:flush-deferred-push')->everyTenMinutes()->withoutOverlapping();
 // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
 Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 

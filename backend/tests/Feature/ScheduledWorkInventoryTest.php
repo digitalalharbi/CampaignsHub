@@ -55,6 +55,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'forms:purge-evidence',
         // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
         'notifications:retry-failed',
+        // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person; every ten minutes, a few rows.
+        'notifications:flush-deferred-push',
         'fx:rates',
         // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
         'fx:monitor',
@@ -177,6 +179,8 @@ final class ScheduledWorkInventoryTest extends TestCase
             'notifications:send-digests',
             'notifications:send-spend-summaries',
             'notifications:send-alerts',
+            // NOTIF-PUSH-001 — two overlapping flushes could each send a person's summary.
+            'notifications:flush-deferred-push',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on

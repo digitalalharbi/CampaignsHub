@@ -53,6 +53,15 @@ const TARGETS = [
   { file: 'icon-192.png', size: 192, background: 'transparent', stroke: GREEN, inset: 0.86 },
   { file: 'icon-512.png', size: 512, background: 'transparent', stroke: GREEN, inset: 0.86 },
   { file: 'icon-maskable-512.png', size: 512, background: DEEP, stroke: '#f7f5f0', inset: 0.58 },
+  /*
+   * NOTIF-PWA-001 — the rest of the sizes an installed app asks for.
+   *
+   * Android picks the nearest declared size for the launcher, the task switcher and the splash; a manifest with only 192 and
+   * 512 makes it scale one of them. Every `any` size is the mark on a transparent tile; the maskable ones sit in the safe zone
+   * on the identity's dark container. iPad Pro asks for 167, iPhone for 180 (above), older iPads for 152.
+   */
+  ...[48, 72, 96, 128, 144, 152, 167, 256, 384].map((size) => ({ file: `icons/icon-${size}.png`, size, background: 'transparent', stroke: GREEN, inset: 0.86 })),
+  ...[192, 384].map((size) => ({ file: `icons/icon-maskable-${size}.png`, size, background: DEEP, stroke: '#f7f5f0', inset: 0.58 })),
 ]
 
 /**
@@ -87,6 +96,7 @@ for (const t of TARGETS) {
   const p = await browser.newPage({ viewport: { width: t.size, height: t.size }, deviceScaleFactor: 1 })
   await p.setContent(page(t))
   const png = await p.screenshot({ omitBackground: t.background === 'transparent' })
+  await mkdir(dirname(resolve(OUT, t.file)), { recursive: true })
   await writeFile(resolve(OUT, t.file), png)
   await p.close()
   process.stdout.write(`${t.file} ${t.size}x${t.size}\n`)

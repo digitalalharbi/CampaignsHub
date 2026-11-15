@@ -29,6 +29,9 @@ use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Metrics\Rates\EcbReferenceRates;
 use App\Domains\Metrics\Services\PeriodReachReader;
+use App\Domains\Notifications\Push\MinishlinkTransport;
+use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Notifications\Push\PushTransport;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
 use App\Domains\Ops\Performance\PerformanceRecorder;
@@ -95,6 +98,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(ReportReadMemo::class);
         // ACCESS-CENTER-001 — member override rows, once per request; forgotten on every write.
         $this->app->scoped(MemberOverrideMemo::class);
+        // NOTIF-PUSH-001 — the push service seam, and one dispatcher per request or job (it remembers whether any device exists).
+        $this->app->bind(PushTransport::class, MinishlinkTransport::class);
+        $this->app->scoped(PushDispatcher::class);
         $this->app->scoped(PresentationAudience::class);
         // INTEG-SYNC-ENGINE-001 — what the last request on a connection came to belongs to one job.
         $this->app->scoped(ProviderRateBudget::class);

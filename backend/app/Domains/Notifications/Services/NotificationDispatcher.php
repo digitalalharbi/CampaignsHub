@@ -8,6 +8,9 @@ use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Notifications\Push\SendPushNotification;
+use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\NotificationChannelPolicy;
 use App\Models\User;
@@ -33,6 +36,7 @@ final class NotificationDispatcher
         private readonly NotificationChoices $choices,
         private readonly SpendAudience $audience,
         private readonly WhatsAppChannel $whatsapp,
+        private readonly PushDispatcher $push,
     ) {}
 
     /**
@@ -67,9 +71,38 @@ final class NotificationDispatcher
         // The catalogue type a person's per-type switch is filed under: `request.assigned` → `request`.
         $switchKey = NotificationChannelPolicy::switchKey($type);
         $dedupKey = $this->dedupKey($tenantId, $userId, $type, $p);
+        // NOTIF-BELL-001 — the finding itself, named once: from the producer, else from the type when the type says it all.
+        $kind = isset($p['kind']) && is_string($p['kind']) && $p['kind'] !== '' ? $p['kind'] : BellKind::forType($type);
+
+        /*
+         * NOTIF-BELL-001 — a finding is ONE notification per day, and a repeat UPDATES it.
+         *
+         * Keyed by kind + object + the day on the Riyadh calendar (+ recipient). Until now a repeat inside the
+         * 60-minute window was dropped and one after it was a brand-new row, so a campaign stuck at 90% for a week
+         * filled the bell with the same line. Now the second sweep of the day refreshes the row's wording and figures,
+         * counts the repeat, and — only when the finding got worse — brings it back as unread. No second email,
+         * no second push: a repeat is not a new event.
+         */
+        $checked = false;
+        if (($p['upsert_daily'] ?? false) === true && $kind !== null) {
+            $dayKey = $this->dayKey($tenantId, $userId, $kind, $p);
+            // ONE read answers both questions: is there a notification for this finding today, or a ledger tombstone for it.
+            $existing = AppNotification::query()->where('tenant_id', $tenantId)
+                ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id'))
+                ->where('dedup_key', $dayKey)->latest('created_at')->first();
+            if ($existing !== null && $existing->type !== 'suppressed') {
+                return $this->refresh($existing, $p);
+            }
+            // A tombstone (the person switched this off) inside the window is a repeat of a refusal, as it always was.
+            if ($existing !== null && $existing->created_at >= Carbon::now()->subMinutes(self::DEDUP_WINDOW_MINUTES)) {
+                return null;
+            }
+            $dedupKey = $dayKey;
+            $checked = true;
+        }
 
         // 1) Dedup — an identical notification within the window is collapsed.
-        if ($this->isDuplicate($tenantId, $userId, $dedupKey)) {
+        if (! $checked && $this->isDuplicate($tenantId, $userId, $dedupKey)) {
             return null;
         }
 
@@ -112,6 +145,9 @@ final class NotificationDispatcher
             'action_url' => $p['action_url'] ?? null,
             'status' => 'unread',
             'dedup_key' => $dedupKey,
+            'kind' => $kind,
+            'repeat_count' => 1,
+            'last_seen_at' => Carbon::now(),
             // DIGESTS-VISUAL-V2-001 — the Arabic wording, when the producer wrote it, so the bell is not English under an Arabic title.
             'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : null,
             'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : null,
@@ -143,7 +179,22 @@ final class NotificationDispatcher
             $this->logDelivery($tenantId, (string) $notification->id, 'whatsapp', $this->whatsappState($notification, $userId, $switchKey, $inQuietHours, $p), $dedupKey);
         }
 
+        // NOTIF-PUSH-001 — a phone is rung only for the few things that warrant it, off this call, and never at the bell's expense.
+        $this->ring($notification);
+
         return $notification;
+    }
+
+    /** Queue the pushes for this notification when it is one that may ring a phone. */
+    private function ring(AppNotification $notification): void
+    {
+        try {
+            if ($this->push->wants($notification)) {
+                SendPushNotification::dispatch((string) $notification->id);
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -246,6 +297,49 @@ final class NotificationDispatcher
 
             return 'failed';
         }
+    }
+
+    /**
+     * Update the day's row for a finding that came round again.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function refresh(AppNotification $n, array $p): AppNotification
+    {
+        $rank = ['info' => 0, 'success' => 0, 'warning' => 1, 'error' => 2, 'critical' => 2];
+        $new = (string) ($p['severity'] ?? $n->severity);
+        $worse = ($rank[$new] ?? 0) > ($rank[(string) $n->severity] ?? 0);
+
+        $fields = [
+            'severity' => $worse ? $new : $n->severity,
+            'title' => $p['title'] ?? $n->title,
+            'message' => $p['message'] ?? $n->message,
+            'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : $n->title_ar,
+            'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : $n->message_ar,
+            'repeat_count' => ((int) $n->repeat_count) + 1,
+            'last_seen_at' => Carbon::now(),
+        ];
+        if ($worse) {
+            $fields += ['status' => 'unread', 'read_at' => null];
+            DB::table('notification_reads')->where('notification_id', $n->id)->delete();
+        }
+        $n->forceFill($fields)->save();
+        // A finding that got worse (a warning that became critical) is news; a plain repeat is not.
+        if ($worse) {
+            $this->ring($n);
+        }
+
+        return $n;
+    }
+
+    /** @param  array<string,mixed>  $p */
+    private function dayKey(string $tenantId, ?int $userId, string $kind, array $p): string
+    {
+        return hash('sha256', implode('|', [
+            'day', $tenantId, $userId ?? 'tenant', $kind,
+            $p['entity_type'] ?? '', $p['entity_id'] ?? '', $p['dedup_extra'] ?? '',
+            Carbon::now('Asia/Riyadh')->toDateString(),
+        ]));
     }
 
     /** @param  array<string,mixed>  $p */
