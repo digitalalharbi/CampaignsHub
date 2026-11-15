@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Models\TenantLimitOverride;
@@ -245,8 +246,8 @@ final class SubscriptionService
             // Archived is not deleted, and it is not occupying a slot either — restoring one is a
             // create as far as the cap is concerned, which is why `restore` is guarded too.
             // …and a project whose client was removed (soft-deleted) is gone with it: it holds no slot (TENANCY-UNIFY-001).
-            'projects' => DB::table('projects')->where('projects.tenant_id', $id)
-                ->whereNull('projects.deleted_at')->where('projects.status', '!=', 'archived')
+            // PROJECT-LIFECYCLE-001 — a slot is held by a LISTED project (draft + active + paused), from the one scope.
+            'projects' => LiveProjects::constrainListed(DB::table('projects')->where('projects.tenant_id', $id))
                 ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('client_workspaces')
                     ->whereColumn('client_workspaces.id', 'projects.client_workspace_id')->whereNotNull('client_workspaces.deleted_at'))
                 ->count(),

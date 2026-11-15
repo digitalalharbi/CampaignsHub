@@ -28,7 +28,11 @@ namespace App\Domains\Projects\Services;
  */
 final class ProjectStatusDisplay
 {
-    private const STARTING = ['draft', 'onboarding'];
+    /*
+     * PROJECT-LIFECYCLE-001 — a draft is promoted to `active` by its first linked account (ProjectStateMachine), so a stored
+     * `active` whose linked source has not delivered yet still reads «onboarding» on screen. Display only; never written.
+     */
+    private const STARTING = ['draft', 'onboarding', 'active'];
 
     /** @param  array<string,mixed>|null  $summary */
     public static function status(string $stored, ?array $summary): string

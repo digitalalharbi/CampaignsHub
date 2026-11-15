@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Agents\Engine\ModelClientFactory;
 use App\Domains\Agents\Jobs\RunAgentTurnJob;
 use App\Domains\Agents\Models\AgentMessage;
@@ -32,7 +33,7 @@ final class RoutineStarter
         $routine = AgentRoutineCatalog::all()[$row->routine] ?? null;
         $role = $routine === null ? null : AgentRoles::get($routine['agent']);
         $project = Project::withoutGlobalScopes()->find($row->project_id);
-        if ($routine === null || $project === null || $project->status !== 'active' || $role === null || ! $role['enabled']) {
+        if ($routine === null || $project === null || ! LiveProjects::isRunning((string) $project->getKey()) || $role === null || ! $role['enabled']) {
             return 'unavailable';
         }
 

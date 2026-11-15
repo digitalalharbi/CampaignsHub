@@ -45,7 +45,8 @@ final class ClientBudgetController extends Controller
 
         [$from, $to] = $this->range($request);
 
-        $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 rule 4 — the client's own state never hides its live projects' figures (project state decides).
+        $clientQuery = ClientWorkspace::query();
         $this->access->restrictQuery($clientQuery, $user);
         $clients = $clientQuery->get(['id', 'name']);
 
@@ -59,6 +60,7 @@ final class ClientBudgetController extends Controller
          */
         $ceilings = $this->access->projectCeilings($user);
         $projects = Project::query()
+            ->live() // PROJECT-LIFECYCLE-001 — budgets of live projects only
             ->whereIn('client_workspace_id', $clients->pluck('id')->all())
             ->get(['id', 'client_workspace_id', 'name'])
             // SEC-3 — a team member confined to some of a client's projects reads only those.

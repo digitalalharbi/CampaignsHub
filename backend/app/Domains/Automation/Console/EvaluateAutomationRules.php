@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Automation\Console;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Automation\Models\AutomationRule;
 use App\Domains\Automation\Services\RuleEvaluator;
 use App\Domains\Automation\Support\RuleSchedule;
@@ -22,6 +23,7 @@ final class EvaluateAutomationRules extends Command
     public function handle(RuleEvaluator $evaluator, TenantContext $tenant): int
     {
         $due = AutomationRule::withoutGlobalScopes()->where('enabled', true)
+            ->whereIn('project_id', LiveProjects::idsQuery()) // PROJECT-LIFECYCLE-001 — automation runs on live projects only
             ->where(fn ($q) => $q->whereNull('next_run_at')->orWhere('next_run_at', '<=', Carbon::now()))
             ->orderBy('next_run_at')->limit(200)->get();
 

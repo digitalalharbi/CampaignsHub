@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Http\Controllers;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Services\SourceFreshness;
@@ -39,7 +40,8 @@ final class ClientsIntegrationOverviewController extends Controller
         $names = $clients->orderBy('name')->pluck('name', 'id');
         $ceilings = $this->access->projectCeilings($user);
 
-        $projects = DB::table('projects')->whereIn('client_workspace_id', $names->keys()->all())->get(['id', 'client_workspace_id'])
+        // PROJECT-LIFECYCLE-001 — listed projects (draft/active/paused); archived and deleted only under «المؤرشفة».
+        $projects = LiveProjects::constrainListed(DB::table('projects')->whereIn('client_workspace_id', $names->keys()->all()))->get(['id', 'client_workspace_id'])
             ->filter(fn ($p): bool => $this->access->projectAllowed($ceilings, (string) $p->client_workspace_id, (string) $p->id));
         $clientOf = $projects->pluck('client_workspace_id', 'id')->map(static fn ($v): string => (string) $v);
 

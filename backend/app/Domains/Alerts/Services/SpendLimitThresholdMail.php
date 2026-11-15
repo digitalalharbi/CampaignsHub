@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Alerts\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Support\AlertMailItem;
@@ -26,8 +27,8 @@ final class SpendLimitThresholdMail
     public function send(SpendLimit $limit, array $reading, int $threshold, Carbon $now): bool
     {
         $addresses = array_values(array_filter(array_map('trim', explode(',', (string) config('budgets.limit_alert_email', '')))));
-        if ($addresses === []) {
-            return false;
+        if ($addresses === [] || ! LiveProjects::isLive((string) $limit->project_id)) {
+            return false; // no address, or the project is archived/deleted (PROJECT-LIFECYCLE-001)
         }
 
         $project = Project::withoutGlobalScopes()->find($limit->project_id);

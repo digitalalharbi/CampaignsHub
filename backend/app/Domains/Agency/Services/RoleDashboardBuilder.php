@@ -160,7 +160,8 @@ final class RoleDashboardBuilder
      */
     private function scope(User $user): array
     {
-        $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 rule 4 — the client's own state never hides its live projects' figures (project state decides).
+        $clientQuery = ClientWorkspace::query();
         $this->access->restrictQuery($clientQuery, $user);
         $clients = $clientQuery->get(['id', 'name'])->mapWithKeys(fn (ClientWorkspace $c): array => [(string) $c->id => (string) $c->name])->all();
 
@@ -168,7 +169,7 @@ final class RoleDashboardBuilder
         $ceilings = $this->access->projectCeilings($user);
         $own = $this->reach->dataIdsFor($user);
 
-        $query = Project::query()->where(function ($q) use ($clients, $restricted): void {
+        $query = Project::query()->live()->where(function ($q) use ($clients, $restricted): void { // PROJECT-LIFECYCLE-001
             $q->whereIn('client_workspace_id', array_keys($clients));
             // A workspace with no client roster (the advertiser's own) has client-less projects; a confined agency member has none.
             if (! $restricted) {

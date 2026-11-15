@@ -83,7 +83,7 @@ final class ClientRequestManagerNotifier
         if ($request->project_id !== null) {
             $projects->whereKey($request->project_id);
         } elseif ($request->client_id !== null) {
-            $projects->where('client_workspace_id', $request->client_id)->whereNotIn('status', ['closed', 'archived']);
+            $projects->where('client_workspace_id', $request->client_id)->live(); // PROJECT-LIFECYCLE-001
         } else {
             $projects->whereRaw('1 = 0');
         }

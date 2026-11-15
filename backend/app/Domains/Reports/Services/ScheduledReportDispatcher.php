@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -41,6 +42,7 @@ final class ScheduledReportDispatcher
         // Each report carries its own tenant_id/project_id.
         $due = ReportSchedule::withoutGlobalScopes()
             ->where('active', true)
+            ->whereIn('project_id', LiveProjects::idsQuery()) // PROJECT-LIFECYCLE-001 — no scheduled report for an archived/deleted project
             ->whereNotNull('next_run_at')
             ->where('next_run_at', '<=', $now)
             ->get();

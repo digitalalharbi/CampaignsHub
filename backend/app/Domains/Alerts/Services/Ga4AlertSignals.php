@@ -71,7 +71,7 @@ final class Ga4AlertSignals
         $ids = ProjectIntegrationBinding::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('provider', 'ga4')->where('is_active', true)
             ->when($only !== null, fn ($q) => $q->where('project_id', $only))->distinct()->pluck('project_id')->all();
 
-        return $ids === [] ? [] : Project::withoutGlobalScopes()->whereIn('id', $ids)->get()->all();
+        return $ids === [] ? [] : Project::withoutGlobalScopes()->whereIn('id', $ids)->live()->get()->all(); // PROJECT-LIFECYCLE-001
     }
 
     /** @return array<string, mixed>|null */

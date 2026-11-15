@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Console;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Agents\Models\AgentRoutine;
 use App\Domains\Agents\Services\RoutineStarter;
 use App\Domains\Agents\Support\AgentRoutineCatalog;
@@ -34,7 +35,7 @@ final class RunAgentRoutines extends Command
         }
 
         $started = 0;
-        foreach (AgentRoutine::withoutGlobalScopes()->where('routine', $key)->where('enabled', true)->cursor() as $row) {
+        foreach (AgentRoutine::withoutGlobalScopes()->where('routine', $key)->where('enabled', true)->whereIn('project_id', LiveProjects::runningIdsQuery())->cursor() as $row) {
             $tenant->setTenantId((string) $row->tenant_id);
             if ($starter->start($row) === 'queued') {
                 $started++;

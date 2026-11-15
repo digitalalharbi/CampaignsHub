@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Http\Controllers;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
@@ -395,13 +396,15 @@ final class FundingController extends Controller
      */
     private function reachable(User $user, bool $deleted = false): array
     {
-        $clients = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 — budgets of LIVE projects only (rule 5); the client's own state never hides one (rule 4).
+        $clients = ClientWorkspace::query();
         $this->access->restrictQuery($clients, $user);
         $names = $clients->pluck('name', 'id');
 
         $ceilings = $this->access->projectCeilings($user);
         $fundings = ProjectFunding::query()->with('project:id,name,client_workspace_id')
             ->whereIn('client_workspace_id', $names->keys()->all())
+            ->whereIn('project_id', LiveProjects::idsQuery())
             ->when($deleted, static fn ($q) => $q->whereNotNull('voided_at'), static fn ($q) => $q->whereNull('voided_at'))->get()
             ->filter(fn (ProjectFunding $f): bool => $this->access->projectAllowed($ceilings, $f->client_workspace_id, $f->project_id)
                 && ! $this->reach->moneyWithheld($user, $f->project_id))

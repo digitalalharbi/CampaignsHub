@@ -20,6 +20,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -245,7 +246,8 @@ final class ProjectListSurfaceTest extends TestCase
      */
     public function test_a_draft_project_that_syncs_and_has_campaigns_reads_active_and_fully_set_up(): void
     {
-        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        DB::table('projects')->where('id', $this->mine->id)->update(['status' => 'draft', 'setup_completion' => 0]); // stored fixture state (the status writer is the lifecycle machine)
+        $this->mine->refresh();
         $account = $this->account($this->snapchat, 'act-1', syncedHoursAgo: 2);
         $this->bind($this->mine, $account);
         ExternalCampaign::withoutGlobalScopes()->create([
@@ -258,15 +260,17 @@ final class ProjectListSurfaceTest extends TestCase
         $this->assertSame('active', $card['status']);
         $this->assertSame(100, $card['setup_completion']);
 
-        // Derived on read: no row was rewritten to make the card right.
-        $this->assertSame('draft', (string) $this->mine->refresh()->status);
+        // PROJECT-LIFECYCLE-001 — linking the first account promoted the draft to `active` through the lifecycle
+        // machine (a draft is not live); reading the card wrote nothing else.
+        $this->assertSame('active', (string) $this->mine->refresh()->status);
         $this->assertSame(0, (int) $this->mine->setup_completion);
     }
 
     public function test_a_linked_source_that_has_not_synced_yet_reads_onboarding_and_a_bare_project_stays_draft(): void
     {
-        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
-        $this->neighbour->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        DB::table('projects')->where('id', $this->mine->id)->update(['status' => 'draft', 'setup_completion' => 0]); // stored fixture state (the status writer is the lifecycle machine)
+        $this->mine->refresh();
+        DB::table('projects')->where('id', $this->neighbour->id)->update(['status' => 'draft', 'setup_completion' => 0]);
         $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: null));
 
         $cards = $this->cards();
@@ -281,8 +285,9 @@ final class ProjectListSurfaceTest extends TestCase
     /** The project's own page reads the same derived status and setup as its card — and gains no `summary` key. */
     public function test_the_show_endpoint_derives_status_and_setup_like_the_list(): void
     {
-        $this->mine->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
-        $this->neighbour->forceFill(['status' => 'draft', 'setup_completion' => 0])->save();
+        DB::table('projects')->where('id', $this->mine->id)->update(['status' => 'draft', 'setup_completion' => 0]); // stored fixture state (the status writer is the lifecycle machine)
+        $this->mine->refresh();
+        DB::table('projects')->where('id', $this->neighbour->id)->update(['status' => 'draft', 'setup_completion' => 0]);
         $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: null));
 
         $card = $this->cards()['رزة أفينيو'];
@@ -296,13 +301,14 @@ final class ProjectListSurfaceTest extends TestCase
         // A project with nothing stays what was stored, and nothing is written by reading.
         $bare = $this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/projects/'.$this->neighbour->id)->assertOk()->json('data');
         $this->assertSame('draft', $bare['status']);
-        $this->assertSame('draft', (string) $this->mine->refresh()->status);
+        $this->assertSame('active', (string) $this->mine->refresh()->status, 'promoted by its first linked account (PROJECT-LIFECYCLE-001)');
     }
 
     /** A status somebody CHOSE is not overridden by what the project happens to hold. */
     public function test_a_paused_project_stays_paused_however_much_it_has_synced(): void
     {
-        $this->mine->forceFill(['status' => 'paused', 'setup_completion' => 0])->save();
+        DB::table('projects')->where('id', $this->mine->id)->update(['status' => 'paused', 'setup_completion' => 0]); // stored fixture state (the status writer is the lifecycle machine)
+        $this->mine->refresh();
         $this->bind($this->mine, $this->account($this->snapchat, 'act-1', syncedHoursAgo: 1));
 
         $card = $this->cards()['رزة أفينيو'];

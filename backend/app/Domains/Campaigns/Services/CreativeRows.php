@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Campaigns\Services;
 
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\CanonicalObjective;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
@@ -102,6 +103,8 @@ final class CreativeRows
          * `campaigns.manage`, exactly as the project route does.
          */
         app(ReachableProjects::class)->constrain($query, $user, 'project_id', $capability);
+        // PROJECT-LIFECYCLE-001 — the cross-project library reads LIVE projects only (archived/deleted never aggregated).
+        LiveProjects::whereProjectLive($query, 'project_id');
 
         $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
 

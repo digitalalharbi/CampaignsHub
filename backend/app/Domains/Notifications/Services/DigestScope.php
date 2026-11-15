@@ -47,6 +47,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class DigestScope
 {
+    /*
+     * PROJECT-LIFECYCLE-001 rule 5 — every ceiling here is LIVE projects only (`Project::live()`): this class routes
+     * digests, alert mail, notification audiences and request mail, so an archived or deleted project reaches nobody.
+     */
+
     /**
      * The project ids this user may be sent figures about, after their own preference is applied.
      *
@@ -170,6 +175,7 @@ final class DigestScope
         // A named CLIENT scope means every project under those clients, and only those.
         if ($clientScope !== []) {
             return Project::query()
+                ->live()
                 ->where('tenant_id', $tenantId)
                 ->whereIn('client_workspace_id', $clientScope)
                 ->pluck('id')
@@ -184,6 +190,7 @@ final class DigestScope
          */
         if ($user->is_platform_admin || $user->hasPermission('clients.view_all')) {
             return Project::query()
+                ->live()
                 ->where('tenant_id', $tenantId)
                 ->pluck('id')
                 ->map(static fn ($id): string => (string) $id)
@@ -237,6 +244,7 @@ final class DigestScope
     private function existing(array $ids, string $tenantId): array
     {
         return Project::query()
+            ->live()
             ->where('tenant_id', $tenantId)
             ->whereIn('id', $ids)
             ->pluck('id')

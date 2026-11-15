@@ -117,7 +117,7 @@ final class DeliveryOverview
      */
     private function scheduled(ClientWorkspace $client, ?array $reachableProjects): array
     {
-        $projects = Project::query()->where('client_workspace_id', $client->getKey())
+        $projects = Project::query()->live()->where('client_workspace_id', $client->getKey()) // PROJECT-LIFECYCLE-001
             ->when($reachableProjects !== null, fn ($q) => $q->whereIn('id', $reachableProjects))
             ->pluck('id')->map(fn ($id) => (string) $id)->all();
 
