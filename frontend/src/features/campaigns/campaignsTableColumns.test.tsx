@@ -88,6 +88,6 @@ describe('the campaigns table columns', () => {
     fireEvent.click(screen.getByTestId('campaign-view-new'))
     fireEvent.change(screen.getByTestId('campaign-view-name'), { target: { value: 'Q4 board' } })
     fireEvent.click(screen.getByTestId('campaign-view-save'))
-    expect(save.mutate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Q4 board', filters: expect.objectContaining({ columns: expect.arrayContaining(['spend', 'results']) }), date_range: { days: 30 } }), expect.anything())
+    expect(save.mutate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Q4 board', filters: expect.objectContaining({ columns: expect.arrayContaining(['spend', 'results']) }), date_range: { days: 7 } }), expect.anything())  // DATE-RANGE-001: a new user's period is the last 7 complete days
   })
 })

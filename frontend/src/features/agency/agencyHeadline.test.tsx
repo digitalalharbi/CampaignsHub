@@ -4,6 +4,7 @@ import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyH
 import type { AgencyOverview } from './api'
 import type { AlertEvent } from '@/features/alerts/api'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { resetPeriodSession } from '@/lib/period/usePeriod'
 
 vi.mock('./api', () => ({ fetchAgencyOverview: vi.fn() }))
 vi.mock('@/features/alerts/api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), listAlertEvents: vi.fn() }))
@@ -14,7 +15,6 @@ import { listAlertEvents } from '@/features/alerts/api'
  * DASHBOARD-FIRST-SCREEN-001 — the first screen states money, results, cost and movement under the
  * money and coverage contracts, and opens the surface that answers each in depth.
  */
-const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
 const PROVIDERS = ['meta', 'google']
 const complete = { state: 'complete', expected_contributors: PROVIDERS, included_contributors: PROVIDERS, excluded_contributors: [], partial_contributors: [], reported_through: {} }
 const truncated = { state: 'partial', expected_contributors: PROVIDERS, included_contributors: [], excluded_contributors: PROVIDERS, partial_contributors: PROVIDERS, reported_through: { meta: '2026-09-27', google: '2026-09-27' } }
@@ -148,16 +148,28 @@ describe('the agency headline', () => {
     expect(links[0]).toHaveAttribute('href', '/agency/campaigns/p1/c1')
   })
 
+  /** DATE-RANGE-001 — the window is the system's period: seven complete days to start, ending YESTERDAY. */
   it('lets the operator choose the window, and asks the server for exactly that window', async () => {
-    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
-    renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
-    await screen.findByTestId('agency-kpi-spend')
-    const first = vi.mocked(fetchAgencyOverview).mock.calls[0]![0] as { from: string; to: string }
-    expect(daysBetween(first.from, first.to)).toBe(30)
-    fireEvent.click(screen.getByRole('button', { name: '7 days' }))
-    await waitFor(() => expect(vi.mocked(fetchAgencyOverview).mock.calls.length).toBeGreaterThan(1))
-    const last = vi.mocked(fetchAgencyOverview).mock.calls.at(-1)![0] as { from: string; to: string }
-    expect(daysBetween(last.from, last.to)).toBe(7)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-15T06:00:00Z'))
+    resetPeriodSession()
+    window.localStorage.clear()
+    try {
+      vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
+      renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
+      await screen.findByTestId('agency-kpi-spend')
+      expect(vi.mocked(fetchAgencyOverview).mock.calls[0]![0]).toEqual({ from: '2026-11-08', to: '2026-11-14' })
+      fireEvent.click(screen.getByTestId('agency-period-picker-button'))
+      fireEvent.click(await screen.findByTestId('agency-period-picker-preset-last_30'))
+      fireEvent.click(screen.getByTestId('agency-period-picker-compare-toggle'))
+      fireEvent.click(screen.getByTestId('agency-period-picker-apply'))
+      await waitFor(() => expect(vi.mocked(fetchAgencyOverview).mock.calls.length).toBeGreaterThan(1))
+      const last = vi.mocked(fetchAgencyOverview).mock.calls.at(-1)!
+      expect(last[0]).toEqual({ from: '2026-10-16', to: '2026-11-14' })
+      expect(last[1]).toEqual({ from: '2026-09-16', to: '2026-10-15' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('says there is nothing to read when the operator reaches no project', async () => {

@@ -2,7 +2,6 @@ import { comparableWindows } from '@/lib/coverage/contract'
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
 import { excludedRows, portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
@@ -46,15 +45,16 @@ const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
 }
 import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
-import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
+import { useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { useBudget, useCampaigns, useFreshness, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
-import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { ProvenanceBadge, TrendPill } from '@/features/analytics/components'
 import { compact, money, num } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
@@ -156,7 +156,8 @@ export function CampaignsPage() {
   const approved = useApprovedBudget(projectId)
   const canAddBudget = useAuth((s) => s.hasPermission('funding.manage'))
 
-  const [days, setDays] = useUrlNumber('days', 30)
+  /* DATE-RANGE-001 — the system's one period; rolling presets end yesterday, as the platforms' do. */
+  const { days, setDays, range } = usePeriod()
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
@@ -249,7 +250,6 @@ export function CampaignsPage() {
     setModalOpen(false)
     if (launching) setLaunch('')
   }
-  const range = useLastNDaysRange(days)
 
   /*
    * The canonical key expanded into the raw objectives the API filters on — the same expansion the
@@ -811,7 +811,6 @@ export function CampaignsPage() {
         badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={
           <>
-            <PeriodLabel from={range.from} to={range.to} testId="campaigns-period" />
             {/*
               Freshness from the project's own freshness endpoint — the newest arrival across its
               sources. `null` while it answers, which `DataFreshness` already draws as «لم تصل
@@ -849,7 +848,7 @@ export function CampaignsPage() {
               row pushes everything after it onto a line of its own. */}
           <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
           <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-          <RangeTabs value={days} onChange={setDays} />
+          <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
           {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }

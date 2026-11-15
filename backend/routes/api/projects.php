@@ -25,6 +25,7 @@ use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
 use App\Domains\Metrics\Http\Controllers\AudienceController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
+use App\Domains\Metrics\Http\Controllers\PeriodController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
@@ -294,6 +295,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/budget-platforms', [MetricsController::class, 'budgetPlatforms'])->middleware('project.can:budget.view')->name('metrics.budget-platforms');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+    // DATE-RANGE-001 — the Riyadh dates of a named period, and per account which complete days of it have no figures.
+    Route::get('metrics/period', [PeriodController::class, 'resolve'])->name('metrics.period');
+    Route::get('metrics/period-coverage', [PeriodController::class, 'coverage'])->name('metrics.period-coverage');
     // LIVE-OPERATING-VIEW-001 — per source: latest successful sync · source timestamp · next sync · state; never «real-time».
     Route::get('live-view', [LiveOperatingViewController::class, 'show'])->middleware('project.can:campaigns.view')->name('live-view');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,

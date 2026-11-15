@@ -50,6 +50,6 @@ describe('saved views on the ad-groups and ads pages', () => {
     fireEvent.click(await screen.findByTestId('entity-ad-view-new'))
     fireEvent.change(screen.getByTestId('entity-ad-view-name'), { target: { value: 'My view' } })
     fireEvent.click(screen.getByTestId('entity-ad-view-save'))
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: 'My view', date_range: { days: 30 } }), expect.anything())
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: 'My view', date_range: { days: 7 } }), expect.anything())
   })
 })

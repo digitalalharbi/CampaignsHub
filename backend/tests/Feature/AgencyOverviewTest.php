@@ -134,6 +134,27 @@ final class AgencyOverviewTest extends TestCase
             ->assertJsonCount(2, 'data.timeseries');
     }
 
+    /** DATE-RANGE-001 — a comparison the reader chose (here: the same dates a year earlier) is what «previous» means. */
+    public function test_a_chosen_comparison_replaces_the_default_previous_window(): void
+    {
+        $a = $this->campaign($this->client('Alpha'));
+        $this->spend($a, 'meta', '2026-06-10', 1000, 10);
+        $this->spend($a, 'meta', '2025-06-10', 300, 3);   // same dates, a year earlier
+        $this->spend($a, 'meta', '2026-05-20', 200, 2);   // the default previous window
+
+        $user = $this->operator('cmp@test.dev', ['clients.view', ClientScopeResolver::ALL_CLIENTS]);
+
+        $this->actingAs($user, 'sanctum')->getJson($this->url().'&compare_from=2025-06-01&compare_to=2025-06-30')
+            ->assertOk()
+            ->assertJsonPath('data.previous.spend', 300)
+            ->assertJsonPath('data.previous_period.from', '2025-06-01')
+            ->assertJsonPath('data.previous_period.to', '2025-06-30');
+
+        // A malformed comparison is ignored, not obeyed: the default window stands.
+        $this->actingAs($user, 'sanctum')->getJson($this->url().'&compare_from=nope&compare_to=2025-06-30')
+            ->assertOk()->assertJsonPath('data.previous.spend', 200);
+    }
+
     /** The money narrows with the scope — the same ceiling the counts use, not a wider one. */
     public function test_a_scoped_operator_sees_only_their_clients_money(): void
     {
