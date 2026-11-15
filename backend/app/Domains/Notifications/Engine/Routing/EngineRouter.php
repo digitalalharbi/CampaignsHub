@@ -94,6 +94,10 @@ final class EngineRouter implements Router
     {
         $route = $ws->routeFor($event->key);
         $channels = $this->channels($event, Scope::Internal, $route['channels'] ?? null);
+        // NOTIF-V2-FOLLOWUP-001 — a person's own choice of channels for their morning brief narrows, never widens, what the workspace allows.
+        if (isset($intent->payload['channels_only']) && is_array($intent->payload['channels_only'])) {
+            $channels = array_values(array_filter($channels, static fn (Channel $c): bool => in_array($c->value, $intent->payload['channels_only'], true)));
+        }
         $eventAllowed = $this->gate->allows($intent->tenantId, $event->entitlement ?? EntitlementKey::Internal)
             && $this->gate->allows($intent->tenantId, EntitlementKey::Internal);
         $addressee = isset($intent->payload['addressee_user_id']) ? (int) $intent->payload['addressee_user_id'] : null;

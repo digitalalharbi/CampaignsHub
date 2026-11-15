@@ -28,8 +28,8 @@ final class CatalogMessageComposer implements MessageComposer
             ['project' => $project, 'workspace' => $workspace],
         );
 
-        $title = $event === null ? $delivery->eventKey : (string) __($event->textKey($delivery->scope, 'title'), $replace, $locale);
-        $body = $event === null ? '' : (string) __($event->textKey($delivery->scope, 'body'), $replace, $locale);
+        $title = $event === null ? $delivery->eventKey : $this->text($event->textKey($delivery->scope, 'title'), $delivery, $replace, $locale);
+        $body = $event === null ? '' : $this->text($event->textKey($delivery->scope, 'body'), $delivery, $replace, $locale);
         if ($delivery->groupCount > 1) {
             $body .= $locale === 'ar' ? " ({$delivery->groupCount} حالات)" : " ({$delivery->groupCount} items)";
         }
@@ -48,5 +48,25 @@ final class CatalogMessageComposer implements MessageComposer
             text: $title."\n\n".$body."\n\n".$context."\n\n".$ref,
             url: isset($delivery->payload['url']) ? (string) $delivery->payload['url'] : null,
         );
+    }
+
+    /**
+     * NOTIF-V2-INTERNAL-001 — an event may carry a `variant` («created», «edited», «renewed», «deleted»): its own sentence is
+     * `<key>_<variant>` and the plain key is the fallback, so one catalog event tells four different facts truthfully.
+     *
+     * @param  array<string, mixed>  $replace
+     */
+    private function text(string $key, Delivery $delivery, array $replace, string $locale): string
+    {
+        $variant = $delivery->payload['variant'] ?? null;
+        if (is_string($variant) && $variant !== '') {
+            $specific = $key.'_'.$variant;
+            $found = (string) __($specific, $replace, $locale);
+            if ($found !== $specific) {
+                return $found;
+            }
+        }
+
+        return (string) __($key, $replace, $locale);
     }
 }

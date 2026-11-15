@@ -47,7 +47,12 @@ final class NotificationInbox
     {
         return AppNotification::query()
             ->where(fn (Builder $q) => $this->visibleTo($q, $user))
-            ->where('type', '!=', 'suppressed'); // hide delivery-ledger tombstones
+            ->where('type', '!=', 'suppressed') // hide delivery-ledger tombstones
+            // NOTIF-V2-INTERNAL-001 — a type this person muted for this project, and a row they put aside until later, are not theirs to see now.
+            ->whereNotExists(static fn ($m) => $m->select(DB::raw(1))->from('notification_mutes as nm')
+                ->where('nm.user_id', $user->id)->whereColumn('nm.project_id', 'app_notifications.project_id')->whereColumn('nm.kind', 'app_notifications.kind'))
+            ->whereNotExists(static fn ($z) => $z->select(DB::raw(1))->from('notification_user_snoozes as ns')
+                ->where('ns.user_id', $user->id)->whereColumn('ns.notification_id', 'app_notifications.id')->where('ns.snoozed_until', '>', now()));
     }
 
     /**

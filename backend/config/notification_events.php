@@ -44,8 +44,8 @@ return [
         // ── §5 budgets and limits ──
         'budget.threshold_75' => $i('important', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'channels' => $quiet]),
         'budget.threshold_90' => $i('important', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view']),
-        'budget.threshold_100' => $i('critical', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'internal_only' => true]),
-        'budget.overrun' => $i('critical', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'internal_only' => true]),
+        'budget.threshold_100' => $i('critical', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'internal_only' => true, 'creates_task' => true]),
+        'budget.overrun' => $i('critical', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'internal_only' => true, 'creates_task' => true]),
         'spend_limit.reached' => $i('critical', $money, ['preference_type' => 'internal_spend_limit', 'required_capability' => 'money.view', 'internal_only' => true]),
         'budget.changed' => $i('info', $money, ['preference_type' => 'project_budget', 'required_capability' => 'money.view', 'channels' => $quiet, 'internal_only' => true]),
         'spend_limit.changed' => $i('info', $money, ['preference_type' => 'internal_spend_limit', 'required_capability' => 'money.view', 'channels' => $quiet, 'internal_only' => true]),
@@ -97,5 +97,8 @@ return [
         'continuity.planning' => $e(),
         'digest.month_end' => $e(),
         'digest.month_start' => $e(),
+
+        // ── §6 «أعد التوجيه بضغطة»: an internal report a person chose to send to an external recipient (same checks, review, log) ──
+        'report.rerouted' => $e(['groupable' => false]),
     ],
 ];

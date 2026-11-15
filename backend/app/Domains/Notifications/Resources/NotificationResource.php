@@ -41,6 +41,14 @@ final class NotificationResource extends JsonResource
             'title' => $ar && $this->title_ar ? $this->title_ar : $this->title,
             'message' => $ar && $this->message_ar ? $this->message_ar : $this->message,
             'project_id' => $this->project_id,
+            // NOTIF-V2-INTERNAL-001 — every notification names its project and its workspace, so it can never be mistaken for another's.
+            'project_name' => $this->getAttribute('project_name'),
+            'workspace_name' => $this->getAttribute('workspace_name'),
+            'priority' => match ($this->severity) {
+                'critical', 'error' => 'critical',
+                'warning' => 'important',
+                default => 'info',
+            },
             'client_workspace_id' => $this->client_workspace_id,
             'action_url' => $this->action_url,
             // NOTIF-BELL-001 — the object the row is about; the panel's «افتح» button goes here.

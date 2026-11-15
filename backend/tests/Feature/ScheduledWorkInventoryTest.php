@@ -61,6 +61,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         // (1 min), the 7-day unconfirmed notice and the grace-period heads-up (daily).
         'notifications:v2-digests',
         'notifications:v2-send',
+        'notifications:v2-internal-scan',
+        'notifications:v2-morning-brief',
         'notifications:v2-consent-sweep',
         'notifications:v2-grace-heads-up',
         'fx:rates',
@@ -190,6 +192,8 @@ final class ScheduledWorkInventoryTest extends TestCase
             // NOTIF-V2-ENGINE-001 — the claim makes a double send impossible; overlap would still be wasted work.
             'notifications:v2-send',
             'notifications:v2-digests',
+            'notifications:v2-internal-scan',
+            'notifications:v2-morning-brief',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on
