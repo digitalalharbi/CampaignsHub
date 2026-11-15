@@ -10,16 +10,17 @@ import { useLocation, useSearchParams, type NavigateOptions } from 'react-router
  * lost (`analytics-normalization`, Firefox, CI PR #1071), or the period is. Which one loses depends on how the browser
  * orders the effect and the event, which is why it only showed in one browser.
  *
- * Every writer that goes through here records what it wrote until the router commits it; a write in the meantime starts
- * from that pending address instead of its stale render. Once a render shows the address committed, the record is
- * dropped and the rendered params are the truth again. The record is scoped to the path it was written on, and expires,
- * so it can never leak a page's keys into another page.
+ * Every writer that goes through here records what it wrote, tagged with the location it was written FROM (its key). A
+ * writer whose render is still that same location — nothing has been committed since — starts from the pending address
+ * instead of its stale render. As soon as the router commits ANY navigation (this write, another writer's, a link, Back)
+ * the location key changes, the record no longer applies, and the rendered params are the truth again; it can never
+ * replay an address the router superseded. Scoped to the path, and it expires.
  */
-let pending: { path: string; search: string; at: number } | null = null
+let pending: { path: string; key: string; search: string; at: number } | null = null
 const PENDING_MS = 1500
 
-function baseFor(path: string, rendered: URLSearchParams): URLSearchParams {
-  if (pending && pending.path === path && Date.now() - pending.at < PENDING_MS) return new URLSearchParams(pending.search)
+function baseFor(path: string, key: string, rendered: URLSearchParams): URLSearchParams {
+  if (pending && pending.path === path && pending.key === key && Date.now() - pending.at < PENDING_MS) return new URLSearchParams(pending.search)
 
   return new URLSearchParams(rendered)
 }
@@ -28,21 +29,21 @@ export type LatestParamsUpdate = (latest: URLSearchParams) => URLSearchParams
 
 export function useLatestSearchParams(): [URLSearchParams, (update: LatestParamsUpdate, options?: NavigateOptions) => void] {
   const [params, setParams] = useSearchParams()
-  const { pathname, search } = useLocation()
+  const { pathname, key } = useLocation()
 
-  /* The router committed what was pending: the rendered params are current again. */
+  /* A navigation was committed after the write: the rendered params are current again. */
   useEffect(() => {
-    if (pending && pending.path === pathname && pending.search === search.replace(/^\?/, '')) pending = null
-  }, [pathname, search])
+    if (pending && (pending.path !== pathname || pending.key !== key)) pending = null
+  }, [pathname, key])
 
   const write = useCallback((update: LatestParamsUpdate, options?: NavigateOptions) => {
     setParams((rendered) => {
-      const next = update(baseFor(pathname, rendered))
-      pending = { path: pathname, search: next.toString(), at: Date.now() }
+      const next = update(baseFor(pathname, key, rendered))
+      pending = { path: pathname, key, search: next.toString(), at: Date.now() }
 
       return next
     }, options)
-  }, [pathname, setParams])
+  }, [key, pathname, setParams])
 
   return [params, write]
 }
