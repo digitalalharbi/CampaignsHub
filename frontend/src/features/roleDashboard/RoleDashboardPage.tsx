@@ -4,6 +4,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
 import { useRoleDashboard, type DashboardView, type RoleDashboard } from './api'
+import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
 import { PmView } from './PmView'
 import { useFitViewport } from './parts'
@@ -35,6 +36,8 @@ function Body({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
   switch (d.view) {
     case 'pm':
       return <PmView d={d} portal={portal} />
+    case 'finance':
+      return <FinanceView d={d} portal={portal} />
     case 'manager':
     default:
       return <ManagerView d={d} portal={portal} />
