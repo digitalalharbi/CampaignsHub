@@ -77,13 +77,39 @@ jobs:
             q "select provider, count(*) from external_creatives where provider<>'snapchat' and is_demo=false and cover_path is null group by 1 order by 1;"
             echo "## B. DRY RUN (command, snapchat only)"
             $DC exec -T backend php artisan creatives:backfill-covers --provider=snapchat --limit=2000 2>&1
+            # SNAP-COVERS-RESYNC-002: scoped, guarded. Selection = snapchat, not demo, no cover, verdict provider_gave_none, not a dynamic collection.
+            SEL="provider='snapchat' and is_demo=false and cover_path is null and cover_error='provider_gave_none' and coalesce(format,'')<>'collection_dynamic'"
+            echo "## C0. GUARDED SELECTION (read-only): selected | of which backing off now | distinct accounts"
+            q "select count(*), count(*) filter (where cover_next_attempt_at > now()), count(distinct external_account_id) from external_creatives where $SEL;"
+            SELN=$(q "select count(*) from external_creatives where $SEL;" | grep -E '^[0-9]+$' | head -1)
+            echo "selection count: ${SELN}"
             if [ "${HOURS}" = "apply-snap-covers" ]; then
-              echo "## C. RUN (queues snapchat captures only)"
+              if [ -z "${SELN}" ] || [ "${SELN}" -lt 190 ] || [ "${SELN}" -gt 200 ]; then
+                echo "ABORT: selection ${SELN} outside 190..200, nothing written"
+                exit 0
+              fi
+              echo "## C1. CLEAR BACK-OFF (one transaction, assertion-guarded, only cover_next_attempt_at)"
+              $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -v ON_ERROR_STOP=1 -At' 2>&1 <<EOF2
+            BEGIN;
+            DO \$\$
+            DECLARE n int; m int;
+            BEGIN
+              SELECT count(*) INTO n FROM external_creatives WHERE $SEL;
+              IF n < 190 OR n > 200 THEN RAISE EXCEPTION 'selection % out of range', n; END IF;
+              UPDATE external_creatives SET cover_next_attempt_at = NULL WHERE $SEL AND cover_next_attempt_at IS NOT NULL;
+              GET DIAGNOSTICS m = ROW_COUNT;
+              IF m > n THEN RAISE EXCEPTION 'updated % > selected %', m, n; END IF;
+              RAISE NOTICE 'backoff cleared on % rows (selected %)', m, n;
+            END \$\$;
+            COMMIT;
+            EOF2
+              echo "## C2. RUN (queues snapchat captures only)"
               $DC exec -T backend php artisan creatives:backfill-covers --provider=snapchat --limit=2000 --execute 2>&1
             else
               echo "## C. RUN skipped (dry run only)"
             fi
-            echo "## D. AFTER: same as A and A5"
+            echo "## D. AFTER: snapchat total | with cover | without cover | provider_gave_none; then other providers"
+            q "select count(*), count(*) filter (where cover_path is not null), count(*) filter (where cover_path is null), count(*) filter (where cover_path is null and cover_error='provider_gave_none') from external_creatives where $SNAP_Q;"
             q "select count(*), count(*) filter (where cover_path is not null), count(*) filter (where cover_path is null) from external_creatives where $SNAP_Q;"
             q "select provider, count(*) from external_creatives where provider<>'snapchat' and is_demo=false and cover_path is null group by 1 order by 1;"
             echo "== END SNAP-COVERS"
