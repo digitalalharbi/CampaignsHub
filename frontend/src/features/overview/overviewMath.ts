@@ -5,13 +5,18 @@ import type { ClientBudgetRow } from '@/features/agency/api'
  *
  * Pure, so the three rules the Owner stated are testable rather than asserted:
  *   - the totals are summed from the SAME rows the cards draw, so the cards add up to the figure above them;
- *   - nothing is added across currencies — a mixed set prints no total rather than a wrong one;
- *   - «تكفي N يوم» exists only where it can be measured: the balance is known AND the last seven days moved money.
+ *   - the budget is the APPROVED project budget (SAR), so the totals always add — never a platform campaign budget;
+ *   - «تكفي N يوم» exists only where it can be measured: the server states it from the budget's last three complete days.
  */
 
 /** «قرّبت تخلص» — the Owner's 90% alert threshold, or a balance that lasts a week or less. */
 export const NEAR_END_RATIO = 0.9
 export const NEAR_END_DAYS = 7
+
+/*
+ * ONE-BUDGET-001 — every budget figure on the home page is the client's APPROVED project budget (`project_budget`, from
+ * /agency/budgets, over each budget's own period). The campaign budgets set inside the platforms are not read here.
+ */
 
 export function weekSpend(row: ClientBudgetRow): number | null {
   const line = row.daily_spend_7d
@@ -19,21 +24,20 @@ export function weekSpend(row: ClientBudgetRow): number | null {
   return line === undefined || line === null ? null : line.reduce((sum, v) => sum + v, 0)
 }
 
-/** Whole days the remaining budget lasts at the last seven days' average. Null = cannot be measured; 0 = already out. */
+/** Whole days the remaining approved budget lasts, as the server states it (last three complete days). Null = cannot be measured. */
 export function coverDays(row: ClientBudgetRow): number | null {
-  if (row.remaining === null || row.remaining === undefined) return null
-  if (row.remaining <= 0) return 0
-
-  const week = weekSpend(row)
-  if (week === null || week <= 0) return null
-
-  return Math.floor(row.remaining / (week / 7))
+  return row.project_budget?.cover_days ?? null
 }
 
 export function budgetRatio(row: ClientBudgetRow): number | null {
-  if (row.budget === null || row.budget <= 0 || row.spent === null) return null
+  const b = row.project_budget
+  if (!b || b.approved === null || b.approved <= 0 || b.spent === null) return null
 
-  return row.spent / row.budget
+  return b.spent / b.approved
+}
+
+export function hasBudget(row: ClientBudgetRow): boolean {
+  return (row.project_budget?.budgeted ?? 0) > 0
 }
 
 export function isNearEnd(row: ClientBudgetRow): boolean {
@@ -48,7 +52,7 @@ export function isRunning(row: ClientBudgetRow): boolean {
 }
 
 export interface OverviewTotals {
-  /** Null where the rows disagree on currency, or none has a figure — never a sum of two units. */
+  /** Always SAR: approved budgets are kept in riyals, so they always add. Null when no client has a budget. */
   currency: string | null
   mixedCurrency: boolean
   spent: number | null
@@ -59,21 +63,19 @@ export interface OverviewTotals {
 }
 
 export function totalsOf(rows: readonly ClientBudgetRow[]): OverviewTotals {
-  const currencies = new Set(rows.filter((r) => r.budget !== null && r.currency).map((r) => r.currency as string))
-  const mixedCurrency = currencies.size > 1 || rows.some((r) => r.currencies > 1)
   const sum = (pick: (r: ClientBudgetRow) => number | null | undefined): number | null => {
-    if (mixedCurrency) return null
     const parts = rows.map(pick).filter((v): v is number => typeof v === 'number')
 
     return parts.length === 0 ? null : parts.reduce((a, b) => a + b, 0)
   }
+  const budget = sum((r) => r.project_budget?.approved)
 
   return {
-    currency: mixedCurrency ? null : [...currencies][0] ?? null,
-    mixedCurrency,
-    spent: sum((r) => r.spent),
-    remaining: sum((r) => r.remaining),
-    budget: sum((r) => r.budget),
+    currency: budget === null ? null : 'SAR',
+    mixedCurrency: false,
+    spent: sum((r) => r.project_budget?.spent),
+    remaining: sum((r) => r.project_budget?.remaining),
+    budget,
     running: rows.filter(isRunning).length,
     nearEnd: rows.filter(isNearEnd).length,
   }
@@ -101,6 +103,9 @@ export function orderClients(rows: readonly ClientBudgetRow[], alertCount: (clie
     const ab = alertCount(b.client_id)
     if (aa !== ab) return ab - aa
 
-    return (b.spent ?? -1) - (a.spent ?? -1) || a.client_name.localeCompare(b.client_name)
+    const sa = a.project_budget?.spent ?? -1
+    const sb = b.project_budget?.spent ?? -1
+
+    return sb - sa || a.client_name.localeCompare(b.client_name)
   })
 }

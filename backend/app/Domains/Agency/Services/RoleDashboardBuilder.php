@@ -13,6 +13,8 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Funding\Services\FundingReach;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -27,8 +29,9 @@ use Illuminate\Support\Carbon;
 /**
  * ROLE-DASHBOARD-001 — one landing page per role, from facts the product already computes.
  *
- * Nothing here is a new metric. Budgets, spend and pace are `MetricsAggregator::budgetPacing()` rolled up by
- * `ClientBudgetRollup` (the same rule the client budgets list uses); results and cost per result are the objective's own
+ * Nothing here is a new metric. Budgets, spend, remaining and run-out are the APPROVED project budgets
+ * (`ProjectBudgetReader`, ONE-BUDGET-001 — the same reading as /agency/budgets, over each budget's own period); the
+ * campaign budgets set inside the platforms ride along as `money.platform_campaign_budgets`, informational only. Results and cost per result are the objective's own
  * (`byCampaign()`); invoices come through `BillingReach`, tasks and approvals through the clients the reader reaches.
  *
  * ## Reach is decided once, here, and nothing widens it
@@ -62,6 +65,8 @@ final class RoleDashboardBuilder
         private readonly ProjectReach $reach,
         private readonly ClientBudgetRollup $rollup,
         private readonly BillingReach $billing,
+        private readonly ProjectBudgetReader $budgets,
+        private readonly FundingReach $fundingReach,
     ) {}
 
     /** @return array<string, mixed> */
@@ -98,9 +103,15 @@ final class RoleDashboardBuilder
         $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
 
         $pacing = $money && $agg !== null ? $agg->budgetPacing($from, $to, $today) : [];
-        $units = $money ? $this->units($agg, $scope, $pacing, $today) : [];
+        // ONE-BUDGET-001 — the approved budgets, never the 30-day window above; a project whose membership withholds money is left out.
+        $approved = $money ? $this->budgets->forProjects($this->fundingReach->moneyVisible($user, array_map('strval', $projectIds))) : [];
+        $units = $money ? $this->units($scope, $approved, $today) : [];
 
-        $out['money'] = $money ? $this->rollup->of($pacing) + ['rows' => count($pacing)] : null;
+        $out['money'] = $money ? $this->reading(array_values($approved)) + [
+            'rows' => count(array_filter($approved, static fn (array $r): bool => $r['has_budget'])),
+            'source' => 'approved_budget',
+            'platform_campaign_budgets' => $this->rollup->of($pacing),
+        ] : null;
         $out['units'] = $units;
         $out['daily_spend'] = $money && $agg !== null ? $this->dailySpend($agg, $today) : [];
 
@@ -181,81 +192,70 @@ final class RoleDashboardBuilder
     }
 
     /**
-     * One row per client (or per project where it has no client), with its budget reading and run-out date.
+     * The approved budgets added together, in the budget-reading shape the views draw. SAR only, so it always adds.
+     *
+     * @param  list<array<string, mixed>>  $readings
+     * @return array<string, mixed>
+     */
+    private function reading(array $readings): array
+    {
+        $t = ProjectBudgetReader::total($readings);
+
+        return [
+            'budget' => $t['approved'], 'spent' => $t['spent'], 'remaining' => $t['remaining'], 'projected' => null, 'pace' => null,
+            'currency' => $t['approved'] === null ? null : 'SAR', 'currencies' => $t['approved'] === null ? 0 : 1,
+            'excluded' => $t['unbudgeted'], 'unmeasured' => 0, 'campaigns' => 0,
+            'daily_rate_3d' => $t['pace_per_day'], 'cover_days' => $t['cover_days'],
+            'budgeted' => $t['budgeted'], 'unbudgeted' => $t['unbudgeted'],
+        ];
+    }
+
+    /**
+     * One row per client (or per project where it has no client), from the approved budgets of its projects: spent of
+     * approved, remaining, and the run-out date from the last three complete days (`ProjectBudgetReader`). A unit whose
+     * projects have no budget is listed with no figure («بدون ميزانية»), never with a platform number.
      *
      * @param  array{clients: array<int|string, string>, projects: array<int|string, array{name: string, client_id: string|null}>, restricted: bool}  $scope
-     * @param  list<array<string, mixed>>  $pacing
+     * @param  array<string, array<string, mixed>>  $approved
      * @return list<array<string, mixed>>
      */
-    private function units(?MetricsAggregator $agg, array $scope, array $pacing, Carbon $today): array
+    private function units(array $scope, array $approved, Carbon $today): array
     {
-        if ($agg === null || $pacing === []) {
-            return [];
-        }
-
-        // Last three COMPLETE days of spend per campaign — one statement for the whole screen.
-        $campaignIds = array_values(array_unique(array_map(static fn (array $r): string => (string) $r['campaign_id'], $pacing)));
-        $series = $agg->forCampaigns($campaignIds)->timeseriesByCampaign($today->copy()->subDays(3), $today->copy()->subDay());
-
-        /** @var array<string, list<array<string, mixed>>> $byUnit */
         $byUnit = [];
         $names = [];
         $kinds = [];
         $projectsOf = [];
-        foreach ($pacing as $row) {
-            $pid = (string) ($row['project_id'] ?? '');
+        foreach ($approved as $pid => $reading) {
             $project = $scope['projects'][$pid] ?? null;
             if ($project === null) {
                 continue;
             }
             $unit = $project['client_id'] ?? 'p:'.$pid;
-            $byUnit[$unit][] = $row;
+            $byUnit[$unit][] = $reading;
             $names[$unit] = $project['client_id'] !== null ? ($scope['clients'][$project['client_id']] ?? $project['name']) : $project['name'];
             $kinds[$unit] = $project['client_id'] !== null ? 'client' : 'project';
-            $projectsOf[$unit][$pid] = $project['name'];
+            $projectsOf[$unit][(string) $pid] = $project['name'];
         }
 
         $units = [];
-        foreach ($byUnit as $unit => $rows) {
-            $r = $this->rollup->of($rows);
-            $spendLast3 = 0.0;
-            foreach ($rows as $row) {
-                if (($row['pacing_basis'] ?? null) !== 'comparable') {
-                    continue;
-                }
-                foreach ($series[(string) $row['campaign_id']] ?? [] as $day) {
-                    $spendLast3 += (float) ($day['spend'] ?? 0);
-                }
-            }
-            $rate = round($spendLast3 / 3, 2);
+        foreach ($byUnit as $unit => $readings) {
+            $r = $this->reading($readings);
+            $days = $r['cover_days'];
             $units[] = [
                 'id' => str_starts_with((string) $unit, 'p:') ? substr((string) $unit, 2) : (string) $unit,
                 'kind' => $kinds[$unit],
                 'name' => $names[$unit],
                 'projects' => array_map(static fn (string $id, string $name): array => ['id' => $id, 'name' => $name], array_keys($projectsOf[$unit]), array_values($projectsOf[$unit])),
                 'ratio' => $r['budget'] !== null && $r['spent'] !== null && $r['budget'] > 0 ? round($r['spent'] / $r['budget'], 4) : null,
-                'daily_rate_3d' => $r['spent'] === null ? null : $rate,
-            ] + $r + $this->runOut($r['remaining'], $rate, $today);
+                'days_left' => $days,
+                'run_out_on' => $days === null ? null : $today->copy()->addDays($days)->toDateString(),
+            ] + $r;
         }
 
-        // Closest to running out first; units with no reading last.
+        // Closest to running out first; units with no budget last.
         usort($units, static fn (array $a, array $b): int => ($b['ratio'] ?? -1) <=> ($a['ratio'] ?? -1));
 
         return $units;
-    }
-
-    /** @return array{days_left: int|null, run_out_on: string|null} */
-    private function runOut(?float $remaining, float $rate, Carbon $today): array
-    {
-        if ($remaining === null || $rate <= 0.0) {
-            return ['days_left' => null, 'run_out_on' => null];
-        }
-        if ($remaining <= 0) {
-            return ['days_left' => 0, 'run_out_on' => $today->toDateString()];
-        }
-        $days = (int) ceil($remaining / $rate);
-
-        return ['days_left' => $days, 'run_out_on' => $today->copy()->addDays($days)->toDateString()];
     }
 
     /** @return list<array{date: string, spend: float}> the last 14 complete days of the scope's spend */

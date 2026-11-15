@@ -9,9 +9,12 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\ClientWorkspaces\Services\ClientPortfolioStats;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
+use App\Domains\Funding\Services\FundingReach;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -164,7 +167,34 @@ final class ClientsController
             'projects' => $projects,
             'campaigns' => $campaigns,
             'requests' => $requests,
+            'budget' => $this->approvedBudget($user, $c, $projects->all()),
         ]]);
+    }
+
+    /**
+     * ONE-BUDGET-001 — the client's approved budgets (/agency/budgets), per project and added up, over each budget's own
+     * period. Null for a reader without a budget permission; a project outside the reader's project ceiling, or whose
+     * membership withholds money, is left out. Deposits carry their source on the budget's own page.
+     *
+     * @param  list<array<string, mixed>>  $projects
+     * @return array<string, mixed>|null
+     */
+    private function approvedBudget(User $user, ClientWorkspace $client, array $projects): ?array
+    {
+        if (! ($user->hasPermission('budget.view') || $user->hasPermission('funding.view') || $user->hasPermission('funding.manage'))) {
+            return null;
+        }
+        $ceilings = $this->access->projectCeilings($user);
+        $allowed = array_values(array_filter($projects, fn (array $p): bool => $this->access->projectAllowed($ceilings, (string) $client->id, (string) $p['id'])));
+        $money = array_flip(app(FundingReach::class)->moneyVisible($user, array_map(static fn (array $p): string => (string) $p['id'], $allowed)));
+        $visible = array_values(array_filter($allowed, static fn (array $p): bool => isset($money[(string) $p['id']])));
+        $readings = app(ProjectBudgetReader::class)->forProjects(array_map(static fn (array $p): string => (string) $p['id'], $visible));
+
+        return [
+            'total' => ProjectBudgetReader::total(array_values($readings)),
+            'projects' => array_map(static fn (array $p): array => ['project_id' => (string) $p['id'], 'project_name' => $p['name'], 'budget' => $readings[(string) $p['id']]], $visible),
+            'can_add' => $user->hasPermission('funding.manage'),
+        ];
     }
 
     /** @return array<string,mixed> */

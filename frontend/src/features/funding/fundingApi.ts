@@ -172,6 +172,60 @@ export function useBudget(projectId: string | null) {
   })
 }
 
+/**
+ * ONE-BUDGET-001 — the approved project budget as every other surface reads it (`ProjectBudgetReader` on the server):
+ * SAR, over the budget's OWN period, never a dashboard window. `has_budget: false` means «بدون ميزانية».
+ */
+export type ApprovedBudget =
+  | { has_budget: false; withheld?: boolean }
+  | {
+      has_budget: true
+      project_id: string
+      currency: 'SAR'
+      payment_mode: PaymentMode
+      payment_method: 'prepaid' | 'direct' | 'unset'
+      status: BudgetStatus
+      approved: number
+      deposits: number
+      settlements: number
+      spent: number
+      remaining: number | null
+      used_ratio: number | null
+      pace_per_day: number | null
+      cover_days: number | null
+      run_out_date: string | null
+      projected: number | null
+      period_start: string | null
+      period_end: string | null
+      thresholds: number[]
+      crossed_threshold: number | null
+      complete: boolean
+      last_spend_day: string | null
+    }
+
+/** Several projects' approved budgets added (SAR). `approved`/`remaining` are null when none has a balance. */
+export interface ApprovedBudgetTotal {
+  currency: 'SAR'
+  budgeted: number
+  unbudgeted: number
+  without_balance: number
+  approved: number | null
+  spent: number | null
+  remaining: number | null
+  used_ratio: number | null
+  pace_per_day: number | null
+  cover_days: number | null
+}
+
+export function useApprovedBudget(projectId: string | null) {
+  return useQuery({
+    queryKey: ['funding', 'approved', projectId],
+    enabled: projectId !== null,
+    retry: false,
+    queryFn: () => getData<ApprovedBudget>(`/projects/${projectId}/approved-budget`),
+  })
+}
+
 export function useBudgetMonth(projectId: string | null, month: string | null) {
   return useQuery({
     queryKey: ['funding', projectId, 'month', month],

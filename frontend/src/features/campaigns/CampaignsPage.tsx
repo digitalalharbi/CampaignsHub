@@ -67,6 +67,8 @@ import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
+import { ApprovedBudgetPacing } from '@/features/funding/ApprovedBudget'
+import { useApprovedBudget } from '@/features/funding/fundingApi'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -150,6 +152,9 @@ export function CampaignsPage() {
    * load because a governance sidecar did would be a worse outcome than the missing chip.
    */
   const spendLimits = useSpendLimits(projectId)
+  // ONE-BUDGET-001 — the project's approved budget (one source, its own period); the strip and the pacing line read it.
+  const approved = useApprovedBudget(projectId)
+  const canAddBudget = useAuth((s) => s.hasPermission('funding.manage'))
 
   const [days, setDays] = useUrlNumber('days', 30)
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
@@ -917,6 +922,8 @@ export function CampaignsPage() {
         currency={summary.data?.currency ?? null}
         paused={counts.paused ?? 0}
         ar={ar}
+        approved={approved.data}
+        canAddBudget={canAddBudget}
       />
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
@@ -1005,7 +1012,8 @@ export function CampaignsPage() {
             An incomparable scope reads «—» and says why. It never reads 0%, which an operator takes
             as «we have spent nothing» when the truth is that nothing here could be added up.
           */}
-          <BudgetPacingRow rows={budget.data ?? []} ar={ar} />
+          {/* ONE-BUDGET-001 — paced against the APPROVED budget; the campaign budgets in the platforms are not «the budget». */}
+          {approved.data && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
           {/* Charts — all from the project-scoped metrics API. */}
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">

@@ -19,6 +19,7 @@ import { ClassificationEditor } from './ClassificationEditor'
 import { campaignStatusLabel, objectiveLabel } from '@/features/campaigns/labels'
 import { projectStatusLabel } from '@/features/projects/ProjectsPage'
 import { TabBilling } from './TabBilling'
+import { ClientBudgetCard } from './ClientBudgetCard'
 import { TabDelivery } from './delivery/TabDelivery'
 import { TabPortal } from './portal/TabPortal'
 import { TabContentApprovals } from './portal/TabContentApprovals'
@@ -159,6 +160,8 @@ export function ClientCommandCenterPage() {
               ))}
             </StatGrid>
           )}
+
+          {tab === 'overview' && d.budget && <ClientBudgetCard budget={d.budget} ar={ar} clientName={d.name} />}
 
           {tab === 'overview' && (
             <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="client-project-actions">

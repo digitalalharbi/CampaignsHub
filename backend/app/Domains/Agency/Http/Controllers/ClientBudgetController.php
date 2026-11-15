@@ -6,6 +6,8 @@ namespace App\Domains\Agency\Http\Controllers;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Funding\Services\FundingReach;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
@@ -32,6 +34,8 @@ final class ClientBudgetController extends Controller
     public function __construct(
         private readonly ClientAccess $access,
         private readonly ClientBudgetRollup $rollup,
+        private readonly ProjectBudgetReader $budgets,
+        private readonly FundingReach $fundingReach,
     ) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -77,6 +81,14 @@ final class ClientBudgetController extends Controller
                 ->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
 
         $projectsByClient = $projects->groupBy('client_workspace_id');
+
+        /*
+         * ONE-BUDGET-001 — the APPROVED budget of each project (/agency/budgets), over the budget's own period. It is the
+         * «budget» the home cards draw; the dashboard window (`from`/`to`) never touches it. The campaign roll-up above
+         * stays in the payload as `platform_campaign_budgets`, informational only. A project whose membership withholds
+         * money reads as having no figure, exactly as on the budgets page.
+         */
+        $approved = $this->budgets->forProjects($this->fundingReach->moneyVisible($user, $allProjectIds));
 
         /*
          * NAV-HOME-PLANS-001 — each client's last seven days of spend, for the home page's card line.
@@ -140,10 +152,22 @@ final class ClientBudgetController extends Controller
                 }
             }
 
+            $projectBudgets = $clientProjects
+                ->map(fn ($p): array => [
+                    'project_id' => (string) $p->id,
+                    'project_name' => $p->name,
+                    'budget' => $approved[(string) $p->id] ?? ProjectBudgetReader::none(),
+                ])
+                ->values()
+                ->all();
+
             $rows[] = [
                 'client_id' => (string) $client->id,
                 'client_name' => $client->name,
                 'projects' => $clientProjects->count(),
+                'project_budget' => ProjectBudgetReader::total(array_column($projectBudgets, 'budget')),
+                'project_budgets' => $projectBudgets,
+                'platform_campaign_budgets' => ['budget' => $rollup['budget'], 'spent' => $rollup['spent'], 'currency' => $rollup['currency'], 'campaigns' => $rollup['campaigns']],
                 'projects_breakdown' => $breakdown,
                 'daily_spend_7d' => $rollup['currencies'] > 1 || $pacing === [] ? null : array_map(static fn (float $v): float => round($v, 2), $daily),
             ] + $rollup;
