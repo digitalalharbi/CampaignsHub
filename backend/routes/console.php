@@ -238,6 +238,12 @@ Schedule::command('integrations:prune-raw')->dailyAt('03:30');
 Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
 
 /*
+ * FX-ENGINE-001 — after the rates have arrived: in-app alerts for a used currency with no rate or one older than 7 days,
+ * and the money guard's cheap scan (the last 3 days of stored figures) for any money that bypassed convert().
+ */
+Schedule::command('fx:monitor')->dailyAt('03:00')->withoutOverlapping();
+
+/*
  * The periodic delivery packs (WD-SCHEDULE-001, DELIVERY-SETTINGS-001) — every morning, Riyadh time; each client is prepared on its own day.
  *
  * Prepares last ISO week's DRAFT pack for each client that opted in; sending is the Owner's decision.

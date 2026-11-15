@@ -20,9 +20,11 @@ use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\FxMonitor;
 use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
 use App\Domains\Metrics\Rates\EcbReferenceRates;
@@ -61,6 +63,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -197,6 +200,24 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        /*
+         * FX-ENGINE-001 — an ad account linked (or re-read) in a currency with no exchange rate alerts the platform admin in
+         * the app at once, not at the next daily sweep. One rate lookup; never allowed to break a sync.
+         */
+        ExternalAccount::saved(static function (ExternalAccount $account): void {
+            if (! $account->wasChanged('currency') && ! $account->wasRecentlyCreated) {
+                return;
+            }
+            if ($account->account_type !== 'ad_account' || ! is_string($account->currency) || $account->currency === '') {
+                return;
+            }
+            try {
+                app(FxMonitor::class)->accountLinked($account->currency, (string) $account->provider, (string) $account->tenant_id);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        });
+
         // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.
         DB::listen(static function (QueryExecuted $query): void {
             app(PerformanceRecorder::class)->noteQuery($query->sql, (float) $query->time, app()->runningInConsole() ? 'job' : 'http');

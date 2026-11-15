@@ -7,8 +7,10 @@ namespace App\Domains\Metrics\Http\Controllers;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Metrics\Fx\CurrencyCoverage;
 use App\Domains\Metrics\Fx\FxEngine;
+use App\Domains\Metrics\Fx\FxMonitor;
 use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Fx\FxRecompute;
+use App\Domains\Metrics\Fx\MoneyGuard;
 use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
@@ -194,13 +196,13 @@ final class PlatformCurrencyRateController extends Controller
     }
 
     /**
-     * The safety-net block of the page (alerts, daily guard) — empty until FX-ENGINE-001's monitor is installed.
+     * The safety-net block of the page: the open FX alerts (no rate / stale) and the last daily guard run.
      *
-     * @return array<string, mixed>
+     * @return array{alerts: list<array<string, mixed>>, guard: array<string, mixed>|null}
      */
     private function safetyNet(): array
     {
-        return ['alerts' => [], 'guard' => null];
+        return ['alerts' => app(FxMonitor::class)->open(), 'guard' => MoneyGuard::lastRun()];
     }
 
     /** @return array<string, mixed> */

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Alerts;
 
+use App\Domains\Metrics\Fx\FxMonitor;
 use App\Domains\Notifications\Support\AlertVisual;
 use App\Domains\Platform\Models\PlatformAlert;
 use Illuminate\Support\Carbon;
@@ -37,6 +38,7 @@ final class PlatformAlertPresenter
             PlatformAlert::UNVERIFIED => $this->unverified($f, $ar),
             PlatformAlert::MISMATCH => $this->mismatch($f, $ar),
             PlatformAlert::UNSETTLED => $this->unsettled($f, $ar),
+            FxMonitor::MISSING, FxMonitor::STALE => $this->fx((string) $alert->kind, $f, $ar),
             default => $this->blocking($f, $ar),
         };
 
@@ -252,6 +254,44 @@ final class PlatformAlertPresenter
         ];
     }
 
+    /**
+     * FX-ENGINE-001 — a currency in use with no exchange rate, or with one older than 7 days. Evidence only: the counts
+     * and the date the monitor read; the fix is on the rates page.
+     *
+     * @param  array<string,mixed>  $f
+     */
+    private function fx(string $kind, array $f, bool $ar): array
+    {
+        $cur = (string) ($f['currency'] ?? '');
+        $accounts = (int) ($f['accounts'] ?? 0);
+        $withheld = (int) ($f['withheld'] ?? 0);
+        $date = (string) ($f['rate_date'] ?? '');
+
+        if ($kind === FxMonitor::MISSING) {
+            return [
+                'title' => $ar ? "عملة بدون سعر صرف: {$cur}" : "A currency with no exchange rate: {$cur}",
+                'context' => $cur,
+                'line' => $ar
+                    ? "حسابات إعلانية مربوطة بـ {$cur}: {$accounts}. أرقام بانتظار سعر صرف: {$withheld}."
+                    : "Ad accounts linked in {$cur}: {$accounts}. Figures awaiting an exchange rate: {$withheld}.",
+                'more' => [],
+                'steps' => $ar ? "افتح أسعار الصرف ← سجّل سعر {$cur} ← أعد الحساب" : "Open exchange rates → record a {$cur} rate → recompute",
+                'viz' => AlertVisual::count($withheld, $ar ? 'رقم محجوب' : 'withheld', 'bad'),
+            ];
+        }
+
+        return [
+            'title' => $ar ? "سعر صرف قديم: {$cur}" : "Stale exchange rate: {$cur}",
+            'context' => $cur,
+            'line' => $ar
+                ? "آخر سعر مسجّل بتاريخ {$date}، أقدم من 7 أيام. الأرقام تُحسب به مع ⚠."
+                : "The latest rate is dated {$date}, older than 7 days. Figures use it, marked ⚠.",
+            'more' => [],
+            'steps' => $ar ? "افتح أسعار الصرف ← سجّل سعر {$cur} أحدث" : "Open exchange rates → record a newer {$cur} rate",
+            'viz' => AlertVisual::count($accounts, $ar ? 'حساب' : ($accounts === 1 ? 'account' : 'accounts'), 'watch'),
+        ];
+    }
+
     // ── Pieces ────────────────────────────────────────────────────────────────────────────────
 
     /** @param  array<string,mixed>  $i */
@@ -348,6 +388,9 @@ final class PlatformAlertPresenter
         $links = [];
         if (($f['registration_id'] ?? null) !== null) {
             $links[] = ['label' => $ar ? 'التسجيلات' : 'Registrations', 'path' => '/admin/registrations'];
+        }
+        if (($f['rates_page'] ?? null) !== null) {
+            $links[] = ['label' => $ar ? 'أسعار الصرف' : 'Exchange rates', 'path' => (string) $f['rates_page']];
         }
         if (($f['tenant_id'] ?? null) !== null) {
             $links[] = ['label' => $ar ? 'المساحة' : 'Workspace', 'path' => '/admin/tenants'];
