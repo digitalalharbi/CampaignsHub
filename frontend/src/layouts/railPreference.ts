@@ -4,6 +4,9 @@ import { useAuth } from '@/stores/auth'
 /**
  * NOV-SIDEBAR-001 — the side rail is a 64px icon strip until the person opens it, and the choice is theirs.
  *
+ * RAIL-DEFAULT-COLLAPSED-001 — every new visit starts on the strip. The open choice lives in `sessionStorage`, so it
+ * survives a reload in the same tab, but a new tab or a new visit opens collapsed again.
+ *
  * ## Per person, not per browser
  *
  * The old preference was one key for the whole browser, so two people sharing a workstation (an agency's
@@ -13,7 +16,7 @@ import { useAuth } from '@/stores/auth'
  * ## Where it is stored
  *
  * There is no server-side preferences mechanism to extend (the account «اللغة والمظهر» page keeps language and
- * theme in this same browser storage), so this stays in `localStorage` — wrapped, because private windows, blocked
+ * theme in this same browser storage), so this stays in browser storage (`sessionStorage`) — wrapped, because private windows, blocked
  * site data and thumbnail capture all make the accessor throw, and a rail that cannot remember is still a rail.
  * Nothing depends on the value being readable: the default is the collapsed strip.
  */
@@ -27,7 +30,7 @@ export function railStorageKey(userId: string | null | undefined): string {
 /** `true` unless this person opened it before — the strip is the default, never the expanded rail. */
 export function readRailCollapsed(userId: string | null | undefined): boolean {
   try {
-    return window.localStorage.getItem(railStorageKey(userId)) !== 'open'
+    return window.sessionStorage.getItem(railStorageKey(userId)) !== 'open'
   } catch {
     return true
   }
@@ -35,7 +38,7 @@ export function readRailCollapsed(userId: string | null | undefined): boolean {
 
 function writeRailCollapsed(userId: string | null | undefined, collapsed: boolean): void {
   try {
-    window.localStorage.setItem(railStorageKey(userId), collapsed ? 'closed' : 'open')
+    window.sessionStorage.setItem(railStorageKey(userId), collapsed ? 'closed' : 'open')
   } catch {
     /* the choice simply will not survive this session */
   }
