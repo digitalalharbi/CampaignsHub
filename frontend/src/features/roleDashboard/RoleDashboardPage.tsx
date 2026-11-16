@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { days as countedDays } from '@/lib/counted'
 import { Skeleton } from '@/components/ui/States'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -67,7 +68,7 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
             {DASHBOARD_WINDOWS.map((n) => (
               <button key={n} type="button" role="radio" aria-checked={days === n} data-testid={`role-window-${n}`} onClick={() => setDays(n)}
                 className={`min-h-8 rounded-lg px-2.5 text-xs font-semibold tnum ${days === n ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'}`}>
-                {ar ? (n === 7 ? '7 أيام' : `${n} يوم`) : `${n} days`}
+                {countedDays(n, ar ? 'ar' : 'en')}
               </button>
             ))}
           </div>
