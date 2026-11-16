@@ -1,3 +1,5 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
@@ -3213,7 +3215,8 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
   )
 }
 
-export function EntityTab({ projectId, range, filters, level, workspace }: TabProps & { level: 'ad_set' | 'ad'; workspace?: EntityWorkspaceControls }) {
+export function EntityTab({ projectId, range, filters, level, workspace, part = 'all' }: TabProps & { level: 'ad_set' | 'ad'; workspace?: EntityWorkspaceControls; /** AF2 — a fitted page draws the table and the diagnosis on separate tabs. */ part?: 'all' | 'table' | 'diagnosis' }) {
+  const fitCompact = useFitCompact()
   /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
   const portalTo = usePortalPath()
   const ar = useAr()
@@ -3595,10 +3598,11 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
         />
       )}
 
-      <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
-      <Panel
+      {part !== 'diagnosis' && <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />}
+      {part !== 'diagnosis' && <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+        action={fitCompact && plan.mixed ? <InfoTip text={ar ? 'تضم هذه القائمة أهدافًا مختلفة، فتُعرض الأرقام المشتركة فقط. ضيّق فلتر الهدف لترى أرقام هدف واحد.' : 'These rows span different objectives, so only the figures they share are shown. Narrow the objective filter to see one objective’s own figures.'} /> : undefined}
         loading={q.isLoading}
         error={q.isError}
         /*
@@ -3633,7 +3637,7 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
               Only when the rows really hold several. One family — even beside rows with no campaign link
               at all — gets its own figures and needs no explanation.
             */}
-            {plan.mixed && (
+            {plan.mixed && !fitCompact && (
               <p data-testid={`entity-mixed-objectives-${level}`} className="mb-2 rounded-xl border border-border bg-surface-secondary p-3 text-xs text-text-secondary">
                 {ar
                   ? 'تضم هذه القائمة أهدافًا مختلفة، فتُعرض الأرقام المشتركة فقط: العائد وتكلفة النتيجة لا يصحّان عبر أهداف اشترت أشياء مختلفة. ضيِّق الهدف من الفلتر لترى أرقام هدف واحد.'
@@ -3668,9 +3672,9 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
             )}
           </div>
         )}
-      </Panel>
+      </Panel>}
 
-      {level === 'ad_set' && workspace && (
+      {level === 'ad_set' && workspace && part !== 'table' && (
         <ChangeDiagnosis
           data={adSetDrivers.data}
           currency={currency}

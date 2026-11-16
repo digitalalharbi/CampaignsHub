@@ -1,3 +1,4 @@
+import { AgencyFit } from '@/components/fit/AgencyFit'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { StatCard } from '@/components/ui/StatCard'
 import { useEffect, useState } from 'react'
@@ -88,7 +89,7 @@ export function ThreadsPage() {
   })
 
   return (
-    <div className="flex w-full flex-col gap-4">
+    <AgencyFit className="flex w-full flex-col gap-4" testid="messages-fit">
       {/* UX-PAGE-HERO-001 — the shared head, and the inbox at a glance inside it (§44). */}
       <PageIntro
         testid="messages-intro"
@@ -136,8 +137,9 @@ export function ThreadsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-        <div className="flex flex-col gap-2">
+      {/* AF2 — fitted: the two panes take what is left, and the conversation list scrolls INSIDE its pane (an inbox is a scrolling surface by nature). */}
+      <div className="fit-panel grid gap-4 md:grid-cols-[320px_1fr] md:grid-rows-[minmax(0,1fr)]">
+        <div data-fit-scroll className="flex min-h-0 flex-col gap-2 [[data-fit=true]_&]:overflow-y-auto">
           {q.isLoading ? (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
           ) : q.isError ? (
@@ -154,7 +156,7 @@ export function ThreadsPage() {
           )}
         </div>
 
-        <div className="min-h-[300px]">
+        <div data-fit-scroll className="min-h-[300px] [[data-fit=true]_&]:min-h-0 [[data-fit=true]_&]:overflow-y-auto">
           {selectedId ? (
             <ThreadDetailPanel
               threadId={selectedId}
@@ -178,7 +180,7 @@ export function ThreadsPage() {
           qc.invalidateQueries({ queryKey: ['messaging', 'threads'] })
         }} />
       ) : null}
-    </div>
+    </AgencyFit>
   )
 }
 

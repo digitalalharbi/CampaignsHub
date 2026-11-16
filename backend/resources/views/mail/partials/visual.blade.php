@@ -20,9 +20,13 @@
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" data-block="viz" data-viz="ring" style="margin-top:6px;">
         <tr>
             <td width="{{ $size + 10 }}" valign="middle" style="padding:0;">
-                {{-- The ring: the state's colour, its glyph in the middle. --}}
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-                    <td width="{{ $size }}" height="{{ $size }}" align="center" valign="middle" style="width:{{ $size }}px; height:{{ $size }}px; border:{{ max(3, (int) round($size / 8)) }}px solid {{ $S::INK[$vstate] }}; border-radius:50%; background-color:{{ $S::CELL[$vstate] }}; font-size:{{ max(10, (int) round($size / 2.6)) }}px; font-weight:800; line-height:1; color:{{ $S::INK[$vstate] }}; text-align:center;">{{ $glyph ?? $S::GLYPH[$vstate] }}</td>
+                {{-- The ring: the state's colour, its glyph in the middle. EMAIL-CLIENT-COMPAT-001 — a FIXED box: the table and its one cell
+                     carry width/height attributes and px sizes (the border inside them), `table-layout:fixed`, a px line-height equal to the
+                     inner box. `border-radius:50%` only rounds it; a client that drops it shows a small square, never a stretched oval. --}}
+                @php($ring = max(3, (int) round($size / 8)))
+                @php($inner = $size - 2 * $ring)
+                <table role="presentation" width="{{ $size }}" height="{{ $size }}" cellpadding="0" cellspacing="0" border="0" style="width:{{ $size }}px; height:{{ $size }}px; table-layout:fixed;"><tr>
+                    <td width="{{ $inner }}" height="{{ $inner }}" align="center" valign="middle" bgcolor="{{ $S::CELL[$vstate] }}" style="width:{{ $inner }}px; height:{{ $inner }}px; padding:0; border:{{ $ring }}px solid {{ $S::INK[$vstate] }}; border-radius:50%; background-color:{{ $S::CELL[$vstate] }}; font-size:{{ max(10, (int) round($size / 2.6)) }}px; font-weight:800; line-height:{{ $inner }}px; mso-line-height-rule:exactly; color:{{ $S::INK[$vstate] }}; text-align:center; white-space:nowrap; overflow:hidden;">{{ $glyph ?? $S::GLYPH[$vstate] }}</td>
                 </tr></table>
             </td>
             @if (! empty($timeline['from']) || ! empty($timeline['to']))
@@ -36,9 +40,9 @@
                         <tr>
                             <td colspan="2" style="padding-top:3px;">
                                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-                                    <td width="10" height="10" style="width:10px; height:10px; border-radius:50%; background-color:{{ $S::INK['watch'] }}; font-size:1px; line-height:10px;">&nbsp;</td>
-                                    <td height="4" style="height:4px; background-color:{{ $S::INK[$vstate] }}; font-size:1px; line-height:4px;">&nbsp;</td>
-                                    <td width="10" height="10" style="width:10px; height:10px; border-radius:50%; background-color:{{ $S::INK[$vstate] }}; font-size:1px; line-height:10px;">&nbsp;</td>
+                                    <td width="10" height="10" bgcolor="{{ $S::INK['watch'] }}" style="width:10px; height:10px; border-radius:50%; background-color:{{ $S::INK['watch'] }}; font-size:1px; line-height:10px; mso-line-height-rule:exactly;">&nbsp;</td>
+                                    <td height="4" bgcolor="{{ $S::INK[$vstate] }}" style="height:4px; background-color:{{ $S::INK[$vstate] }}; font-size:1px; line-height:4px; mso-line-height-rule:exactly;">&nbsp;</td>
+                                    <td width="10" height="10" bgcolor="{{ $S::INK[$vstate] }}" style="width:10px; height:10px; border-radius:50%; background-color:{{ $S::INK[$vstate] }}; font-size:1px; line-height:10px; mso-line-height-rule:exactly;">&nbsp;</td>
                                 </tr></table>
                             </td>
                         </tr>

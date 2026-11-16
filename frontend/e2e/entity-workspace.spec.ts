@@ -19,9 +19,15 @@ test.describe('the ads and ad-groups tables (agency, seeded data)', () => {
 
     const table = page.getByTestId('entity-table-ad')
     await expect(table).toBeVisible({ timeout: 30_000 })
-    // MGMT-PAGES-001 — the page carries its own KPI strip and trend above the table, not an Analytics tab.
+    // MGMT-PAGES-001 — the page carries its own KPI strip and trend, not an Analytics tab. AF2: on `/agency` the page fits the
+    // screen, so the table and the strip with its trend are two tabs OF THIS PAGE («القائمة» / «النظرة العامة») rather than one
+    // above the other — the claim (they live here, not on Analytics) is asserted on the tab that holds them.
+    const tabs = page.getByTestId('entity-tabs-ad').getByRole('tab')
+    await tabs.nth(1).click()
     await expect(page.getByTestId('entity-overview-ad')).toBeVisible()
     await expect(page.getByTestId('entity-overview-ad-trend')).toBeVisible({ timeout: 30_000 })
+    await tabs.nth(0).click()
+    await expect(table).toBeVisible()
     const rows = table.locator('tbody tr')
     const before = await rows.count()
     expect(before).toBeGreaterThan(1)
@@ -55,15 +61,16 @@ test.describe('the ads and ad-groups tables (agency, seeded data)', () => {
 
     const table = page.getByTestId('entity-table-ad_set')
     await expect(table).toBeVisible({ timeout: 30_000 })
-    const headsBefore = await table.locator('th').count()
+    /* AF2 — the COLUMN heads, `thead th`: a row's first cell is a `th` too, and the rows on screen now follow the screen's height. */
+    const headsBefore = await table.locator('thead th').count()
 
     await page.getByTestId('entity-columns-toggle-ad_set').click()
     const first = page.getByTestId('entity-columns-ad_set').locator('input[type="checkbox"]').first()
     await first.uncheck()
-    await expect(table.locator('th')).toHaveCount(headsBefore - 1)
+    await expect(table.locator('thead th')).toHaveCount(headsBefore - 1)
 
     await page.reload()
-    await expect(page.getByTestId('entity-table-ad_set').locator('th')).toHaveCount(headsBefore - 1, { timeout: 30_000 })
+    await expect(page.getByTestId('entity-table-ad_set').locator('thead th')).toHaveCount(headsBefore - 1, { timeout: 30_000 })
 
     // Leave the shared storage state as it was found.
     await page.getByTestId('entity-columns-toggle-ad_set').click()

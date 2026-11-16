@@ -71,6 +71,7 @@ use App\Domains\Notifications\Console\RenderMailPreviews;
 use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Notifications\Console\SendMailGallery;
 use App\Domains\Notifications\Console\SendSpendSummaries;
 use App\Domains\Notifications\Engine\Http\Middleware\EnsurePlanFeature;
 use App\Domains\Ops\Console\PerfCheckCommand;
@@ -183,6 +184,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
+        SendMailGallery::class,
         // EMAIL-RTL-001 — one mailable, one language, one file.
         MailPreviewCommand::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
