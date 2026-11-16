@@ -37,6 +37,9 @@ export function ResponsiveList<T>({
   empty?: ReactNode
 }) {
   const tablet = useIsTablet()
+  // TABLE-FULL-001 — the first column keeps at least 16rem; when the screen is narrower than that plus the fixed columns,
+  // the table scrolls sideways inside its own card instead of cutting names and figures (the page itself never does).
+  const fixedRem = columns.slice(1).reduce((s, c) => s + (c.width?.endsWith('rem') ? Number.parseFloat(c.width) : 0), 0)
   if (rows.length === 0 && empty) return <div data-testid={`${testid}-empty`}>{empty}</div>
 
   if (!tablet) {
@@ -49,8 +52,8 @@ export function ResponsiveList<T>({
 
   return (
     <>
-      <div data-testid={`${testid}-table`} className={`min-h-0 overflow-hidden ${FIT_CARD}`}>
-        <table className="w-full table-fixed border-collapse text-start text-sm">
+      <div data-testid={`${testid}-table`} className={`min-h-0 overflow-x-auto overflow-y-hidden ${FIT_CARD}`}>
+        <table className="w-full table-fixed border-collapse text-start text-sm" style={fixedRem > 0 ? { minWidth: `${fixedRem + 16}rem` } : undefined}>
           <thead>
             <tr style={{ height: FIT_HEAD_HEIGHT }} className="border-b border-border text-xs text-text-muted">
               {columns.map((c, i) => (
