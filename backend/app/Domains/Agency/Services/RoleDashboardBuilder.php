@@ -28,6 +28,7 @@ use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * ROLE-DASHBOARD-001 — one landing page per role, from facts the product already computes.
@@ -131,14 +132,10 @@ final class RoleDashboardBuilder
             $out['integrations'] = in_array('integrations', $sections, true) ? $this->integrations($scope) : null;
             $out['campaigns'] = $this->campaignCounts($projectIds, null);
             /*
-             * DASH-MANAGER-PERFORMANCE-001 — the manager's page reads the performance of EVERY campaign he can reach the way
-             * the marketer's reads his own: the leading campaigns, the platform comparison and the spend share by platform.
-             * The same reader, so the same money rules (no spend, cost or ROAS without the money key).
+             * DASH-PERF-SPLIT-001 — the manager's performance (every reachable campaign) is read by its own request,
+             * `GET /me/dashboard/performance`: over hundreds of campaigns it took the whole page from ~5s to ~30s.
              */
-            $out += array_intersect_key(
-                $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
-                array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
-            );
+            $out['performance_deferred'] = true;
         }
 
         if ($view === 'pm') {
@@ -470,6 +467,37 @@ final class RoleDashboardBuilder
      * @param  list<string>  $projectIds
      * @return array<string, mixed>
      */
+    /**
+     * DASH-MANAGER-PERFORMANCE-001 / DASH-PERF-SPLIT-001 — the performance of EVERY campaign the member can reach, the way
+     * the marketer's page reads his own: the leading campaigns, the platform comparison, the spend share by platform and
+     * the window's headline against the window before it. The same reader, so the same money rules (no spend, cost or
+     * ROAS without the money key). Held for two minutes per member, window and day: the page refetches every two.
+     *
+     * @return array<string, mixed>
+     */
+    public function performanceFor(User $user, int $days = self::DEFAULT_DAYS): array
+    {
+        $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
+        $today = PeriodResolver::today();
+        $to = $today->copy();
+        $from = $to->copy()->subDays($days - 1);
+        $tenant = (string) app(TenantContext::class)->tenantId();
+        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.$today->toDateString();
+
+        return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to): array {
+            $scope = $this->scope($user);
+            $projectIds = array_keys($scope['projects']);
+            $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
+            $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
+
+            return ['window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()]]
+                + array_intersect_key(
+                    $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
+                    array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
+                );
+        });
+    }
+
     private function marketer(User $user, ?MetricsAggregator $agg, array $projectIds, Carbon $from, Carbon $to, Carbon $today, bool $money, bool $preferMine = true): array
     {
         $mineQuery = UnifiedCampaign::query()->whereIn('project_id', $projectIds)
