@@ -118,7 +118,12 @@ export interface RoleDashboard {
   platforms?: PlatformRow[]
   /** DASH-PERIOD-001 — the window's headline over every campaign; spend against the window just before it. */
   performance?: PerformanceBlock | null
+  /** DASH-PERF-SPLIT-001 — the manager's performance is read by `useDashboardPerformance`, not with the page. */
+  performance_deferred?: boolean
 }
+
+/** DASH-PERF-SPLIT-001 — `GET /me/dashboard/performance`: the manager's performance panels, over every reachable campaign. */
+export type DashboardPerformance = Pick<RoleDashboard, 'window' | 'campaign_rows' | 'families' | 'rank_family' | 'best' | 'worst' | 'platforms' | 'performance'>
 
 export interface PerformanceBlock {
   spend: number | null
@@ -136,6 +141,19 @@ export interface PerformanceBlock {
 /** DASH-PERIOD-001 — the windows the page offers (the server answers 30 to anything else). */
 export const DASHBOARD_WINDOWS = [7, 14, 30, 90] as const
 export type DashboardWindow = (typeof DASHBOARD_WINDOWS)[number]
+
+export function useDashboardPerformance(days: DashboardWindow, enabled = true) {
+  return useQuery({
+    queryKey: ['me', 'dashboard', 'performance', days],
+    queryFn: () => getData<DashboardPerformance>(days === 30 ? '/me/dashboard/performance' : `/me/dashboard/performance?days=${days}`),
+    enabled,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    // Another window keeps the panels on screen until the new figures land.
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+}
 
 export function useRoleDashboard(view: DashboardView | null, days: DashboardWindow = 30) {
   const params = new URLSearchParams()
