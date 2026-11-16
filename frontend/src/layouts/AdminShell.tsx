@@ -91,7 +91,7 @@ const adminNav = [
    */
   { to: '/admin/settings/integrations', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
   // AI-PLATFORM-KEY-001 — the platform's AI key and each plan's monthly allowance per person.
-  { to: '/admin/settings/ai', ar: 'الذكاء الاصطناعي', en: 'AI', icon: Bot },
+  { to: '/admin/settings/ai', ar: 'مفتاح AI', en: 'AI key', icon: Bot },
   // SUPERADMIN-FEATURES-001 — a capability on or off for every workspace.
   { to: '/admin/features', ar: 'الخصائص', en: 'Features', icon: ToggleRight },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
