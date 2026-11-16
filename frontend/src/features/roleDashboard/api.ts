@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 import type { FxConversion, FxSpendNote } from '@/lib/money/fx'
 
@@ -116,12 +116,38 @@ export interface RoleDashboard {
   best?: RankedCampaign[]
   worst?: RankedCampaign[]
   platforms?: PlatformRow[]
+  /** DASH-PERIOD-001 — the window's headline over every campaign; spend against the window just before it. */
+  performance?: PerformanceBlock | null
 }
 
-export function useRoleDashboard(view: DashboardView | null) {
+export interface PerformanceBlock {
+  spend: number | null
+  previous_spend: number | null
+  previous: { from: string; to: string }
+  withheld: number
+  campaigns: number
+  family: string | null
+  results: number | null
+  result_label: Words | null
+  cost_per_result: number | null
+  cost_label: Words | null
+}
+
+/** DASH-PERIOD-001 — the windows the page offers (the server answers 30 to anything else). */
+export const DASHBOARD_WINDOWS = [7, 14, 30, 90] as const
+export type DashboardWindow = (typeof DASHBOARD_WINDOWS)[number]
+
+export function useRoleDashboard(view: DashboardView | null, days: DashboardWindow = 30) {
+  const params = new URLSearchParams()
+  if (view) params.set('view', view)
+  if (days !== 30) params.set('days', String(days))
+  const qs = params.toString()
+
   return useQuery({
-    queryKey: ['me', 'dashboard', view],
-    queryFn: () => getData<RoleDashboard>(view ? `/me/dashboard?view=${view}` : '/me/dashboard'),
+    queryKey: ['me', 'dashboard', view, days],
+    queryFn: () => getData<RoleDashboard>(qs ? `/me/dashboard?${qs}` : '/me/dashboard'),
+    // A new window keeps the figures on screen until the new ones land, the same view's page in another period.
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
     refetchInterval: 120_000,
     refetchOnWindowFocus: true,
