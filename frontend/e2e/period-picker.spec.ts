@@ -34,6 +34,8 @@ test.describe('the period picker', () => {
     const panel = page.getByTestId('agency-period-picker-panel')
     await expect(panel).toBeVisible()
     await expect(panel).toContainText('التواريخ بتوقيت الرياض (GMT+3)')
+    // PICKER-SHORT-PRESETS-001 — «آخر 30 يوم» lives under «تخصيص».
+    await page.getByTestId('agency-period-picker-preset-custom').click()
     await page.getByTestId('agency-period-picker-preset-last_30').click()
     await page.getByTestId('agency-period-picker-compare-toggle').check()
     await expect(page.getByTestId('agency-period-picker-compare-range')).toContainText('16 سبتمبر – 15 أكتوبر 2026')
@@ -98,11 +100,14 @@ test.describe('the period picker', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   })
 
-  test('on a desktop it shows two months side by side', async ({ page, request }) => {
+  // PICKER-ONE-MONTH-001 — one month on every screen (Meta / Snapchat style), and every control inside the screen.
+  test('on a desktop it shows one month, with Update and Cancel in view', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.setViewportSize({ width: 1366, height: 800 })
     await page.goto('/agency/campaigns')
     await page.getByTestId('campaigns-period-picker-button').click()
-    await expect(page.getByTestId('campaigns-period-picker-panel').locator('[data-testid^="campaigns-period-picker-cal-"]')).toHaveCount(2)
+    await expect(page.getByTestId('campaigns-period-picker-panel').locator('[data-testid^="campaigns-period-picker-cal-"]')).toHaveCount(1)
+    await expect(page.getByTestId('campaigns-period-picker-apply')).toBeInViewport()
+    await expect(page.getByTestId('campaigns-period-picker-cancel')).toBeInViewport()
   })
 })

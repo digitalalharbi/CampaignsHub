@@ -1,3 +1,5 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { StatCard } from '@/components/ui/StatCard'
 import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -133,9 +135,12 @@ export function Panel({
   children: ReactNode
   className?: string
 }) {
+  /* AF2 — on a fitted `/agency` page the panel is tighter and its description is an info tooltip beside the title. */
+  const compact = useFitCompact()
+
   return (
-    <section className={`flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className={`flex flex-col rounded-2xl border border-border bg-surface ${compact ? 'p-3' : 'p-5'} shadow-[var(--shadow-small)] ${className}`}>
+      <div className={`${compact ? 'mb-2' : 'mb-4'} flex items-start justify-between gap-3`}>
         {/*
           `min-w-0` on the text and `shrink-0` on the action, or the action loses.
           A flex item's minimum width is its content, so a two-word title with nowhere to wrap
@@ -143,8 +148,8 @@ export function Panel({
           that reads as two controls. The title wraps; the control does not.
         */}
         <div className="min-w-0">
-          <h3 className="text-base font-bold tracking-tight text-text-primary">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
+          <h3 className="flex items-center gap-1 text-base font-bold tracking-tight text-text-primary">{title}{compact && description && <InfoTip text={description} label={description} />}</h3>
+          {description && !compact && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
         </div>
         {action && <div className="shrink-0 whitespace-nowrap">{action}</div>}
       </div>

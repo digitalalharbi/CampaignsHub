@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Engine\Content;
 use App\Domains\Notifications\Engine\Contracts\EventRegistry;
 use App\Domains\Notifications\Engine\Contracts\MessageComposer;
 use App\Domains\Notifications\Engine\Data\Delivery;
+use App\Domains\Notifications\Support\MailDesign;
 
 /**
  * The engine's own words for a delivery: the catalog title and body in the recipient's language, with the project and
@@ -44,7 +45,7 @@ final class CatalogMessageComposer implements MessageComposer
             subject: mb_substr($subject, 0, 150),
             title: $title,
             body: $body,
-            html: "<div dir=\"{$dir}\" style=\"font-family:sans-serif\"><p><strong>{$e($title)}</strong></p><p>{$e($body)}</p><p>{$e($context)}</p><p style=\"color:#6b7280;font-size:12px\">{$e($ref)}</p></div>",
+            html: "<div dir=\"{$dir}\" style=\"font-family:".MailDesign::font($locale === 'ar')."\"><p><strong>{$e($title)}</strong></p><p>{$e($body)}</p><p>{$e($context)}</p><p style=\"color:#6b7280;font-size:12px\">{$e($ref)}</p></div>",
             text: $title."\n\n".$body."\n\n".$context."\n\n".$ref,
             url: isset($delivery->payload['url']) ? (string) $delivery->payload['url'] : null,
         );

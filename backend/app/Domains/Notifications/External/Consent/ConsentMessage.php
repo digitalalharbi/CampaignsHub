@@ -30,10 +30,11 @@ final class ConsentMessage
         $subject = mb_substr($subject, 0, 90 - ($footprintRemoved ? 0 : 15)).($footprintRemoved ? '' : ' · CampaignsHub');
         $dir = $l === 'ar' ? 'rtl' : 'ltr';
 
-        $html = '<div dir="'.$dir.'" style="font-family:'.$e(T::emailFont($l)).';color:'.T::color('text-primary').';text-align:'.($l === 'ar' ? 'right' : 'left').'">'
+        $html = '<div dir="'.$dir.'" style="font-family:'.str_replace('"', "'", T::emailFont($l)).';color:'.T::color('text-primary').';text-align:'.($l === 'ar' ? 'right' : 'left').'">'
             .'<p style="font-size:'.T::px('text-lg').';font-weight:700;margin:0 0 '.T::space('3').'">'.$e($title).'</p>'
             .'<p style="font-size:'.T::px('text-sm').';line-height:1.7;color:'.T::color('text-secondary').';margin:0 0 '.T::space('4').'">'.$e($body).'</p>'
-            .'<p style="margin:0 0 '.T::space('4').'"><a href="'.$e($link).'" style="display:inline-block;background:'.T::color('brand-700').';color:'.T::color('surface').';text-decoration:none;font-weight:600;border-radius:'.T::radius('radius-medium').';padding:'.T::space('3').' '.T::space('5').'">'.$e($t('confirm.button')).'</a></p>'
+            // EMAIL-CLIENT-COMPAT-001 — a bullet-proof button: padding, ground and corners on a table cell, the label never wraps.
+            .'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 '.T::space('4').'"><tr><td align="'.($l === 'ar' ? 'right' : 'left').'"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="'.T::color('brand-700').'" data-button="cta" style="background-color:'.T::color('brand-700').';border-radius:'.T::radius('radius-medium').';padding:'.T::space('3').' '.T::space('5').';white-space:nowrap;"><a href="'.$e($link).'" style="color:'.T::color('surface').';text-decoration:none;font-weight:600;white-space:nowrap;">'.$e($t('confirm.button')).'</a></td></tr></table></td></tr></table>'
             .'<p style="font-size:'.T::px('text-xs').';color:'.T::color('text-muted').';margin:0">'.$e($t('confirm.ignore')).'</p>'
             .($footprintRemoved ? '' : '<p style="font-size:'.T::px('text-xs').';color:'.T::color('text-muted').';margin:'.T::space('4').' 0 0">'.$e($t('footprint')).'</p>')
             .'</div>';

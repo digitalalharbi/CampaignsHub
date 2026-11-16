@@ -47,11 +47,11 @@ export function RangeCalendar({
 
   return (
     <div className="min-w-0" data-testid={testId}>
-      <div className="mb-1 text-center text-sm font-bold text-text-primary" aria-hidden>
+      <div className="mb-0.5 text-center text-xs font-bold text-text-primary" aria-hidden>
         {(ar ? MONTHS_AR : MONTHS_EN)[month - 1]} <bdi dir="ltr">{year}</bdi>
       </div>
       <div className="grid grid-cols-7 text-center text-xs font-semibold text-text-muted" aria-hidden>
-        {names.map((n) => <div key={n} className="py-1">{n}</div>)}
+        {names.map((n) => <div key={n} className="py-0.5 text-[10px] sm:text-[10px]">{n}</div>)}
       </div>
       <div role="grid" aria-label={`${(ar ? MONTHS_AR : MONTHS_EN)[month - 1]} ${year}`} className="grid grid-cols-7 gap-y-0.5">
         {cells.map((day, i) => {
@@ -89,10 +89,10 @@ export function RangeCalendar({
                 onPointerEnter={() => onDayPointerEnter(day)}
                 onPointerUp={(e) => onDayPointerUp(day, e)}
                 onKeyDown={(e) => onDayKeyDown(day, e)}
-                className={`relative flex h-11 w-full select-none items-center justify-center text-sm font-semibold tnum sm:h-9 ${edgeShape} ${cls}`}
+                className={`relative flex h-11 w-full select-none items-center justify-center text-sm font-semibold tnum sm:h-7 sm:text-xs ${edgeShape} ${cls}`}
               >
                 <bdi dir="ltr">{dayNum}</bdi>
-                {day === today && <span aria-hidden className="absolute bottom-1 h-1 w-1 rounded-full bg-current" />}
+                {day === today && <span aria-hidden className="absolute bottom-0.5 h-1 w-1 rounded-full bg-current" />}
               </button>
             </div>
           )

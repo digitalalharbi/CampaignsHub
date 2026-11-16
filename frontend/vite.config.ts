@@ -121,7 +121,7 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: false,
     // Playwright e2e specs live in ./e2e and run via `npx playwright test`, not vitest.
-    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    exclude: ['e2e/**', 'e2e-mail/**', 'node_modules/**', 'dist/**'],
     /*
      * 15s, against vitest's 5s default — because the default was failing correct tests.
      *

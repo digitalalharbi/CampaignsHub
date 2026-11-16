@@ -1,3 +1,5 @@
+import { AgencyFit, FitPanel, useFitCompact } from '@/components/fit/AgencyFit'
+import { FitPaged } from '@/components/fit/FitPaged'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, CalendarClock } from 'lucide-react'
@@ -46,7 +48,7 @@ export function DeliveryOverviewPage() {
   const rows = [...(q.data ?? [])].sort((a, b) => RANK[a.visual] - RANK[b.visual] || a.client.localeCompare(b.client))
 
   return (
-    <div className="space-y-5">
+    <AgencyFit className="space-y-5" testid="delivery-fit">
       <PageIntro
         title={ar ? 'الجدولة الدورية والفوترة' : 'Periodic delivery & billing'}
         purpose={ar ? 'حالة تقرير كل عميل وفاتورته، والخطوة التالية المطلوبة منك.' : 'Where each client’s report and invoice stand, and the next step for you.'}
@@ -59,22 +61,37 @@ export function DeliveryOverviewPage() {
       ) : rows.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-text-muted">{ar ? 'لا عملاء نشطون بعد.' : 'No active clients yet.'}</p>
       ) : (
-        <ul className="grid gap-3" data-testid="delivery-overview">
-          {rows.map((r) => <Row key={r.client_id} r={r} ar={ar} />)}
-        </ul>
+        <FitPanel>
+          <FitPaged
+            items={rows}
+            itemHeight={92}
+            rowKey={(r) => r.client_id}
+            render={(r) => <Row r={r} ar={ar} />}
+            ar={ar}
+            testid="delivery-overview"
+            fallback={(items) => (
+              <ul className="grid gap-3" data-testid="delivery-overview">
+                {items.map((r) => <Row key={r.client_id} r={r} ar={ar} inList />)}
+              </ul>
+            )}
+          />
+        </FitPanel>
       )}
-    </div>
+    </AgencyFit>
   )
 }
 
-function Row({ r, ar }: { r: DeliveryOverviewRow; ar: boolean }) {
+function Row({ r, ar, inList = false }: { r: DeliveryOverviewRow; ar: boolean; inList?: boolean }) {
   const lang = ar ? 'ar' : 'en'
   const inv = r.invoice
   const action = ACTION[r.next_action]
   const sched = r.scheduled !== undefined && r.scheduled.active > 0 ? r.scheduled : null
+  /* AF2 — on a fitted page a row is a fixed-height card in a paged list, not a list item of its own. */
+  const compact = useFitCompact()
+  const Tag = inList ? 'li' : 'div'
 
   return (
-    <li data-testid={`delivery-row-${r.client_id}`} data-visual={r.visual} className="grid gap-3 rounded-2xl border border-border bg-surface p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center">
+    <Tag data-testid={`delivery-row-${r.client_id}`} data-visual={r.visual} className={`grid gap-3 rounded-2xl border border-border bg-surface md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center ${compact ? 'h-full overflow-hidden px-4 py-2' : 'p-4'}`}>
       <div className="min-w-0">
         <div className="truncate font-bold text-text-primary">{r.client}</div>
         <div className="mt-0.5 text-xs text-text-muted">
@@ -133,6 +150,6 @@ function Row({ r, ar }: { r: DeliveryOverviewRow; ar: boolean }) {
         <Badge tone={tone(r.visual)}>{action[lang]}</Badge>
         <ArrowRight size={14} className="rtl:rotate-180" />
       </Link>
-    </li>
+    </Tag>
   )
 }

@@ -252,4 +252,10 @@ body {
     overflow: hidden;
     padding-bottom: 0.5rem;
   }
+  /* AF2 — the part of a fitted page that takes what is left; its contents are budgeted against its height. */
+  [data-fit='true'] .fit-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
 }

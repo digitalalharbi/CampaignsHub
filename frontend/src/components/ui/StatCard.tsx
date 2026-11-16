@@ -1,6 +1,9 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { Delta } from '@/components/ui/Delta'
 import { useUi } from '@/stores/ui'
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
+import { FIT_CARD, FIT_KPI_VALUE } from '@/styles/scale'
 import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
@@ -164,6 +167,27 @@ export function StatCard({
   testid?: string
 }) {
   const grid = useContext(StatGridContext)
+  const compact = useFitCompact()
+
+  /* AF2 — the compact card of a fitted `/agency` page: label, big figure, movement; the hint is a tooltip. */
+  if (compact) {
+    return (
+      <div data-testid={testid} className={`flex min-w-0 items-center justify-between gap-2 px-3 py-2 ${FIT_CARD}`}>
+        <div className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-text-secondary">
+            {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
+            <span className="truncate">{label}</span>
+            {hint && <InfoTip text={hint} label={hint} />}
+          </span>
+          <span dir="ltr" title={exact} data-testid={testid ? `${testid}-value` : undefined} className={`block truncate text-start ${FIT_KPI_VALUE} ${VALUE_TONE[tone]}`}>{value}</span>
+        </div>
+        {delta ? (
+          <Delta metric={delta.metric} current={delta.current} previous={delta.previous} since={delta.since} testid={testid ? `${testid}-delta` : undefined} />
+        ) : trailing ? <span className="shrink-0 empty:hidden">{trailing}</span> : null}
+      </div>
+    )
+  }
+
   return (
     <div
       data-testid={testid}

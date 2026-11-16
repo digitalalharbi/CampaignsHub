@@ -258,6 +258,9 @@ final class AlertEventEmailTest extends TestCase
 
     public function test_quiet_hours_hold_the_bundle(): void
     {
+        // The window is 00:00–23:59 Riyadh: a run at 23:59 fell outside it (seen when a run crossed midnight).
+        // Freeze at Riyadh midday so the test never depends on the wall clock.
+        $this->travelTo(Carbon::now('Asia/Riyadh')->setTime(12, 0)->utc());
         Mail::fake();
         $this->withConfiguredEmail();
         DB::table('notification_preferences')->where('user_id', $this->user->id)

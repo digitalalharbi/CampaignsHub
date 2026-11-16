@@ -68,6 +68,9 @@ import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
+import { AgencyFit, FitPanel, useBoxHeight, useFitCompact } from '@/components/fit/AgencyFit'
+import { TabStrip } from '@/components/fit/TabStrip'
+import { useFitRows } from '@/components/fit/useFitRows'
 import { ApprovedBudgetPacing } from '@/features/funding/ApprovedBudget'
 import { useApprovedBudget } from '@/features/funding/fundingApi'
 
@@ -270,6 +273,20 @@ export function CampaignsPage() {
    */
   const [page, setPage] = useState(1)
 
+  /*
+   * AF2 — on `/agency` the overview and the list fit the screen (`AgencyFit`). The overview's blocks become three
+   * tabs (money · ranking · objectives) and the list asks the server for the rows that fit. Reasons, comparison and
+   * the change history are long documents of their own: they flow, and the page is unlocked while one is open.
+   */
+  const fit = location.pathname.startsWith('/agency')
+  const fitView = fit && (view === 'overview' || view === 'table' || view === 'cards')
+  const [ovTab, setOvTab] = useState<'money' | 'ranking' | 'mix'>('money')
+  const ovBox = useBoxHeight(fit)
+  const listFit = useFitRows({ rowHeight: view === 'cards' ? 192 : 50, reserve: view === 'cards' ? 8 : 100, min: view === 'cards' ? 1 : 3, max: 25, fallback: 25 })
+  /* A chart takes what the panel has left (card title and padding ≈ 84px); unlocked, the old fixed heights stand. */
+  const chartH = fit && ovBox.height !== null ? Math.max(110, ovBox.height - 84) : 200
+  const perPage = fit && listFit.locked ? (view === 'cards' ? listFit.rows * 3 : listFit.rows) : undefined
+
   useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
 
   const metricCampaigns = useCampaigns(projectId, range)
@@ -296,7 +313,7 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown, perPage }, page],
     /*
      * The answer records whether it was JUDGED — asked with the figures in hand — because
      * `placeholderData` holds the previous answer while the next one loads, and the previous answer
@@ -317,9 +334,10 @@ export function CampaignsPage() {
       lifecycle: lifecycle === 'all' || !metricsKnown ? undefined : lifecycle,
       /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
       sort: sort || undefined, dir: sort ? dir : undefined,
-      page, from: range.from, to: range.to,
+      page, per_page: perPage, from: range.from, to: range.to,
     })), judged: metricsKnown }),
-    enabled: Boolean(projectId),
+    /* AF2 — the list's page size is the screen's; asking before it is measured would fetch twice. */
+    enabled: Boolean(projectId) && (!fit || view === 'overview' || listFit.measured),
     placeholderData: (prev) => prev,
   })
   /* The provisional window: figures in flight, or held over from an answer asked without them. */
@@ -792,8 +810,53 @@ export function CampaignsPage() {
     )
   }
 
+  const ovTabs = (
+  <TabStrip
+    label={ar ? 'أقسام النظرة العامة' : 'Overview sections'}
+    testid="campaigns-overview-tabs"
+    active={ovTab}
+    onChange={(k) => setOvTab(k as 'money' | 'ranking' | 'mix')}
+    items={[
+      { key: 'money', label: ar ? 'المال' : 'Money' },
+      { key: 'ranking', label: ar ? 'الترتيب' : 'Ranking' },
+      { key: 'mix', label: ar ? 'الأهداف والحركة' : 'Objectives & movers', count: movement.up.length + movement.down.length > 0 ? movement.up.length + movement.down.length : undefined },
+    ]}
+  />
+  )
+
+  const finders = (
+    <>
+          <div className={`relative w-full ${fit ? 'sm:w-44' : 'sm:w-56'}`}>
+            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="campaigns-search"
+              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
+              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            />
+          </div>
+          {/* Sized, because the control is `w-full` by default and a full-width select in a header
+              row pushes everything after it onto a line of its own. */}
+          <Select className={`w-full ${fit ? 'sm:w-36' : 'sm:w-40'}`} value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+          <Select className={`w-full ${fit ? 'sm:w-36' : 'sm:w-44'}`} value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
+    </>
+  )
+
+  const secondaryStrip = (
+    <CampaignSecondaryStrip
+      totals={k}
+      budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
+      currency={summary.data?.currency ?? null}
+      paused={counts.paused ?? 0}
+      ar={ar}
+      approved={approved.data}
+      canAddBudget={canAddBudget}
+    />
+  )
+
   return (
-    <div className="space-y-6">
+    <AgencyFit active={fitView} testid="campaigns-fit">
       {/*
         PRODUCT-VISUAL-001 §4 §13 — the head answers WHERE, WHAT SCOPE, WHAT PERIOD, HOW FRESH.
 
@@ -835,20 +898,7 @@ export function CampaignsPage() {
            * they are a narrowing OF the list and belong against the list.
            */
           <>
-          <div className="relative w-full sm:w-56">
-            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="campaigns-search"
-              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
-              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-            />
-          </div>
-          {/* Sized, because the control is `w-full` by default and a full-width select in a header
-              row pushes everything after it onto a line of its own. */}
-          <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-          <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
+          {!fit && finders}
           <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
           {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
@@ -894,9 +944,11 @@ export function CampaignsPage() {
           </>
         }
       />
-      <FxCoverageNote fx={summary.data?.fx} ar={ar} />
-      <FxSpendNote note={summary.data?.spend_reading} ar={ar} testId="campaigns-fx-spend-note" />
-      <FinancialDisclaimer />
+      <div className={fit ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'contents'}>
+        <FxCoverageNote fx={summary.data?.fx} ar={ar} />
+        <FxSpendNote note={summary.data?.spend_reading} ar={ar} testId="campaigns-fx-spend-note" />
+        <FinancialDisclaimer />
+      </div>
 
       {/*
         * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
@@ -918,17 +970,10 @@ export function CampaignsPage() {
         * so the two cannot disagree about where the period is heading. The rest of the strip's
         * budget figures keep the page's stricter spend rule — see the strip's own note.
         */}
-      <CampaignSecondaryStrip
-        totals={k}
-        budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
-        currency={summary.data?.currency ?? null}
-        paused={counts.paused ?? 0}
-        ar={ar}
-        approved={approved.data}
-        canAddBudget={canAddBudget}
-      />
+      {!fit && secondaryStrip}
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
+      <div className={fit ? 'flex flex-wrap items-center justify-between gap-2' : ''}>
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
         {VIEWS.map((v) => {
           const Icon = v.icon
@@ -951,6 +996,8 @@ export function CampaignsPage() {
           )
         })}
       </div>
+      {fit && view === 'overview' && ovTabs}
+      </div>
 
       {view === 'overview' ? (
         <>
@@ -966,6 +1013,7 @@ export function CampaignsPage() {
             attention» is the answer somebody came for, and a strip that silently loses its most
             important word when the news is good is a strip that cannot be trusted when it is bad.
           */}
+          <div className={fit ? 'flex flex-wrap items-center justify-between gap-2' : 'space-y-6'}>
           <div data-testid="campaigns-bands" className="flex flex-wrap gap-2">
             {BANDS.map((b) => (
               <button
@@ -1001,6 +1049,7 @@ export function CampaignsPage() {
               </button>
             ))}
           </div>
+          </div>
 
           {/*
             BUDGET-GOVERNANCE-001 — what is LEFT, where the period ENDS, and whether that is over.
@@ -1015,15 +1064,23 @@ export function CampaignsPage() {
             as «we have spent nothing» when the truth is that nothing here could be added up.
           */}
           {/* ONE-BUDGET-001 — paced against the APPROVED budget; the campaign budgets in the platforms are not «the budget». */}
-          {approved.data && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
+          {approved.data && !fit && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
+          {fit && ovTab === 'money' && (
+            <>
+              {secondaryStrip}
+              {approved.data && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
+            </>
+          )}
+          <div ref={fit ? ovBox.ref : undefined} className={fit ? 'fit-panel space-y-2.5' : 'space-y-6'}>
           {/* Charts — all from the project-scoped metrics API. */}
+          {(!fit || ovTab === 'money') && (
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
               {timeseries.isLoading
                 ? <Skeleton className="h-[200px]" />
                 : moneySeries === null
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
-                  : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={200} />}
+                  : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={chartH} />}
             </ChartCard>
             <ChartCard
               title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
@@ -1037,9 +1094,12 @@ export function CampaignsPage() {
                 ? <Skeleton className="h-[200px]" />
                 : platformSpend === null
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — partial or multi-currency amounts'}</div>
-                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} currency={reportingCurrency ?? ''} />}
+                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={chartH} currency={reportingCurrency ?? ''} />}
             </ChartCard>
           </div>
+          )}
+          {(!fit || ovTab === 'ranking') && (
+          <div className={fit ? 'grid gap-2.5 lg:grid-cols-2' : 'space-y-6'}>
           {/*
             * VISUAL-DECISION-001 — the status donut is gone, and the ranking took its column.
             *
@@ -1064,7 +1124,7 @@ export function CampaignsPage() {
               {topCampaigns === null
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
                 : topCampaigns.data.length >= 2
-                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform currency={reportingCurrency ?? ''} />
+                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={fit ? chartH : 190} colorByPlatform currency={reportingCurrency ?? ''} />
                   /*
                    * One campaign is not a ranking, and the card says so instead of drawing something else.
                    *
@@ -1100,9 +1160,14 @@ export function CampaignsPage() {
                   : (ar ? 'أعلى يمينًا: إنفاق أكبر بتكلفة أعلى' : 'Up and right: more spend at a higher cost')
               }
             >
-              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} />
+              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} height={fit ? chartH : undefined} />
             </ChartCard>
           </div>
+          </div>
+          )}
+          {(!fit || ovTab === 'mix') && (
+          <>
+          {fit && <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />}
           {mix !== null && mix.rows.length > 0 && (
             <div data-testid="campaigns-objective-mix" className="rounded-2xl border border-border bg-surface p-4">
               <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'}</h3>
@@ -1217,6 +1282,9 @@ export function CampaignsPage() {
               </span>
             </button>
           )}
+          </>
+          )}
+          </div>
         </>
       ) : view === 'history' ? (
         <ProjectChangeHistory projectId={projectId} />
@@ -1235,7 +1303,8 @@ export function CampaignsPage() {
           {/* Filters — search + taxonomy chips for status and objective. */}
           <div className="space-y-2">
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
-            <div className="flex flex-wrap gap-1.5">
+            <div className={fit ? 'flex flex-wrap items-center gap-1.5' : 'flex flex-wrap gap-1.5'} data-testid={fit ? 'campaigns-fit-finders' : undefined}>
+            {fit && finders}
             {/*
               CAMPAIGN-INTELLIGENCE-HUB — what the workspace answers before the reader scrolls.
 
@@ -1243,7 +1312,7 @@ export function CampaignsPage() {
               and «nothing could be examined» are separate answers, and a pacing question nobody
               could measure is not answered «no».
             */}
-            <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />
+            {!fit && <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />}
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
                 Inactive is one click away with its count beside it: a campaign silently missing from a
@@ -1256,7 +1325,7 @@ export function CampaignsPage() {
                 </Chip>
               ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
-              {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
+              {!fit && CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
                 <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
                   {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
                 </Chip>
@@ -1266,7 +1335,7 @@ export function CampaignsPage() {
                 `canonicalOfRaw` maps each campaign's raw objective up, so a project of video buys
                 offers «الوعي والتفاعل» rather than a chip nobody can use.
               */}
-              {CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
+              {!fit && CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
                 <Chip key={o} active={objective === o} onClick={() => setObjective(objective === o ? '' : o)}>
                   {canonicalObjectiveLabel(o, locale)}
                 </Chip>
@@ -1311,6 +1380,8 @@ export function CampaignsPage() {
           )}
 
           {/* Campaign list */}
+          <FitPanel testid={fit ? 'campaigns-fit-list' : undefined} className={fit ? '' : 'space-y-6'}>
+          <div ref={fit ? (listFit.ref as React.RefCallback<HTMLDivElement>) : undefined} className={fit ? 'h-full min-h-0' : ''}>
           {campaignsQuery.isLoading || (listProvisional && view !== 'attention') ? (
             <div data-testid="campaigns-list-pending" aria-busy="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
           ) : campaigns.length === 0 ? (
@@ -1461,7 +1532,7 @@ export function CampaignsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-              <div className="flex flex-col gap-2 border-b border-border p-3" data-testid="campaigns-table-controls">
+              <div className={fit ? 'flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border p-2' : 'flex flex-col gap-2 border-b border-border p-3'} data-testid="campaigns-table-controls">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold text-text-secondary">{ar ? 'المقاييس:' : 'Metrics:'}</span>
                   {(Object.keys(CAMPAIGN_PRESETS) as Array<Exclude<CampaignPreset, 'custom'>>).map((name) => (
@@ -1554,6 +1625,8 @@ export function CampaignsPage() {
               </table></div>
             </div>
           )}
+          </div>
+          </FitPanel>
         </>
       )}
 
@@ -1596,8 +1669,8 @@ export function CampaignsPage() {
           {ar ? 'إنشاء حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
-      <LivePerformanceNotice variant="compact" />
-    </div>
+      <LivePerformanceNotice variant={fit ? 'footer' : 'compact'} />
+    </AgencyFit>
   )
 }
 
@@ -1705,9 +1778,11 @@ function MetricCell({ reading, locale }: { reading: MetricReading | null; locale
 
 /** One named figure, or the honest reason there is not one. Never a score. */
 function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: 'ar' | 'en' }) {
+  const compact = useFitCompact()
+
   return (
     <span
-      className="rounded-lg bg-surface-secondary px-2 py-1.5"
+      className={compact ? 'inline-block rounded-lg bg-surface-secondary px-2 py-0.5 leading-tight' : 'rounded-lg bg-surface-secondary px-2 py-1.5'}
       data-testid={`campaign-headline-${reading.key}`}
       data-state={reading.reading.kind}
     >
