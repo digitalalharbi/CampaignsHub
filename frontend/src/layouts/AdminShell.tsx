@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   Bell,
+  Bot,
   ClipboardCheck,
   CreditCard,
   PackagePlus,
@@ -89,6 +90,8 @@ const adminNav = [
    * clicks and one guess away from the person looking for it.
    */
   { to: '/admin/settings/integrations', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
+  // AI-PLATFORM-KEY-001 — the platform's AI key and each plan's monthly allowance per person.
+  { to: '/admin/settings/ai', ar: 'الذكاء الاصطناعي', en: 'AI', icon: Bot },
   // SUPERADMIN-FEATURES-001 — a capability on or off for every workspace.
   { to: '/admin/features', ar: 'الخصائص', en: 'Features', icon: ToggleRight },
   { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
