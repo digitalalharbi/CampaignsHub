@@ -1,5 +1,9 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
+import { FitPaged } from '@/components/fit/FitPaged'
+import { TabStrip } from '@/components/fit/TabStrip'
+import { Link, useLocation } from 'react-router-dom'
 import { AlertTriangle, ArrowLeftRight, CircleDollarSign, FileText, ReceiptText, Wallet } from 'lucide-react'
 import { BillingTabs } from './BillingTabs'
 import { getFinanceOverview, listReceivables, type FinanceOverview } from './api'
@@ -62,6 +66,9 @@ export function FinanceOverviewPage() {
 
   const overview = useQuery({ queryKey: ['finance-overview'], queryFn: getFinanceOverview, enabled: canView })
   const receivables = useQuery({ queryKey: ['finance-receivables'], queryFn: listReceivables, enabled: canView })
+  /* AF2 — under /agency the page fits the screen: the collection shape, the status breakdown and the collection list are three tabs. */
+  const fit = useLocation().pathname.startsWith('/agency')
+  const [tab, setTab] = useState<'shape' | 'status' | 'list'>('shape')
 
   if (!canView) {
     return <EmptyState title={ar ? 'لا تملك صلاحية الاطلاع على المالية' : 'You may not view finance'} description={ar ? 'تحتاج صلاحية billing.view لعرض هذه الصفحة.' : 'This page needs the billing.view permission.'} />
@@ -73,7 +80,7 @@ export function FinanceOverviewPage() {
   const agingTotal = d ? Object.values(d.aging).reduce((a, b) => a + b, 0) : 0
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid="finance-fit">
       {/*
         UX-PAGE-HERO-001 — the shared head (§44).
 
@@ -132,6 +139,22 @@ export function FinanceOverviewPage() {
             most of the money is in one state, or that the collected share is a sliver — which is the
             thing somebody opens a receivables page to see.
           */}
+          {fit && (
+            <TabStrip
+              label={ar ? 'أقسام المالية' : 'Finance sections'}
+              testid="finance-tabs"
+              active={tab}
+              onChange={(k) => setTab(k as 'shape' | 'status' | 'list')}
+              items={[
+                { key: 'shape', label: ar ? 'التحصيل والأعمار' : 'Collection & ageing' },
+                { key: 'status', label: ar ? 'توزيع الحالات' : 'Status breakdown' },
+                { key: 'list', label: ar ? 'قائمة التحصيل' : 'Collection list', count: (receivables.data ?? []).length },
+              ]}
+            />
+          )}
+          <FitPanel className={fit ? '' : 'space-y-4'}>
+          {(!fit || tab === 'shape') && (
+          <>
           <section className="grid gap-4 lg:grid-cols-[auto_1fr]" data-testid="collection-shape">
             <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
               <h2 className="mb-3 font-bold text-text-primary">{ar ? 'نسبة التحصيل' : 'Collection rate'}</h2>
@@ -234,9 +257,11 @@ export function FinanceOverviewPage() {
               />
             </div>
           </section>
-
-          <div className="grid gap-4 lg:grid-cols-2">
+          </>
+          )}
+          <div className={fit ? 'grid gap-4 lg:grid-cols-1' : 'grid gap-4 lg:grid-cols-2'}>
             {/* Status breakdowns — every state shown as recorded, including the awkward ones. */}
+            {(!fit || tab === 'status') && (
             <section className="space-y-3 rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
               <h2 className="font-bold text-text-primary">{ar ? 'توزيع الحالات' : 'Status breakdown'}</h2>
               <StatusList title={ar ? 'عروض الأسعار' : 'Quotes'} buckets={d.quotes.by_status} labels={QUOTE_STATUS} currency={cur} />
@@ -265,8 +290,9 @@ export function FinanceOverviewPage() {
                 </p>
               </div>
             </section>
-
+            )}
             {/* Collections worklist — ordered by how late each invoice is. */}
+            {(!fit || tab === 'list') && (
             <section className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-bold text-text-primary">{ar ? 'قائمة التحصيل' : 'Collection list'}</h2>
@@ -279,30 +305,57 @@ export function FinanceOverviewPage() {
               ) : (receivables.data ?? []).length === 0 ? (
                 <p className="mt-3 text-sm text-text-muted">{ar ? 'لا توجد فواتير مستحقة — كل ما صدر تم تحصيله.' : 'Nothing is outstanding — everything issued has been collected.'}</p>
               ) : (
-                <ul data-testid="receivables" className="mt-3 space-y-2">
-                  {(receivables.data ?? []).slice(0, 8).map((r) => (
-                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-2.5">
+                <FitPaged
+                  items={receivables.data ?? []}
+                  itemHeight={56}
+                  rowKey={(r) => String(r.id)}
+                  render={(r) => (
+                    <div className="flex h-full flex-wrap items-center justify-between gap-2 overflow-hidden rounded-xl border border-border px-2.5 py-1.5">
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-text-primary">{r.number}</span>
-                        <span className="block text-[11px] text-text-muted">{r.client ?? '—'} · {ar ? 'استحقاق' : 'due'} {r.due_date ?? (ar ? 'غير محدد' : 'not set')}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        {r.days_late > 0 && (
-                          <Badge tone={r.days_late > 60 ? 'danger' : 'warning'}>
-                            <AlertTriangle size={11} /> {ar ? 'متأخرة' : 'late by'} <span className="tnum">{r.days_late}</span> {ar ? 'يومًا' : 'days'}
-                          </Badge>
-                        )}
-                        <span className="tnum font-bold text-text-primary">{money(r.due, r.currency)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                    <span className="block truncate text-sm font-semibold text-text-primary">{r.number}</span>
+                    <span className="block text-[11px] text-text-muted">{r.client ?? '—'} · {ar ? 'استحقاق' : 'due'} {r.due_date ?? (ar ? 'غير محدد' : 'not set')}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {r.days_late > 0 && (
+                      <Badge tone={r.days_late > 60 ? 'danger' : 'warning'}>
+                        <AlertTriangle size={11} /> {ar ? 'متأخرة' : 'late by'} <span className="tnum">{r.days_late}</span> {ar ? 'يومًا' : 'days'}
+                      </Badge>
+                    )}
+                    <span className="tnum font-bold text-text-primary">{money(r.due, r.currency)}</span>
+                  </span>
+                    </div>
+                  )}
+                  ar={ar}
+                  testid="receivables-fit"
+                  fallback={() => (
+                <ul data-testid="receivables" className="mt-3 space-y-2">
+                      {(receivables.data ?? []).slice(0, 8).map((r) => (
+                        <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-2.5">
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-text-primary">{r.number}</span>
+                            <span className="block text-[11px] text-text-muted">{r.client ?? '—'} · {ar ? 'استحقاق' : 'due'} {r.due_date ?? (ar ? 'غير محدد' : 'not set')}</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            {r.days_late > 0 && (
+                              <Badge tone={r.days_late > 60 ? 'danger' : 'warning'}>
+                                <AlertTriangle size={11} /> {ar ? 'متأخرة' : 'late by'} <span className="tnum">{r.days_late}</span> {ar ? 'يومًا' : 'days'}
+                              </Badge>
+                            )}
+                            <span className="tnum font-bold text-text-primary">{money(r.due, r.currency)}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                />
               )}
             </section>
+            )}
           </div>
+          </FitPanel>
         </>
       )}
-    </div>
+    </AgencyFit>
   )
 }
 

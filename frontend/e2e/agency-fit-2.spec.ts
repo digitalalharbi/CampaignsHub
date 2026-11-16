@@ -17,9 +17,19 @@ test.use({ storageState: AUTH.owner })
 const WIDTHS = [360, 390, 430, 768, 1024, 1366, 1920] as const
 const DESKTOPS = [[1366, 768], [1440, 900], [1920, 1080]] as const
 
-interface Fitted { path: string; views?: string[] }
+/** `tabs`: a TabStrip's test id and how many tabs it has — each is opened and measured. `flow`: tab indexes that are long documents and deliberately unlock the page (never sideways, never cut off). */
+interface Fitted { path: string; views?: string[]; tabs?: { testid?: string; selector?: string; count: number; flow?: number[] } }
 const FITTED: Fitted[] = [
   { path: '/agency/campaigns', views: ['', '?view=table', '?view=cards'] },
+  { path: '/agency/ad-groups', tabs: { testid: 'entity-tabs-ad_set', count: 3, flow: [2] } },
+  { path: '/agency/ads', tabs: { testid: 'entity-tabs-ad', count: 2 } },
+  { path: '/agency/recommendations', tabs: { testid: 'recommendations-tabs', count: 2 } },
+  { path: '/agency/forms', tabs: { testid: 'forms-tabs', count: 3, flow: [1, 2] } },
+  { path: '/agency/agents', tabs: { selector: '[role="tablist"] [role="tab"]', count: 3, flow: [1, 2] } },
+  { path: '/agency/billing', tabs: { testid: 'finance-tabs', count: 3 } },
+  { path: '/agency/delivery' },
+  { path: '/agency/messages' },
+  { path: '/agency/automation', tabs: { selector: '[data-testid^="automation-tab-"]', count: 3 } },
 ]
 
 async function ready(page: Page, path: string) {
@@ -40,6 +50,8 @@ async function measure(page: Page) {
         const r = el.getBoundingClientRect()
         const style = getComputedStyle(el)
         if (r.height === 0 || style.position === 'fixed' || style.position === 'absolute' || style.display === 'none') continue
+        /* An inbox / chat pane scrolls inside its own box by nature (`data-fit-scroll`); what is beyond it is not cut off, it is below the pane's own scroll. */
+        if (el.closest('[data-fit-scroll]')) continue
         if (r.bottom > box.bottom + 1) cut.push(`${el.dataset.testid ?? el.tagName}:${Math.round(r.bottom - box.bottom)}`)
         if (cut.length > 4) break
       }
@@ -62,10 +74,16 @@ async function inProject(page: Page, request: Parameters<typeof seededProject>[0
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
 }
 
-for (const { path, views = [''] } of FITTED) {
-  for (const view of views) {
+async function openTab(page: Page, tabs: Fitted['tabs'], index: number) {
+  if (!tabs) return
+  await page.locator(tabs.selector ?? `[data-testid="${tabs.testid}"] [role="tab"]`).nth(index).click()
+  await page.waitForTimeout(700)
+}
+
+for (const { path, views = [''], tabs } of FITTED) {
+  for (const [view, tabIndex] of views.flatMap((v) => (tabs ? Array.from({ length: tabs.count }, (_, i) => [v, i] as const) : [[v, 0] as const]))) {
     const url = path + view
-    test.describe(`${url}`, () => {
+    test.describe(`${url}${tabs ? ` · tab ${tabIndex + 1}` : ''}`, () => {
       for (const [w, h] of DESKTOPS) {
         for (const locale of ['ar', 'en'] as const) {
           test(`fits ${w}×${h} · ${locale}`, async ({ page, request }) => {
@@ -76,14 +94,23 @@ for (const { path, views = [''] } of FITTED) {
             await page.setViewportSize({ width: w, height: h })
             await inProject(page, request)
             await ready(page, url)
+            await openTab(page, tabs, tabIndex)
 
             const m = await measure(page)
+            if (tabs?.flow?.includes(tabIndex)) {
+              /* A long document of its own: the page is unlocked and flows — it may scroll, never sideways, never cut off. */
+              expect(m.locked, 'a flowing tab must unlock the page').toBe(0)
+              expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
+              expect(m.contentH).toBeLessThanOrEqual(0)
+              expect(errors.filter((e) => !/favicon|ResizeObserver/.test(e)), 'console errors').toEqual([])
+              return
+            }
             expect(m.locked, 'the page did not lock to the screen').toBe(1)
             expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
             expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
             expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
             expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
-            expect(m.cut, 'elements hang below the content box').toEqual([])
+            expect(m.cut, `elements hang below the content box (${m.cut.join(', ')})`).toEqual([])
             expect(m.footerVisible, 'the footer is below the fold').toBe(true)
             expect(errors.filter((e) => !/favicon|ResizeObserver/.test(e)), 'console errors').toEqual([])
           })
@@ -95,6 +122,7 @@ for (const { path, views = [''] } of FITTED) {
           await page.setViewportSize({ width: w, height: w < 768 ? 800 : 768 })
           await inProject(page, request)
           await ready(page, url)
+          await openTab(page, tabs, tabIndex)
           const m = await measure(page)
           expect(m.docH, `scrolls sideways by ${m.docH}px at ${w}px`).toBeLessThanOrEqual(0)
           expect(m.contentH).toBeLessThanOrEqual(0)
