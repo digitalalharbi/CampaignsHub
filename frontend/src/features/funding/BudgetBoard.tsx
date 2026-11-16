@@ -113,7 +113,7 @@ export function BoardHeader({ ar }: { ar: boolean }) {
   const h = (v: { ar: string; en: string }) => <span className="truncate text-xs font-bold text-text-muted">{ar ? v.ar : v.en}</span>
 
   return (
-    <div className="hidden min-w-0 grid-cols-[minmax(0,1.5fr)_6.75rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] gap-x-3 px-2.5 leading-none lg:grid" data-testid="board-header">
+    <div className="hidden min-w-0 grid-cols-[minmax(0,1.5fr)_8.5rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] gap-x-3 px-2.5 leading-none lg:grid" data-testid="board-header">
       {h({ ar: 'العميل · المشروع', en: 'Client · project' })}{h(L.period)}{h({ ar: 'الأرقام', en: 'Figures' })}{h(L.platforms)}{h({ ar: 'الحالة', en: 'Status' })}
     </div>
   )
@@ -130,7 +130,8 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
   const st = STATUS[row.status]
   const credit = row.payment_mode === 'credit'
   const used = row.used_ratio === null ? null : Math.min(1, row.used_ratio)
-  const red = isRed(row) || (!credit && row.remaining !== null && row.remaining < row.alert_floor)
+  // BUDGET-ROW-001 — under the alert floor is red only once money has been spent: a small budget that is untouched is not «قرّبت تخلص».
+  const red = isRed(row) || (!credit && row.spent > 0 && row.remaining !== null && row.remaining < row.alert_floor)
   const off = row.plan_alerts > 0 || (row.plan ?? []).some((p) => p.flag !== null)
 
   return (
@@ -139,7 +140,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       onClick={onOpen}
       aria-current={active}
       data-testid={`budget-row-${row.project_id}`}
-      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition lg:grid-cols-[minmax(0,1.5fr)_6.75rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
+      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition lg:grid-cols-[minmax(0,1.5fr)_8.5rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span
@@ -161,7 +162,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       </span>
 
       <span className="col-span-2 flex min-w-0 items-center gap-2 lg:col-span-1" data-testid="row-figures" data-mode={row.payment_mode}>
-        {!credit && used !== null && <Ring ratio={used} tone={red ? 'danger' : st.tone} size={30} />}
+        {!credit && used !== null && <span className="hidden shrink-0 xl:inline-flex"><Ring ratio={used} tone={red ? 'danger' : st.tone} size={30} /></span>}
         <span className="flex min-w-0 flex-1 flex-col gap-0">
           {credit ? (
             <span className="grid grid-cols-2 gap-2">
@@ -176,11 +177,14 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
             </span>
           )}
           {used !== null && (
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+            // BUDGET-ROW-001 — the whole track is the budget and the filled part is what was spent, named «صُرف» so the
+            // percentage is never read as what is left.
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5" title={`${ar ? 'صُرف' : 'Spent'} ${Math.round(used * 100)}% ${ar ? 'من الميزانية' : 'of the budget'}`}>
+              <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
                 <span className={`block h-full rounded-full ${TONE_BAR[red ? 'danger' : st.tone]}`} style={{ width: `${Math.round(used * 100)}%` }} />
               </span>
-              <bdi dir="ltr" className="tnum text-xs font-extrabold leading-none text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
+              <span className="shrink-0 whitespace-nowrap text-xs font-semibold leading-none text-text-muted">{ar ? 'صُرف' : 'Spent'}</span>
+              <bdi dir="ltr" className="tnum shrink-0 text-xs font-extrabold leading-none text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
               {credit && row.ceiling !== null && <span className="text-xs text-text-muted">{ar ? L.ceiling.ar : L.ceiling.en} <Money n={row.ceiling} currency="SAR" /></span>}
             </span>
           )}
