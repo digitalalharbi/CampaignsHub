@@ -220,6 +220,27 @@ final class RoleDashboardTest extends TestCase
         }
     }
 
+    /** DASH-MANAGER-PERFORMANCE-001 — the manager reads every reachable campaign's performance, not only his own. */
+    public function test_the_manager_reads_the_performance_of_every_campaign_he_can_reach(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+
+        $d = $this->dash($this->member(WorkspaceRolePresets::OWNER, null));
+
+        $this->assertSame('manager', $d['view']);
+        $this->assertArrayNotHasKey('mine', $d);
+        $ids = array_column($d['campaign_rows'], 'id');
+        sort($ids);
+        $expected = [(string) $a->id, (string) $b->id];
+        sort($expected);
+        $this->assertSame($expected, $ids);
+        $this->assertArrayHasKey('platforms', $d);
+        $this->assertArrayHasKey('best', $d);
+        // The counts stay the manager's own (every campaign), not the marketer reader's.
+        $this->assertSame(2, $d['campaigns']['total']);
+    }
+
     public function test_another_tenants_figures_never_appear(): void
     {
         $this->campaign($this->alpha, 1000, 400, 100);
