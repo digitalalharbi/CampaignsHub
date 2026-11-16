@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 import { PlatformDonutChart } from '@/features/analytics/charts'
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
-import type { CampaignRow, PlatformRow } from './api'
-import { Nothing, Panel, times, useBoxHeight, useFmt } from './parts'
+import { Delta } from '@/components/ui/Delta'
+import type { CampaignRow, PlatformRow, RoleDashboard } from './api'
+import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 
 /*
  * DASH-PERFORMANCE-PANELS-001 — the three performance panels of a dashboard, read at a glance:
@@ -17,8 +18,8 @@ import { Nothing, Panel, times, useBoxHeight, useFmt } from './parts'
  */
 
 const T = {
-  ar: { top: 'أفضل الحملات', compare: 'مقارنة أداء المنصات', share: 'توزيع الإنفاق حسب المنصة', campaign: 'الحملة', platform: 'المنصة', results: 'النتائج', cost: 'التكلفة', spend: 'الإنفاق', roas: 'العائد', nothing: 'لا توجد بيانات بعد' },
-  en: { top: 'Top campaigns', compare: 'Platform performance', share: 'Spend by platform', campaign: 'Campaign', platform: 'Platform', results: 'Results', cost: 'Cost', spend: 'Spend', roas: 'ROAS', nothing: 'No data yet' },
+  ar: { windowSpend: 'إنفاق الفترة', vsPrevious: 'مقارنة بالفترة السابقة', noPrevious: 'لا توجد فترة سابقة للمقارنة', withheld: 'حملة بلا إنفاق ظاهر', objective: 'الهدف', avgCost: 'متوسط تكلفة النتيجة', top: 'أفضل الحملات', compare: 'مقارنة أداء المنصات', share: 'توزيع الإنفاق حسب المنصة', campaign: 'الحملة', platform: 'المنصة', results: 'النتائج', cost: 'التكلفة', spend: 'الإنفاق', roas: 'العائد', nothing: 'لا توجد بيانات بعد' },
+  en: { windowSpend: 'Spend in period', vsPrevious: 'vs previous period', noPrevious: 'No previous period to compare', withheld: 'campaigns without visible spend', objective: 'Objective', avgCost: 'Average cost per result', top: 'Top campaigns', compare: 'Platform performance', share: 'Spend by platform', campaign: 'Campaign', platform: 'Platform', results: 'Results', cost: 'Cost', spend: 'Spend', roas: 'ROAS', nothing: 'No data yet' },
 }
 
 type Fmt = ReturnType<typeof useFmt>
@@ -162,5 +163,36 @@ export function SpendSharePanel({ platforms, currency, portal, className = '' }:
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * DASH-PERIOD-001 — the chosen window's headline: its spend against the window just before it, and the results and
+ * average cost of the objective that carries the most spend (never summed across objectives).
+ */
+export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
+  const f = useFmt()
+  const t = f.ar ? T.ar : T.en
+  const p = d.performance ?? null
+  if (p === null) return null
+  const cur = d.money?.currency ?? null
+  const resultLabel = p.result_label?.[f.ar ? 'ar' : 'en'] ?? t.results
+  const costLabel = p.cost_label?.[f.ar ? 'ar' : 'en'] ?? t.avgCost
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="dash-window-kpis">
+      {d.can_money && (
+        <Kpi testId="dash-kpi-window-spend" to={`/${portal}/analytics`} label={`${t.windowSpend} · ${f.count(d.window.days)} ${f.ar ? 'يوم' : 'd'}`} value={f.money(p.spend, cur)}>
+          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
+            {p.previous_spend !== null
+              ? <><Delta metric="spend" current={p.spend} previous={p.previous_spend} ar={f.ar} testid="dash-window-spend-delta" /><span className="truncate">{t.vsPrevious}</span></>
+              : <span className="truncate">{t.noPrevious}</span>}
+            {p.withheld > 0 && <span className="truncate">· {f.count(p.withheld)} {t.withheld}</span>}
+          </span>
+        </Kpi>
+      )}
+      <Kpi testId="dash-kpi-window-results" to={`/${portal}/analytics`} label={resultLabel} value={f.short(p.results)} hint={p.family ? `${t.objective}: ${familyName(p.family, f.ar)}` : undefined} />
+      {d.can_money && <Kpi testId="dash-kpi-window-cost" to={`/${portal}/analytics`} label={costLabel} value={f.money(p.cost_per_result, cur)} hint={p.family ? familyName(p.family, f.ar) : undefined} />}
+    </div>
   )
 }
