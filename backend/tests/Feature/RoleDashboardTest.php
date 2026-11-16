@@ -220,6 +220,46 @@ final class RoleDashboardTest extends TestCase
         }
     }
 
+    /** DASH-MANAGER-PERFORMANCE-001 — the manager reads every reachable campaign's performance, not only his own. */
+    public function test_the_manager_reads_the_performance_of_every_campaign_he_can_reach(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+
+        $d = $this->dash($this->member(WorkspaceRolePresets::OWNER, null));
+
+        $this->assertSame('manager', $d['view']);
+        $this->assertArrayNotHasKey('mine', $d);
+        $ids = array_column($d['campaign_rows'], 'id');
+        sort($ids);
+        $expected = [(string) $a->id, (string) $b->id];
+        sort($expected);
+        $this->assertSame($expected, $ids);
+        $this->assertArrayHasKey('platforms', $d);
+        $this->assertArrayHasKey('best', $d);
+        // The counts stay the manager's own (every campaign), not the marketer reader's.
+        $this->assertSame(2, $d['campaigns']['total']);
+    }
+
+    /** DASH-PERIOD-001 — a chosen window, its spend against the window just before it, over every campaign. */
+    public function test_the_window_is_chosen_and_its_spend_is_read_against_the_window_before_it(): void
+    {
+        // Each fixture spends `earlier` 12 days ago and `daily` on each of the last three days.
+        $this->campaign($this->alpha, 1000, 400, 100);
+        $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $d = $this->dash($owner, '?days=7');
+
+        $this->assertSame(7, $d['window']['days']);
+        $this->assertEqualsWithDelta(450, $d['performance']['spend'], 0.01);
+        $this->assertEqualsWithDelta(600, $d['performance']['previous_spend'], 0.01);
+        $this->assertSame(2, $d['performance']['campaigns']);
+
+        // A window the page does not offer falls back to thirty days.
+        $this->assertSame(30, $this->dash($owner, '?days=11')['window']['days']);
+    }
+
     public function test_another_tenants_figures_never_appear(): void
     {
         $this->campaign($this->alpha, 1000, 400, 100);

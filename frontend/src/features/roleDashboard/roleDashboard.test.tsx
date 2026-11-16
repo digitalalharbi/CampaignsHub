@@ -126,3 +126,48 @@ describe('the role dashboards', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('الرئيسية')
   })
 })
+
+/** DASH-MANAGER-PERFORMANCE-001 — the manager reads the leading campaigns, the platforms and where the spend went. */
+describe('the manager performance panels', () => {
+  beforeEach(() => { state.data = null })
+
+  it('lists the leading campaigns, compares the platforms with a bar each and shares the spend', () => {
+    page(base({
+      rank_family: 'sales',
+      campaign_rows: [
+        { id: 'k1', project_id: 'p1', name: 'Summer', status: 'active', family: 'sales', platform: 'snapchat', spend: 500, result: 40, result_label: null, cost_per_result: 12.5, cost_label: null, roas: 3.6 },
+        { id: 'k2', project_id: 'p1', name: 'Weekend', status: 'active', family: 'sales', platform: 'meta', spend: 300, result: 90, result_label: null, cost_per_result: 3.3, cost_label: null, roas: 3.1 },
+      ],
+      platforms: [
+        { platform: 'snapchat', spend: 500, share: 0.625, result: 40, result_label: null, cost_per_result: 12.5, cost_label: null, roas: 3.6, ctr: null },
+        { platform: 'meta', spend: 300, share: 0.375, result: 90, result_label: null, cost_per_result: 3.3, cost_label: null, roas: 3.1, ctr: null },
+      ],
+    }))
+
+    const top = screen.getByTestId('dash-top')
+    const rows = within(top).getAllByRole('row').slice(1)
+    // The most results first.
+    expect(rows[0]).toHaveTextContent('Weekend')
+    expect(within(top).getByRole('link', { name: 'Weekend' })).toHaveAttribute('href', '/agency/campaigns/p1/k2')
+    expect(screen.getByTestId('dash-compare-snapchat')).toHaveTextContent('3.6')
+    expect(screen.getByTestId('dash-spend-share-legend')).toHaveTextContent(/6[23]%/)
+  })
+
+  it('DASH-PERIOD-001 — reads the window\'s spend against the window before it, and offers the windows', () => {
+    page(base({
+      performance: { spend: 450, previous_spend: 600, previous: { from: '2026-11-02', to: '2026-11-08' }, withheld: 0, campaigns: 2, family: 'sales', results: 130, result_label: null, cost_per_result: 3.46, cost_label: null },
+    }))
+    expect(screen.getByTestId('dash-window-kpis')).toBeInTheDocument()
+    expect(screen.getByTestId('dash-window-spend-delta')).toHaveTextContent('25%')
+    expect(screen.getByTestId('dash-kpi-window-results-value')).toHaveTextContent('130')
+    expect(screen.getByTestId('role-window-30')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('role-window-7')).toBeInTheDocument()
+  })
+
+  it('says there is nothing yet instead of drawing empty tables', () => {
+    page(base({ campaign_rows: [], platforms: [] }))
+    expect(screen.queryByTestId('dash-top')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('dash-compare')).not.toBeInTheDocument()
+    expect(screen.getByTestId('dash-panel-spend-share')).toHaveTextContent('No data yet')
+  })
+})
