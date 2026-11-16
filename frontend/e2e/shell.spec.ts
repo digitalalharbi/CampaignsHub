@@ -50,12 +50,12 @@ test.describe('the side rail (NOV-SIDEBAR-001)', () => {
     await ready(page, '/agency/clients')
     await page.getByTestId('rail-toggle').click()
 
-    const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('campaign-hub-rail:')))
+    const keys = await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith('campaign-hub-rail:')))
     expect(keys).toHaveLength(1)
     expect(keys[0]).not.toBe('campaign-hub-rail:anonymous')
 
     // Somebody else on the same browser starts from the strip.
-    await page.evaluate((k) => { localStorage.removeItem(k) }, keys[0])
+    await page.evaluate((k) => { sessionStorage.removeItem(k) }, keys[0])
     await page.reload()
     await expect.poll(async () => Math.round((await page.locator('aside').first().boundingBox())?.width ?? 0)).toBe(64)
   })
