@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
+import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
 import { Gauge, MessagesSquare, Settings2 } from 'lucide-react'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Tabs } from '@/components/ui/Tabs'
@@ -37,6 +39,8 @@ export function AgentCenterPage() {
   // The same rule as the approvals queue: whoever may pause or change a budget decides; the server re-checks each one.
   const canDecide = useAuth((s) => s.hasPermission('campaigns.pause') || s.hasPermission('campaigns.budget.change'))
   const [tab, setTab] = useState<Tab>('assistant')
+  /* AF2 — under /agency the chat fits the screen and takes what the header leaves; Team and Proposals are long lists of their own and flow. */
+  const fit = useLocation().pathname.startsWith('/agency')
   const [threadId, setThreadId] = useState<string | null>(null)
   const [settings, setSettings] = useState(false)
   const [railOpen, setRailOpen] = useState(false)
@@ -65,7 +69,7 @@ export function AgentCenterPage() {
   const open = (id: string | null) => { setThreadId(id); setTab('assistant'); setRailOpen(false) }
 
   return (
-    <div className="space-y-4" data-testid="agent-center">
+    <AgencyFit className="space-y-4" testid="agent-center" active={tab === 'assistant'}>
       <PageIntro
         title={title}
         purpose={purpose}
@@ -93,15 +97,16 @@ export function AgentCenterPage() {
         onChange={(k) => setTab(k as Tab)}
       />
 
+      <FitPanel className={fit ? '' : 'space-y-4'}>
       {tab === 'assistant' && (
-        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <div className={`grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] ${fit ? 'h-full min-h-0 lg:grid-rows-[minmax(0,1fr)]' : ''}`}>
           <button type="button" onClick={() => setRailOpen((v) => !v)} aria-expanded={railOpen} data-testid="rail-toggle" className="inline-flex items-center gap-1.5 justify-self-start rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary lg:hidden">
             <MessagesSquare size={13} aria-hidden />{ar ? 'المحادثات' : 'Conversations'}
           </button>
-          <aside className={`${railOpen ? 'block' : 'hidden'} max-h-[34rem] min-w-0 lg:block lg:max-h-[calc(100vh-14rem)]`}>
+          <aside className={`${railOpen ? 'block' : 'hidden'} max-h-[34rem] min-w-0 lg:block ${fit ? 'lg:max-h-full lg:min-h-0 lg:overflow-y-auto' : 'lg:max-h-[calc(100vh-14rem)]'}`}>
             <ConversationRail projectId={currentProjectId} ar={ar} activeId={threadId} onOpen={open} onNew={() => open(null)} onGone={(id) => { if (id === threadId) setThreadId(null) }} />
           </aside>
-          <div className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-3 lg:h-[calc(100vh-14rem)] lg:min-h-[32rem]">
+          <div className={`flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-3 ${fit ? 'lg:min-h-0' : 'lg:h-[calc(100vh-14rem)] lg:min-h-[32rem]'}`}>
             <AssistantChat projectId={currentProjectId} projectName={projectName} threadId={threadId} onThread={setThreadId} ar={ar} canUse={canUse} canDecide={canDecide} />
           </div>
         </div>
@@ -109,7 +114,8 @@ export function AgentCenterPage() {
       {tab === 'team' && <TeamTab projectId={currentProjectId} ar={ar} onProposals={() => setTab('proposals')} />}
       {tab === 'proposals' && <ProposalsTab projectId={currentProjectId} ar={ar} canDecide={canDecide} />}
 
+      </FitPanel>
       <SettingsDrawer open={settings} onClose={() => setSettings(false)} ar={ar} projectId={currentProjectId} canManage={canManage} onOpenThread={(id) => { setSettings(false); open(id) }} />
-    </div>
+    </AgencyFit>
   )
 }

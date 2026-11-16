@@ -1,4 +1,6 @@
-import { memo, useMemo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { roomBelow, useFitLocked } from '@/components/fit/useFitRows'
 import { readMetricValue } from '@/lib/metricValue'
 import { orderRows } from '@/lib/tableSort'
 
@@ -222,10 +224,55 @@ export function MetricTable({
   )
 
   const [page, setPage] = useState(0)
-  const pages = pageSize ? Math.max(1, Math.ceil(order.length / pageSize)) : 1
+  /*
+   * AF2 — on a fitted `/agency` page a table that was given no page size takes the one the screen allows: the rows
+   * that fit between its own top and the bottom of the `.fit-panel` it sits in, with the pager's line kept back.
+   * Locked only; unlocked (a phone, a short window) every row is drawn as before and the page flows.
+   */
+  const fitCompact = useFitCompact()
+  const locked = useFitLocked()
+  const wrap = useRef<HTMLDivElement>(null)
+  const [fitSize, setFitSize] = useState<number | undefined>(undefined)
+  const seen = useRef(0)
+  const auto = fitCompact && locked && pageSize === undefined
+  useEffect(() => {
+    const el = wrap.current
+    const panel = el?.closest<HTMLElement>('.fit-panel')
+    if (!auto || !el || !panel) { setFitSize(undefined); return }
+    let frame = 0
+    seen.current = 0
+    const measure = () => {
+      const rowEls = [...el.querySelectorAll<HTMLElement>('tbody tr:not([aria-hidden])')]
+      const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
+      /* The tallest row seen, not the first: a wrapped name makes one row taller, and the page must hold the worst case. */
+      /* Never smaller than the tallest row seen so far: with fewer rows drawn the columns re-flow (WebKit most), and a page sized from the first reading would then overhang. */
+      seen.current = Math.max(seen.current, 40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
+      const rowH = seen.current
+      /*
+        The room the rows may use: down to the panel's bottom, less the head and less whatever the panel draws below this
+        table (the card's padding and border, a note) — `roomBelow`. The pager lives inside `wrap`, so its line is kept
+        back separately: as drawn when it is drawn, at least 34px.
+      */
+      const wrapRect = el.getBoundingClientRect()
+      const tableBottom = el.querySelector('table')?.getBoundingClientRect().bottom ?? wrapRect.bottom
+      const pagerH = Math.max(34, Math.ceil(wrapRect.bottom - tableBottom))
+      const avail = panel.getBoundingClientRect().bottom - wrapRect.top - head - roomBelow(el, panel)
+      const all = Math.max(1, Math.floor(avail / rowH))
+      const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - pagerH) / rowH))
+      setFitSize((cur) => (cur === next ? cur : next))
+    }
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
+    ro.observe(panel)
+    ro.observe(el)
+    measure()
+
+    return () => { ro.disconnect(); cancelAnimationFrame(frame) }
+  }, [auto, rows.length, head.length])
+  const size = pageSize ?? fitSize
+  const pages = size ? Math.max(1, Math.ceil(order.length / size)) : 1
   const current = Math.min(page, pages - 1)
-  const shown = pageSize ? order.slice(current * pageSize, current * pageSize + pageSize) : order
-  const padding = pageSize && pages > 1 ? pageSize - shown.length : 0
+  const shown = size ? order.slice(current * size, current * size + size) : order
+  const padding = size && pages > 1 ? size - shown.length : 0
 
   const toggle = (i: number) => {
     setPage(0)
@@ -243,7 +290,7 @@ export function MetricTable({
    * and the gate caught every one of them.
    */
   return (
-    <div className="min-w-0 max-w-full overflow-x-auto">
+    <div ref={wrap} className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border text-text-muted">
@@ -282,9 +329,9 @@ export function MetricTable({
           ))}
         </tbody>
       </table>
-      {pageSize !== undefined && pages > 1 && (
+      {size !== undefined && pages > 1 && (
         <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-muted" data-testid={testId ? `${testId}-pager` : 'metric-table-pager'}>
-          <span className="tnum" dir="ltr">{`${current * pageSize + 1}–${Math.min(order.length, (current + 1) * pageSize)} / ${order.length}`}</span>
+          <span className="tnum" dir="ltr">{`${current * size + 1}–${Math.min(order.length, (current + 1) * size)} / ${order.length}`}</span>
           <span className="inline-flex items-center gap-1">
             <button type="button" aria-label="Previous" disabled={current === 0} onClick={() => setPage(current - 1)} data-testid={testId ? `${testId}-prev` : undefined} className="rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary disabled:opacity-40">‹</button>
             <span className="tnum font-semibold text-text-secondary" dir="ltr">{`${current + 1} / ${pages}`}</span>

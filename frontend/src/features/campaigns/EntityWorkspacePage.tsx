@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { AgencyFit, FitPanel, useBoxHeight } from '@/components/fit/AgencyFit'
+import { TabStrip } from '@/components/fit/TabStrip'
 import { CampaignViewsBar } from './CampaignViewsBar'
 import type { SavedView } from '@/features/dashboard/savedViews'
 import { useQuery } from '@tanstack/react-query'
@@ -53,6 +56,10 @@ function readHidden(level: Level): string[] {
 export function EntityWorkspacePage({ level }: { level: Level }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const { currentProjectId } = useProject()
+  /* AF2 — under /agency the page fits the screen: the table, the overview and the drivers are three tabs. */
+  const fit = useLocation().pathname.startsWith('/agency')
+  const [tab, setTab] = useState<'list' | 'overview' | 'drivers'>('list')
+  const box = useBoxHeight(fit)
   // DATE-RANGE-001 — the system's one period, shared with every page; rolling presets end yesterday.
   const { days, setDays, range } = usePeriod()
   const [platform, setPlatform] = useState('all')
@@ -112,7 +119,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
   ]
 
   return (
-    <div className="space-y-4" data-testid={`entity-workspace-${level}`}>
+    <AgencyFit className="space-y-4" testid={`entity-workspace-${level}`} active={tab !== 'drivers'}>
       <PageIntro title={title} purpose={purpose} />
 
       <FilterBar
@@ -123,6 +130,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
           ...(status === 'all' ? [] : [{ key: `status:${status}`, axis: ar ? 'الحالة' : 'State', label: statusOptions.find((o) => o.value === status)?.label ?? status, onRemove: () => setStatus('all') }]),
         ]}
         onReset={() => { setPlatform('all'); setStatus('all'); setSearch('') }}
+        density={fit ? 'dense' : undefined}
         trailing={(
           <button
             type="button"
@@ -170,6 +178,21 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
         </fieldset>
       )}
 
+
+      <div className={fit ? 'flex flex-wrap items-center justify-between gap-2' : 'contents'}>
+      {fit && (
+        <TabStrip
+          label={ar ? 'أقسام الصفحة' : 'Page sections'}
+          testid={`entity-tabs-${level}`}
+          active={tab}
+          onChange={(k) => setTab(k as 'list' | 'overview' | 'drivers')}
+          items={[
+            { key: 'list', label: ar ? 'القائمة' : 'List' },
+            { key: 'overview', label: ar ? 'النظرة العامة' : 'Overview' },
+            ...(level === 'ad_set' ? [{ key: 'drivers', label: ar ? 'ما الذي حرّكها' : 'What moved' }] : []),
+          ]}
+        />
+      )}
       <CampaignViewsBar
         module={`entities-${level}`}
         testPrefix={`entity-${level}`}
@@ -178,11 +201,18 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
         onApply={applySavedView}
         ar={ar}
       />
-
+      </div>
       {/* MGMT-PAGES-001 — the report's own blocks above the table: KPI strip, trend, where results came from. */}
-      <ManagementOverview projectId={currentProjectId} range={range} filters={filters} testid={`entity-overview-${level}`} />
-
-      <EntityTab projectId={currentProjectId} range={range} filters={filters} level={level} workspace={workspace} />
+      {(!fit || tab === 'overview') && (
+        <div ref={fit ? box.ref : undefined} className={fit ? 'fit-panel' : undefined}>
+          <ManagementOverview projectId={currentProjectId} range={range} filters={filters} testid={`entity-overview-${level}`} chartHeight={fit && box.height !== null ? Math.max(110, box.height - 315) : undefined} />
+        </div>
+      )}
+      {(!fit || tab === 'list' || tab === 'drivers') && (
+        fit
+          ? <FitPanel><EntityTab projectId={currentProjectId} range={range} filters={filters} level={level} workspace={workspace} part={tab === 'drivers' ? 'diagnosis' : 'table'} /></FitPanel>
+          : <EntityTab projectId={currentProjectId} range={range} filters={filters} level={level} workspace={workspace} />
+      )}
 
       {managing && managing.unified_campaign_id && (
         <ManageDialog
@@ -194,7 +224,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
           onClose={() => setManaging(null)}
         />
       )}
-    </div>
+    </AgencyFit>
   )
 }
 
