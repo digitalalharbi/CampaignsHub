@@ -7,7 +7,7 @@ import { RangeCalendar, stepForKey } from '@/components/ui/RangeCalendar'
 import { PeriodStatus } from '@/components/ui/PeriodStatus'
 import { usePeriod } from '@/lib/period/usePeriod'
 import {
-  COMPARE_LABEL, MONTHS_AR, MONTHS_EN, PRESETS, addDays, addMonths, formatSpan, isValidYmd, parseYmd, periodSummary, presetLabel,
+  COMPARE_LABEL, MONTHS_AR, MONTHS_EN, PRESETS, addDays, formatSpan, isValidYmd, parseYmd, periodSummary, presetLabel,
   type CompareMode, type PresetKey,
 } from '@/lib/period/periodMath'
 import { resolveSelection, type Selection } from '@/lib/period/periodState'
@@ -17,7 +17,10 @@ import { resolveSelection, type Selection } from '@/lib/period/periodState'
  *
  * A button that says the period in words and dates («آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026»). It opens a
  * panel with presets, two months side by side, from/to fields you can type into, a comparison, and
- * «تحديث» / «إلغاء». Nothing changes on the page until «تحديث»: the panel edits a DRAFT.
+ * «تحديث» / «إلغاء» in a footer that stays visible. FILTERS-LIVE-001 — the page follows the panel LIVE: a preset, a
+ * finished range, typed dates or a comparison change the figures at once (as Meta / Snapchat / مؤشر do), so a choice
+ * is never lost behind a button. «تحديث» or a press outside keeps it and closes; «إلغاء» and Escape put back the
+ * period the panel opened on.
  *
  * On a phone the same panel is a bottom sheet with ONE month and the presets as a sideways-scrolling row.
  *
@@ -44,6 +47,18 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => { setOpen(false); triggerRef.current?.focus() }, [])
+  /* What the panel opened on, and whether a live preview has moved the page off it — «إلغاء» puts it back. */
+  const openedWith = useRef<Selection>(selection)
+  const movedLive = useRef(false)
+  const toggle = () => setOpen((v) => { if (!v) { openedWith.current = selection; movedLive.current = false } return !v })
+  // Held in a ref so «إلغاء» stays one stable function: the panel's key/outside listeners re-bind (and re-focus) on change.
+  const setSel = useRef(state.setSelection)
+  setSel.current = state.setSelection
+  const cancel = useCallback(() => {
+    if (movedLive.current) setSel.current(openedWith.current, { remember: false })
+    movedLive.current = false
+    close()
+  }, [close])
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`} data-testid={testId}>
@@ -51,7 +66,7 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
         <button
           ref={triggerRef} type="button" data-testid={`${testId}-button`}
           aria-haspopup="dialog" aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
           className="flex min-h-11 w-full max-w-full items-center gap-2 rounded-xl border border-border-strong bg-surface px-3 py-1.5 text-start text-sm font-semibold text-text-primary hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 sm:min-h-10"
         >
           <CalendarDays className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden />
@@ -81,8 +96,9 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
       {open && (
         <PickerPanel
           ar={ar} anchor={triggerRef} initial={selection} ctx={ctx} recent={recent} testId={testId}
-          onCancel={close}
-          onApply={(next) => { state.setSelection(next); close() }}
+          onCancel={cancel}
+          onLive={(next) => { movedLive.current = true; state.setSelection(next, { remember: false }) }}
+          onApply={(next) => { movedLive.current = false; state.setSelection(next); close() }}
         />
       )}
     </div>
@@ -90,6 +106,9 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
 }
 
 type Target = 'main' | 'compare'
+
+/** PICKER-SHORT-PRESETS-001 — the list on show; every other preset sits under «تخصيص». */
+const SHORT_PRESETS: PresetKey[] = ['today', 'yesterday', 'this_week', 'this_month', 'last_month', 'ytd']
 
 function useIsPhone(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches)
@@ -106,7 +125,7 @@ function useIsPhone(): boolean {
   return phone
 }
 
-export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply, allowCompare = true }: {
+export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply, onLive, allowCompare = true }: {
   allowCompare?: boolean
   ar: boolean
   anchor: React.RefObject<HTMLButtonElement | null>
@@ -116,11 +135,14 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   testId: string
   onCancel: () => void
   onApply: (s: Selection) => void
+  /** FILTERS-LIVE-001 — called with each finished choice while the panel is open, so the page updates at once. */
+  onLive?: (s: Selection) => void
 }) {
   const phone = useIsPhone()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const [draft, setDraft] = useState<Selection>(initial)
+  const openedOn = useRef(JSON.stringify(initial))
   const [target, setTarget] = useState<Target>('main')
   const [anchorDay, setAnchorDay] = useState<string | null>(null)
   const [hover, setHover] = useState<string | null>(null)
@@ -131,10 +153,11 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   const todayP = parseYmd(ctx.today)!
   // First displayed month: the month before the period's last month (so the period's end is on the right), or that month alone on a phone.
   const endP = parseYmd(resolved.period.to)!
-  const [view, setView] = useState(() => (phone ? { y: endP.y, m: endP.m } : fromMonth(addMonths(`${endP.y}-${String(endP.m).padStart(2, '0')}-01`, -1))))
+  // PICKER-ONE-MONTH-001 — one month, on the period's last month, on every screen (as Meta and Snapchat's compact pickers).
+  const [view, setView] = useState(() => ({ y: endP.y, m: endP.m }))
   const showView = (day: string) => {
     const p = parseYmd(day)!
-    setView(phone ? { y: p.y, m: p.m } : fromMonth(addMonths(`${p.y}-${String(p.m).padStart(2, '0')}-01`, -1)))
+    setView({ y: p.y, m: p.m })
   }
 
   /* Position: fixed under the button, kept inside the screen; a phone gets a bottom sheet instead. */
@@ -145,7 +168,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
       const a = anchor.current?.getBoundingClientRect()
       const panel = panelRef.current
       if (!a || !panel) return
-      const w = panel.offsetWidth || 760
+      const w = panel.offsetWidth || 440
       const rtl = document.documentElement.dir === 'rtl'
       const wanted = rtl ? a.right - w : a.left
       const left = Math.max(8, Math.min(wanted, window.innerWidth - w - 8))
@@ -164,6 +187,9 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place); ro?.disconnect() }
   }, [phone, anchor])
 
+  /* A press outside SAVES what was chosen (a change is never lost by clicking away); Escape and «إلغاء» discard. */
+  const onOutside = useRef<() => void>(onCancel)
+
   /* Escape closes; Tab stays inside; a press outside closes (never on the button that opened it). */
   useEffect(() => {
     const el = panelRef.current
@@ -180,7 +206,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     }
     const onDown = (e: globalThis.PointerEvent) => {
       const t = e.target as Node
-      if (el && !el.contains(t) && !anchor.current?.contains(t)) onCancel()
+      if (el && !el.contains(t) && !anchor.current?.contains(t)) onOutside.current()
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onDown)
@@ -233,8 +259,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     const next = addDays(day, step)
     if (next > ctx.today) return
     const p = parseYmd(next)!
-    const shown = [view, nextMonth(view)].slice(0, phone ? 1 : 2)
-    if (!shown.some((s) => s.y === p.y && s.m === p.m)) setView(phone ? { y: p.y, m: p.m } : fromMonth(next.slice(0, 7) + '-01'))
+    if (!(view.y === p.y && view.m === p.m)) setView({ y: p.y, m: p.m })
     requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>(`[data-day="${next}"]`)?.focus())
   }
 
@@ -262,40 +287,64 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     setTarget(mode === 'custom' ? 'compare' : 'main')
   }
 
-  const apply = () => {
+  const finished = (): Selection => {
     const out: Selection = { ...draft }
     if (out.key === 'custom') { out.from = resolved.period.from; out.to = resolved.period.to }
     if (out.compare === 'custom') { out.cfrom = resolved.comparison?.from; out.cto = resolved.comparison?.to }
-    onApply(out)
-  }
 
-  const second = nextMonth(view)
-  const canNext = !(phone ? (view.y > todayP.y || (view.y === todayP.y && view.m >= todayP.m)) : (second.y > todayP.y || (second.y === todayP.y && second.m >= todayP.m)))
+    return out
+  }
+  const apply = () => onApply(finished())
+
+  /* FILTERS-LIVE-001 — every finished choice reaches the page at once; half a range (one click) waits for its end. */
+  const lastLive = useRef(JSON.stringify(initial))
+  useEffect(() => {
+    if (!onLive || anchorDay !== null) return
+    const out = finished()
+    const key = JSON.stringify(out)
+    if (key === lastLive.current) return
+    lastLive.current = key
+    onLive(out)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is the identity
+  }, [draft, anchorDay])
+  useEffect(() => {
+    onOutside.current = () => {
+      // Against what the panel OPENED on: a live preview has already moved the page (and `initial`) to the draft.
+      const changed = JSON.stringify(draft) !== openedOn.current
+      if (changed) apply(); else onCancel()
+    }
+  })
+
+  const canNext = !(view.y > todayP.y || (view.y === todayP.y && view.m >= todayP.m))
   const prevIcon = ar ? <ChevronRight className="h-5 w-5" aria-hidden /> : <ChevronLeft className="h-5 w-5" aria-hidden />
   const nextIcon = ar ? <ChevronLeft className="h-5 w-5" aria-hidden /> : <ChevronRight className="h-5 w-5" aria-hidden />
   const years = useMemo(() => Array.from({ length: todayP.y - 2019 }, (_, i) => 2020 + i), [todayP.y])
   const activePreset = draft.key !== 'custom' ? draft.key : null
+  const [showMore, setShowMore] = useState(false)
 
   const calendars = (
     <div className="min-w-0 flex-1">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-1.5 rounded-lg bg-surface-secondary px-2 py-1 text-center text-xs font-bold text-text-primary" data-testid={`${testId}-draft-span`} aria-live="polite">
+        {formatSpan(resolved.period, ar)}
+      </div>
+      <div className="mb-1 flex items-center justify-between gap-2">
         <button type="button" onClick={() => setView((v) => prevMonth(v))} aria-label={ar ? 'الشهر السابق' : 'Previous month'} data-testid={`${testId}-prev`}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9">{prevIcon}</button>
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-7 sm:w-7">{prevIcon}</button>
         <div className="flex items-center gap-2">
           <select aria-label={ar ? 'الشهر' : 'Month'} value={view.m} onChange={(e) => setView((v) => ({ ...v, m: Number(e.target.value) }))} data-testid={`${testId}-month`}
-            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-9">
+            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-7 sm:text-xs">
             {(ar ? MONTHS_AR : MONTHS_EN).map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
           </select>
           <select aria-label={ar ? 'السنة' : 'Year'} value={view.y} onChange={(e) => setView((v) => ({ ...v, y: Number(e.target.value) }))} data-testid={`${testId}-year`}
-            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary tnum sm:h-9" dir="ltr">
+            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary tnum sm:h-7 sm:text-xs" dir="ltr">
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <button type="button" disabled={!canNext} onClick={() => setView((v) => nextMonth(v))} aria-label={ar ? 'الشهر التالي' : 'Next month'} data-testid={`${testId}-next`}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover disabled:opacity-30 sm:h-9 sm:w-9">{nextIcon}</button>
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover disabled:opacity-30 sm:h-7 sm:w-7">{nextIcon}</button>
       </div>
-      <div className={`grid gap-4 ${phone ? 'grid-cols-1' : 'grid-cols-2'}`}>
-        {[view, ...(phone ? [] : [second])].map((v) => (
+      <div>
+        {[view].map((v) => (
           <RangeCalendar
             key={`${v.y}-${v.m}`} year={v.y} month={v.m} today={ctx.today} ar={ar} testId={`${testId}-cal-${v.y}-${String(v.m).padStart(2, '0')}`}
             paints={[{ span: mainPaint, tone: 'main' }, { span: cmpPaint, tone: 'compare' }]}
@@ -306,17 +355,35 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     </div>
   )
 
-  const presetButtons = PRESETS.map((p) => (
+  const presetButton = (p: (typeof PRESETS)[number]) => (
     <button
       key={p.key} type="button" data-testid={`${testId}-preset-${p.key}`} aria-pressed={activePreset === p.key} onClick={() => choosePreset(p.key)}
-      className={`shrink-0 rounded-lg px-3 py-2 text-start text-sm font-semibold ${phone ? 'min-h-11 border border-border' : 'min-h-9 w-full'} ${activePreset === p.key ? 'bg-brand-600 text-white' : 'text-text-primary hover:bg-surface-hover'}`}
-    >{ar ? p.ar : p.en}</button>
-  ))
+      className={`shrink-0 rounded-lg text-start font-semibold ${phone ? 'min-h-11 border border-border px-3 py-2 text-sm' : 'min-h-7 w-full px-2 py-1 text-xs'} ${activePreset === p.key ? 'bg-brand-600 text-white' : 'text-text-primary hover:bg-surface-hover'}`}
+    >{p.key === 'ytd' ? (ar ? 'السنة الحالية' : 'This year') : (ar ? p.ar : p.en)}</button>
+  )
+  /*
+   * PICKER-SHORT-PRESETS-001 — the few periods people actually reach for, then «تخصيص». «تخصيص» opens the rest of the
+   * presets underneath it (and the calendar and the from/to fields are always there for any two days).
+   */
+  const shortPresets = PRESETS.filter((p) => SHORT_PRESETS.includes(p.key))
+  const otherPresets = PRESETS.filter((p) => !SHORT_PRESETS.includes(p.key))
+  const presetButtons = (
+    <>
+      {shortPresets.map(presetButton)}
+      <button
+        type="button" data-testid={`${testId}-preset-custom`} aria-expanded={showMore} onClick={() => setShowMore((v) => !v)}
+        className={`shrink-0 rounded-lg text-start font-semibold ${phone ? 'min-h-11 border border-border px-3 py-2 text-sm' : 'min-h-7 w-full px-2 py-1 text-xs'} ${draft.key === 'custom' || (activePreset !== null && !SHORT_PRESETS.includes(activePreset)) ? 'text-brand-600' : 'text-text-secondary hover:bg-surface-hover'}`}
+      >{ar ? 'تخصيص' : 'Customize'} {showMore ? '▴' : '▾'}</button>
+      <div hidden={!showMore} className={!showMore ? 'hidden' : phone ? 'contents' : 'space-y-px border-t border-border pt-1'} data-testid={`${testId}-presets-more`}>
+        {otherPresets.map(presetButton)}
+      </div>
+    </>
+  )
 
   const body = (
     <>
-      {recent.length > 0 && (
-        <div className="mb-3" data-testid={`${testId}-recent`}>
+      {phone && recent.length > 0 && (
+        <div className="mb-2" data-testid={`${testId}-recent`}>
           <div className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'مستخدمة مؤخرًا' : 'Recently used'}</div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {recent.map((s, i) => {
@@ -324,7 +391,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
 
               return (
                 <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`}
-                  className="min-h-11 shrink-0 rounded-lg border border-border bg-surface-secondary px-3 py-1.5 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover sm:min-h-9">
+                  className="min-h-11 shrink-0 rounded-lg border border-border bg-surface-secondary px-3 py-1.5 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover sm:min-h-0 sm:px-2 sm:py-1">
                   <span className="block">{presetLabel(r.period.key, ar)}</span>
                   <span className="block font-normal text-text-secondary">{formatSpan(r.period, ar)}</span>
                 </button>
@@ -334,28 +401,47 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
         </div>
       )}
 
-      <div className={phone ? 'flex flex-col gap-3' : 'flex gap-4'}>
+      <div className={phone ? 'flex flex-col gap-3' : 'flex gap-3'}>
         {phone
           ? <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>
-          : <div className="w-44 shrink-0 space-y-0.5 border-e border-border pe-3" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>}
-        {calendars}
-      </div>
+          : (
+            <div className="w-28 shrink-0 space-y-px border-e border-border pe-2">
+              {recent.length > 0 && (
+                <div className="mb-1 border-b border-border pb-1" data-testid={`${testId}-recent`}>
+                  <div className="px-2 pb-0.5 text-[10px] font-bold text-text-secondary">{ar ? 'مستخدمة مؤخرًا' : 'Recently used'}</div>
+                  {recent.slice(0, 3).map((s, i) => {
+                    const r = resolveSelection(s, ctx)
 
-      <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+                    return (
+                      <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`} title={formatSpan(r.period, ar)}
+                        className="block min-h-7 w-full truncate rounded-lg px-2 py-1 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover">
+                        {presetLabel(r.period.key, ar)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="space-y-px" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>
+            </div>
+          )}
+        <div className="min-w-0 flex-1">
+        {calendars}
+
+      <div className="mt-2 grid gap-2 border-t border-border pt-2">
         <DateFields
           ar={ar} label={target === 'main' ? (ar ? 'الفترة' : 'Period') : (ar ? 'فترة المقارنة' : 'Comparison period')} span={targetSpan} today={ctx.today} testId={testId}
           onCommit={(f, t) => { setTargetSpan(f, t); showView(t) }}
         />
         {allowCompare ? <div>
-          <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-text-primary sm:min-h-9">
-            <input type="checkbox" className="h-5 w-5 accent-[var(--brand-600)]" checked={draft.compare !== 'none'} data-testid={`${testId}-compare-toggle`}
+          <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-text-primary sm:min-h-7 sm:text-xs">
+            <input type="checkbox" className="h-5 w-5 accent-[var(--brand-600)] sm:h-4 sm:w-4" checked={draft.compare !== 'none'} data-testid={`${testId}-compare-toggle`}
               onChange={(e) => setMode(e.target.checked ? 'previous' : 'none')} />
             {ar ? 'مقارنة' : 'Compare'}
           </label>
           {draft.compare !== 'none' && (
             <div className="space-y-2">
               <select aria-label={ar ? 'نوع المقارنة' : 'Comparison type'} value={draft.compare} data-testid={`${testId}-compare-mode`} onChange={(e) => setMode(e.target.value as CompareMode)}
-                className="h-11 w-full rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-9">
+                className="h-11 w-full rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-8 sm:text-xs">
                 {(['previous', 'last_year', 'custom'] as const).map((m) => <option key={m} value={m}>{ar ? COMPARE_LABEL[m].ar : COMPARE_LABEL[m].en}</option>)}
               </select>
               {resolved.comparison && <div className="text-xs text-text-secondary" data-testid={`${testId}-compare-range`}>{formatSpan(resolved.comparison, ar)}</div>}
@@ -363,7 +449,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
                 <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label={ar ? 'ما الذي يُحدَّد في التقويم' : 'What the calendar edits'}>
                   {(['main', 'compare'] as const).map((t) => (
                     <button key={t} type="button" aria-pressed={target === t} onClick={() => { setTarget(t); setAnchorDay(null) }} data-testid={`${testId}-target-${t}`}
-                      className={`min-h-11 rounded-md px-3 text-sm font-semibold sm:min-h-8 ${target === t ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary'}`}>
+                      className={`min-h-11 rounded-md px-3 text-sm font-semibold sm:min-h-7 sm:text-xs ${target === t ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary'}`}>
                       {t === 'main' ? (ar ? 'الفترة' : 'Period') : (ar ? 'المقارنة' : 'Comparison')}
                     </button>
                   ))}
@@ -374,16 +460,18 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
           )}
         </div> : <div />}
       </div>
+        </div>
+      </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-elevated px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:-mx-3 sm:-mb-3 sm:px-3" data-testid={`${testId}-footer`}>
         <p className="text-xs text-text-secondary" data-testid={`${testId}-zone`}>
           {ar ? 'التواريخ بتوقيت الرياض (GMT+3)' : 'Dates are in Riyadh time (GMT+3)'}
         </p>
         <div className="flex gap-2">
           <button type="button" onClick={onCancel} data-testid={`${testId}-cancel`}
-            className="min-h-11 rounded-xl border border-border-strong bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-hover sm:min-h-9">{ar ? 'إلغاء' : 'Cancel'}</button>
+            className="min-h-11 rounded-xl border border-border-strong bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-hover sm:min-h-8 sm:text-xs">{ar ? 'إلغاء' : 'Cancel'}</button>
           <button type="button" onClick={apply} data-testid={`${testId}-apply`}
-            className="min-h-11 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 sm:min-h-9">{ar ? 'تحديث' : 'Update'}</button>
+            className="min-h-11 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 sm:min-h-8 sm:text-xs">{ar ? 'تحديث' : 'Update'}</button>
         </div>
       </div>
     </>
@@ -395,7 +483,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
         <div className="absolute inset-0 bg-black/40" aria-hidden />
         <div
           ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={`${testId}-panel`}
-          className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-surface-elevated p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-small)] focus:outline-none"
+          className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-surface-elevated p-4 shadow-[var(--shadow-small)] focus:outline-none"
         >
           <div className="mb-3 flex items-center justify-between">
             <h2 id={titleId} className="text-base font-bold text-text-primary">{ar ? 'الفترة الزمنية' : 'Period'}</h2>
@@ -411,7 +499,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     <div
       ref={panelRef} tabIndex={-1} role="dialog" aria-modal="false" aria-labelledby={titleId} data-testid={`${testId}-panel`}
       style={pos ? { top: pos.top, left: pos.left, maxHeight: pos.maxH } : { visibility: 'hidden', top: 0, left: 0 }}
-      className="fixed z-[80] w-[min(760px,calc(100vw-1rem))] overflow-y-auto rounded-2xl border border-border-strong bg-surface-elevated p-4 shadow-[0_12px_40px_rgba(0,0,0,.22)] focus:outline-none"
+      className="fixed z-[80] w-[min(440px,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-border-strong bg-surface-elevated p-3 shadow-[0_12px_40px_rgba(0,0,0,.22)] focus:outline-none"
     >
       <h2 id={titleId} className="sr-only">{ar ? 'الفترة الزمنية' : 'Period'}</h2>
       {body}
@@ -454,7 +542,7 @@ function DateFields({ ar, label, span, today, testId, onCommit }: {
     setErr(null); onCommit(f, t)
   }
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }
-  const field = 'h-11 w-full rounded-lg border bg-surface px-2 text-base text-text-primary tnum sm:h-9'
+  const field = 'h-11 w-full rounded-lg border bg-surface px-2 text-base text-text-primary tnum sm:h-8 sm:text-xs'
 
   return (
     <div>
@@ -471,6 +559,5 @@ function DateFields({ ar, label, span, today, testId, onCommit }: {
   )
 }
 
-const fromMonth = (firstOfMonth: string) => { const p = parseYmd(firstOfMonth)!; return { y: p.y, m: p.m } }
 const nextMonth = (v: { y: number; m: number }) => (v.m === 12 ? { y: v.y + 1, m: 1 } : { y: v.y, m: v.m + 1 })
 const prevMonth = (v: { y: number; m: number }) => (v.m === 1 ? { y: v.y - 1, m: 12 } : { y: v.y, m: v.m - 1 })
