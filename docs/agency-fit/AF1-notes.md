@@ -88,3 +88,14 @@ Backend: `~/Developer/ch-scripts/ptest.sh <worktree> --filter='…'` (own databa
   invitation, sign-in and access specs. Firefox cannot be launched on this Mac; CI runs it. Reasoned from code: every tab/param
   write goes through `useLatestSearchParams` (the stale functional-`setSearchParams` trap), no AudioContext, and focus moves only
   inside `DetailPanel` (D's trap, already webkit-fixed).
+
+## CI repair — run 43829617205
+
+`creative-analysis.spec.ts:456` (chromium + firefox): `creative-pulse` not found on `/agency/dashboard`. Cause: AF1 fitted
+the board to one screen and moved each block onto a tab of the SAME page; the creative section is the «المحتوى / Creatives»
+tab (`agency-tabs-creative`, `?tab=creative`), still mounted from `AgencyDashboardPage` and reachable from the same route.
+The spec loaded the page and expected the section on the default tab. The spec now opens that tab the way a person does
+(and asserts it is selected); every assertion about the section is unchanged. No product change: the section did not
+disappear, it is one tap away on the same page. Evidence: chromium 269/269 and webkit 269/269 on creative-analysis,
+agency-fit, agency-dashboard-drawn, role-dashboard, pwa-install (the creative test ran, not skipped); vitest dashboard +
+content + agency 556/556; `tsc -b` clean; oxlint clean.
