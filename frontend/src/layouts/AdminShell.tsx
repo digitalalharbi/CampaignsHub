@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   Bell,
@@ -27,6 +28,8 @@ import {
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { useRail } from './railPreference'
 import { PortalFrame } from './PortalFrame'
 import type { MobileMoreGroup, MobileTab } from './MobileTabBar'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
@@ -61,26 +64,26 @@ import { productName } from '@/lib/brand'
  * used tool simply stopped competing for attention with the queue somebody opens every morning.
  */
 const adminNav = [
-  { to: '/admin', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/admin', group: 'daily', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, end: true },
   // The queue in front of Tenants: applications that have not become one yet (SIGNUP-003).
-  { to: '/admin/registrations', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
+  { to: '/admin/registrations', group: 'daily', ar: 'طلبات التسجيل', en: 'Registrations', icon: ClipboardCheck },
   // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site, owned by the platform.
-  { to: '/admin/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
+  { to: '/admin/requests', group: 'daily', ar: 'الطلبات', en: 'Requests', icon: Inbox },
   // PLATFORM-INBOX-ATTENTION-001 — contact messages, support tickets and data requests addressed to the platform.
-  { to: '/admin/inbox', ar: 'الوارد', en: 'Inbox', icon: MessagesSquare },
-  { to: '/admin/tenants', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
-  { to: '/admin/billing', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
+  { to: '/admin/inbox', group: 'daily', ar: 'الوارد', en: 'Inbox', icon: MessagesSquare },
+  { to: '/admin/tenants', group: 'customers', ar: 'المستأجرون', en: 'Tenants', icon: Building2 },
+  { to: '/admin/billing', group: 'customers', ar: 'الخطط والاشتراكات', en: 'Plans & subscriptions', icon: CreditCard },
   // PRICING-ADDONS-001 — priced and opened for sale here; requests are approved in each tenant's drawer.
-  { to: '/admin/addons', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
+  { to: '/admin/addons', group: 'customers', ar: 'الإضافات', en: 'Add-ons', icon: PackagePlus },
   // PRICING-MIGRATION-001 — launch-plan subscribers onto the current catalogue: previewed, typed, at period end.
-  { to: '/admin/plan-migration', ar: 'الانتقال للباقات الجديدة', en: 'Plan migration', icon: ArrowRightLeft },
-  { to: '/admin/usage', ar: 'الاستخدام والرصيد', en: 'Usage and credits', icon: Gauge },
-  { to: '/admin/tax', ar: 'ضريبة القيمة المضافة', en: 'VAT', icon: Receipt },
+  { to: '/admin/plan-migration', group: 'customers', ar: 'نقل الباقات', en: 'Plan migration', icon: ArrowRightLeft },
+  { to: '/admin/usage', group: 'customers', ar: 'الاستخدام والرصيد', en: 'Usage and credits', icon: Gauge },
+  { to: '/admin/tax', group: 'customers', ar: 'ضريبة القيمة المضافة', en: 'VAT', icon: Receipt },
   // MAIL-014 — beside the audit trail, because both answer «what did the platform do?». Separate
   // entries because one is about people's actions and the other about the mailer's.
-  { to: '/admin/email', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
-  { to: '/admin/notifications', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
-  { to: '/admin/audit', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
+  { to: '/admin/email', group: 'system', ar: 'البريد والتسليم', en: 'Email & delivery', icon: Mail },
+  { to: '/admin/notifications', group: 'system', ar: 'الإشعارات', en: 'Notifications', icon: Bell },
+  { to: '/admin/audit', group: 'system', ar: 'السجلات والتدقيق', en: 'Logs & audit', icon: ScrollText },
   /*
    * PROVCFG-001 — a daily entry, not an advanced one.
    *
@@ -89,12 +92,22 @@ const adminNav = [
    * it under «متقدم» beside the one-time portal cutover would put the reason nothing is syncing two
    * clicks and one guess away from the person looking for it.
    */
-  { to: '/admin/settings/integrations', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
+  { to: '/admin/settings/integrations', group: 'system', ar: 'مزوّدو التكامل', en: 'Integration providers', icon: Plug },
   // AI-PLATFORM-KEY-001 — the platform's AI key and each plan's monthly allowance per person.
-  { to: '/admin/settings/ai', ar: 'مفتاح AI', en: 'AI key', icon: Bot },
+  { to: '/admin/settings/ai', group: 'system', ar: 'مفتاح AI', en: 'AI key', icon: Bot },
   // SUPERADMIN-FEATURES-001 — a capability on or off for every workspace.
-  { to: '/admin/features', ar: 'الخصائص', en: 'Features', icon: ToggleRight },
-  { to: '/admin/settings', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
+  { to: '/admin/features', group: 'system', ar: 'الخصائص', en: 'Features', icon: ToggleRight },
+  { to: '/admin/settings', group: 'system', ar: 'إعدادات النظام', en: 'System settings', icon: Settings },
+] as const
+
+/**
+ * ADMIN-CONSOLE-NAV-001 — three short sections instead of one long list of seventeen: the day's queue, the customers and
+ * their money, and the platform itself. Collapsed, each section is a thin divider between icons.
+ */
+const ADMIN_GROUPS = [
+  { key: 'daily', ar: 'اليوم', en: 'Today' },
+  { key: 'customers', ar: 'العملاء والاشتراكات', en: 'Customers & billing' },
+  { key: 'system', ar: 'النظام', en: 'System' },
 ] as const
 
 /** Rare and technical. Reachable, but not competing with the daily queue. */
@@ -165,7 +178,8 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
           <>
             {isActive && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
             <Icon size={19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
-            {!collapsed && <span>{ar ? label.ar : label.en}</span>}
+            {/* Collapsed, the name stays for screen readers (and is what a test reads), the icon carries the tooltip. */}
+            {collapsed ? <span className="sr-only">{ar ? label.ar : label.en}</span> : <span>{ar ? label.ar : label.en}</span>}
           </>
         )}
       </NavLink>
@@ -174,7 +188,14 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
   return (
     <>
       <nav aria-label={ar ? 'أقسام إدارة المنصة' : 'Platform sections'} className="flex flex-col gap-1">
-        {render(adminNav)}
+        {ADMIN_GROUPS.map((g, n) => (
+          <div key={g.key} className="flex flex-col gap-1">
+            {collapsed
+              ? n > 0 && <span className="mx-auto my-1 h-px w-6 bg-border" aria-hidden />
+              : <span className="px-3 pt-2 text-xs font-bold text-text-muted">{ar ? g.ar : g.en}</span>}
+            {render(adminNav.filter((i) => i.group === g.key))}
+          </div>
+        ))}
       </nav>
 
       <div className="mt-auto" />
@@ -231,8 +252,16 @@ function PlatformIdentity({ collapsed }: { collapsed?: boolean }) {
 }
 
 export function AdminShell() {
-  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
-    useUi()
+  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen } = useUi()
+  /*
+   * ADMIN-CONSOLE-NAV-001 — the same rail as every other portal: the icon strip until this person opens it, and every new
+   * visit starts collapsed (RAIL-DEFAULT-COLLAPSED-001).
+   */
+  const userId = useAuth((s) => s.user?.id)
+  const sidebarCollapsed = useRail((s) => s.collapsed)
+  const toggleSidebarCollapsed = useRail((s) => s.toggle)
+  const hydrateRail = useRail((s) => s.hydrate)
+  useLayoutEffect(() => hydrateRail(userId), [userId, hydrateRail])
   const ar = locale === 'ar'
 
   return (
