@@ -4,7 +4,7 @@ import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/l
 import { PLATFORM_ORDER } from '@/lib/platforms'
 import { ProviderMark } from '@/components/ProviderMark'
 import { FxSpendNote } from '@/components/money/FxAmount'
-import { useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
+import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 import { Skeleton } from '@/components/ui/States'
 import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel, WindowKpis } from './performance'
@@ -56,6 +56,8 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true)
   const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
   const perfLoading = d.performance_deferred === true && perf.isLoading
+  // DASH-METRICS-CURRENCY-001 — the platforms' figures in their own unit; the budgets above stay in theirs.
+  const mc = metricsCurrency(pd)
   const ratio = m && m.budget && m.spent !== null ? m.spent / m.budget : null
   const status = budgetStatus(ratio, d.thresholds.near)
   const bars = useBoxHeight(120)
@@ -99,7 +101,7 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
           <>
             <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
             <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
-            <SpendSharePanel platforms={pd.platforms ?? []} currency={cur} portal={portal} className="min-h-[220px] lg:col-span-3" />
+            <SpendSharePanel platforms={pd.platforms ?? []} currency={mc} portal={portal} className="min-h-[220px] lg:col-span-3" />
           </>
         )}
       </div>
@@ -127,7 +129,7 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
 
         <Panel title={t.daily} to={`/${portal}/analytics`} testId="dash-panel-daily" className="min-h-[200px] lg:col-span-3">
           <div ref={line.ref} className="h-full min-h-[140px]" role="img" aria-label={t.daily}>
-            {d.daily_spend.length < 2 ? <Nothing label={t.nothing} /> : <MetricLineChart height={line.height} currency={cur ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />}
+            {d.daily_spend.length < 2 ? <Nothing label={t.nothing} /> : <MetricLineChart height={line.height} currency={mc ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />}
           </div>
         </Panel>
       </div>
