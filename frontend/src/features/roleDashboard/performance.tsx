@@ -3,6 +3,7 @@ import { PlatformDonutChart } from '@/features/analytics/charts'
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { Delta } from '@/components/ui/Delta'
+import { days } from '@/lib/counted'
 import type { CampaignRow, PlatformRow, RoleDashboard } from './api'
 import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 
@@ -10,16 +11,16 @@ import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './
  * DASH-PERFORMANCE-PANELS-001 — the three performance panels of a dashboard, read at a glance:
  *
  *   أفضل الحملات            the leading campaigns: platform, results and cost per result
- *   مقارنة أداء المنصات      each platform's spend, results and return (or cost) with a bar to compare by eye
- *   توزيع الإنفاق حسب المنصة  the spend share as a ring with the percentages beside it
+ *   مقارنة المنصات           each platform's spend, results and return (or cost) with a bar to compare by eye
+ *   توزيع الإنفاق            the spend share as a ring with the percentages beside it
  *
  * Every figure comes from the dashboard payload as it is: a withheld spend stays «—», never 0, and a cost or a return
  * is shown only for the objective the server ranked by (results of different objectives are never summed).
  */
 
 const T = {
-  ar: { windowSpend: 'إنفاق الفترة', vsPrevious: 'مقارنة بالفترة السابقة', noPrevious: 'لا توجد فترة سابقة للمقارنة', withheld: 'حملة بلا إنفاق ظاهر', objective: 'الهدف', avgCost: 'متوسط تكلفة النتيجة', top: 'أفضل الحملات', compare: 'مقارنة أداء المنصات', share: 'توزيع الإنفاق حسب المنصة', campaign: 'الحملة', platform: 'المنصة', results: 'النتائج', cost: 'التكلفة', spend: 'الإنفاق', roas: 'العائد', nothing: 'لا توجد بيانات بعد' },
-  en: { windowSpend: 'Spend in period', vsPrevious: 'vs previous period', noPrevious: 'No previous period to compare', withheld: 'campaigns without visible spend', objective: 'Objective', avgCost: 'Average cost per result', top: 'Top campaigns', compare: 'Platform performance', share: 'Spend by platform', campaign: 'Campaign', platform: 'Platform', results: 'Results', cost: 'Cost', spend: 'Spend', roas: 'ROAS', nothing: 'No data yet' },
+  ar: { windowSpend: 'إنفاق الفترة', vsPrevious: 'مقارنة بالفترة السابقة', noPrevious: 'لا توجد فترة سابقة للمقارنة', withheld: 'حملة بلا إنفاق ظاهر', objective: 'الهدف', avgCost: 'متوسط تكلفة النتيجة', top: 'أفضل الحملات', compare: 'مقارنة المنصات', share: 'توزيع الإنفاق', campaign: 'الحملة', platform: 'المنصة', results: 'النتائج', cost: 'التكلفة', spend: 'الإنفاق', roas: 'العائد', nothing: 'لا توجد بيانات بعد' },
+  en: { windowSpend: 'Spend in period', vsPrevious: 'vs previous period', noPrevious: 'No previous period to compare', withheld: 'campaigns without visible spend', objective: 'Objective', avgCost: 'Average cost per result', top: 'Top campaigns', compare: 'Platform comparison', share: 'Spend share', campaign: 'Campaign', platform: 'Platform', results: 'Results', cost: 'Cost', spend: 'Spend', roas: 'ROAS', nothing: 'No data yet' },
 }
 
 type Fmt = ReturnType<typeof useFmt>
@@ -182,7 +183,7 @@ export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' |
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="dash-window-kpis">
       {d.can_money && (
-        <Kpi testId="dash-kpi-window-spend" to={`/${portal}/analytics`} label={`${t.windowSpend} · ${f.count(d.window.days)} ${f.ar ? 'يوم' : 'd'}`} value={f.money(p.spend, cur)}>
+        <Kpi testId="dash-kpi-window-spend" to={`/${portal}/analytics`} label={`${t.windowSpend} · ${days(d.window.days, f.ar ? 'ar' : 'en')}`} value={f.money(p.spend, cur)}>
           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
             {p.previous_spend !== null
               ? <><Delta metric="spend" current={p.spend} previous={p.previous_spend} ar={f.ar} testid="dash-window-spend-delta" /><span className="truncate">{t.vsPrevious}</span></>
