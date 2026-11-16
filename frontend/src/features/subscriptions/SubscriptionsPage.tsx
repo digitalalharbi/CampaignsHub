@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { AddonsShop } from './AddonsShop'
 import { LimitRings } from './LimitRings'
 import { LockedFeature, PlanCompare } from './PlanCompare'
@@ -273,7 +274,7 @@ export function SubscriptionsPage() {
   const currentCode = current?.plan?.code ?? null
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-3 md:p-4">
+    <AgencyFit className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-3 md:p-4" fitClassName="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-2 p-3" testid="subscriptions-fit">
       {/*
         UX-PAGE-HERO-001 — the product's header, not an eighth spelling of one.
 
@@ -289,6 +290,7 @@ export function SubscriptionsPage() {
         purpose={c.subtitle}
         badges={<CreditCard size={18} aria-hidden className="text-text-muted" />}
       />
+      <FitScroll className="flex flex-col gap-3">
 
       {/* POLICY-PLACEMENT-001 — «what am I paying for, and how do I stop», beside the subscription. */}
       <PolicyNote context="billing" />
@@ -405,7 +407,8 @@ export function SubscriptionsPage() {
           )}
         </>
       )}
-    </div>
+      </FitScroll>
+    </AgencyFit>
   )
 }
 

@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -95,7 +96,7 @@ export function FormBuilderPage() {
   const busy = update.isPending || publish.isPending || archive.isPending
 
   return (
-    <div className="space-y-6" data-testid="form-builder">
+    <AgencyFit className="space-y-6" testid="form-builder">
       <PageIntro
         testid="form-builder-intro"
         title={name || (ar ? 'نموذج' : 'Form')}
@@ -109,6 +110,7 @@ export function FormBuilderPage() {
           </div>
         )}
       />
+      <FitScroll className="space-y-6">
 
       {detail.status !== 'draft' && currentProjectId && <FormFunnelPanel projectId={currentProjectId} formId={detail.id} />}
 
@@ -254,7 +256,8 @@ export function FormBuilderPage() {
           </Card>
         </div>
       </div>
-    </div>
+      </FitScroll>
+    </AgencyFit>
   )
 }
 

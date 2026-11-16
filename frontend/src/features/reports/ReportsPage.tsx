@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom'
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { useProjectFromUrl } from '@/features/projects/useProjectFromUrl'
 import { ColumnPicker } from './ColumnPicker'
@@ -110,6 +112,8 @@ const statusLabel = (code: string, ar: boolean) =>
   STATUS_LABEL[code] ? (ar ? STATUS_LABEL[code].ar : STATUS_LABEL[code].en) : code
 
 export function ReportsPage() {
+  /* AF4 — under /agency the page is fitted: the header stays put and the body is the panel that scrolls. */
+  const fit = useLocation().pathname.startsWith('/agency')
   const ar = useAr()
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
   useProjectFromUrl()
@@ -277,7 +281,7 @@ export function ReportsPage() {
       }
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid="reports-fit">
       {/*
         UX-PAGE-HERO-001 — the product's own header, not a third spelling of one.
         This drew its own `<h1>` at `text-3xl` while the shared header is `PAGE_TITLE`, so Reports was
@@ -408,6 +412,7 @@ export function ReportsPage() {
         </>
         }
       />
+      <FitScroll className={fit ? '' : 'space-y-4'}>
 
       {!currentProjectId && (
         <div data-testid="reports-need-project">
@@ -822,8 +827,8 @@ export function ReportsPage() {
           <ScopeLostDialog ar={ar} onClose={() => setScopeId(null)} />
         )
       )}
-      <LivePerformanceNotice variant="compact" />
-    </div>
+      <LivePerformanceNotice variant="compact" />      </FitScroll>
+    </AgencyFit>
   )
 }
 

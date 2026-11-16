@@ -1,4 +1,4 @@
-import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
+import { AgencyFit, FitPanel, FitScroll } from '@/components/fit/AgencyFit'
 import { DetailPanel } from '@/components/fit/DetailPanel'
 import { TabStrip } from '@/components/fit/TabStrip'
 import { FxAmount } from '@/components/money/FxAmount'
@@ -99,6 +99,7 @@ export function CampaignDetailPage() {
   const ar = locale === 'ar'
   const [factsOpen, setFactsOpen] = useState(false)
   const [ovSub, setOvSub] = useState<'performance' | 'details' | 'activity'>('performance')
+  const Body = fit && ovSub === 'details' ? FitScroll : FitPanel
   const fromState = (location.state as { from?: unknown } | null)?.from
   const cameFrom = typeof fromState === 'string' && /^\/[^/\\]/.test(fromState) ? fromState : null
   const [sp, setSp] = useSearchParams()
@@ -256,7 +257,7 @@ export function CampaignDetailPage() {
   )
 
   return (
-    <AgencyFit className="space-y-4" testid="campaign-detail-fit" active={tab === 'overview' && ovSub !== 'details'}>
+    <AgencyFit className="space-y-4" testid="campaign-detail-fit" active>
       {/*
         * CAMPAIGN-DRILL-001 — back to where the reader actually came from.
         *
@@ -367,7 +368,7 @@ export function CampaignDetailPage() {
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
-        <TabPanel>
+        <TabPanel className={fit ? 'flex min-h-0 flex-1 flex-col pt-2' : undefined}>
           {/* CMC-2 — KPIs + executive summary (this campaign only). */}
           {/*
             `flex-wrap` + `min-w-0`: the period picker (DATE-RANGE-001) is ~300px with its label, and beside the title at 390px it
@@ -386,7 +387,7 @@ export function CampaignDetailPage() {
               ]}
             />
           )}
-          <FitPanel className={fit ? 'pt-2' : ''}>
+          <Body className={fit ? 'pt-2' : ''}>
           {(!fit || ovSub === 'performance') && (
           <>
           <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -436,10 +437,13 @@ export function CampaignDetailPage() {
           </Card>
           </>
           )}
-          </FitPanel>
+          </Body>
         </TabPanel>
       )}
 
+      {/* AF4 — every other tab is a long panel of its own: the page stays fitted and the PANEL scrolls. */}
+      {fit && tab !== 'overview' ? (
+        <FitScroll>
       {tab === 'platforms' && (
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
@@ -552,12 +556,130 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
+          <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
+        </FitScroll>
+      ) : (
+        <>
+      {tab === 'platforms' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          {linkedQuery.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <CampaignPlatformsTab
+              campaign={c} projectId={projectId} range={range} locale={locale} linked={linked}
+              onLink={() => setLinkOpen(true)} onUnlink={(id) => unlinkMutation.mutate(id)}
+              unlinkingId={unlinkMutation.isPending ? (unlinkMutation.variables as string) : undefined}
+              canUpdate={canUpdate}
+            />
+          )}
+        </TabPanel>
+      )}
+
+      {tab === 'performance' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
+
+          {/*
+            CREATIVE-FORMAT-INTELLIGENCE-001, scoped to THIS campaign.
+
+            «Image or video» is a different answer per campaign than per account, and a campaign page
+            that could only show the account-wide verdict would be handing the reader somebody else's
+            evidence for the decision in front of them. The scope travels: project, period and this
+            campaign.
+
+            MEDIUM depth — the scoreboard, the comparison and the spend mix. The trend and the exact
+            table stay in Content Analytics, where somebody has come to read rather than to check.
+          */}
+          <div className="mt-4">
+            {/* CONTENT-FORMAT-ROAS-REMOVED-001 — see `CreativesPage.tsx`: a return computed from
+                partially-reported creative revenue over fully-attributed creative spend is not a
+                return, and the verdict built on it told operators to move budget on it. */}
+          </div>
+        </TabPanel>
+      )}
+
+      {tab === 'budget' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          <CampaignBudgetTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'funnel' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
+        </TabPanel>
+      )}
+      {tab === 'activity' && (
+        <TabPanel>
+          <CampaignActivityTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'alerts' && (
+        <TabPanel>
+          <CampaignAlertsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'reports' && (
+        <TabPanel>
+          <CampaignReportsTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+
+      {tab === 'creatives' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          <CampaignCreativesTab campaign={c} projectId={projectId} range={range} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'structure' && (
+        <TabPanel>
+          <CampaignStructureTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'audience' && (
+        <TabPanel>
+          <CampaignAudienceTab campaign={c} locale={locale} />
+        </TabPanel>
+      )}
+      {tab === 'events' && (
+        <TabPanel>
+          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
+          <CampaignEventsTab campaign={c} projectId={projectId} range={range} />
+        </TabPanel>
+      )}
+      {tab === 'sync' && (
+        <TabPanel>
+          <CampaignSyncLogTab campaign={c} projectId={projectId} />
+        </TabPanel>
+      )}
+      {/* CAMPAIGN-MGMT-WRITE-001 — the platform entities, operated from here. */}
+      {tab === 'control' && (
+        <TabPanel>
+          <CampaignControlPanel campaign={c} projectId={projectId} onOpenHistory={() => setTab('activity')} />
+        </TabPanel>
+      )}
+      {tab === 'settings' && (
+        <TabPanel>
+          <CampaignWriteControl projectId={projectId} />
+        </TabPanel>
+      )}
+      {tab === 'notes' && (
+        <TabPanel>
+          <CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} />
+        </TabPanel>
+      )}
+
+        </>
+      )}
       {/*
         Owner directive 2026-10-09 §7, §14 — the figures before the index. This panel is the campaign's
         drill-down map (platforms, ad accounts, ad sets, ads, creatives, alerts, reports); it used to
         sit between the header and the tabs and put the performance tab at 768 px on a 1366×768 screen.
       */}
-      {!(fit && tab === 'overview') && <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />}
+      {!fit && <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />}
 
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />

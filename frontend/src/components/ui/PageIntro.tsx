@@ -77,11 +77,11 @@ export function PageIntro({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             {eyebrow !== undefined && eyebrow !== '' && (
-              <span data-testid={testid ? `${testid}-eyebrow` : undefined} className="max-w-[16rem] truncate text-xs font-semibold text-text-muted">{eyebrow} ·</span>
+              <><span data-testid={testid ? `${testid}-eyebrow` : undefined} className="max-w-[16rem] truncate text-xs font-semibold text-text-muted">{eyebrow}</span><span aria-hidden className="text-xs text-text-muted">·</span></>
             )}
             <h1 className={`${FIT_TITLE} text-text-primary`}>{title}</h1>
             {badges}
-            {purpose && <InfoTip text={purpose} label={purpose} />}
+            {purpose && <><InfoTip text={purpose} label={purpose} /><span className="sr-only">{purpose}</span></>}
           </div>
           {meta && <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{meta}</div>}
           {actions && <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div>}

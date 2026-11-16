@@ -1,4 +1,4 @@
-import { useFitCompact } from '@/components/fit/AgencyFit'
+import { AgencyFit, FitScroll, useFitCompact } from '@/components/fit/AgencyFit'
 import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
@@ -324,6 +324,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   // CONS-CLIENT-PROJECT — a client chosen in the sidebar brings its project with it.
   useClientProjectAutoSelect()
   const portalBase = usePortalBase()
+  /* AF4 — under /agency the page is fitted: header, filters and the tab strip stay put; the tab's body is the panel that scrolls. */
+  const fit = portalBase === '/agency'
   /*
    * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
    * all show the same page. They were `useState` only: narrowing to one platform and one objective
@@ -547,7 +549,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   )
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid={`${surface}-fit`}>
       {/*
         The page names the surface the reader arrived at, not the file it lives in.
 
@@ -625,7 +627,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           amounts of room. Dense puts each label on its control's own line — one row instead of
           three, which is what stood between the header and the first figure.
         */
-        density={isAnalysis ? 'comfortable' : 'dense'}
+        density={isAnalysis && !fit ? 'comfortable' : 'dense'}
         applied={applied}
         onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
         /*
@@ -781,6 +783,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         the filter bar and the tab bar stay: this page carries its own project selector, so the
         thing the sentence asks for is on screen beside it.
       */}
+      <FitScroll className={fit ? '' : 'space-y-4'}>
       {currentProjectId === null ? (
         /* ADV-HOME-001 — the dashboard opens on every project at once; analysis still asks for one. */
         surface === 'dashboard'
@@ -815,8 +818,9 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         </>
       )}
 
-      <LivePerformanceNotice variant="compact" />
-    </div>
+      </FitScroll>
+      <LivePerformanceNotice variant={fit ? 'footer' : 'compact'} />
+    </AgencyFit>
   )
 }
 

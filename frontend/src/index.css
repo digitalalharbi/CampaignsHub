@@ -252,6 +252,15 @@ body {
     overflow: hidden;
     padding-bottom: 0.5rem;
   }
+  /* AF4 — a long document or form inside a fitted page: the PAGE stays put (header, tabs, actions fixed) and this region scrolls. */
+  [data-fit='true'] .fit-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* its own containing block, so an absolutely-positioned child is clipped by it and cannot grow the document */
+    position: relative;
+  }
   /* AF2 — the part of a fitted page that takes what is left; its contents are budgeted against its height. */
   [data-fit='true'] .fit-panel {
     flex: 1 1 0;

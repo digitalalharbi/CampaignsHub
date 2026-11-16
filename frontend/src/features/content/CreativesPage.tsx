@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { creativeKindLabel as creativeKindLabelImpl } from './creativeKind'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
@@ -410,6 +411,8 @@ function addressFor(query: LibraryQuery, view: 'grid' | 'list', creative: string
 }
 
 export function CreativesPage() {
+  /* AF4 — under /agency the page is fitted: the header stays put and the body is the panel that scrolls. */
+  const fit = useLocation().pathname.startsWith('/agency')
   const { locale } = useUi()
   const ar = locale === 'ar'
   const t = COPY[ar ? 'ar' : 'en']
@@ -789,7 +792,7 @@ export function CreativesPage() {
   )
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid="content-fit">
       {/*
         PRODUCT-VISUAL-001 §4 §15 — WHICH project, WHAT window, HOW fresh.
 
@@ -847,6 +850,7 @@ export function CreativesPage() {
           </>
         }
       />
+      <FitScroll className={fit ? '' : 'space-y-4'}>
 
       {/*
         CONTENT-KPI-TOTALS-001 — the figures for the library the reader is looking at.
@@ -1544,8 +1548,8 @@ export function CreativesPage() {
           onClose={() => setComparing(false)}
         />
       )}
-      <LivePerformanceNotice variant="compact" />
-    </div>
+      <LivePerformanceNotice variant="compact" />      </FitScroll>
+    </AgencyFit>
   )
 }
 

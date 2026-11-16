@@ -42,9 +42,9 @@ export function Tabs({
   )
 }
 
-export function TabPanel({ children }: { children: ReactNode }) {
+export function TabPanel({ children, className = 'pt-4' }: { children: ReactNode; className?: string }) {
   return (
-    <div role="tabpanel" className="pt-4">
+    <div role="tabpanel" className={className}>
       {children}
     </div>
   )

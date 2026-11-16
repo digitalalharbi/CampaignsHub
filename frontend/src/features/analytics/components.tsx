@@ -149,6 +149,7 @@ export function Panel({
         */}
         <div className="min-w-0">
           <h3 className="flex items-center gap-1 text-base font-bold tracking-tight text-text-primary">{title}{compact && description && <InfoTip text={description} label={description} />}</h3>
+          {compact && description && <span className="sr-only">{description}</span>}
           {description && !compact && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
         </div>
         {action && <div className="shrink-0 whitespace-nowrap">{action}</div>}

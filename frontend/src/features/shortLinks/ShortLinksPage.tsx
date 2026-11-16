@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom'
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, Copy, ExternalLink, Link2, MessageCircle, QrCode, Trash2 } from 'lucide-react'
@@ -153,6 +155,8 @@ function useCopy() {
 }
 
 export function ShortLinksPage() {
+  /* AF4 — under /agency the page is fitted: the header stays put and the body is the panel that scrolls. */
+  const fit = useLocation().pathname.startsWith('/agency')
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const client = useQueryClient()
@@ -308,7 +312,7 @@ export function ShortLinksPage() {
   const countedTotal = rows.reduce((sum, l) => sum + (l.clicks ?? 0), 0)
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid="short-links-fit">
       {/*
         PRODUCT-VISUAL-001 §29 — active links, and the clicks that were ACTUALLY measured.
 
@@ -344,6 +348,7 @@ export function ShortLinksPage() {
           </>
         )}
       />
+      <FitScroll className={fit ? '' : 'space-y-4'}>
 
       {created !== null ? (
         <Card>
@@ -708,7 +713,7 @@ export function ShortLinksPage() {
             </>
           )}
         </ChartCard>
-      )}
-    </div>
+      )}      </FitScroll>
+    </AgencyFit>
   )
 }

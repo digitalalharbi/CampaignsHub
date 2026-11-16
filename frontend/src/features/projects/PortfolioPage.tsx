@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, ArrowRight, Layers } from 'lucide-react'
@@ -220,8 +221,9 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
     .sort((a, b) => ATTENTION_ORDER.indexOf(a.attention!) - ATTENTION_ORDER.indexOf(b.attention!))
 
   return (
-    <section className="space-y-4">
+    <AgencyFit className="space-y-4" testid="portfolio-fit" active={!home}>
       <FinancialDisclaimer />
+      <FitScroll className="space-y-4">
       {home ? (
         <div data-testid="portfolio-home">
           <SectionHeader title={t.homeTitle} question={t.homeQuestion} testId="portfolio-home-header" />
@@ -597,7 +599,8 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
           </Card>
         </>
       )}
-    </section>
+      </FitScroll>
+    </AgencyFit>
   )
 }
 

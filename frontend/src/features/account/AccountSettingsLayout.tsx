@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Bell, KeyRound, Palette, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useUi } from '@/stores/ui'
@@ -28,7 +29,7 @@ export function AccountSettingsLayout() {
    * its content. Neither alone is enough, which is why the first attempt at this only half-worked.
    */
   return (
-    <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
+    <AgencyFit className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]" fitClassName="grid min-h-0 w-full flex-1 grid-cols-1 gap-3 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]" testid="account-fit">
       <nav aria-label={ar ? 'إعدادات المستخدم' : 'User settings'} className="min-w-0 lg:sticky lg:top-20 lg:h-fit lg:self-start">
         <span className="mb-2 hidden px-3 text-[11px] font-bold uppercase tracking-wide text-text-muted lg:block">
           {ar ? 'إعدادات حسابي' : 'My account'}
@@ -53,7 +54,7 @@ export function AccountSettingsLayout() {
           ))}
         </div>
       </nav>
-      <div className="min-w-0 space-y-4">
+      <FitScroll className="min-w-0 space-y-4">
         <Outlet />
         {/*
           POLICY-PLACEMENT-001 — «what happens to my data, and how do I get it out», beside the
@@ -61,7 +62,7 @@ export function AccountSettingsLayout() {
           who has no account at all.
         */}
         <PolicyNote context="account" />
-      </div>
-    </div>
+      </FitScroll>
+    </AgencyFit>
   )
 }

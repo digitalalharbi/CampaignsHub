@@ -1,3 +1,4 @@
+import { AgencyFit, FitScroll } from '@/components/fit/AgencyFit'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ExternalLink, Palette, Plug } from 'lucide-react'
 import { SETTINGS_TABS } from '@/features/settings/SettingsPage'
@@ -86,7 +87,7 @@ export function SettingsLayout() {
   const openTab = new URLSearchParams(location.search).get('tab') ?? 'general'
 
   return (
-    <div className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+    <AgencyFit className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]" fitClassName="grid min-h-0 w-full flex-1 grid-cols-1 gap-3 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]" testid="settings-fit">
       {/*
         SETTINGS-MOBILE-OVERFLOW-001 — the settings page scrolled sideways on a phone.
 
@@ -124,9 +125,10 @@ export function SettingsLayout() {
           ))}
         </div>
       </nav>
-      <div className="flex min-h-0 min-w-0 flex-col">
+      {/* AF4 — fitted: the section's form is the part that scrolls; the nav and the header stay put. */}
+      <FitScroll className="flex min-h-0 min-w-0 flex-col">
         <Outlet />
-      </div>
-    </div>
+      </FitScroll>
+    </AgencyFit>
   )
 }

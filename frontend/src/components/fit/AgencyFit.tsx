@@ -23,28 +23,38 @@ export function useFitCompact(): boolean {
   return useContext(FitCompactContext)
 }
 
-function Locked({ children, testid }: { children: ReactNode; testid?: string }) {
+function Locked({ children, testid, className }: { children: ReactNode; testid?: string; className?: string }) {
   useFitLock(true)
 
   return (
     <FitCompactContext.Provider value>
-      <section data-testid={testid} className={`flex min-h-0 flex-1 flex-col ${FIT_GAP}`}>{children}</section>
+      <section data-testid={testid} className={className ?? `flex min-h-0 flex-1 flex-col ${FIT_GAP}`}>{children}</section>
     </FitCompactContext.Provider>
   )
 }
 
-function Routed({ children, className, testid, active }: { children: ReactNode; className: string; testid?: string; active: boolean }) {
+function Routed({ children, className, fitClassName, testid, active }: { children: ReactNode; className: string; fitClassName?: string; testid?: string; active: boolean }) {
   const { pathname } = useLocation()
-  if (active && pathname.startsWith('/agency')) return <Locked testid={testid}>{children}</Locked>
+  if (active && pathname.startsWith('/agency')) return <Locked testid={testid} className={fitClassName}>{children}</Locked>
 
   return <div data-testid={testid} className={className}>{children}</div>
 }
 
-export function AgencyFit({ children, className = 'space-y-6', testid, active = true }: { children: ReactNode; className?: string; testid?: string; active?: boolean }) {
+/** `fitClassName` replaces the locked section's default flex-column classes — for a layout that is a grid, not a stack. */
+export function AgencyFit({ children, className = 'space-y-6', fitClassName, testid, active = true }: { children: ReactNode; className?: string; fitClassName?: string; testid?: string; active?: boolean }) {
   const inRouter = useInRouterContext()
   if (!inRouter) return <div data-testid={testid} className={className}>{children}</div>
 
-  return <Routed className={className} testid={testid} active={active}>{children}</Routed>
+  return <Routed className={className} fitClassName={fitClassName} testid={testid} active={active}>{children}</Routed>
+}
+
+/**
+ * AF4 — a long document or form inside a fitted page. The page does not scroll: its header, tabs and actions stay where
+ * they are and THIS region scrolls (`data-fit-scroll`, so the fit spec does not count what is inside as cut off).
+ * Unlocked — a phone, a short window, `/app` — it is a plain block and the page scrolls vertically as it always did.
+ */
+export function FitScroll({ children, className = '', testid }: { children: ReactNode; className?: string; testid?: string }) {
+  return <div data-testid={testid} data-fit-scroll className={`fit-scroll ${className}`}>{children}</div>
 }
 
 /** The part of a fitted page that gives: it takes the height that is left, and everything inside is budgeted against it. */
