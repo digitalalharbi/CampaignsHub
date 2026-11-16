@@ -220,7 +220,7 @@ test.describe('fit and overflow', () => {
   const VIEWS = ['&section=internal', '&section=internal&tab2=delivery', '&section=internal&tab2=followup', '&section=external', '&section=external&tab2=events', '&section=external&tab2=settings', '&section=external&tab2=log', '&section=usage']
 
   for (const query of VIEWS) {
-    test(`1366x768: no vertical scroll of the page, no overflow — ${query}`, async ({ page }) => {
+    test(`1366x768: no overflow sideways — ${query}`, async ({ page }) => {
       await page.setViewportSize({ width: 1366, height: 768 })
       await migratedRecipients(page)
       await open(page, query)
@@ -228,7 +228,7 @@ test.describe('fit and overflow', () => {
         docH: document.documentElement.scrollHeight, winH: window.innerHeight, docW: document.documentElement.scrollWidth, winW: window.innerWidth,
         cut: (() => { const c = document.querySelector('.portal-content'); return c ? c.scrollHeight - c.clientHeight : 0 })(),
       }))
-      expect(m.docH).toBeLessThanOrEqual(m.winH + 1)
+      // SCROLL-RESTORE-001 — the page may scroll vertically now; it must still never be wider than the window.
       expect(m.docW).toBeLessThanOrEqual(m.winW)
     })
 
