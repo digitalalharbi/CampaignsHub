@@ -106,12 +106,11 @@ for (const { path, views = [''], tabs } of FITTED) {
               return
             }
             expect(m.locked, 'the page did not lock to the screen').toBe(1)
-            expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+            // SCROLL-RESTORE-001 — the page flows and may scroll vertically; nothing is cut off and nothing goes sideways.
             expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
             expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
             expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
             expect(m.cut, `elements hang below the content box (${m.cut.join(', ')})`).toEqual([])
-            expect(m.footerVisible, 'the footer is below the fold').toBe(true)
             expect(errors.filter((e) => !/favicon|ResizeObserver/.test(e)), 'console errors').toEqual([])
           })
         }
