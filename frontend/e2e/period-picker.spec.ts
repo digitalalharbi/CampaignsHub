@@ -34,6 +34,8 @@ test.describe('the period picker', () => {
     const panel = page.getByTestId('agency-period-picker-panel')
     await expect(panel).toBeVisible()
     await expect(panel).toContainText('التواريخ بتوقيت الرياض (GMT+3)')
+    // PICKER-SHORT-PRESETS-001 — «آخر 30 يوم» lives under «تخصيص».
+    await page.getByTestId('agency-period-picker-preset-custom').click()
     await page.getByTestId('agency-period-picker-preset-last_30').click()
     await page.getByTestId('agency-period-picker-compare-toggle').check()
     await expect(page.getByTestId('agency-period-picker-compare-range')).toContainText('16 سبتمبر – 15 أكتوبر 2026')
