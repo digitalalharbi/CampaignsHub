@@ -15,7 +15,8 @@ import { resolveSelection, type Selection } from '@/lib/period/periodState'
  *
  * A button that says the period in words and dates («آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026»). It opens a
  * panel with presets, two months side by side, from/to fields you can type into, a comparison, and
- * «تحديث» / «إلغاء». Nothing changes on the page until «تحديث»: the panel edits a DRAFT.
+ * «تحديث» / «إلغاء» in a footer that stays visible. The panel edits a DRAFT: «تحديث» or a press outside the
+ * panel saves it; «إلغاء» and Escape discard it.
  *
  * On a phone the same panel is a bottom sheet with ONE month and the presets as a sideways-scrolling row.
  *
@@ -137,7 +138,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
       const a = anchor.current?.getBoundingClientRect()
       const panel = panelRef.current
       if (!a || !panel) return
-      const w = panel.offsetWidth || 760
+      const w = panel.offsetWidth || 600
       const rtl = document.documentElement.dir === 'rtl'
       const wanted = rtl ? a.right - w : a.left
       const left = Math.max(8, Math.min(wanted, window.innerWidth - w - 8))
@@ -156,6 +157,9 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place); ro?.disconnect() }
   }, [phone, anchor])
 
+  /* A press outside SAVES what was chosen (a change is never lost by clicking away); Escape and «إلغاء» discard. */
+  const onOutside = useRef<() => void>(onCancel)
+
   /* Escape closes; Tab stays inside; a press outside closes (never on the button that opened it). */
   useEffect(() => {
     const el = panelRef.current
@@ -172,7 +176,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     }
     const onDown = (e: globalThis.PointerEvent) => {
       const t = e.target as Node
-      if (el && !el.contains(t) && !anchor.current?.contains(t)) onCancel()
+      if (el && !el.contains(t) && !anchor.current?.contains(t)) onOutside.current()
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onDown)
@@ -260,6 +264,12 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     if (out.compare === 'custom') { out.cfrom = resolved.comparison?.from; out.cto = resolved.comparison?.to }
     onApply(out)
   }
+  useEffect(() => {
+    onOutside.current = () => {
+      const changed = JSON.stringify(draft) !== JSON.stringify(initial)
+      if (changed) apply(); else onCancel()
+    }
+  })
 
   const second = nextMonth(view)
   const canNext = !(phone ? (view.y > todayP.y || (view.y === todayP.y && view.m >= todayP.m)) : (second.y > todayP.y || (second.y === todayP.y && second.m >= todayP.m)))
@@ -270,23 +280,23 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
 
   const calendars = (
     <div className="min-w-0 flex-1">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <button type="button" onClick={() => setView((v) => prevMonth(v))} aria-label={ar ? 'الشهر السابق' : 'Previous month'} data-testid={`${testId}-prev`}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-9 sm:w-9">{prevIcon}</button>
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:h-7 sm:w-7">{prevIcon}</button>
         <div className="flex items-center gap-2">
           <select aria-label={ar ? 'الشهر' : 'Month'} value={view.m} onChange={(e) => setView((v) => ({ ...v, m: Number(e.target.value) }))} data-testid={`${testId}-month`}
-            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-9">
+            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-7 sm:text-xs">
             {(ar ? MONTHS_AR : MONTHS_EN).map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
           </select>
           <select aria-label={ar ? 'السنة' : 'Year'} value={view.y} onChange={(e) => setView((v) => ({ ...v, y: Number(e.target.value) }))} data-testid={`${testId}-year`}
-            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary tnum sm:h-9" dir="ltr">
+            className="h-11 rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary tnum sm:h-7 sm:text-xs" dir="ltr">
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <button type="button" disabled={!canNext} onClick={() => setView((v) => nextMonth(v))} aria-label={ar ? 'الشهر التالي' : 'Next month'} data-testid={`${testId}-next`}
           className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover disabled:opacity-30 sm:h-9 sm:w-9">{nextIcon}</button>
       </div>
-      <div className={`grid gap-4 ${phone ? 'grid-cols-1' : 'grid-cols-2'}`}>
+      <div className={`grid ${phone ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-3'}`}>
         {[view, ...(phone ? [] : [second])].map((v) => (
           <RangeCalendar
             key={`${v.y}-${v.m}`} year={v.y} month={v.m} today={ctx.today} ar={ar} testId={`${testId}-cal-${v.y}-${String(v.m).padStart(2, '0')}`}
@@ -301,14 +311,14 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   const presetButtons = PRESETS.map((p) => (
     <button
       key={p.key} type="button" data-testid={`${testId}-preset-${p.key}`} aria-pressed={activePreset === p.key} onClick={() => choosePreset(p.key)}
-      className={`shrink-0 rounded-lg px-3 py-2 text-start text-sm font-semibold ${phone ? 'min-h-11 border border-border' : 'min-h-9 w-full'} ${activePreset === p.key ? 'bg-brand-600 text-white' : 'text-text-primary hover:bg-surface-hover'}`}
+      className={`shrink-0 rounded-lg text-start font-semibold ${phone ? 'min-h-11 border border-border px-3 py-2 text-sm' : 'min-h-7 w-full px-2 py-1 text-xs'} ${activePreset === p.key ? 'bg-brand-600 text-white' : 'text-text-primary hover:bg-surface-hover'}`}
     >{ar ? p.ar : p.en}</button>
   ))
 
   const body = (
     <>
       {recent.length > 0 && (
-        <div className="mb-3" data-testid={`${testId}-recent`}>
+        <div className="mb-2" data-testid={`${testId}-recent`}>
           <div className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'مستخدمة مؤخرًا' : 'Recently used'}</div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {recent.map((s, i) => {
@@ -316,7 +326,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
 
               return (
                 <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`}
-                  className="min-h-11 shrink-0 rounded-lg border border-border bg-surface-secondary px-3 py-1.5 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover sm:min-h-9">
+                  className="min-h-11 shrink-0 rounded-lg border border-border bg-surface-secondary px-3 py-1.5 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover sm:min-h-0 sm:px-2 sm:py-1">
                   <span className="block">{presetLabel(r.period.key, ar)}</span>
                   <span className="block font-normal text-text-secondary">{formatSpan(r.period, ar)}</span>
                 </button>
@@ -326,28 +336,28 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
         </div>
       )}
 
-      <div className={phone ? 'flex flex-col gap-3' : 'flex gap-4'}>
+      <div className={phone ? 'flex flex-col gap-3' : 'flex gap-3'}>
         {phone
           ? <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>
-          : <div className="w-44 shrink-0 space-y-0.5 border-e border-border pe-3" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>}
+          : <div className="w-32 shrink-0 space-y-px border-e border-border pe-2" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>}
         {calendars}
       </div>
 
-      <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+      <div className="mt-2 grid gap-2 border-t border-border pt-2 sm:grid-cols-2">
         <DateFields
           ar={ar} label={target === 'main' ? (ar ? 'الفترة' : 'Period') : (ar ? 'فترة المقارنة' : 'Comparison period')} span={targetSpan} today={ctx.today} testId={testId}
           onCommit={(f, t) => { setTargetSpan(f, t); showView(t) }}
         />
         {allowCompare ? <div>
-          <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-text-primary sm:min-h-9">
-            <input type="checkbox" className="h-5 w-5 accent-[var(--brand-600)]" checked={draft.compare !== 'none'} data-testid={`${testId}-compare-toggle`}
+          <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-text-primary sm:min-h-7 sm:text-xs">
+            <input type="checkbox" className="h-5 w-5 accent-[var(--brand-600)] sm:h-4 sm:w-4" checked={draft.compare !== 'none'} data-testid={`${testId}-compare-toggle`}
               onChange={(e) => setMode(e.target.checked ? 'previous' : 'none')} />
             {ar ? 'مقارنة' : 'Compare'}
           </label>
           {draft.compare !== 'none' && (
             <div className="space-y-2">
               <select aria-label={ar ? 'نوع المقارنة' : 'Comparison type'} value={draft.compare} data-testid={`${testId}-compare-mode`} onChange={(e) => setMode(e.target.value as CompareMode)}
-                className="h-11 w-full rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-9">
+                className="h-11 w-full rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-8 sm:text-xs">
                 {(['previous', 'last_year', 'custom'] as const).map((m) => <option key={m} value={m}>{ar ? COMPARE_LABEL[m].ar : COMPARE_LABEL[m].en}</option>)}
               </select>
               {resolved.comparison && <div className="text-xs text-text-secondary" data-testid={`${testId}-compare-range`}>{formatSpan(resolved.comparison, ar)}</div>}
@@ -355,7 +365,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
                 <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label={ar ? 'ما الذي يُحدَّد في التقويم' : 'What the calendar edits'}>
                   {(['main', 'compare'] as const).map((t) => (
                     <button key={t} type="button" aria-pressed={target === t} onClick={() => { setTarget(t); setAnchorDay(null) }} data-testid={`${testId}-target-${t}`}
-                      className={`min-h-11 rounded-md px-3 text-sm font-semibold sm:min-h-8 ${target === t ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary'}`}>
+                      className={`min-h-11 rounded-md px-3 text-sm font-semibold sm:min-h-7 sm:text-xs ${target === t ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary'}`}>
                       {t === 'main' ? (ar ? 'الفترة' : 'Period') : (ar ? 'المقارنة' : 'Comparison')}
                     </button>
                   ))}
@@ -367,15 +377,15 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
         </div> : <div />}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-elevated px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:-mx-3 sm:-mb-3 sm:px-3" data-testid={`${testId}-footer`}>
         <p className="text-xs text-text-secondary" data-testid={`${testId}-zone`}>
           {ar ? 'التواريخ بتوقيت الرياض (GMT+3)' : 'Dates are in Riyadh time (GMT+3)'}
         </p>
         <div className="flex gap-2">
           <button type="button" onClick={onCancel} data-testid={`${testId}-cancel`}
-            className="min-h-11 rounded-xl border border-border-strong bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-hover sm:min-h-9">{ar ? 'إلغاء' : 'Cancel'}</button>
+            className="min-h-11 rounded-xl border border-border-strong bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-hover sm:min-h-8 sm:text-xs">{ar ? 'إلغاء' : 'Cancel'}</button>
           <button type="button" onClick={apply} data-testid={`${testId}-apply`}
-            className="min-h-11 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 sm:min-h-9">{ar ? 'تحديث' : 'Update'}</button>
+            className="min-h-11 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 sm:min-h-8 sm:text-xs">{ar ? 'تحديث' : 'Update'}</button>
         </div>
       </div>
     </>
@@ -387,7 +397,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
         <div className="absolute inset-0 bg-black/40" aria-hidden />
         <div
           ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={`${testId}-panel`}
-          className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-surface-elevated p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-small)] focus:outline-none"
+          className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-surface-elevated p-4 shadow-[var(--shadow-small)] focus:outline-none"
         >
           <div className="mb-3 flex items-center justify-between">
             <h2 id={titleId} className="text-base font-bold text-text-primary">{ar ? 'الفترة الزمنية' : 'Period'}</h2>
@@ -403,7 +413,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     <div
       ref={panelRef} tabIndex={-1} role="dialog" aria-modal="false" aria-labelledby={titleId} data-testid={`${testId}-panel`}
       style={pos ? { top: pos.top, left: pos.left, maxHeight: pos.maxH } : { visibility: 'hidden', top: 0, left: 0 }}
-      className="fixed z-[80] w-[min(760px,calc(100vw-1rem))] overflow-y-auto rounded-2xl border border-border-strong bg-surface-elevated p-4 shadow-[0_12px_40px_rgba(0,0,0,.22)] focus:outline-none"
+      className="fixed z-[80] w-[min(600px,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-border-strong bg-surface-elevated p-3 shadow-[0_12px_40px_rgba(0,0,0,.22)] focus:outline-none"
     >
       <h2 id={titleId} className="sr-only">{ar ? 'الفترة الزمنية' : 'Period'}</h2>
       {body}
@@ -446,7 +456,7 @@ function DateFields({ ar, label, span, today, testId, onCommit }: {
     setErr(null); onCommit(f, t)
   }
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }
-  const field = 'h-11 w-full rounded-lg border bg-surface px-2 text-base text-text-primary tnum sm:h-9'
+  const field = 'h-11 w-full rounded-lg border bg-surface px-2 text-base text-text-primary tnum sm:h-8 sm:text-xs'
 
   return (
     <div>
