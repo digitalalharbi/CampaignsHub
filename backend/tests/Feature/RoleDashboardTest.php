@@ -266,6 +266,40 @@ final class RoleDashboardTest extends TestCase
         $this->assertSame(30, $this->dash($owner, '?days=11')['window']['days']);
     }
 
+    /** WATCH-BOARD-001 — the follow-up board reads every reachable client, or one, and never one out of reach. */
+    public function test_the_watch_board_reads_one_client_and_never_one_out_of_reach(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $all = $this->dash($owner, '', '/watch');
+        $this->assertNull($all['unit']);
+        $this->assertSame(['Alpha', 'Beta'], array_column($all['units'], 'name'));
+        $this->assertCount(2, $all['campaign_rows']);
+        $this->assertNotEmpty($all['trend']);
+        $this->assertArrayHasKey('content', $all);
+
+        $one = $this->dash($owner, '?unit='.$this->alpha->id, '/watch');
+        $this->assertSame((string) $this->alpha->id, $one['unit']);
+        $this->assertSame([(string) $a->id], array_column($one['campaign_rows'], 'id'));
+        // Alpha alone: 400 twelve days ago and 3 × 100 since.
+        $this->assertEqualsWithDelta(700, $one['performance']['spend'] ?? 0, 0.01);
+
+        // A PM confined to Alpha asking for Beta reads his own reach, not Beta.
+        $pm = $this->member(WorkspaceRolePresets::PROJECT_MANAGER, WorkspaceRolePresets::all()[WorkspaceRolePresets::PROJECT_MANAGER]['permissions'], [(string) $this->alpha->id]);
+        $p = $this->dash($pm, '?unit='.$this->beta->id, '/watch');
+        $this->assertNull($p['unit']);
+        $this->assertSame(['Alpha'], array_column($p['units'], 'name'));
+        $this->assertNotContains((string) $b->id, array_column($p['campaign_rows'], 'id'));
+        $this->assertStringNotContainsString('Beta', json_encode($p));
+
+        // Finance opens no campaigns, so the board is not offered and not served.
+        $finance = $this->member(WorkspaceRolePresets::FINANCE, WorkspaceRolePresets::all()[WorkspaceRolePresets::FINANCE]['permissions']);
+        $this->assertFalse($this->dash($finance)['can_watch']);
+        $this->getJson('/api/v1/me/dashboard/watch')->assertForbidden();
+    }
+
     public function test_another_tenants_figures_never_appear(): void
     {
         $this->campaign($this->alpha, 1000, 400, 100);
