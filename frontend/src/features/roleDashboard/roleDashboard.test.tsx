@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
-import type { DashboardUnit, RoleDashboard } from './api'
+import type { DashboardUnit, RoleDashboard, WatchBoard } from './api'
 
-const state: { data: RoleDashboard | null } = { data: null }
+const state: { data: RoleDashboard | null; watch: WatchBoard | null } = { data: null, watch: null }
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   useRoleDashboard: () => ({ data: state.data, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
   // DASH-PERF-SPLIT-001 — the panels' own request answers with the same fixture.
   useDashboardPerformance: () => ({ data: state.data, isLoading: false, isError: false }),
+  // WATCH-BOARD-001 — the follow-up board's own request.
+  useWatchBoard: () => ({ data: state.watch, isLoading: false, isError: false, isFetching: false, isPlaceholderData: false }),
 }))
 vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }) }))
 
@@ -37,7 +39,7 @@ const page = (d: RoleDashboard, locale: 'ar' | 'en' = 'en') => {
 }
 
 describe('the role dashboards', () => {
-  beforeEach(() => { state.data = null })
+  beforeEach(() => { state.data = null; state.watch = null })
 
   it('manager: figures open their pages, spend carries its status, the strip names alerts and integrations', () => {
     page(base({}))
@@ -131,7 +133,7 @@ describe('the role dashboards', () => {
 
 /** DASH-MANAGER-PERFORMANCE-001 — the manager reads the leading campaigns, the platforms and where the spend went. */
 describe('the manager performance panels', () => {
-  beforeEach(() => { state.data = null })
+  beforeEach(() => { state.data = null; state.watch = null })
 
   it('lists the leading campaigns, compares the platforms with a bar each and shares the spend', () => {
     page(base({
@@ -171,5 +173,40 @@ describe('the manager performance panels', () => {
     expect(screen.queryByTestId('dash-top')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dash-compare')).not.toBeInTheDocument()
     expect(screen.getByTestId('dash-panel-spend-share')).toHaveTextContent('No data yet')
+  })
+
+  it('WATCH-BOARD-001 — follows every client from one board: best and weakest campaigns of every platform, and the content', () => {
+    const ranked = (id: string, name: string, platform: string, result: number, cost: number) => ({ id, project_id: 'p1', name, family: 'leads', platform, spend: 100, cost_per_result: cost, cost_label: null, result, result_label: null, roas: null })
+    const ad = (id: string, name: string, provider: string) => ({ id, name, provider, preview: null, spend: 50, impressions: 1000, clicks: 40, conversions: 4, ctr: 0.04, cpa: 12.5, roas: null })
+    state.watch = {
+      window: { from: '2026-10-17', to: '2026-11-15', days: 30, today: '2026-11-15' },
+      units: [{ id: 'c1', kind: 'client', name: 'Alpha', projects: 1 }, { id: 'c2', kind: 'client', name: 'Beta', projects: 2 }],
+      unit: null, can_money: true, currency: 'SAR',
+      trend: [{ date: '2026-11-14', spend: 100, impressions: 1000, clicks: 30, conversions: 3 }, { date: '2026-11-15', spend: 120, impressions: 1500, clicks: 45, conversions: 5 }],
+      content: { best: [ad('a1', 'Story A', 'snapchat'), ad('a2', 'Reel B', 'meta')], worst: [ad('a3', 'Banner C', 'tiktok')], basis: { metric: 'cpa', label_ar: 'تكلفة النتيجة', label_en: 'Cost per result', family: 'leads' }, in_scope: 3 },
+      rank_family: 'leads',
+      best: [ranked('k1', 'Leads Snap', 'snapchat', 90, 4), ranked('k2', 'Leads Meta', 'meta', 60, 6)],
+      worst: [ranked('k3', 'Leads TikTok', 'tiktok', 5, 40)],
+      platforms: [], performance: { spend: 220, previous_spend: 200, previous: { from: '2026-09-17', to: '2026-10-16' }, withheld: 0, campaigns: 3, family: 'leads', results: 155, result_label: null, cost_per_result: 1.42, cost_label: null },
+    }
+    page(base({ can_watch: true }))
+
+    const board = screen.getByTestId('watch-board')
+    expect(within(board).getByTestId('watch-unit-all')).toHaveAttribute('aria-checked', 'true')
+    expect(within(board).getByTestId('watch-unit-c2')).toHaveTextContent('Beta')
+    expect(screen.getByTestId('watch-kpi-results-value')).toHaveTextContent('155')
+    expect(screen.getByTestId('watch-kpi-clicks-value')).toHaveTextContent('75')
+    // Best and weakest, each opening its campaign, the platform named beside it.
+    expect(within(screen.getByTestId('watch-best')).getByRole('link', { name: /Leads Snap/ })).toHaveAttribute('href', '/agency/campaigns/p1/k1')
+    expect(screen.getByTestId('watch-best-k1')).toHaveTextContent('Snapchat')
+    expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
+    expect(screen.getAllByTestId('watch-content-best')).toHaveLength(2)
+    expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
+    expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/dashboard')
+  })
+
+  it('WATCH-BOARD-001 — is not offered to a member who cannot open the campaigns', () => {
+    page(base({ can_watch: false }))
+    expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
   })
 })
