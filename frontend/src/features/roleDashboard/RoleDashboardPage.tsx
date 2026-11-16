@@ -4,7 +4,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
-import { useRoleDashboard, type DashboardView, type RoleDashboard } from './api'
+import { DASHBOARD_WINDOWS, useRoleDashboard, type DashboardView, type DashboardWindow, type RoleDashboard } from './api'
 import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
 import { MarketerView } from './MarketerView'
@@ -51,7 +51,8 @@ function Body({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
 export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [chosen, setChosen] = useState<DashboardView | null>(null)
-  const q = useRoleDashboard(chosen)
+  const [days, setDays] = useState<DashboardWindow>(30)
+  const q = useRoleDashboard(chosen, days)
   const { ref } = useFitViewport()
   const d = q.data
 
@@ -60,7 +61,17 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       <PageIntro
         testid="role-dashboard-intro"
         title={ar ? HOME.ar : HOME.en}
-        actions={d && d.available_views.length > 1 ? (
+        actions={<div className="flex flex-wrap items-center gap-2">
+          {/* DASH-PERIOD-001 — the window the performance figures are read over, one tap each. */}
+          <div role="radiogroup" aria-label={ar ? 'الفترة' : 'Period'} data-testid="role-dashboard-window" className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
+            {DASHBOARD_WINDOWS.map((n) => (
+              <button key={n} type="button" role="radio" aria-checked={days === n} data-testid={`role-window-${n}`} onClick={() => setDays(n)}
+                className={`min-h-8 rounded-lg px-2.5 text-xs font-semibold tnum ${days === n ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'}`}>
+                {ar ? (n === 7 ? '7 أيام' : `${n} يوم`) : `${n} days`}
+              </button>
+            ))}
+          </div>
+          {d && d.available_views.length > 1 ? (
           <div role="tablist" aria-label={ar ? 'عرض الدور' : 'Role view'} data-testid="role-dashboard-views" className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
             {d.available_views.map((v) => (
               <button key={v} type="button" role="tab" aria-selected={d.view === v} data-testid={`role-view-${v}`} onClick={() => setChosen(v)}
@@ -69,7 +80,8 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
               </button>
             ))}
           </div>
-        ) : undefined}
+          ) : null}
+        </div>}
       />
 
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
