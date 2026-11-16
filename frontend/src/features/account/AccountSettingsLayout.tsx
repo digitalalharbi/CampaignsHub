@@ -14,7 +14,7 @@ const ITEMS = [
   { to: '/account/preferences', ar: 'اللغة والمظهر', en: 'Language & appearance', icon: Palette },
   { to: '/account/notifications', ar: 'الإشعارات الشخصية', en: 'Personal notifications', icon: Bell },
   // MCP-SERVER-001 — connect Claude, Gemini or ChatGPT to CampaignsHub with the person's own token.
-  { to: '/account/ai', ar: 'ربط الذكاء الاصطناعي', en: 'Connect AI', icon: Plug },
+  { to: '/account/ai', ar: 'ربط MCP', en: 'MCP', icon: Plug },
 ] as const
 
 export function AccountSettingsLayout() {
