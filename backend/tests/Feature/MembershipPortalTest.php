@@ -125,7 +125,7 @@ final class MembershipPortalTest extends TestCase
 
         $resolver = app(PortalResolver::class);
         $this->assertFalse($resolver->needsSwitcher($user));
-        $this->assertSame('/app/dashboard', $resolver->landingPathFor($user));
+        $this->assertSame('/app/home', $resolver->landingPathFor($user));
     }
 
     public function test_the_resolver_sends_a_multi_membership_user_to_the_switcher(): void
@@ -148,7 +148,7 @@ final class MembershipPortalTest extends TestCase
         $this->membership($user, $a, Portal::Agency, default: true);
         $this->membership($user, $b, Portal::App);
 
-        $this->assertSame('/app/dashboard', app(PortalResolver::class)->landingPathFor($user, Portal::App));
+        $this->assertSame('/app/home', app(PortalResolver::class)->landingPathFor($user, Portal::App));
     }
 
     /** Asking for a portal you do NOT hold must never grant it — you land on your own default. */
@@ -161,7 +161,7 @@ final class MembershipPortalTest extends TestCase
         $resolver = app(PortalResolver::class);
         // Asking for Agency does not conjure an Agency membership — the user's own portal is returned.
         $this->assertSame(Portal::App, $resolver->resolve($user, Portal::Agency)->portal);
-        $this->assertSame('/app/dashboard', $resolver->landingPathFor($user, Portal::Agency));
+        $this->assertSame('/app/home', $resolver->landingPathFor($user, Portal::Agency));
     }
 
     /** A revoked membership is not a membership. */
@@ -176,7 +176,7 @@ final class MembershipPortalTest extends TestCase
 
         $resolver = app(PortalResolver::class);
         $this->assertFalse($resolver->needsSwitcher($user));
-        $this->assertSame('/agency', $resolver->landingPathFor($user, Portal::App));
+        $this->assertSame('/agency/home', $resolver->landingPathFor($user, Portal::App));
     }
 
     /** A user with no membership is sent to onboarding, never guessed into someone's workspace. */
@@ -237,7 +237,7 @@ final class MembershipPortalTest extends TestCase
 
         $user->tenant?->forceFill(['onboarding_completed_at' => now()])->save();
 
-        $this->assertSame('/agency', app(PortalResolver::class)->landingPathFor($user->refresh()));
+        $this->assertSame('/agency/home', app(PortalResolver::class)->landingPathFor($user->refresh()));
     }
 
     /** An advertiser signup lands in the campaigns portal, not the agency one. */

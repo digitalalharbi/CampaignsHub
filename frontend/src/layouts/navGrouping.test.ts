@@ -22,7 +22,7 @@ import { navLeaves, type NavGroup } from './SidebarNav'
 
 /** `/app` as it was before REG-001: sixteen flat entries. */
 const APP_BEFORE = [
-  '/app/dashboard', '/app/requests', '/app/clients', '/app/projects', '/app/campaigns',
+  '/app/home', '/app/dashboard', '/app/requests', '/app/clients', '/app/projects', '/app/campaigns',
   '/app/content', '/app/analytics', '/app/reports', '/app/tasks', '/app/integrations',
   '/app/files', '/app/alerts', '/app/messages', '/app/billing', '/app/subscriptions',
   '/app/settings',
@@ -36,7 +36,7 @@ const APP_BEFORE = [
  * second — which is the distinction, rather than "the agency has no plan".
  */
 const AGENCY_BEFORE = [
-  '/agency/dashboard', '/agency/clients', '/agency/requests',
+  '/agency/home', '/agency/dashboard', '/agency/clients', '/agency/requests',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',
