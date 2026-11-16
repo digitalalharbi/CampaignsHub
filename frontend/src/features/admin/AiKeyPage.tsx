@@ -21,7 +21,7 @@ const API = '/admin/settings/ai'
 const NAMES: Record<ProviderRow['provider'], string> = { anthropic: 'Claude (Anthropic)', openai: 'ChatGPT (OpenAI)', gemini: 'Gemini (Google)' }
 
 /**
- * AI-PLATFORM-KEY-001 — «الذكاء الاصطناعي» in the admin console: the platform's own key and each plan's monthly allowance per
+ * AI-PLATFORM-KEY-001 — «مفتاح AI» in the admin console: the platform's own key and each plan's monthly allowance per
  * person. The key is write-only: once saved only its last four characters come back, and the field never shows it again.
  */
 export function AiKeyPage() {
@@ -32,14 +32,14 @@ export function AiKeyPage() {
   const done = (data: AiSettings) => qc.setQueryData(['admin', 'ai'], data)
 
   if (q.isLoading) return <Skeleton className="h-64" />
-  if (q.isError || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} ar={ar} title={tx('الذكاء الاصطناعي', 'AI')} />
+  if (q.isError || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} ar={ar} title={tx('مفتاح AI', 'AI key')} />
 
   const d = q.data
 
   return (
     <div className="space-y-3" data-testid="admin-ai">
       <header className="flex flex-wrap items-center gap-2">
-        <h1 className="me-auto font-heading text-2xl font-bold text-text-primary">{tx('الذكاء الاصطناعي', 'AI')}</h1>
+        <h1 className="me-auto font-heading text-2xl font-bold text-text-primary">{tx('مفتاح AI', 'AI key')}</h1>
         <Badge tone={d.active_provider ? 'success' : 'warning'} data-testid="ai-active">
           {d.active_provider ? `${tx('المفعّل', 'Active')}: ${NAMES[d.active_provider as ProviderRow['provider']] ?? d.active_provider}` : tx('لا يوجد مفتاح مفعّل', 'No active key')}
         </Badge>
