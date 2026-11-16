@@ -80,7 +80,7 @@ final class EmailLayoutRtlTest extends TestCase
             return;
         }
 
-        $this->assertMatchesRegularExpression('/<td align="center" bgcolor="#0b7a62"[^>]*>\s*<a class="ch-btn"[^>]*min-height:44px/', $html);
+        $this->assertMatchesRegularExpression('/<td align="center" bgcolor="#0b7a62"[^>]*>\s*<a class="ch-btn"[^>]*line-height:44px[^>]*white-space:nowrap/', $html, 'a 44px line box, never wrapping (EMAIL-CLIENT-COMPAT-001: no min-height, which mail clients drop)');
 
         if (str_contains($key, 'security')) {
             return; // the security alert's action is "this was not me"; it carries no token URL

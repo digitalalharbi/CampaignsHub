@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Support;
 use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\Notifications\Engine\Content\ComposedMessage;
 use App\Domains\Notifications\Engine\Sending\EngineMail;
+use App\Domains\Notifications\External\Consent\ConsentMessage;
 use App\Domains\Notifications\External\Content\ExternalMode;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
@@ -118,6 +119,29 @@ final class MailGallery
         return ['from' => '2026-11-08', 'to' => '2026-11-14', 'days' => 7, 'projects' => $projects, 'total' => $external
             ? ['spend' => 8200.0, 'spend_currency' => 'SAR', 'spend_left_out' => 0, 'cap' => 32000.0, 'remaining' => 9400.0, 'cap_currency' => 'SAR', 'cap_left_out' => 0, 'used' => 0.71, 'near' => 1, 'projects' => 2]
             : ['spend' => null, 'spend_currency' => 'SAR', 'spend_left_out' => 1, 'cap' => 47000.0, 'remaining' => 8800.0, 'cap_currency' => 'SAR', 'cap_left_out' => 1, 'used' => 0.81, 'near' => 2, 'projects' => 5]];
+    }
+
+    /**
+     * EMAIL-CLIENT-COMPAT-001 — every message the compatibility checks render: the gallery, the seven external templates and the
+     * external subscription confirmation. Fixtures only, like the rest of this class.
+     *
+     * @return array<string, Mailable>
+     */
+    public static function compatMessages(string $locale): array
+    {
+        $out = self::messages($locale);
+        foreach (['finance', 'project_manager', 'admin_owner', 'client', 'achievement', 'continuity_planning', 'month_end'] as $tpl) {
+            $mail = self::externalDemo($tpl, $locale);
+            if ($mail !== null) {
+                $out['external-'.str_replace('_', '-', $tpl)] = $mail;
+            }
+        }
+        $out['external-confirmation'] = new EngineMail(
+            ConsentMessage::compose('Nour Agency', ['Al-Waha Store'], 'https://campaignshub.io/n/c/sample', $locale),
+            'REF-SAMPLE', $locale,
+        );
+
+        return $out;
     }
 
     /**
