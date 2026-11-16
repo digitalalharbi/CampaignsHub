@@ -4,6 +4,7 @@ import { railStorageKey, readRailCollapsed, useRail } from './railPreference'
 describe('NOV-SIDEBAR-001 — the rail preference is per person and starts collapsed', () => {
   beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     useRail.setState({ userId: null, collapsed: true })
   })
 
@@ -35,15 +36,21 @@ describe('NOV-SIDEBAR-001 — the rail preference is per person and starts colla
     expect(readRailCollapsed('u1')).toBe(true)
   })
 
+  it('ignores a choice left in long-term storage, so a new visit starts collapsed', () => {
+    localStorage.setItem(railStorageKey('u1'), 'open')
+    useRail.getState().hydrate('u1')
+    expect(useRail.getState().collapsed).toBe(true)
+  })
+
   it('never throws when storage is unavailable', () => {
-    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')!
-    Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('blocked') } })
+    const real = Object.getOwnPropertyDescriptor(window, 'sessionStorage')!
+    Object.defineProperty(window, 'sessionStorage', { configurable: true, get() { throw new Error('blocked') } })
     try {
       expect(readRailCollapsed('u1')).toBe(true)
       expect(() => useRail.getState().toggle()).not.toThrow()
       expect(useRail.getState().collapsed).toBe(false)
     } finally {
-      Object.defineProperty(window, 'localStorage', real)
+      Object.defineProperty(window, 'sessionStorage', real)
     }
   })
 })
