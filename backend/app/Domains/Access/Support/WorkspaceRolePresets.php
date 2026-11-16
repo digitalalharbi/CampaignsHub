@@ -97,6 +97,8 @@ final class WorkspaceRolePresets
                 ...self::BASE,
                 'clients.view', 'clients.view_all',
                 'budget.view', 'budget.manage', 'billing.view', 'billing.manage',
+                // FINANCE-ADDS-BUDGET-001 — the budgets API asks for `funding.*`; without these the finance preset could not add one.
+                'funding.view', 'funding.manage',
             ]],
 
             self::MEDIA_BUYER => ['ar' => 'مشتري إعلانات', 'en' => 'Media buyer', 'permissions' => [
