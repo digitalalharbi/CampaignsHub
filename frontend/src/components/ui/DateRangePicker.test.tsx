@@ -210,6 +210,35 @@ describe('the period picker', () => {
     expect(screen.queryByTestId('date-range-panel')).not.toBeInTheDocument()
   })
 
+  it('FILTERS-LIVE-001 — the page follows a preset at once, before «تحديث»; «إلغاء» puts the old period back', async () => {
+    renderWithProviders(<Pages />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('date-range-button'))
+    fireEvent.click(await screen.findByTestId('date-range-preset-last_30'))
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('from=2026-10-16&to=2026-11-14'))
+    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('آخر 30 يوم')
+    expect(screen.getByTestId('date-range-panel')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('date-range-cancel'))
+    await waitFor(() => expect(screen.getByTestId('date-range-summary')).toHaveTextContent('آخر 7 أيام'))
+  })
+
+  it('FILTERS-LIVE-001 — a finished two-click range reaches the page at once; half a range does not', async () => {
+    renderWithProviders(<Pages />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('date-range-button'))
+    fireEvent.click(await screen.findByTestId('day-2026-11-03'))
+    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('آخر 7 أيام')
+    fireEvent.click(screen.getByTestId('day-2026-11-09'))
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('from=2026-11-03&to=2026-11-09'))
+  })
+
+  it('a press outside the panel keeps the choice and closes', async () => {
+    renderWithProviders(<Pages />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('date-range-button'))
+    fireEvent.click(await screen.findByTestId('date-range-preset-last_90'))
+    act(() => { fireEvent.pointerDown(document.body) })
+    expect(screen.queryByTestId('date-range-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('آخر 90 يوم')
+  })
+
   it('speaks English when the page does', () => {
     renderWithProviders(<Pages />, { locale: 'en' })
     expect(screen.getByTestId('date-range-summary')).toHaveTextContent('Last 7 days: 8 Nov – 14 Nov 2026')
