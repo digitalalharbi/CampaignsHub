@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BellRing, Clock, ListChecks, Users } from 'lucide-react'
 import { TabStrip } from '@/components/fit/TabStrip'
 import { Pager } from '@/components/fit/Pager'
 import { ResponsiveList } from '@/components/fit/ResponsiveList'
 import { useFitRows } from '@/components/fit/useFitRows'
+import { FIT_ROW_HEIGHT } from '@/styles/scale'
 import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/Switch'
 import { Skeleton } from '@/components/ui/States'
@@ -77,11 +78,23 @@ function RoutingMatrix({ data }: { data: WorkspaceSettingsData }) {
   const [routing, setRouting] = useState<Record<string, RouteEntry>>(data.settings.routing)
   const [priorities, setPriorities] = useState<Record<string, Priority>>(savedPriorities)
   const [page, setPage] = useState(1)
-  const { ref, rows: perPage } = useFitRows({ min: 3, max: 30, fallback: 8 })
+  // Rows here hold wrapping chips, so they are taller than the standard 44px row: measure the real row height
+  // and fit by that, or the bottom rows are cut off by the box.
+  const [rowH, setRowH] = useState(FIT_ROW_HEIGHT)
+  const { ref, rows: perPage } = useFitRows({ min: 3, max: 30, fallback: 8, rowHeight: rowH })
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const setBox = (el: HTMLDivElement | null) => { boxRef.current = el; (ref as (el: HTMLElement | null) => void)(el) }
   const dirty = JSON.stringify(routing) !== JSON.stringify(data.settings.routing) || JSON.stringify(priorities) !== JSON.stringify(savedPriorities)
   const pages = Math.max(1, Math.ceil(events.length / perPage))
   useEffect(() => { if (page > pages) setPage(pages) }, [page, pages])
   const shown = events.slice((page - 1) * perPage, page * perPage)
+  useLayoutEffect(() => {
+    const trs = boxRef.current?.querySelectorAll<HTMLElement>('tbody tr')
+    if (!trs || trs.length === 0) return
+    const tallest = Math.ceil(Math.max(...Array.from(trs, (tr) => tr.getBoundingClientRect().height)))
+    const next = Math.max(FIT_ROW_HEIGHT, tallest)
+    setRowH((cur) => (Math.abs(cur - next) <= 2 ? cur : next))
+  })
 
   const entry = (e: WorkspaceEvent): Required<RouteEntry> => ({
     roles: routing[e.key]?.roles ?? e.route.roles,
@@ -132,18 +145,18 @@ function RoutingMatrix({ data }: { data: WorkspaceSettingsData }) {
           {save.isSuccess && !dirty ? t('saved') : t('save')}
         </Button>
       </div>
-      <div ref={ref as never} className="flex min-h-0 flex-1 flex-col gap-1">
-        <div className="min-h-0 flex-1 overflow-y-auto md:overflow-hidden">
+      <div ref={setBox} className="flex min-h-0 flex-1 flex-col gap-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <ResponsiveList
             testid="routing"
             rows={shown}
             rowKey={(e) => e.key}
             columns={[
               { key: 'event', header: t('colEvent'), cell: (e) => <span title={title(e)}>{title(e)}{routing[e.key] ? <span className="ms-1 text-xs text-brand-600">{t('customised')}</span> : null}</span> },
-              { key: 'prio', header: t('colPriority'), width: '11%', cell: prioButton },
-              { key: 'roles', header: t('colRoles'), width: '36%', cell: roleChips },
-              { key: 'ch', header: t('colChannels'), width: '22%', cell: channelChips },
-              { key: 'on', header: t('colOn'), width: '8%', align: 'center', cell: (e) => <Switch testId={`on-${e.key}`} checked={entry(e).enabled} disabled={!gate.editable} onCheckedChange={(v) => patch(e, { enabled: v })} /> },
+              { key: 'prio', header: t('colPriority'), width: '84px', cell: prioButton },
+              { key: 'roles', header: t('colRoles'), width: '38%', cell: roleChips },
+              { key: 'ch', header: t('colChannels'), width: '20%', cell: channelChips },
+              { key: 'on', header: t('colOn'), width: '72px', align: 'center', cell: (e) => <Switch testId={`on-${e.key}`} checked={entry(e).enabled} disabled={!gate.editable} onCheckedChange={(v) => patch(e, { enabled: v })} /> },
             ]}
             renderCard={(e) => (
               <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
