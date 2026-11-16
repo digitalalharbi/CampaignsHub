@@ -23,6 +23,9 @@ final class RoleDashboardController extends Controller
         $user = $request->user();
         abort_if($user === null, 401);
 
-        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null), 'Dashboard.');
+        // DASH-PERIOD-001 — the window the performance figures are read over: 7, 14, 30 (default) or 90 days to today.
+        $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
+
+        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null, $days), 'Dashboard.');
     }
 }
