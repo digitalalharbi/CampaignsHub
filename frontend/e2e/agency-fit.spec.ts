@@ -106,7 +106,7 @@ function watchConsole(page: Page) {
   return errors
 }
 
-test.describe('desktop: no scroll at all', () => {
+test.describe('desktop: nothing cut off, never sideways (SCROLL-RESTORE-001)', () => {
   for (const p of PAGES) {
     for (const [w, h] of DESKTOP) {
       for (const locale of ['ar', 'en'] as const) {
@@ -117,7 +117,7 @@ test.describe('desktop: no scroll at all', () => {
           await open(page, p.path, p.project)
 
           const m = await overflow(page)
-          expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+          // SCROLL-RESTORE-001 — a page may scroll vertically (nothing is clipped to fit); sideways and cut-off never.
           expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
           expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
           expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
@@ -141,7 +141,6 @@ test.describe('every width: never sideways, and on a phone only vertically', () 
         const m = await overflow(page)
         expect(m.docH, `scrolls sideways by ${m.docH}px at ${w}px`).toBeLessThanOrEqual(0)
         expect(m.contentH, `content wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
-        if (w >= 1366) expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
         expect(errors, 'console errors').toEqual([])
       })
     }
