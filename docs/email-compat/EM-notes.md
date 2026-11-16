@@ -81,3 +81,35 @@ switched off by a sender; the fix makes it invert one consistent, explicit palet
    buttons one line; ring marks round/square, never ovals; heatmap chips one size; no «[Message clipped]» (except a 30-project digest).
 3. Same in light mode, then Gmail web, iOS Mail (dark + light), Outlook desktop (rounded green CTA = VML), Outlook mobile.
 4. Report any difference with a screenshot and the template name.
+
+## EM2 — port onto the deployed release (branch `feature/email-client-compat-v2` on `origin/main` @ `a01dc3b01`, #1071)
+
+Builder EM2, 2026-11-16. Not pushed, no PR (the lead opens it).
+
+1. **Port.** The six commits above were cherry-picked in order onto `a01dc3b01` with **no conflicts** (the squash of #1071 changed no
+   mail file between `0692fbfa7` and `a01dc3b01`). `InternalMailsUnchangedTest` passes on the merged tree with the hashes from
+   `7763efd45` unchanged, so no regeneration was needed.
+2. **Clock-dependent tests.** Main's RIYADH-DAY-001 fix already made `NovSpendLimitAlertsTest::the run out date…` read the Riyadh
+   «today»; on top of it both tests now freeze time before seeding: the run-out test at 2026-11-16 12:00 Riyadh, `AlertEventEmailTest::quiet
+   hours hold the bundle` at Riyadh midday of the current day (its 00:00–23:59 window used to miss a run at 23:59).
+3. **`php artisan mail:send-gallery {to} [--keys=*] [--locale=ar,en] [--send]`** — how the Owner puts the gallery in his own external
+   mailbox. Same path as the admin «test send»: `MailGallery` fixtures (`compatMessages`: gallery + 7 externals + confirmation; no tenant,
+   no product-data read), `TestSendMark` (subject `[اختبار]`/`[TEST]`, the visible «رسالة اختبار، وليست إشعارًا حقيقيًا» strip, no
+   unsubscribe), `TransactionalMailer::send()` with `TEST_KIND` → one `mail_deliveries` row per message (`kind=test`, `tenant_id` null,
+   `template=gallery.<key>`). Dry run unless `--send` (`--dry-run` wins); exactly one valid address; ≤ 40 messages; address and From masked;
+   refusals printed by class (`MailFailure`: e.g. `sender_rejected`), never the provider's text; the command never sets a From — it reports
+   `sender: from_is_mailbox | envelope_aligned_by_code | no_smtp_mailbox` (AlignEnvelopeSender). Default set (26 = 13 × ar/en):
+   external-finance/-project-manager/-admin-owner/-client/-achievement/-continuity-planning/-month-end, digest-portfolio, digest-project,
+   alerts-bundle, spend-summary-weekly, spend-summary-external, external-confirmation. Never scheduled (tested). The existing marker text
+   was kept (not changed to «تقرير اختبار»): changing it would change the admin test send too. `MailTestSendTest`'s «only these files can
+   send a test» allowlist now names the command, with the reason.
+   **Owner run (on the server):** `php artisan mail:send-gallery you@gmail.com` (dry run, sizes) → `… --send`. `sent` = the provider
+   accepted it, not delivery. If the run reports `sender_rejected`, set `MAIL_FROM_ADDRESS` to the authenticated mailbox (M-notes).
+4. **PWA manifest MIME.** `infrastructure/nginx/frontend.conf` (the file `frontend.production.Dockerfile` copies) gains an exact
+   `location = /manifest.webmanifest` with `types { application/manifest+json webmanifest; }`, no-cache and the security headers;
+   `ProductionEdgeRoutingTest` pins it. **Not verified:** `nginx -t` (no nginx/docker on this machine) and the live header after deploy
+   (`curl -sI https://campaignshub.io/manifest.webmanifest`).
+
+Verification here: Playwright `playwright.mail.config.ts` chromium + webkit 240/240 on a clean preview dir (firefox not run). Backend
+targeted runs via `ptest.sh` (no --parallel) listed in the EM2 report. Real Gmail/Outlook/Apple Mail rendering still unverified — that is
+what the command is for.
