@@ -35,7 +35,10 @@ import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { usePortalPath } from '@/app/portalPath'
 import { toApiError } from '@/lib/api/client'
-import { StatCard, StatGrid } from '@/components/ui/StatCard'
+import { FitPage } from '@/components/fit/FitPage'
+import { KpiMini, KpiStrip } from '@/components/fit/KpiMini'
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { Building2, FolderKanban, Inbox, Megaphone } from 'lucide-react'
 
 type Tab = 'overview' | 'projects' | 'campaigns' | 'analytics' | 'reports' | 'requests' | 'billing' | 'delivery' | 'portal' | 'approvals' | 'messages' | 'team' | 'files' | 'activity' | 'settings'
 
@@ -115,57 +118,70 @@ export function ClientCommandCenterPage() {
     { key: 'settings', label: t('tab_settings') },
   ]
 
-  return (
-    <div className="mx-auto w-full max-w-5xl">
-      <Link to={portalTo('/clients')} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}</Link>
-
+  /*
+   * AGENCY-FIT-001 — the client's main screen is one screen.
+   *
+   * The name, the status chips and the tab strip are three short rows; the overview is the four counts, the budget and
+   * the project actions. «تعديل التصنيف» opens its editor in a layer instead of growing the page, and the back link and
+   * the edit button ride in the title row. The other tabs are documents and lists of their own (campaigns, billing,
+   * conversations, the files…) and let the page flow, as the team page's access center does.
+   */
+  const bar = (
+    <div className="flex min-w-0 flex-col gap-2">
       {d.is_archived && (
-        <div className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">{t('cc_archived_banner')}</div>
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning">{t('cc_archived_banner')}</div>
       )}
+      <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="client-chips">
+        <span className="rounded-full bg-brand-primary-soft px-2.5 py-1 font-semibold text-brand-700">{labelOf(CLIENT_STATUS_LABELS, d.classification.client_status, lang)}</span>
+        {d.classification.service_level && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(SERVICE_LEVEL_LABELS, d.classification.service_level, lang)}</span>}
+        {d.classification.industry && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(INDUSTRY_LABELS, d.classification.industry, lang)}</span>}
+        {d.classification.priority && d.classification.priority !== 'normal' && <span className="rounded-full bg-warning/15 px-2.5 py-1 font-semibold text-warning">{t('cc_priority')}: {labelOf(PRIORITY_LABELS, d.classification.priority, lang)}</span>}
+        {d.classification.owner_name && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{t('cc_owner')}: {d.classification.owner_name}</span>}
+      </div>
+      <div className="flex max-w-full flex-nowrap gap-1 overflow-x-auto border-b border-border" data-testid="client-tabs">
+        {TABS.map((tb) => (
+          <button key={tb.key} onClick={() => setTab(tb.key)} className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${tab === tb.key ? 'border-brand-500 text-brand-700' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>{tb.label}</button>
+        ))}
+      </div>
+    </div>
+  )
 
-      <div className="rounded-2xl border border-border bg-surface p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="font-heading text-2xl font-extrabold text-text-primary">{d.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full bg-brand-primary-soft px-2.5 py-1 font-semibold text-brand-700">{labelOf(CLIENT_STATUS_LABELS, d.classification.client_status, lang)}</span>
-              {d.classification.service_level && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(SERVICE_LEVEL_LABELS, d.classification.service_level, lang)}</span>}
-              {d.classification.industry && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{labelOf(INDUSTRY_LABELS, d.classification.industry, lang)}</span>}
-              {d.classification.priority && d.classification.priority !== 'normal' && <span className="rounded-full bg-warning/15 px-2.5 py-1 font-semibold text-warning">{t('cc_priority')}: {labelOf(PRIORITY_LABELS, d.classification.priority, lang)}</span>}
-              {d.classification.owner_name && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{t('cc_owner')}: {d.classification.owner_name}</span>}
-            </div>
-          </div>
+  return (
+    <FitPage
+      testid="client-command-center"
+      introTestid="client-intro"
+      fit={tab === 'overview'}
+      title={d.name}
+      actions={
+        <>
+          <Link to={portalTo('/clients')} className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><ArrowLeft size={15} className="rtl:rotate-180" /> {t('clients_portfolio')}</Link>
           {d.can.update && (
-            <button onClick={() => setEditing((v) => !v)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary"><Pencil size={14} /> {t('cc_edit_classification')}</button>
+            <button onClick={() => setEditing((v) => !v)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary hover:text-text-primary"><Pencil size={14} /> {t('cc_edit_classification')}</button>
           )}
-        </div>
+        </>
+      }
+      toolbar={bar}
+    >
+      <DetailPanel open={editing && d.can.update} onClose={() => setEditing(false)} title={t('cc_edit_classification')} closeLabel={ar ? 'إغلاق' : 'Close'} testid="client-classification-panel">
+        {d.can.update && <ClassificationEditor clientId={d.id} current={d.classification} onClose={() => setEditing(false)} />}
+      </DetailPanel>
 
-        {editing && d.can.update && <ClassificationEditor clientId={d.id} current={d.classification} onClose={() => setEditing(false)} />}
-
-        <div className="mt-4 flex flex-wrap gap-1 border-b border-border">
-          {TABS.map((tb) => (
-            <button key={tb.key} onClick={() => setTab(tb.key)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === tb.key ? 'border-brand-500 text-brand-700' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>{tb.label}</button>
-          ))}
-        </div>
-
-        <div className="mt-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5">
           {tab === 'overview' && (
             /*
-              UX-KPI-PRESENTATION-001 — the shared card, and the same grid every other row uses.
-              These were centred figures over centred labels in a `bg-surface-secondary` box: a fifth
-              design for a labelled number, on a page a reader reaches from the dashboard.
+              UX-KPI-PRESENTATION-001 — the shared card, and the same grid every other row uses; AGENCY-FIT-001 — the compact one.
             */
-            <StatGrid min="9rem">
-              {[[t('col_projects'), d.overview.projects], [t('col_active_campaigns'), d.overview.active_campaigns], [t('col_draft_campaigns'), d.overview.draft_campaigns], [t('col_open_requests'), d.overview.open_requests]].map(([label, val]) => (
-                <StatCard key={String(label)} label={label as string} value={val as number} />
+            <KpiStrip testid="client-counts">
+              {[[t('col_projects'), d.overview.projects, FolderKanban, 'brand'], [t('col_active_campaigns'), d.overview.active_campaigns, Megaphone, 'success'], [t('col_draft_campaigns'), d.overview.draft_campaigns, Building2, 'neutral'], [t('col_open_requests'), d.overview.open_requests, Inbox, 'warning']].map(([label, val, icon, tone]) => (
+                <KpiMini key={String(label)} label={label as string} value={String(val)} icon={icon as typeof Building2} tone={tone as 'brand'} />
               ))}
-            </StatGrid>
+            </KpiStrip>
           )}
 
-          {tab === 'overview' && d.budget && <ClientBudgetCard budget={d.budget} ar={ar} clientName={d.name} />}
+          {tab === 'overview' && d.budget && <ClientBudgetCard budget={d.budget} ar={ar} clientName={d.name} limit={3} />}
 
           {tab === 'overview' && (
-            <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="client-project-actions">
+            <div className="flex flex-wrap items-center gap-2" data-testid="client-project-actions">
               {d.projects.length === 1 && (
                 <Link to={portalTo(`/projects/${d.projects[0].id}/integrations`)} data-testid="client-sources-link" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:text-text-primary">
                   {ar ? 'المنصات المربوطة' : 'Connected platforms'}
@@ -233,8 +249,7 @@ export function ClientCommandCenterPage() {
           {tab === 'activity' && <TabActivity clientId={d.id} />}
 
           {tab === 'settings' && <TabSettings d={d} />}
-        </div>
       </div>
-    </div>
+    </FitPage>
   )
 }

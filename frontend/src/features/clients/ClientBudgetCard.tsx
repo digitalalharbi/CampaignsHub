@@ -10,15 +10,15 @@ import type { ClientDetail } from './api'
  * the budget's own period. A project with no budget says so and offers «أضف ميزانية»; a deposit's source (a payment in
  * the system, or a manual entry with its reference) is on the budget's own page, one press away.
  */
-export function ClientBudgetCard({ budget, ar, clientName }: { budget: NonNullable<ClientDetail['budget']>; ar: boolean; clientName: string }) {
+export function ClientBudgetCard({ budget, ar, clientName, limit }: { budget: NonNullable<ClientDetail['budget']>; ar: boolean; clientName: string; /** AGENCY-FIT-001 — the first few projects, and a link to the rest, so the card stays one block on a fitted screen. */ limit?: number }) {
   const to = usePortalPath()
   if (budget.projects.length === 0) return null
 
   return (
-    <section className="mt-4 flex flex-col gap-2 rounded-xl border border-border p-3" data-testid="client-budget-card" aria-label={ar ? 'الميزانية' : 'Budget'}>
+    <section className={`${limit === undefined ? 'mt-4 ' : ''}flex flex-col gap-2 rounded-xl border border-border p-3`} data-testid="client-budget-card" aria-label={ar ? 'الميزانية' : 'Budget'}>
       <h2 className="text-sm font-bold text-text-primary">{ar ? 'الميزانية' : 'Budget'}</h2>
       <ul className="flex flex-col gap-2">
-        {budget.projects.map((p) => (
+        {(limit === undefined ? budget.projects : budget.projects.slice(0, limit)).map((p) => (
           <li key={p.project_id} className="flex min-w-0 flex-col gap-1" data-testid={`client-budget-${p.project_id}`}>
             {budget.projects.length > 1 && <span className="truncate text-xs font-semibold text-text-secondary">{p.project_name}</span>}
             {p.budget.has_budget ? (
@@ -39,6 +39,11 @@ export function ClientBudgetCard({ budget, ar, clientName }: { budget: NonNullab
           </li>
         ))}
       </ul>
+      {limit !== undefined && budget.projects.length > limit && (
+        <Link to={to('/budgets')} data-testid="client-budget-more" className="text-xs font-semibold text-brand-600 hover:underline">
+          {ar ? `و${(budget.projects.length - limit).toLocaleString('en-US')} مشاريع أخرى — كل الميزانيات` : `+${(budget.projects.length - limit).toLocaleString('en-US')} more projects — all budgets`}
+        </Link>
+      )}
       <FinancialDisclaimer />
     </section>
   )
