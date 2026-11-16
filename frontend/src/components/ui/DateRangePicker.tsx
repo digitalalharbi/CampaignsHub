@@ -1,3 +1,5 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useUi } from '@/stores/ui'
@@ -38,6 +40,7 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
   testId?: string
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
+  const compact = useFitCompact()
   const state = usePeriod({ earliest })
   const { period, comparison, selection, ctx, recent } = state
 
@@ -79,11 +82,16 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
         </button>
       </div>
       <PeriodStatus projectId={projectId} period={period} testId={`${testId}-status`} />
-      {budgetHint && (
+      {budgetHint && (compact ? (
+        /* AF2 — on a fitted page the sentence is an info tooltip beside the button, not a line under it. */
+        <span data-testid={`${testId}-budget-hint`}>
+          <InfoTip text={ar ? 'الميزانية تُحسب على فترتها، لا على فترة العرض' : 'Budgets are counted on their own period, not on the viewing period'} />
+        </span>
+      ) : (
         <p className="w-full text-xs text-text-muted" data-testid={`${testId}-budget-hint`}>
           {ar ? 'الميزانية تُحسب على فترتها، لا على فترة العرض' : 'Budgets are counted on their own period, not on the viewing period'}
         </p>
-      )}
+      ))}
 
       {open && (
         <PickerPanel
