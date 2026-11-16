@@ -693,7 +693,7 @@ final class RoleDashboardBuilder
                 : (float) $a['cost_per_result'] <=> (float) $b['cost_per_result']);
             $shape = static fn (array $r): array => [
                 'id' => (string) $r['campaign_id'], 'project_id' => $projectOf[(string) $r['campaign_id']] ?? null, 'name' => (string) $r['campaign_name'], 'family' => $top,
-                'platform' => AdPlatforms::canonical((string) ($r['provider'] ?? '')), 'spend' => $money && (int) ($r['spend_withheld_rows'] ?? 0) === 0 ? (float) $r['spend'] : null,
+                'platform' => AdPlatforms::canonical((string) ($r['provider'] ?? '')), 'spend' => (int) ($r['spend_withheld_rows'] ?? 0) === 0 ? (float) $r['spend'] : null,
                 'cost_per_result' => $r['cost_per_result'], 'cost_label' => $r['cost_per_result_label'] ?? null,
                 'result' => $r['result'], 'result_label' => $r['result_label'] ?? null, 'roas' => $sales ? ($r['roas'] ?? null) : null,
             ];
