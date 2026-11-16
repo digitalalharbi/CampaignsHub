@@ -94,7 +94,8 @@ for (const role of ROLES) {
           return { x: d.scrollWidth - d.clientWidth, y: d.scrollHeight - window.innerHeight, wide }
         })
         expect(m.x, `${role.key} @${w}: horizontal overflow by ${m.wide.join(',')}`).toBeLessThanOrEqual(0)
-        if (w >= 1366) expect(m.y, `${role.key} @${w}×${h}: the page scrolls vertically by ${m.y}px`).toBeLessThanOrEqual(1)
+        // DASH-PERF-SPLIT-001 — the manager's page carries the performance panels as well and may scroll; the others stay one screen.
+        if (w >= 1366 && role.key !== 'manager') expect(m.y, `${role.key} @${w}×${h}: the page scrolls vertically by ${m.y}px`).toBeLessThanOrEqual(1)
       }
       expect(errors, errors.join('\n')).toEqual([])
       await context.close()
