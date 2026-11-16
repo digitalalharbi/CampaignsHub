@@ -241,6 +241,25 @@ final class RoleDashboardTest extends TestCase
         $this->assertSame(2, $d['campaigns']['total']);
     }
 
+    /** DASH-PERIOD-001 — a chosen window, its spend against the window just before it, over every campaign. */
+    public function test_the_window_is_chosen_and_its_spend_is_read_against_the_window_before_it(): void
+    {
+        // Each fixture spends `earlier` 12 days ago and `daily` on each of the last three days.
+        $this->campaign($this->alpha, 1000, 400, 100);
+        $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $d = $this->dash($owner, '?days=7');
+
+        $this->assertSame(7, $d['window']['days']);
+        $this->assertEqualsWithDelta(450, $d['performance']['spend'], 0.01);
+        $this->assertEqualsWithDelta(600, $d['performance']['previous_spend'], 0.01);
+        $this->assertSame(2, $d['performance']['campaigns']);
+
+        // A window the page does not offer falls back to thirty days.
+        $this->assertSame(30, $this->dash($owner, '?days=11')['window']['days']);
+    }
+
     public function test_another_tenants_figures_never_appear(): void
     {
         $this->campaign($this->alpha, 1000, 400, 100);
