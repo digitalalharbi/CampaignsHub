@@ -99,7 +99,7 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
 
 type Target = 'main' | 'compare'
 
-/** PICKER-SHORT-PRESETS-001 — the list on show; every other preset sits under «مخصص». */
+/** PICKER-SHORT-PRESETS-001 — the list on show; every other preset sits under «تخصيص». */
 const SHORT_PRESETS: PresetKey[] = ['today', 'yesterday', 'this_week', 'this_month', 'last_month', 'ytd']
 
 function useIsPhone(): boolean {
@@ -352,7 +352,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     >{p.key === 'ytd' ? (ar ? 'السنة الحالية' : 'This year') : (ar ? p.ar : p.en)}</button>
   )
   /*
-   * PICKER-SHORT-PRESETS-001 — the few periods people actually reach for, then «مخصص». «مخصص» opens the rest of the
+   * PICKER-SHORT-PRESETS-001 — the few periods people actually reach for, then «تخصيص». «تخصيص» opens the rest of the
    * presets underneath it (and the calendar and the from/to fields are always there for any two days).
    */
   const shortPresets = PRESETS.filter((p) => SHORT_PRESETS.includes(p.key))
@@ -363,7 +363,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
       <button
         type="button" data-testid={`${testId}-preset-custom`} aria-expanded={showMore} onClick={() => setShowMore((v) => !v)}
         className={`shrink-0 rounded-lg text-start font-semibold ${phone ? 'min-h-11 border border-border px-3 py-2 text-sm' : 'min-h-7 w-full px-2 py-1 text-xs'} ${draft.key === 'custom' || (activePreset !== null && !SHORT_PRESETS.includes(activePreset)) ? 'text-brand-600' : 'text-text-secondary hover:bg-surface-hover'}`}
-      >{ar ? 'مخصص' : 'Custom'} {showMore ? '▴' : '▾'}</button>
+      >{ar ? 'تخصيص' : 'Customize'} {showMore ? '▴' : '▾'}</button>
       <div hidden={!showMore} className={!showMore ? 'hidden' : phone ? 'contents' : 'space-y-px border-t border-border pt-1'} data-testid={`${testId}-presets-more`}>
         {otherPresets.map(presetButton)}
       </div>
