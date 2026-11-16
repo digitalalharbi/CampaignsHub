@@ -3,7 +3,7 @@ import { PlatformDonutChart, RankingBarChart } from '@/features/analytics/charts
 import { ProviderMark } from '@/components/ProviderMark'
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
-import type { RankedCampaign, RoleDashboard } from './api'
+import { metricsCurrency, type RankedCampaign, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, familyName, times, useBoxHeight, useFmt } from './parts'
 
 const T = {
@@ -32,7 +32,8 @@ export function MarketerView({ d, portal }: { d: RoleDashboard; portal: 'agency'
   const f = useFmt()
   const t = f.ar ? T.ar : T.en
   const m = d.money
-  const cur = m?.currency ?? null
+  // DASH-METRICS-CURRENCY-001 — every money figure on this page is a platform figure: the rows' own unit.
+  const cur = metricsCurrency(d)
   const camps = d.campaigns
   const rows = d.campaign_rows ?? []
   const platforms = d.platforms ?? []

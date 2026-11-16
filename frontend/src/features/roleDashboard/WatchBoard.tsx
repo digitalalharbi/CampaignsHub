@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Trophy } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
 import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPoster } from '@/features/content/AdPoster'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/States'
 import { campaigns as countedCampaigns, days as countedDays } from '@/lib/counted'
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
+import { useAgencyClient } from '@/stores/agencyClient'
 import { useWatchBoard, type DashboardWindow, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
 import { Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 import { PlatformComparePanel, SpendSharePanel } from './performance'
@@ -220,35 +221,52 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
 export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: DashboardWindow }) {
   const f = useFmt()
   const t = f.ar ? T.ar : T.en
-  const [unit, setUnit] = useState<string | null>(null)
+  /*
+   * CLIENT-SCOPE-TOP-001 — on the agency portal a CLIENT chosen here is the client of every section (the top bar's choice,
+   * `useAgencyClient`), and the top bar's choice opens here. A client-less project is this board's own narrowing.
+   */
+  const stored = useAgencyClient((s) => s.currentClientId)
+  const setStored = useAgencyClient((s) => s.setCurrentClientId)
+  const [local, setLocal] = useState<string | null>(null)
+  const unit = local ?? (portal === 'agency' ? stored : null)
+  const choose = (id: string | null) => {
+    if (portal === 'agency' && (id === null || !id.startsWith('p:'))) {
+      setLocal(null)
+      setStored(id)
+
+      return
+    }
+    setLocal(id)
+  }
   const q = useWatchBoard(days, unit)
   const b = q.data
   const units = b?.units ?? []
+  const shown = b ? b.unit : unit
 
   return (
     <section data-testid="watch-board" aria-busy={q.isFetching} className="grid min-w-0 grid-cols-1 gap-2">
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
         <h2 className="shrink-0 text-base font-extrabold tracking-tight text-text-primary">{t.title}</h2>
+        {/*
+          CLIENT-SCOPE-TOP-001 — ONE compact picker, not a row of chips: with twenty clients a chip row ran off the screen
+          and read as clutter. A native select opens as the phone's own list, and on the agency portal it is the same choice
+          as the top bar's (every section follows it).
+        */}
         {units.length > 1 && (
-          <div role="radiogroup" aria-label={t.clients} data-testid="watch-units" className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
-            {[{ id: null as string | null, name: t.all }, ...units].map((u) => {
-              const on = unit === u.id
-
-              return (
-                <button
-                  key={u.id ?? 'all'}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  data-testid={`watch-unit-${u.id ?? 'all'}`}
-                  onClick={() => setUnit(u.id)}
-                  className={`min-h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors ${on ? 'border-transparent bg-brand-600 text-white' : 'border-border bg-surface text-text-secondary hover:bg-surface-hover'}`}
-                >
-                  {u.name}
-                </button>
-              )
-            })}
-          </div>
+          <label data-testid="watch-units" className={`relative inline-flex h-9 min-w-0 max-w-full items-center gap-1.5 self-start rounded-full border px-3 text-xs font-semibold sm:max-w-72 ${shown ? 'border-transparent bg-brand-600 text-white' : 'border-border bg-surface text-text-secondary'}`}>
+            <Building2 size={14} aria-hidden className="shrink-0" />
+            <span className="sr-only">{t.clients}</span>
+            <select
+              data-testid="watch-unit-select"
+              value={shown ?? ''}
+              onChange={(e) => choose(e.target.value === '' ? null : e.target.value)}
+              className="min-w-0 flex-1 cursor-pointer appearance-none truncate bg-transparent pe-4 outline-none [&>option]:bg-surface [&>option]:text-text-primary"
+            >
+              <option value="">{t.all}</option>
+              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <ChevronDown size={14} aria-hidden className="pointer-events-none absolute end-2.5 shrink-0" />
+          </label>
         )}
       </div>
 

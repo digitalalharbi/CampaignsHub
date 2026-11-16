@@ -71,6 +71,7 @@ import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { AgencyFit, FitPanel, useBoxHeight, useFitCompact } from '@/components/fit/AgencyFit'
 import { TabStrip } from '@/components/fit/TabStrip'
 import { useFitRows } from '@/components/fit/useFitRows'
+import { LevelTabs } from './LevelTabs'
 import { ApprovedBudgetPacing } from '@/features/funding/ApprovedBudget'
 import { useApprovedBudget } from '@/features/funding/fundingApi'
 
@@ -857,6 +858,8 @@ export function CampaignsPage() {
 
   return (
     <AgencyFit active={fitView} testid="campaigns-fit">
+      {/* CAMPAIGN-LEVELS-001 — الحملات · المجموعات · الإعلانات, one strip, the query carried along. */}
+      <LevelTabs />
       {/*
         PRODUCT-VISUAL-001 §4 §13 — the head answers WHERE, WHAT SCOPE, WHAT PERIOD, HOW FRESH.
 
@@ -2105,4 +2108,3 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
     </div>
   )
 }
-
