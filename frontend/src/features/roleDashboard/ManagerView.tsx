@@ -6,7 +6,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { FxSpendNote } from '@/components/money/FxAmount'
 import type { DashboardUnit, RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
-import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel } from './performance'
+import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel, WindowKpis } from './performance'
 
 const T = {
   ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', active: 'حملات نشطة', alerts: 'التنبيهات', vsBudget: 'الإنفاق والميزانية', onPlan: 'على الخطة', offPlan: 'خارج الخطة', daily: 'الإنفاق اليومي', integrations: 'التكاملات', healthy: 'سليمة', review: 'تحتاج مراجعة', pending: 'قيد الإعداد', paused: 'متوقفة', critical: 'حرجة', open: 'مفتوحة', nothing: 'لا توجد بيانات', unmeasured: 'حملة بلا قياس', of: 'من الميزانية', barBudget: 'الميزانية', barSpent: 'الإنفاق' },
@@ -81,7 +81,8 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         DASH-MANAGER-PERFORMANCE-001 — performance first (the leading campaigns, the platforms side by side, where the
         money went), then the money against its budgets. One block, so the page keeps its rows.
       */}
-      <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)]">
+      <WindowKpis d={d} portal={portal} />
       <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
         <TopCampaignsPanel rows={d.campaign_rows ?? []} family={d.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
         <PlatformComparePanel platforms={d.platforms ?? []} family={d.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
