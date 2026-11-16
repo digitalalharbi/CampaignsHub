@@ -17,7 +17,10 @@ use App\Domains\Agents\Support\DataMinimizer;
 use App\Domains\Agents\Support\MemoryScrubber;
 use App\Domains\Agents\Support\TurnDigest;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Subscriptions\Usage\UsageLedger;
+use App\Domains\Subscriptions\Usage\UsageMeter;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use RuntimeException;
 
@@ -64,8 +67,20 @@ final class AgentConversation
             throw new RuntimeException('thread_too_long');
         }
 
-        ['client' => $client, 'model' => $model, 'token_limit' => $limit, 'credential_id' => $credentialId] =
-            $this->models->for($project, $key, $assistant ? AssistantSettings::model((string) $thread->tenant_id) : null);
+        $picked = $this->models->for($project, $key, $assistant ? AssistantSettings::model((string) $thread->tenant_id) : null);
+        ['client' => $client, 'model' => $model, 'token_limit' => $limit, 'credential_id' => $credentialId] = $picked;
+        // AI-PLATFORM-KEY-001 — on the platform key every reply counts once against this person's monthly allowance.
+        $platform = ($picked['platform'] ?? false) === true;
+        if ($platform && $live) {
+            $this->guardPlatform($thread, $user);
+            if ($user !== null) {
+                $this->usage->record(
+                    (string) $thread->tenant_id, 'ai_messages_platform', 1, 'agent_reply:'.$threadId.':'.$this->lastUserMessageId($thread),
+                    scope: 'user:'.$user->getKey(), cap: $this->platformAllowance((string) $thread->tenant_id),
+                    referenceType: 'agent_thread', referenceId: $threadId,
+                );
+            }
+        }
         $stable = AgentRoles::stablePrompt($key);
         $context = AgentRoles::contextBlock((string) $project->name, $this->rulesSummary($project), $this->memory($thread, $user), $this->context($thread));
         $tools = $this->toolbox->specs($role['tools']);
@@ -102,7 +117,7 @@ final class AgentConversation
             // PRICING-USAGE-CREDITS-001 — the customer's own key: recorded so they see it and their cap alerts at 75/90/100%,
             // never charged against credits.
             $this->usage->record(
-                (string) $thread->tenant_id, 'ai_tokens_own_key',
+                (string) $thread->tenant_id, $platform ? 'ai_tokens_platform' : 'ai_tokens_own_key',
                 (int) ($turn->usage['input_tokens'] ?? 0) + (int) ($turn->usage['output_tokens'] ?? 0),
                 'agent_message:'.$message->getKey(), scope: $credentialId, cap: $limit,
                 referenceType: 'agent_message', referenceId: (string) $message->getKey(),
@@ -156,6 +171,40 @@ final class AgentConversation
      * The person's daily cap (AGENTS-ASSISTANT-001) and the key's monthly ceiling, read before EVERY call, not once per turn.
      * Measured on THIS key and THIS person — another project's key or a colleague never spends this allowance.
      */
+    /**
+     * AI-PLATFORM-KEY-001 — this person's replies on the platform key this month, against the plan's per-person allowance.
+     * Reached → `ai_monthly_limit_reached` (the screen offers to raise it). No allowance set for the plan = not capped.
+     */
+    private function guardPlatform(AgentThread $thread, ?User $user): void
+    {
+        // A scheduled run has no person to count against: on the platform key it is refused, so its cost is never unbounded.
+        if ($user === null) {
+            throw new RuntimeException('ai_routine_needs_own_key');
+        }
+        $cap = $this->platformAllowance((string) $thread->tenant_id);
+        if ($cap !== null && $this->usage->usedThisMonth((string) $thread->tenant_id, 'ai_messages_platform', 'user:'.$user->getKey()) >= $cap) {
+            throw new RuntimeException('ai_monthly_limit_reached');
+        }
+    }
+
+    /** One person's monthly replies on the platform key for this workspace's plan; null when the plan states none. */
+    private function platformAllowance(string $tenantId): ?int
+    {
+        $meter = UsageMeter::query()->where('code', 'ai_messages_platform')->where('is_active', true)->first();
+        $tenant = Tenant::query()->find($tenantId);
+        if ($meter === null || $tenant === null) {
+            return null;
+        }
+
+        return $meter->includedFor(app(SubscriptionService::class)->currentPlan($tenant)?->code);
+    }
+
+    /** The id of the message this reply answers, so one reply is counted once even if the job is retried. */
+    private function lastUserMessageId(AgentThread $thread): string
+    {
+        return (string) ($thread->messages()->withoutGlobalScopes()->where('role', 'user')->latest('created_at')->value('id') ?? 'none');
+    }
+
     private function guardSpend(AgentThread $thread, ?User $user, ?int $limit, string $credentialId): void
     {
         if ($limit !== null && $this->usage->usedThisMonth((string) $thread->tenant_id, 'ai_tokens_own_key', $credentialId) >= $limit) {
