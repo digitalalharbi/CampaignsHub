@@ -19,8 +19,12 @@ const DESKTOP = [[1366, 768], [1440, 900], [1920, 1080]] as const
  * a chooser, which has its own row). The estate is made fuller than the demo seed on purpose: a page that has to PAGE
  * proves nothing against a seed that fits on any screen.
  */
-const PAGES: Array<{ name: string; path: string; project?: boolean }> = [
-  { name: 'home', path: '/agency/home' },
+const PAGES: Array<{ name: string; path: string; project?: boolean; scrolls?: boolean }> = [
+  /*
+   * WATCH-BOARD-001 — «الرئيسية» carries the follow-up board below the role's own part (every client's best and weakest
+   * campaigns and content), so it scrolls VERTICALLY by design, at every width. Sideways is still never allowed.
+   */
+  { name: 'home', path: '/agency/home', scrolls: true },
   { name: 'analytics board · attention', path: '/agency/dashboard' },
   { name: 'analytics board · figures', path: '/agency/dashboard?tab=figures' },
   { name: 'analytics board · trend', path: '/agency/dashboard?tab=trend' },
@@ -117,11 +121,11 @@ test.describe('desktop: no scroll at all', () => {
           await open(page, p.path, p.project)
 
           const m = await overflow(page)
-          expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+          if (!p.scrolls) expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
           expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
-          expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
+          if (!p.scrolls) expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
           expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
-          expect(m.cut, 'elements hang below the content box').toEqual([])
+          if (!p.scrolls) expect(m.cut, 'elements hang below the content box').toEqual([])
           expect(m.restless, 'a scroll region that scrolls at rest').toEqual([])
           expect(errors, 'console errors').toEqual([])
         })
@@ -141,7 +145,7 @@ test.describe('every width: never sideways, and on a phone only vertically', () 
         const m = await overflow(page)
         expect(m.docH, `scrolls sideways by ${m.docH}px at ${w}px`).toBeLessThanOrEqual(0)
         expect(m.contentH, `content wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
-        if (w >= 1366) expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+        if (w >= 1366 && !p.scrolls) expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
         expect(errors, 'console errors').toEqual([])
       })
     }
