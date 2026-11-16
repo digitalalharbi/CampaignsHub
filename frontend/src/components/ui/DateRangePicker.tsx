@@ -15,8 +15,10 @@ import { resolveSelection, type Selection } from '@/lib/period/periodState'
  *
  * A button that says the period in words and dates («آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026»). It opens a
  * panel with presets, two months side by side, from/to fields you can type into, a comparison, and
- * «تحديث» / «إلغاء» in a footer that stays visible. The panel edits a DRAFT: «تحديث» or a press outside the
- * panel saves it; «إلغاء» and Escape discard it.
+ * «تحديث» / «إلغاء» in a footer that stays visible. FILTERS-LIVE-001 — the page follows the panel LIVE: a preset, a
+ * finished range, typed dates or a comparison change the figures at once (as Meta / Snapchat / مؤشر do), so a choice
+ * is never lost behind a button. «تحديث» or a press outside keeps it and closes; «إلغاء» and Escape put back the
+ * period the panel opened on.
  *
  * On a phone the same panel is a bottom sheet with ONE month and the presets as a sideways-scrolling row.
  *
@@ -42,6 +44,18 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => { setOpen(false); triggerRef.current?.focus() }, [])
+  /* What the panel opened on, and whether a live preview has moved the page off it — «إلغاء» puts it back. */
+  const openedWith = useRef<Selection>(selection)
+  const movedLive = useRef(false)
+  const toggle = () => setOpen((v) => { if (!v) { openedWith.current = selection; movedLive.current = false } return !v })
+  // Held in a ref so «إلغاء» stays one stable function: the panel's key/outside listeners re-bind (and re-focus) on change.
+  const setSel = useRef(state.setSelection)
+  setSel.current = state.setSelection
+  const cancel = useCallback(() => {
+    if (movedLive.current) setSel.current(openedWith.current, { remember: false })
+    movedLive.current = false
+    close()
+  }, [close])
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`} data-testid={testId}>
@@ -49,7 +63,7 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
         <button
           ref={triggerRef} type="button" data-testid={`${testId}-button`}
           aria-haspopup="dialog" aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
           className="flex min-h-11 w-full max-w-full items-center gap-2 rounded-xl border border-border-strong bg-surface px-3 py-1.5 text-start text-sm font-semibold text-text-primary hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 sm:min-h-10"
         >
           <CalendarDays className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden />
@@ -74,8 +88,9 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
       {open && (
         <PickerPanel
           ar={ar} anchor={triggerRef} initial={selection} ctx={ctx} recent={recent} testId={testId}
-          onCancel={close}
-          onApply={(next) => { state.setSelection(next); close() }}
+          onCancel={cancel}
+          onLive={(next) => { movedLive.current = true; state.setSelection(next, { remember: false }) }}
+          onApply={(next) => { movedLive.current = false; state.setSelection(next); close() }}
         />
       )}
     </div>
@@ -99,7 +114,7 @@ function useIsPhone(): boolean {
   return phone
 }
 
-export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply, allowCompare = true }: {
+export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel, onApply, onLive, allowCompare = true }: {
   allowCompare?: boolean
   ar: boolean
   anchor: React.RefObject<HTMLButtonElement | null>
@@ -109,6 +124,8 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   testId: string
   onCancel: () => void
   onApply: (s: Selection) => void
+  /** FILTERS-LIVE-001 — called with each finished choice while the panel is open, so the page updates at once. */
+  onLive?: (s: Selection) => void
 }) {
   const phone = useIsPhone()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -258,12 +275,26 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
     setTarget(mode === 'custom' ? 'compare' : 'main')
   }
 
-  const apply = () => {
+  const finished = (): Selection => {
     const out: Selection = { ...draft }
     if (out.key === 'custom') { out.from = resolved.period.from; out.to = resolved.period.to }
     if (out.compare === 'custom') { out.cfrom = resolved.comparison?.from; out.cto = resolved.comparison?.to }
-    onApply(out)
+
+    return out
   }
+  const apply = () => onApply(finished())
+
+  /* FILTERS-LIVE-001 — every finished choice reaches the page at once; half a range (one click) waits for its end. */
+  const lastLive = useRef(JSON.stringify(initial))
+  useEffect(() => {
+    if (!onLive || anchorDay !== null) return
+    const out = finished()
+    const key = JSON.stringify(out)
+    if (key === lastLive.current) return
+    lastLive.current = key
+    onLive(out)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is the identity
+  }, [draft, anchorDay])
   useEffect(() => {
     onOutside.current = () => {
       const changed = JSON.stringify(draft) !== JSON.stringify(initial)
