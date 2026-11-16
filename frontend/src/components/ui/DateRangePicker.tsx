@@ -134,6 +134,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const [draft, setDraft] = useState<Selection>(initial)
+  const openedOn = useRef(JSON.stringify(initial))
   const [target, setTarget] = useState<Target>('main')
   const [anchorDay, setAnchorDay] = useState<string | null>(null)
   const [hover, setHover] = useState<string | null>(null)
@@ -300,7 +301,8 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   }, [draft, anchorDay])
   useEffect(() => {
     onOutside.current = () => {
-      const changed = JSON.stringify(draft) !== JSON.stringify(initial)
+      // Against what the panel OPENED on: a live preview has already moved the page (and `initial`) to the draft.
+      const changed = JSON.stringify(draft) !== openedOn.current
       if (changed) apply(); else onCancel()
     }
   })
