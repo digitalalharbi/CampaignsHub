@@ -234,7 +234,8 @@ body {
  * a tablet, a short window — the page flows and scrolls vertically like any other. `100vh` first, `100dvh` after:
  * a browser without `dvh` keeps the first, and one with it takes the viewport that tracks its toolbars.
  */
-@media (min-width: 1280px) and (min-height: 640px) {
+/* SCROLL-RESTORE-001 — no screen matches: every page flows and scrolls (see `FIT_LOCK_QUERY`). */
+@media (min-width: 100000px) {
   [data-fit='true'] {
     height: 100vh;
     height: 100dvh;
