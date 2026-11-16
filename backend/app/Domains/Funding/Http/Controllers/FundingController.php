@@ -62,6 +62,12 @@ final class FundingController extends Controller
         $user = $this->reader($request);
         $deleted = $request->boolean('deleted');
         [$fundings, $names] = $this->reachable($user, $deleted);
+        // CLIENT-SCOPE-001 — the client chosen at the top of the agency portal narrows the board AND its totals to that client.
+        // Only ever narrows what `reachable` already allows: an id outside the person's reach returns nothing.
+        $client = $request->query('client');
+        if (is_string($client) && $client !== '') {
+            $fundings = $fundings->filter(static fn (ProjectFunding $f): bool => (string) $f->client_workspace_id === $client)->values();
+        }
 
         $rows = $fundings
             ->map(fn (ProjectFunding $f): array => [
