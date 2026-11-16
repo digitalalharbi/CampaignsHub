@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Trophy } from 'lucide-react'
 import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPoster } from '@/features/content/AdPoster'
-import { Delta } from '@/components/ui/Delta'
+import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
 import { campaigns as countedCampaigns, days as countedDays } from '@/lib/counted'
 import { platformColor } from '@/lib/colors'
@@ -49,19 +49,14 @@ const sum = (xs: Array<number | null | undefined>): number | null => {
   return known.length === 0 ? null : known.reduce((a, b) => a + b, 0)
 }
 
-/** One headline figure: the value, how it moved, and its own line over the window. Opens the analytics. */
-function Stat({ label, value, to, testId, points, color, children }: { label: string; value: string; to: string; testId: string; points: number[]; color: string; children?: ReactNode }) {
+/** One headline figure — the shared card (StatCard), its daily line in the spark slot, opening the analytics. */
+function Stat({ label, value, to, testId, points, color, tone, hint, delta }: {
+  label: string; value: string; to: string; testId: string; points: number[]; color: string; tone: StatTone; hint?: string
+  delta?: { metric: string; current: number | null | undefined; previous: number | null | undefined }
+}) {
   return (
-    <Link
-      to={to}
-      data-testid={testId}
-      className="group relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-2xl border border-border bg-surface px-3.5 pb-1 pt-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-    >
-      <span aria-hidden className="absolute inset-x-0 top-0 h-0.5" style={{ background: color }} />
-      <span className="truncate text-xs font-semibold text-text-secondary">{label}</span>
-      <span className="tnum truncate text-2xl font-extrabold leading-tight tracking-tight text-text-primary" data-testid={`${testId}-value`}>{value}</span>
-      <span className="flex min-h-4 min-w-0 items-center gap-1.5 text-xs text-text-muted">{children}</span>
-      <div className="-mx-1 h-9" aria-hidden><KpiSparkline points={points} color={color} height={36} /></div>
+    <Link to={to} className="block min-w-0 rounded-2xl transition hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+      <StatCard label={label} value={value} hint={hint} tone={tone} dot delta={delta} testid={testId} spark={<div className="h-9" aria-hidden><KpiSparkline points={points} color={color} height={36} /></div>} />
     </Link>
   )
 }
@@ -151,19 +146,15 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
     <div className="grid min-w-0 grid-cols-1 gap-2">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="watch-kpis">
         {b.can_money && (
-          <Stat label={`${t.spend} · ${countedDays(b.window.days, f.ar ? 'ar' : 'en')}`} value={f.money(p?.spend, cur)} to={analytics} testId="watch-kpi-spend" points={trend.map((d) => d.spend ?? 0)} color="var(--brand-600)">
-            {p && p.previous_spend !== null ? <><Delta metric="spend" current={p.spend} previous={p.previous_spend} ar={f.ar} testid="watch-spend-delta" /><span className="truncate">{t.vsPrevious}</span></> : null}
-          </Stat>
+          <Stat label={`${t.spend} · ${countedDays(b.window.days, f.ar ? 'ar' : 'en')}`} value={f.money(p?.spend, cur)} to={analytics} testId="watch-kpi-spend" points={trend.map((d) => d.spend ?? 0)} color="var(--brand-600)" tone="brand"
+            hint={p && p.previous_spend !== null ? t.vsPrevious : undefined} delta={p && p.previous_spend !== null ? { metric: 'spend', current: p.spend, previous: p.previous_spend } : undefined} />
         )}
-        <Stat label={resultLabel} value={f.short(p?.results)} to={analytics} testId="watch-kpi-results" points={trend.map((d) => d.conversions ?? 0)} color="var(--success)">
-          {p?.family ? <span className="truncate">{familyName(p.family, f.ar)}{b.can_money && p.cost_per_result !== null ? ` · ${t.cost} ${f.money(p.cost_per_result, cur)}` : ''}</span> : null}
-        </Stat>
-        <Stat label={t.impressions} value={f.short(impressions)} to={analytics} testId="watch-kpi-impressions" points={trend.map((d) => d.impressions)} color="var(--info)">
-          {p ? <span className="truncate">{countedCampaigns(p.campaigns, f.ar ? 'ar' : 'en')}</span> : null}
-        </Stat>
-        <Stat label={t.clicks} value={f.short(clicks)} to={analytics} testId="watch-kpi-clicks" points={trend.map((d) => d.clicks)} color="var(--purple)">
-          {ctr !== null ? <span className="truncate">{t.ctr} {f.pct(ctr)}</span> : null}
-        </Stat>
+        <Stat label={resultLabel} value={f.short(p?.results)} to={analytics} testId="watch-kpi-results" points={trend.map((d) => d.conversions ?? 0)} color="var(--success)" tone="success"
+          hint={p?.family ? `${familyName(p.family, f.ar)}${b.can_money && p.cost_per_result !== null ? ` · ${t.cost} ${f.money(p.cost_per_result, cur)}` : ''}` : undefined} />
+        <Stat label={t.impressions} value={f.short(impressions)} to={analytics} testId="watch-kpi-impressions" points={trend.map((d) => d.impressions)} color="var(--info)" tone="info"
+          hint={p ? countedCampaigns(p.campaigns, f.ar ? 'ar' : 'en') : undefined} />
+        <Stat label={t.clicks} value={f.short(clicks)} to={analytics} testId="watch-kpi-clicks" points={trend.map((d) => d.clicks)} color="var(--purple)" tone="neutral"
+          hint={ctr !== null ? `${t.ctr} ${f.pct(ctr)}` : undefined} />
       </div>
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
