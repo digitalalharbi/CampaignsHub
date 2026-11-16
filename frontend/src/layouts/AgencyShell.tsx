@@ -24,6 +24,7 @@ import { useUi } from '@/stores/ui'
 import { useAuth } from '@/stores/auth'
 import { useRail } from './railPreference'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
+import { ClientScopeChip } from '@/features/agency/ClientScopeChip'
 import { useSectionAllowed } from '@/lib/accessSections'
 import { SidebarNav } from './SidebarNav'
 import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
@@ -263,6 +264,9 @@ export function AgencyShell() {
           >
             <CampaignsHubMark size={18} />
           </Link>
+
+          {/* CLIENT-SCOPE-TOP-001 — «كل العملاء» or one client's space; every section below reads the same choice. */}
+          <ClientScopeChip />
 
           <div className="ms-auto flex min-w-0 items-center gap-1.5">
             <UsageMeterChip />
