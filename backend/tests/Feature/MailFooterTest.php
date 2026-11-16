@@ -90,7 +90,7 @@ final class MailFooterTest extends TestCase
         foreach ($lines as $name => $cell) {
             $this->assertMatchesRegularExpression('#^<td data-footer-line="'.$name.'" dir="'.$dir.'" align="'.$align.'" style="text-align:'.$align.'; direction:'.$dir.';#', $cell, $name);
             // Readable on the cream ground: 12px or more, a line-height that lets Arabic breathe.
-            $this->assertMatchesRegularExpression('#font-size:1[23]px; line-height:1\.8;#', $cell, $name);
+            $this->assertMatchesRegularExpression('#font-size:1[23]px; line-height:2[23]px;#', $cell, $name);
             $this->assertStringContainsString('color:#5b6b68;', $cell, $name);
         }
         $this->assertStringContainsString('font-size:13px', $lines['policies']);
@@ -118,7 +118,7 @@ final class MailFooterTest extends TestCase
         // The year moves; the name and the host are Latin in both languages, held in one left-to-right run
         // so the Arabic line cannot reorder them or move the dot.
         $this->assertSame('© '.date('Y').' CampaignsHub · campaignshub.io', self::text($lines['copyright']));
-        $this->assertMatchesRegularExpression('#<span dir="ltr" style="direction:ltr; unicode-bidi:embed; display:inline-block;">© \d{4} CampaignsHub · <a href="https://campaignshub\.io/?"[^>]*>campaignshub\.io</a></span>#', $lines['copyright']);
+        $this->assertMatchesRegularExpression('#<span dir="ltr" style="direction:ltr; unicode-bidi:embed; display:inline-block;[^"]*">© \d{4} CampaignsHub · <a href="https://campaignshub\.io/?"[^>]*>campaignshub\.io</a></span>#', $lines['copyright']);
 
         $this->assertSame($ar
             ? 'أُرسلت هذه الرسالة من كامبينز هب — منصة إدارة الحملات الإعلانية المدفوعة.'

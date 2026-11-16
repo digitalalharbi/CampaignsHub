@@ -179,6 +179,24 @@ final class ProductionEdgeRoutingTest extends TestCase
         }
     }
 
+    /**
+     * PWA-MANIFEST-MIME-001 — Production served `/manifest.webmanifest` as `application/octet-stream` (no `.webmanifest` entry in the
+     * image's stock `mime.types`), beside `nosniff`. The manifest gets its own exact location with the registered type.
+     */
+    public function test_the_web_app_manifest_is_served_as_manifest_json(): void
+    {
+        $manifest = $this->block('location\s+=\s+/manifest\.webmanifest\s*\{');
+        $this->assertMatchesRegularExpression('~types\s*\{\s*application/manifest\+json\s+webmanifest;\s*\}~', $manifest);
+        $this->assertStringContainsString('try_files $uri =404;', $manifest, 'a missing manifest is a 404, not index.html');
+        foreach (['X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy'] as $header) {
+            $this->assertStringContainsString($header, $manifest, "{$header} must be repeated where add_header replaces the server-level set");
+        }
+        // The file the location serves is the one the page links.
+        $root = dirname(__DIR__, 3);
+        $this->assertFileExists($root.'/frontend/public/manifest.webmanifest');
+        $this->assertStringContainsString('href="/manifest.webmanifest"', (string) file_get_contents($root.'/frontend/index.html'));
+    }
+
     private function block(string $opening): string
     {
         $this->assertSame(1, preg_match('~'.$opening.'(.*?)\n    \}~s', $this->conf, $m), "block {$opening} not found");

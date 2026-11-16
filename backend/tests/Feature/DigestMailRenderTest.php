@@ -131,7 +131,8 @@ final class DigestMailRenderTest extends TestCase
         $digest = $this->digest(['currency' => 'SAR', 'projects' => [$withData, $empty]]);
 
         foreach (['ar' => ['لا بيانات', 'لا أرقام مسجّلة'], 'en' => ['No data', 'No figures recorded']] as $locale => [$chip, $line]) {
-            $html = $this->renderOf($digest, $locale);
+            // EMAIL-CLIENT-COMPAT-001 — margins are spacer tables now; they are not the row's end.
+            $html = (string) preg_replace('#<table[^>]*data-spacer="\d+"[^>]*>.*?</table>#s', '', $this->renderOf($digest, $locale));
             $quiet = (string) substr($html, (int) strrpos($html, 'data-block="portfolio-row"'));
             $quiet = (string) substr($quiet, 0, (int) strpos($quiet, '</table>') + 8);
             $this->assertStringContainsString('Quiet Project', $quiet);
