@@ -19,6 +19,9 @@ import { absenceLabel, assetAspect, mediaFitClass, posterSource, previewShape, r
 import { imageLoading } from './format'
 import { creativeMoney } from './creativeMoney'
 import { VideoPoster } from './VideoPoster'
+import { ProviderMark } from '@/components/ProviderMark'
+import { canonicalPlatform } from '@/lib/platforms'
+import { platformColor } from '@/features/analytics/platformColor'
 import { anyDisplayablePreview } from './previewPresence'
 import {
   groupCreatives,
@@ -1549,6 +1552,12 @@ export function CreativesPage() {
   )
 }
 
+/** X-TEXT-PREVIEW-001 — a headline the ad really has; X's «Tweet <id>» placeholder is not one. */
+function ownHeadline(h: string | null | undefined): string | null {
+  const v = (h ?? '').trim()
+  return v === '' || /^Tweet \d+$/.test(v) ? null : v
+}
+
 function CreativeGridCard({
   creative,
   currency,
@@ -1774,6 +1783,31 @@ function CreativeGridCard({
              * The platform's own note still wins where it sent one: it is more specific than
              * anything written here, and it is what the presenter composed for this exact moment.
              */
+            /*
+             * X-TEXT-PREVIEW-001 — an ad with no picture shows its own words, not a sentence about them.
+             *
+             * The presenter sends `preview.text` for a text ad (a promoted post with no media, a chat card), and the note
+             * said «the ad's text is shown» while the grid drew only the note. The words are the creative; they fill the
+             * cover now, under the platform's mark. X names every promoted post «Tweet <id>», which is an id, not a
+             * headline, so it is never printed as one.
+             */
+            preview.text && (preview.text.body || ownHeadline(preview.text.headline)) ? (
+              <span
+                data-testid="creative-text-card"
+                data-cover="text-card"
+                data-absence={preview.state}
+                title={said || undefined}
+                className="relative flex h-full flex-col justify-center gap-1.5 overflow-hidden bg-surface-secondary p-3 text-start"
+              >
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: platformColor(canonicalPlatform(creative.provider)) }} />
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-text-muted">
+                  <ProviderMark provider={creative.provider} size={14} />
+                  {ar ? 'نص الإعلان' : 'Ad text'}
+                </span>
+                {ownHeadline(preview.text.headline) && <span dir="auto" className="line-clamp-2 text-sm font-bold text-text-primary">{ownHeadline(preview.text.headline)}</span>}
+                {preview.text.body && <span dir="auto" className="line-clamp-6 whitespace-pre-line text-sm leading-relaxed text-text-primary">{preview.text.body}</span>}
+              </span>
+            ) : (
             <span
               data-testid="creative-absence-reason"
               data-absence={preview.state}
@@ -1791,6 +1825,7 @@ function CreativeGridCard({
               */}
               {note && note !== said && <span className="text-[11px] opacity-80">{note}</span>}
             </span>
+            )
           ) : (
             /*
              * CONTENT-NO-PREVIEW-001 — the PANEL goes, the reason stays.
