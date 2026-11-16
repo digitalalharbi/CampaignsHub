@@ -73,8 +73,14 @@ final class RoleDashboardBuilder
     ) {}
 
     /** @return array<string, mixed> */
-    public function build(User $user, ?string $requested = null): array
+    /** DASH-PERIOD-001 — the windows the page offers; anything else falls back to the default. */
+    public const WINDOWS = [7, 14, 30, 90];
+
+    public const DEFAULT_DAYS = 30;
+
+    public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS): array
     {
+        $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $role = $user->rolesInCurrentTenant()->sortBy('id')->first();
         $slug = $role instanceof Role ? (string) $role->slug : null;
         $isOwner = (bool) $user->is_platform_admin || $user->hasRole(WorkspaceRolePresets::OWNER);
@@ -87,7 +93,7 @@ final class RoleDashboardBuilder
         // so a date added to a UTC «today» landed a day early from 00:00 to 03:00 Riyadh.
         $today = PeriodResolver::today();
         $to = $today->copy();
-        $from = $to->copy()->subDays(29);
+        $from = $to->copy()->subDays($days - 1);
 
         $scope = $this->scope($user);
         $projectIds = array_keys($scope['projects']);
@@ -98,7 +104,7 @@ final class RoleDashboardBuilder
             'view' => $view,
             'default_view' => $default,
             'available_views' => $isOwner ? self::VIEWS : [$default],
-            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => 30, 'today' => $today->toDateString()],
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()],
             'thresholds' => ['near' => self::NEAR],
             'scope' => ['clients' => count($scope['clients']), 'projects' => count($projectIds), 'restricted' => $scope['restricted']],
             'can_money' => $money,
@@ -131,7 +137,7 @@ final class RoleDashboardBuilder
              */
             $out += array_intersect_key(
                 $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
-                array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms']),
+                array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
             );
         }
 
@@ -477,13 +483,17 @@ final class RoleDashboardBuilder
             'mine' => $own,
             'campaigns' => $this->campaignCounts($projectIds, $own ? $user : null),
             'campaign_rows' => [], 'families' => [], 'best' => [], 'worst' => [], 'platforms' => [],
+            'performance' => null,
         ];
         if ($agg === null || $ids === []) {
             return $out;
         }
 
         $scoped = $agg->forCampaigns($ids);
-        $rows = $scoped->byCampaign($from, $to);
+        // DASH-PERIOD-001 — the window of the same length just before, so each campaign carries its previous spend.
+        $prevTo = $from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays((int) $from->diffInDays($to));
+        $rows = $scoped->byCampaign($from, $to, $prevFrom, $prevTo);
         // The detail page of a campaign is addressed by its project as well.
         $projectOf = UnifiedCampaign::query()->whereIn('id', $ids)->pluck('project_id', 'id')->map(fn ($v): string => (string) $v)->all();
 
@@ -538,7 +548,52 @@ final class RoleDashboardBuilder
             $out['platforms'] = $this->platformRows($scoped, $families[$top]['rows'], $top, $from, $to);
         }
 
+        $out['performance'] = $this->performance($rows, $families, $top, $money, $prevFrom, $prevTo);
+
         return $out;
+    }
+
+    /**
+     * DASH-PERIOD-001 — the window's headline over EVERY row (the table shows 40): spend against the window before it,
+     * and the results and cost per result of the objective that carries the most spend. A campaign whose spend is
+     * withheld is left out of both spends and counted, so a partial total says so instead of reading as the whole.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, array{spend: float, rows: list<array<string, mixed>>}>  $families
+     * @return array<string, mixed>
+     */
+    private function performance(array $rows, array $families, ?string $top, bool $money, Carbon $prevFrom, Carbon $prevTo): array
+    {
+        $known = array_values(array_filter($rows, static fn (array $r): bool => (int) ($r['spend_withheld_rows'] ?? 0) === 0));
+        $withPrevious = array_values(array_filter($known, static fn (array $r): bool => ($r['previous_spend'] ?? null) !== null));
+
+        $results = null;
+        $cost = null;
+        $resultLabel = null;
+        $costLabel = null;
+        if ($top !== null) {
+            $resulted = array_values(array_filter($families[$top]['rows'], static fn (array $r): bool => ($r['result'] ?? null) !== null));
+            if ($resulted !== []) {
+                $results = (float) array_sum(array_map(static fn (array $r): float => (float) $r['result'], $resulted));
+                $resultLabel = $resulted[0]['result_label'] ?? null;
+                $costLabel = $resulted[0]['cost_per_result_label'] ?? null;
+                $spendOfResulted = array_sum(array_map(static fn (array $r): float => (int) ($r['spend_withheld_rows'] ?? 0) === 0 ? (float) ($r['spend'] ?? 0) : 0.0, $resulted));
+                $cost = $money && $results > 0 ? round($spendOfResulted / $results, 2) : null;
+            }
+        }
+
+        return [
+            'spend' => $money ? round((float) array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $known)), 2) : null,
+            'previous_spend' => $money && $withPrevious !== [] ? round((float) array_sum(array_map(static fn (array $r): float => (float) $r['previous_spend'], $withPrevious)), 2) : null,
+            'previous' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            'withheld' => count($rows) - count($known),
+            'campaigns' => count($rows),
+            'family' => $top,
+            'results' => $results,
+            'result_label' => $resultLabel,
+            'cost_per_result' => $cost,
+            'cost_label' => $costLabel,
+        ];
     }
 
     /**
