@@ -124,6 +124,15 @@ final class RoleDashboardBuilder
             $out['alerts'] = $this->alerts($user, $projectIds);
             $out['integrations'] = in_array('integrations', $sections, true) ? $this->integrations($scope) : null;
             $out['campaigns'] = $this->campaignCounts($projectIds, null);
+            /*
+             * DASH-MANAGER-PERFORMANCE-001 — the manager's page reads the performance of EVERY campaign he can reach the way
+             * the marketer's reads his own: the leading campaigns, the platform comparison and the spend share by platform.
+             * The same reader, so the same money rules (no spend, cost or ROAS without the money key).
+             */
+            $out += array_intersect_key(
+                $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
+                array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms']),
+            );
         }
 
         if ($view === 'pm') {
@@ -455,13 +464,13 @@ final class RoleDashboardBuilder
      * @param  list<string>  $projectIds
      * @return array<string, mixed>
      */
-    private function marketer(User $user, ?MetricsAggregator $agg, array $projectIds, Carbon $from, Carbon $to, Carbon $today, bool $money): array
+    private function marketer(User $user, ?MetricsAggregator $agg, array $projectIds, Carbon $from, Carbon $to, Carbon $today, bool $money, bool $preferMine = true): array
     {
         $mineQuery = UnifiedCampaign::query()->whereIn('project_id', $projectIds)
             ->where(fn ($q) => $q->where('owner_id', $user->getKey())->orWhere('created_by', $user->getKey()));
         $mine = $projectIds === [] ? [] : $mineQuery->pluck('id')->map(fn ($id): string => (string) $id)->all();
         // Without any campaign of his own, the page reads the campaigns he can reach and says so.
-        $own = $mine !== [];
+        $own = $preferMine && $mine !== [];
         $ids = $own ? $mine : ($projectIds === [] ? [] : UnifiedCampaign::query()->whereIn('project_id', $projectIds)->pluck('id')->map(fn ($id): string => (string) $id)->all());
 
         $out = [
