@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Bell, KeyRound, Palette, ShieldCheck, User as UserIcon } from 'lucide-react'
+import { Bell, KeyRound, Palette, Plug, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { PolicyNote } from '@/features/legal/PolicyFooter'
 
@@ -13,6 +13,8 @@ const ITEMS = [
   { to: '/account/security', ar: 'الأمان والجلسات', en: 'Security & sessions', icon: ShieldCheck },
   { to: '/account/preferences', ar: 'اللغة والمظهر', en: 'Language & appearance', icon: Palette },
   { to: '/account/notifications', ar: 'الإشعارات الشخصية', en: 'Personal notifications', icon: Bell },
+  // MCP-SERVER-001 — connect Claude, Gemini or ChatGPT to CampaignsHub with the person's own token.
+  { to: '/account/ai', ar: 'ربط الذكاء الاصطناعي', en: 'Connect AI', icon: Plug },
 ] as const
 
 export function AccountSettingsLayout() {
