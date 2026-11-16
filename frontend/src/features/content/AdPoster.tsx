@@ -127,7 +127,9 @@ export function AdPoster({
      * that says plainly it is the text and not the image. `data-absence` still names the absence, so
      * nothing reading the page mistakes this for a picture.
      */
-    const copy = preview?.text
+    // X-TEXT-PREVIEW-001 — X's «Tweet <id>» is an id, not a headline.
+    const raw = preview?.text
+    const copy = raw ? { headline: raw.headline && /^Tweet \d+$/.test(raw.headline.trim()) ? null : raw.headline, body: raw.body } : raw
     if (copy && (copy.headline || copy.body)) {
       const key = provider ? canonicalPlatform(provider) : null
       const color = key ? platformColor(key) : 'var(--brand-600)'
