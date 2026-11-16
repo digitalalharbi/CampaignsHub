@@ -41,6 +41,7 @@ const PersonalNotificationsPage = lazyPage(() => import('@/features/account/Pers
 const ProfilePage = lazyPage(() => import('@/features/account/ProfilePage'), 'ProfilePage')
 const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), 'PasswordPage')
 const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
+const AiConnectPage = lazyPage(() => import('@/features/account/AiConnectPage'), 'AiConnectPage')
 const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
 const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
 // PROJECT-LIFECYCLE-001 §8 — «فتح»: an archived project opens view-only; a live one keeps its usual destination.
@@ -532,6 +533,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
@@ -743,6 +746,8 @@ export const router = createBrowserRouter(withErrorBoundary([
                 { path: 'security', element: <SecurityPage /> },
                 { path: 'preferences', element: <PreferencesPage /> },
                 { path: 'notifications', element: <PersonalNotificationsPage /> },
+                // MCP-SERVER-001
+                { path: 'ai', element: <AiConnectPage /> },
               ],
             },
           ],
@@ -793,6 +798,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           /*
