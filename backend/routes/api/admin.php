@@ -24,6 +24,7 @@ use App\Domains\Platform\Http\Controllers\PlatformGrantController;
 use App\Domains\Platform\Http\Controllers\PlatformLimitController;
 use App\Domains\Platform\Http\Controllers\PlatformMembershipController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
+use App\Domains\Platform\Http\Controllers\PlatformAiKeyController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformPlanMigrationController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
@@ -247,6 +248,13 @@ Route::middleware(['auth:sanctum', 'platform'])
          * Since PAY-GATEWAY-CONSOLE-001 (Owner decision, 2026-10-31) keys are stored here, encrypted and write-only;
          * nothing returns a secret. Saving keys, enabling and choosing the primary are separate audited acts.
          */
+        // AI-PLATFORM-KEY-001 — the platform's AI key (write-only, encrypted) and the per-person monthly allowance by plan.
+        Route::prefix('/settings/ai')->name('ai.')->group(function (): void {
+            Route::get('/', [PlatformAiKeyController::class, 'index'])->name('index');
+            Route::put('/allowance', [PlatformAiKeyController::class, 'allowance'])->middleware('throttle:20,1')->name('allowance');
+            Route::put('/{provider}', [PlatformAiKeyController::class, 'save'])->middleware('throttle:20,1')->name('save');
+        });
+
         Route::prefix('/settings/integrations/payments')->name('payments.')->group(function (): void {
             Route::get('/', [PlatformPaymentSettingsController::class, 'index'])->name('index');
             // PAY-GATEWAY-CONSOLE-001 — keys, activation and the primary gateway, each its own audited act.
