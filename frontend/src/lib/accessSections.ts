@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
+import { useAuth } from '@/stores/auth'
 
 /**
  * ACCESS-SECTIONS-001 — the signed-in member's effective access, from the server's one resolver
@@ -32,6 +33,44 @@ export function sectionOfPath(to: string): string | null {
   return null
 }
 
+/**
+ * NAV-PAGE-PERMISSION-001 — the permission each page needs to OPEN, as the access center states it (the «page» key of
+ * `WorkspaceRolePresets`' areas, and the read each page's first request makes).
+ *
+ * The seven sections above are the ones an owner can switch off per member; every other page still answers 403 to a
+ * member whose role lacks its read permission. The rail offered those pages anyway, so an invited member saw every
+ * area and was refused inside it («ليس لديك صلاحية لتنفيذ هذا الإجراء»). A page is now offered only to whoever holds
+ * the permission it needs. Presentation only, as everywhere here: the server keeps refusing on every route.
+ */
+const PAGE_PERMISSION: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^\/clients(\/|$)/, 'clients.view'],
+  [/^\/requests(\/|$)/, 'requests.view'],
+  [/^\/messages(\/|$)/, 'messaging.view'],
+  [/^\/(campaigns|ad-groups|ads|short-links|recommendations)(\/|$)/, 'campaigns.view'],
+  [/^\/content(\/|$)/, 'content.view'],
+  [/^\/files(\/|$)/, 'drive.view'],
+  [/^\/analytics(\/|$)/, 'analytics.view'],
+  [/^\/(reports|delivery)(\/|$)/, 'reports.view'],
+  [/^\/forms(\/|$)/, 'leads.view'],
+  [/^\/(budgets|spend-limits)(\/|$)/, 'budget.view'],
+  [/^\/billing(\/|$)/, 'billing.view'],
+  [/^\/tasks(\/|$)/, 'tasks.view'],
+  [/^\/alerts(\/|$)/, 'alerts.view'],
+  [/^\/agents(\/|$)/, 'ai.view'],
+  [/^\/automation(\/|$)/, 'automations.view'],
+  [/^\/integrations(\/|$)/, 'integrations.view'],
+  [/^\/subscriptions(\/|$)/, 'subscriptions.view'],
+  [/^\/settings(\/|$)/, 'settings.manage'],
+]
+
+/** The permission an address needs to open, or null when any member who reaches the portal may open it. */
+export function permissionOfPath(to: string): string | null {
+  const path = to.replace(/^\/(app|agency)/, '')
+  for (const [re, key] of PAGE_PERMISSION) if (re.test(path)) return key
+
+  return null
+}
+
 export function useMyAccess() {
   return useQuery({
     queryKey: ['me', 'access'],
@@ -43,11 +82,17 @@ export function useMyAccess() {
   })
 }
 
-/** `(to) => boolean` — false only for an address in a section the server says this member lacks. */
+/**
+ * `(to) => boolean` — false for an address in a section the server says this member lacks, or a page whose permission
+ * they do not hold (NAV-PAGE-PERMISSION-001). Fails open while the session or the access answer is still loading.
+ */
 export function useSectionAllowed(): (to: string) => boolean {
   const q = useMyAccess()
   const sections = q.data?.sections
+  const user = useAuth((s) => s.user)
   return (to: string) => {
+    const perm = permissionOfPath(to)
+    if (perm !== null && user && !user.is_platform_admin && !user.permissions.includes(perm)) return false
     if (!sections) return true
     const section = sectionOfPath(to)
     return section === null || sections.includes(section)
