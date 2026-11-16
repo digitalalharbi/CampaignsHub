@@ -9,6 +9,7 @@ import { SlideOver } from './SlideOver'
 import { ModeBadges, PeriodChip, PlatformSplit, Ring, Sar } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
+import { BudgetLimits } from './BudgetLimits'
 import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
 import { Money } from './money'
 import { FxSpendNote } from '@/components/money/FxAmount'
@@ -91,6 +92,8 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
           )}
           <FreshnessChip freshness={data.freshness} testid="budget-freshness" />
           <FxSpendNote note={data.fx} ar={ar} testId="budget-fx-note" />
+          {/* ONE-BUDGET-UI-001 — the budget is the spend limit: its alert steps and finer limits live here, not on a second page. */}
+          {data.payment_mode !== 'credit' && <BudgetLimits projectId={data.project_id} usedRatio={data.used_ratio} ar={ar} />}
 
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">
