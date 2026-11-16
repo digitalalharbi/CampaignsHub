@@ -579,6 +579,9 @@ final class MailTestSendTest extends TestCase
         }
         sort($senders);
         $this->assertSame([
+            // EMAIL-CLIENT-COMPAT-001 — the Owner asked for the gallery in his own external mailbox to check Gmail rendering. Run by a
+            // person on the server, never scheduled (SendMailGalleryCommandTest proves it), dry run unless --send, ONE address, <= 40.
+            'Domains/Notifications/Console/SendMailGallery.php',
             'Domains/Notifications/Http/Controllers/TeamNotificationsController.php',
             'Domains/Notifications/Services/TransactionalMailer.php',
             'Domains/Platform/Http/Controllers/PlatformEmailController.php',
