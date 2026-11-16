@@ -96,12 +96,12 @@ final class SupportAccessTest extends TestCase
     public function test_a_visit_sees_that_workspace_only_and_says_so_to_the_spa(): void
     {
         $this->browser($this->admin());
-        $this->startVisit()->assertOk()->assertJsonPath('data.landing_path', '/agency');
+        $this->startVisit()->assertOk()->assertJsonPath('data.landing_path', '/agency/home');
 
         $memberships = $this->getJson('/api/v1/auth/memberships')->assertOk()->json('data');
         $this->assertCount(1, $memberships['memberships']);
         $this->assertSame((string) $this->acme->id, $memberships['current']['tenant']['id']);
-        $this->assertSame('/agency', $memberships['destination']);
+        $this->assertSame('/agency/home', $memberships['destination']);
 
         $this->getJson('/api/v1/auth/me')->assertOk()
             ->assertJsonPath('data.user.support.tenant_name', 'Acme')->assertJsonPath('data.user.support.mode', 'read');

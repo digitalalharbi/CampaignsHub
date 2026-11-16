@@ -457,6 +457,13 @@ test.describe('the dashboard’s creative section', () => {
     const projectId = await seededProject(request, STORE_PROJECT)
     await selectProject(page, projectId)
     await page.goto('/agency/dashboard')
+    /*
+     * AF1 (PR #1074) fitted the board to one screen and gave each block a tab on the SAME page; the creative section is
+     * the «المحتوى / Creatives» tab (`agency-tabs-creative`, addressable as `?tab=creative`). The reader opens it the way
+     * a person does; every assertion about the section below is unchanged.
+     */
+    await page.getByTestId('agency-tabs-creative').click()
+    await expect(page.getByTestId('agency-tabs-creative')).toHaveAttribute('aria-selected', 'true')
 
     await expect(page.getByTestId('creative-pulse')).toBeVisible({ timeout: 30000 })
 

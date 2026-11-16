@@ -43,7 +43,7 @@ test('owner invites with a category and «المالية» switched off → invi
   const join = g.getByRole('button', { name: /Join workspace|الانضمام/ })
   await expect(join).toBeEnabled()
   await join.click()
-  await expect(g).toHaveURL(/\/(dashboard|agency)/, { timeout: 15_000 })
+  await expect(g).toHaveURL(/\/(home|dashboard|agency)/, { timeout: 15_000 })
 
   const me = await g.evaluate(async () => (await (await fetch('/api/v1/auth/me', { headers: { Accept: 'application/json' } })).json()))
   const permissions: string[] = me.data?.permissions ?? me.data?.user?.permissions ?? []

@@ -205,7 +205,7 @@ final class PortalAccessTest extends TestCase
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->postJson('/api/v1/auth/memberships/switch', ['membership_id' => (string) $appMembership->getKey()])
             ->assertOk()
-            ->assertJsonPath('data.destination', '/app/dashboard')
+            ->assertJsonPath('data.destination', '/app/home')
             ->assertJsonPath('data.current.portal', 'app');
     }
 
@@ -281,11 +281,11 @@ final class PortalAccessTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=app')
-            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+            ->assertOk()->assertJsonPath('data.destination', '/app/home');
 
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=agency')
-            ->assertOk()->assertJsonPath('data.destination', '/agency');
+            ->assertOk()->assertJsonPath('data.destination', '/agency/home');
     }
 
     public function test_asking_for_an_unheld_portal_lands_on_your_own(): void
@@ -296,7 +296,7 @@ final class PortalAccessTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=agency')
-            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+            ->assertOk()->assertJsonPath('data.destination', '/app/home');
     }
 
     /** A junk portal value is ignored rather than erroring or opening anything. */
@@ -308,7 +308,7 @@ final class PortalAccessTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=../../etc/passwd')
-            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
+            ->assertOk()->assertJsonPath('data.destination', '/app/home');
     }
     // ---- request-scoped lifetime ----
 

@@ -322,7 +322,7 @@ final class WorkspaceSwitchIsolationTest extends TestCase
 
         $this->membershipsAs($user)
             ->assertJsonPath('data.pending_registration', null)
-            ->assertJsonPath('data.destination', '/app/dashboard')
+            ->assertJsonPath('data.destination', '/app/home')
             ->assertJsonPath('data.memberships.0.tenant.id', (string) $tenant->id);
     }
 
@@ -334,7 +334,7 @@ final class WorkspaceSwitchIsolationTest extends TestCase
         $this->grant($user, $tenant);
         $this->application('both@test.dev', AccountState::ApprovedAwaitingPayment);
 
-        $this->membershipsAs($user)->assertJsonPath('data.pending_registration', null)->assertJsonPath('data.destination', '/app/dashboard');
+        $this->membershipsAs($user)->assertJsonPath('data.pending_registration', null)->assertJsonPath('data.destination', '/app/home');
     }
 
     public function test_a_restricted_membership_reports_its_own_ceiling_and_routes_normally(): void

@@ -71,6 +71,7 @@ describe('spend limits — November additions', () => {
       freshness: { stale: true, items: [{ provider: 'meta', account: 'Main', reason: 'failed', error_category: 'token_invalidated', last_synced_at: null }] },
     })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
 
     expect(await screen.findByTestId('spend-limit-l1-run-out')).toHaveTextContent('2026-11-22')
     expect(screen.getByTestId('spend-limit-l1-converted')).toHaveTextContent('من SAR إلى USD')

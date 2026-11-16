@@ -78,7 +78,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
   {
     key: 'home',
     ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
-    leaves: [{ to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
+    leaves: [{ to: '/agency/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
   },
   {
     key: 'clients',
@@ -104,6 +104,8 @@ export const agencyNavGroups: readonly NavGroup[] = [
     key: 'results',
     ar: 'النتائج', en: 'Results', icon: TrendingUp,
     leaves: [
+      // AF1 — the full analytics board is no longer the landing; it stays one tap away, first among the results.
+      { to: '/agency/dashboard', ar: 'لوحة التحليلات', en: 'Analytics board', icon: LayoutDashboard },
       { to: '/agency/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp },
       { to: '/agency/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, cap: 'reports.view' },
       { to: '/agency/delivery', ar: 'الجدولة', en: 'Delivery', icon: Send, cap: 'reports.view' },

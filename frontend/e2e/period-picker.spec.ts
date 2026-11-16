@@ -20,7 +20,7 @@ test.describe('the period picker', () => {
   })
 
   test('defaults to the last 7 complete days, ends yesterday and carries itself in the address', async ({ page }) => {
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/dashboard?tab=figures')
     await expect(page.getByTestId('agency-period-picker-summary')).toContainText('آخر 7 أيام: 8 نوفمبر – 14 نوفمبر 2026', { timeout: 30_000 })
     await expect.poll(() => new URL(page.url()).searchParams.get('from')).toBe('2026-11-08')
     expect(new URL(page.url()).searchParams.get('to')).toBe('2026-11-14')
@@ -29,7 +29,7 @@ test.describe('the period picker', () => {
 
   test('«آخر 30 يوم» is 16 Oct → 14 Nov, compares with 16 Sep → 15 Oct, and survives navigation and reload', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/dashboard?tab=figures')
     await page.getByTestId('agency-period-picker-button').click()
     const panel = page.getByTestId('agency-period-picker-panel')
     await expect(panel).toBeVisible()

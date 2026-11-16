@@ -23,7 +23,7 @@ describe('the web app manifest', () => {
     expect(manifest.name).toBe('كمبينز هب')
     expect(manifest.short_name.length).toBeGreaterThan(0)
     expect(manifest.short_name.length).toBeLessThanOrEqual(12)
-    expect(manifest).toMatchObject({ lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/dashboard', scope: '/' })
+    expect(manifest).toMatchObject({ lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/home', scope: '/' })
     expect(manifest.start_url.startsWith(manifest.scope)).toBe(true)
     expect(manifest.theme_color).toMatch(hex)
     expect(manifest.background_color).toMatch(hex)

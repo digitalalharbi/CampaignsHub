@@ -1,13 +1,16 @@
 import { dataAge, syncFailureLabel } from './syncFailureLabel'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Link2, MoreHorizontal, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
+import { AlertTriangle, ChevronDown, CircleDollarSign, Link2, Megaphone, MoreHorizontal, Plug, Plus, RefreshCcw, Search, Unplug } from 'lucide-react'
 import { fetchConnectionHub, fetchConnectionHubWithRemoved, unlinkAccount, STATUS_DIMENSIONS, type HubConnection, type IntegrationStatuses, type StatusDimension } from './api'
 import { CONNECTION_COPY, SYNC_COPY, needsReauthorising } from './connectionCopy'
 import { StatusChips, statusTone } from './StatusChips'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
+import { KpiMini, KpiStrip } from '@/components/fit/KpiMini'
+import { Pager } from '@/components/fit/Pager'
+import { useFitRows } from '@/components/fit/useFitRows'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { ProviderMark } from '@/components/ProviderMark'
 import { CopyId } from '@/components/ui/CopyId'
@@ -92,7 +95,12 @@ export function sortSources(connections: HubConnection[], sort: SourceSort, ar: 
   return rows.sort((a, b) => (ar ? a.label_ar : a.label).localeCompare(ar ? b.label_ar : b.label, ar ? 'ar' : 'en'))
 }
 
-export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, onRemove, onReauthorise, onRelink }: {
+/** A collapsed source row is about this tall, with the rule between rows — read with `useFitRows` so the count and the CSS agree. */
+const SOURCE_ROW_HEIGHT = 58
+
+export function ConnectionHub({ projectId = null, fit: fitted = false, onConnect, onOpen, onAction, onRemove, onReauthorise, onRelink }: {
+  /** AGENCY-FIT-001 — a page of whole rows that fit the screen, with a pager, instead of a list that grows. */
+  fit?: boolean
   /** INTEG-PROJECT-SPACE-001 — the project whose space this is. Part of every query key, so nothing of another project is ever shown from cache. */
   projectId?: string | null
   onConnect: () => void
@@ -124,11 +132,19 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
 
   const spend = useProjectSpend(projectId)
   const listed = useMemo(() => hub.data?.connections ?? [], [hub.data])
+  const fit = useFitRows({ rowHeight: SOURCE_ROW_HEIGHT, reserve: 2, min: 2, max: 40, fallback: 1000 })
+  const [page, setPage] = useState(1)
+  useEffect(() => { setPage(1) }, [search, sort, showRemoved])
   const shown = useMemo(() => {
     const needle = search.trim().toLowerCase()
     const matched = needle === '' ? listed : listed.filter((c) => haystack(c).includes(needle))
     return sortSources(matched, sort, ar)
   }, [listed, search, sort, ar])
+
+  const perPage = fitted && fit.locked ? fit.rows : Number.MAX_SAFE_INTEGER
+  const pages = Math.max(1, Math.ceil(shown.length / perPage))
+  const current = Math.min(page, pages)
+  const pageRows = fitted && fit.locked ? shown.slice((current - 1) * perPage, current * perPage) : shown
 
   if (hub.isLoading) {
     return (
@@ -150,7 +166,7 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
   }
 
   return (
-    <section className="flex min-w-0 flex-col gap-4" data-testid="hub-section-sources" id="hub-sources" aria-labelledby="hub-sources-title">
+    <section className={fitted ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2' : 'flex min-w-0 flex-col gap-4'} data-testid="hub-section-sources" id="hub-sources" aria-labelledby="hub-sources-title">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 id="hub-sources-title" className="text-base font-bold text-text-primary">{ar ? 'المصادر' : 'Sources'}</h2>
 
@@ -203,8 +219,9 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
           A list of rows, not a `<table>`: the same row has to become a stacked block on a phone, and
           a table that reflows into blocks stops being a table for assistive technology halfway down.
         */
+        <div ref={fitted ? (fit.ref as never) : undefined} className={fitted ? 'min-h-0 flex-1' : undefined}>
         <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-          {shown.map((connection) => (
+          {pageRows.map((connection) => (
             <ConnectionRow
               key={connection.id}
               connection={connection}
@@ -224,7 +241,9 @@ export function ConnectionHub({ projectId = null, onConnect, onOpen, onAction, o
             </li>
           )}
         </ul>
+        </div>
       )}
+      {fitted && fit.locked && listed.length > 0 && <Pager testid="hub-pager" page={current} pages={pages} onPage={setPage} total={shown.length} ar={ar} hideWhenSingle />}
 
       {/* The way back to a removed source's record — off by default, so the list stays the live estate. */}
       <label className="flex w-fit items-center gap-2 text-xs text-text-secondary">
@@ -692,7 +711,7 @@ function UnlinkDialog({ projectId, account, ar, onClose }: {
  * INTEG-PROJECT-SPACE-001 — the project's four figures, on top of its space: linked accounts, campaigns,
  * the last 30 days of spend, and how many sources need an action. Figures only — a word and a number.
  */
-export function HubSummary({ connections, campaigns = null, projectId = null }: { connections: HubConnection[]; campaigns?: number | null; projectId?: string | null }) {
+export function HubSummary({ connections, campaigns = null, projectId = null, compact = false }: { connections: HubConnection[]; campaigns?: number | null; projectId?: string | null; /** AGENCY-FIT-001 — the compact card (`KpiMini`), for the fitted page. */ compact?: boolean }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const spend = useProjectSpend(projectId)
   const live = connections.filter((c) => !isGone(c))
@@ -715,6 +734,21 @@ export function HubSummary({ connections, campaigns = null, projectId = null }: 
     : reading.withheld ? (ar ? 'محجوب — بلا سعر صرف' : 'Withheld — no FX rate')
       : reading.excluded > 0 ? (ar ? `خارج الإجمالي (محجوب): ${countedAccounts(reading.excluded, 'ar')}` : `Left out (withheld): ${countedAccounts(reading.excluded, 'en')}`)
         : undefined
+
+  if (compact) {
+    const spendValue = <span dir="ltr" data-testid="hub-kpi-spend-figure" data-withheld={reading?.withheld ? 'true' : 'false'} data-excluded={reading?.excluded ?? 0} title={reading?.exact ?? undefined}>{reading === null ? '—' : reading.text}</span>
+
+    return (
+      <section className="min-w-0" data-testid="hub-summary" aria-label={ar ? 'ملخص' : 'Summary'}>
+        <KpiStrip>
+          <KpiMini testid="hub-kpi-accounts" icon={Plug} tone="brand" label={ar ? 'الحسابات' : 'Accounts'} value={accounts.toLocaleString('en-US')} />
+          <KpiMini testid="hub-kpi-campaigns" icon={Megaphone} tone="neutral" label={ar ? 'الحملات' : 'Campaigns'} value={campaigns === null ? '—' : campaigns.toLocaleString('en-US')} />
+          <KpiMini testid="hub-kpi-spend" icon={CircleDollarSign} tone="info" label={ar ? 'إنفاق 30 يومًا' : '30-day spend'} value={spendValue} hint={spendMark} />
+          <KpiMini testid="hub-kpi-attention" icon={AlertTriangle} tone={attention > 0 ? 'danger' : 'success'} label={ar ? 'تحتاج إجراء' : 'Need action'} value={attention.toLocaleString('en-US')} />
+        </KpiStrip>
+      </section>
+    )
+  }
 
   return (
     <section className="min-w-0" data-testid="hub-summary" aria-label={ar ? 'ملخص' : 'Summary'}>
