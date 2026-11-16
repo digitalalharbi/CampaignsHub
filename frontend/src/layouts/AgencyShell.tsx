@@ -190,7 +190,7 @@ export function AgencyShell() {
       railWidth={sidebarCollapsed ? 'w-16' : 'w-[264px]'}
       railCompact={sidebarCollapsed}
       drawerLabel={ar ? 'القائمة' : 'Menu'}
-      tabs={AGENCY_TABS}
+      tabs={AGENCY_TABS.filter((tab) => sectionAllowed(tab.to))}
       moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap) && sectionAllowed(leaf.to))}
       // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
       // below it is read through that choice, and the drawer is no longer the phone's way in.

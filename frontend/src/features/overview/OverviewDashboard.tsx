@@ -54,12 +54,29 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
    */
   // Set by «كل العملاء» so the sync below cannot re-select the client during the render before the address updates.
   const leaving = useRef(false)
+  // LOOP-185-001 — the client id this page put in the store on the address's word alone, and whether the store took it.
+  const forced = useRef<{ id: string; held: boolean } | null>(null)
   useEffect(() => {
     if (clientId === null) leaving.current = false
     if (portal !== 'agency' || clientId === null || leaving.current) return
     if (budgets.isError) {
       // Without the budget permission the list cannot vouch for the id; the server still narrows every figure.
-      if (storedClient !== clientId) setClient(clientId)
+      /*
+       * LOOP-185-001 — the scope switcher drops a client this reader cannot reach (a link from another workspace, a
+       * client list that failed). Setting it again after that ping-ponged the two stores until React gave up (minified
+       * error #185) and the home page died. Once the store HAS held this id and lost it, the address forgets it instead.
+       */
+      if (forced.current?.id === clientId && storedClient === clientId) forced.current.held = true
+      if (storedClient !== clientId) {
+        if (forced.current?.id === clientId && forced.current.held) {
+          forced.current = null
+          setParams({}, { replace: true })
+
+          return
+        }
+        forced.current = { id: clientId, held: false }
+        setClient(clientId)
+      }
 
       return
     }
