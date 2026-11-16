@@ -111,6 +111,7 @@ const PlatformInboxPage = lazyPage(() => import('@/features/admin/PlatformInboxP
 const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
 const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
 const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
+const AiKeyPage = lazyPage(() => import('@/features/admin/AiKeyPage'), 'AiKeyPage')
 const ProviderSettingsPage = lazyPage(() => import('@/features/admin/ProviderSettingsPage'), 'ProviderSettingsPage')
 const MetaCandidatePage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaCandidatePage')
 const MetaSaasPage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaSaasPage')
@@ -604,6 +605,8 @@ export const router = createBrowserRouter(withErrorBoundary([
              * same day: a tenant able to set it could move their own reported ROAS by editing a number.
              */
             { path: 'settings/currency-rates', element: <CurrencyRatesPage /> },
+            // AI-PLATFORM-KEY-001
+            { path: 'settings/ai', element: <AiKeyPage /> },
             // REVIEW-001 — per-provider platform-review readiness, eight distinct checklists.
             { path: 'integrations/review', element: <ProviderReviewPage /> },
             { path: 'cutover', element: <CutoverPage /> },
