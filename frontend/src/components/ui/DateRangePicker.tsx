@@ -317,7 +317,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
 
   const body = (
     <>
-      {recent.length > 0 && (
+      {phone && recent.length > 0 && (
         <div className="mb-2" data-testid={`${testId}-recent`}>
           <div className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'مستخدمة مؤخرًا' : 'Recently used'}</div>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -339,9 +339,28 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
       <div className={phone ? 'flex flex-col gap-3' : 'flex gap-3'}>
         {phone
           ? <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>
-          : <div className="w-32 shrink-0 space-y-px border-e border-border pe-2" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>}
+          : (
+            <div className="w-32 shrink-0 space-y-px border-e border-border pe-2">
+              {recent.length > 0 && (
+                <div className="mb-1 border-b border-border pb-1" data-testid={`${testId}-recent`}>
+                  <div className="px-2 pb-0.5 text-[10px] font-bold text-text-secondary">{ar ? 'مستخدمة مؤخرًا' : 'Recently used'}</div>
+                  {recent.slice(0, 3).map((s, i) => {
+                    const r = resolveSelection(s, ctx)
+
+                    return (
+                      <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`} title={formatSpan(r.period, ar)}
+                        className="block min-h-7 w-full truncate rounded-lg px-2 py-1 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover">
+                        {presetLabel(r.period.key, ar)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="space-y-px" data-testid={`${testId}-presets`} role="group" aria-label={ar ? 'فترات جاهزة' : 'Presets'}>{presetButtons}</div>
+            </div>
+          )}
+        <div className="min-w-0 flex-1">
         {calendars}
-      </div>
 
       <div className="mt-2 grid gap-2 border-t border-border pt-2 sm:grid-cols-2">
         <DateFields
@@ -375,6 +394,8 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
             </div>
           )}
         </div> : <div />}
+      </div>
+        </div>
       </div>
 
       <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-elevated px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:-mx-3 sm:-mb-3 sm:px-3" data-testid={`${testId}-footer`}>
