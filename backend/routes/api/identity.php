@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Domains\Access\Http\Controllers\MyAccessController;
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardController;
+use App\Domains\Agency\Http\Controllers\RoleDashboardPerformanceController;
+use App\Domains\Agency\Http\Controllers\RoleDashboardWatchController;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
@@ -201,6 +203,10 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
     Route::get('/access', MyAccessController::class)->name('access');
     // ROLE-DASHBOARD-001 — the landing page per role, server-filtered to the member's reach (agency and advertiser portals).
     Route::get('/dashboard', RoleDashboardController::class)->middleware('portal:app,agency')->name('dashboard');
+    // DASH-PERF-SPLIT-001 — the performance panels, read on their own so the page is not held for them.
+    Route::get('/dashboard/performance', RoleDashboardPerformanceController::class)->middleware('portal:app,agency')->name('dashboard.performance');
+    // WATCH-BOARD-001 — the follow-up board: best and weakest campaigns and content of every platform, per client.
+    Route::get('/dashboard/watch', RoleDashboardWatchController::class)->middleware('portal:app,agency')->name('dashboard.watch');
     Route::patch('/profile', [MeController::class, 'updateProfile'])->name('profile.update');
     Route::get('/sessions', [MeController::class, 'sessions'])->name('sessions');
 

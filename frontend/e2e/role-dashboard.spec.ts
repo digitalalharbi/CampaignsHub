@@ -6,7 +6,7 @@ import { AUTH, csrfHeaders, E2E_ORIGIN } from './helpers'
  * ROLE-DASHBOARD-001 — the landing page of each role, in a real browser, at seven widths.
  *
  * For every role: sign in → «الرئيسية» opens that role's own dashboard (the server decides which) →
- *   - no horizontal scroll at any width, and no vertical scroll at all from 1366×768 up;
+ *   - no horizontal scroll at any width (the page scrolls vertically: the follow-up board sits below — WATCH-BOARD-001);
  *   - no console error and no page error;
  *   - every figure card opens a real page of the product (no 404), and the page behind it is not the home again.
  *
@@ -94,7 +94,9 @@ for (const role of ROLES) {
           return { x: d.scrollWidth - d.clientWidth, y: d.scrollHeight - window.innerHeight, wide }
         })
         expect(m.x, `${role.key} @${w}: horizontal overflow by ${m.wide.join(',')}`).toBeLessThanOrEqual(0)
-        if (w >= 1366) expect(m.y, `${role.key} @${w}×${h}: the page scrolls vertically by ${m.y}px`).toBeLessThanOrEqual(1)
+        // WATCH-BOARD-001 — the follow-up board sits below the role's own part, so every home may scroll vertically (never sideways).
+        if (role.key !== 'finance') await expect(page.getByTestId('watch-board'), `${role.key} @${w}`).toBeVisible({ timeout: 30_000 })
+        else await expect(page.getByTestId('watch-board')).toHaveCount(0)
       }
       expect(errors, errors.join('\n')).toEqual([])
       await context.close()

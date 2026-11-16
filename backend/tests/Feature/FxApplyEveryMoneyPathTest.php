@@ -108,7 +108,7 @@ final class FxApplyEveryMoneyPathTest extends TestCase
             "projects/{$p}/metrics/compare?{$w}&".http_build_query(['campaign_ids' => [$c, $this->secondCampaign()]]),
             "projects/{$p}/agent-proposals", "projects/{$p}/approved-budget", "projects/{$p}/spend-limits",
             "projects/{$p}/automation/rules", "projects/{$p}/automation/summary", "projects/{$p}/automation/targets",
-            'agency/overview', 'agency/client-budgets', 'me/dashboard', 'portfolio/overview', 'funding',
+            'agency/overview', 'agency/client-budgets', 'me/dashboard', 'me/dashboard/performance', 'me/dashboard/watch', 'portfolio/overview', 'funding',
             'app/clients', "app/clients/{$this->client->id}", "app/clients/{$this->client->id}/analytics?{$w}",
         ];
         $out = [];

@@ -4,8 +4,9 @@ import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/l
 import { PLATFORM_ORDER } from '@/lib/platforms'
 import { ProviderMark } from '@/components/ProviderMark'
 import { FxSpendNote } from '@/components/money/FxAmount'
-import type { DashboardUnit, RoleDashboard } from './api'
+import { useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
+import { Skeleton } from '@/components/ui/States'
 import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel, WindowKpis } from './performance'
 
 const T = {
@@ -51,6 +52,10 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const t = f.ar ? T.ar : T.en
   const m = d.money
   const cur = m?.currency ?? null
+  // DASH-PERF-SPLIT-001 — the performance panels arrive on their own request; the page's own figures never wait for them.
+  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true)
+  const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
+  const perfLoading = d.performance_deferred === true && perf.isLoading
   const ratio = m && m.budget && m.spent !== null ? m.spent / m.budget : null
   const status = budgetStatus(ratio, d.thresholds.near)
   const bars = useBoxHeight(120)
@@ -81,12 +86,22 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         DASH-MANAGER-PERFORMANCE-001 — performance first (the leading campaigns, the platforms side by side, where the
         money went), then the money against its budgets. One block, so the page keeps its rows.
       */}
-      <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)]">
-      <WindowKpis d={d} portal={portal} />
+      <div className="grid min-h-0 grid-cols-1 gap-2">
+      {perfLoading ? <Skeleton className="h-20" /> : <WindowKpis d={pd} portal={portal} />}
       <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
-        <TopCampaignsPanel rows={d.campaign_rows ?? []} family={d.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
-        <PlatformComparePanel platforms={d.platforms ?? []} family={d.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
-        <SpendSharePanel platforms={d.platforms ?? []} currency={cur} portal={portal} className="min-h-[220px] lg:col-span-3" />
+        {perfLoading ? (
+          <>
+            <Skeleton className="h-[220px] md:col-span-2 lg:col-span-5" />
+            <Skeleton className="h-[220px] lg:col-span-4" />
+            <Skeleton className="h-[220px] lg:col-span-3" />
+          </>
+        ) : (
+          <>
+            <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
+            <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
+            <SpendSharePanel platforms={pd.platforms ?? []} currency={cur} portal={portal} className="min-h-[220px] lg:col-span-3" />
+          </>
+        )}
       </div>
 
       <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">

@@ -22,12 +22,14 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Services\ReportAds;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * ROLE-DASHBOARD-001 — one landing page per role, from facts the product already computes.
@@ -108,6 +110,8 @@ final class RoleDashboardBuilder
             'thresholds' => ['near' => self::NEAR],
             'scope' => ['clients' => count($scope['clients']), 'projects' => count($projectIds), 'restricted' => $scope['restricted']],
             'can_money' => $money,
+            // WATCH-BOARD-001 — the follow-up board is the campaigns' own figures: offered to whoever may open the campaigns.
+            'can_watch' => $user->hasPermission('campaigns.view'),
             'sections' => $sections,
         ];
 
@@ -131,14 +135,10 @@ final class RoleDashboardBuilder
             $out['integrations'] = in_array('integrations', $sections, true) ? $this->integrations($scope) : null;
             $out['campaigns'] = $this->campaignCounts($projectIds, null);
             /*
-             * DASH-MANAGER-PERFORMANCE-001 — the manager's page reads the performance of EVERY campaign he can reach the way
-             * the marketer's reads his own: the leading campaigns, the platform comparison and the spend share by platform.
-             * The same reader, so the same money rules (no spend, cost or ROAS without the money key).
+             * DASH-PERF-SPLIT-001 — the manager's performance (every reachable campaign) is read by its own request,
+             * `GET /me/dashboard/performance`: over hundreds of campaigns it took the whole page from ~5s to ~30s.
              */
-            $out += array_intersect_key(
-                $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
-                array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
-            );
+            $out['performance_deferred'] = true;
         }
 
         if ($view === 'pm') {
@@ -470,7 +470,163 @@ final class RoleDashboardBuilder
      * @param  list<string>  $projectIds
      * @return array<string, mixed>
      */
-    private function marketer(User $user, ?MetricsAggregator $agg, array $projectIds, Carbon $from, Carbon $to, Carbon $today, bool $money, bool $preferMine = true): array
+    /**
+     * DASH-MANAGER-PERFORMANCE-001 / DASH-PERF-SPLIT-001 — the performance of EVERY campaign the member can reach, the way
+     * the marketer's page reads his own: the leading campaigns, the platform comparison, the spend share by platform and
+     * the window's headline against the window before it. The same reader, so the same money rules (no spend, cost or
+     * ROAS without the money key). Held for two minutes per member, window and day: the page refetches every two.
+     *
+     * @return array<string, mixed>
+     */
+    public function performanceFor(User $user, int $days = self::DEFAULT_DAYS): array
+    {
+        $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
+        $today = PeriodResolver::today();
+        $to = $today->copy();
+        $from = $to->copy()->subDays($days - 1);
+        $tenant = (string) app(TenantContext::class)->tenantId();
+        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.$today->toDateString();
+
+        return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to): array {
+            $scope = $this->scope($user);
+            $projectIds = array_keys($scope['projects']);
+            $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
+            $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
+
+            return ['window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()]]
+                + array_intersect_key(
+                    $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
+                    array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
+                );
+        });
+    }
+
+    /**
+     * WATCH-BOARD-001 — «لوحة المتابعة»: one board to follow a client without opening each platform.
+     *
+     * Over the member's own reach (`scope()`), narrowed to one client (or one client-less project) when asked:
+     *  - the window's headline against the window before it, and the daily trend;
+     *  - the leading and the weakest campaigns of every platform together, ranked inside one objective;
+     *  - the platform comparison and spend share;
+     *  - the leading and the weakest content (the report's own ranker, `ReportAds`).
+     * A unit outside the member's reach is ignored (the board reads all of his reach). Held two minutes.
+     *
+     * @return array<string, mixed>
+     */
+    public function watchFor(User $user, int $days = self::DEFAULT_DAYS, ?string $unit = null): array
+    {
+        $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
+        $today = PeriodResolver::today();
+        $to = $today->copy();
+        $from = $to->copy()->subDays($days - 1);
+        $tenant = (string) app(TenantContext::class)->tenantId();
+        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($unit ?? '*').'|'.$today->toDateString();
+
+        return Cache::remember($key, 120, function () use ($user, $days, $unit, $today, $from, $to): array {
+            $scope = $this->scope($user);
+            $units = [];
+            foreach ($scope['projects'] as $pid => $p) {
+                $id = $p['client_id'] ?? 'p:'.$pid;
+                $units[$id] ??= [
+                    'id' => (string) $id,
+                    'kind' => $p['client_id'] !== null ? 'client' : 'project',
+                    'name' => $p['client_id'] !== null ? ($scope['clients'][$p['client_id']] ?? $p['name']) : $p['name'],
+                    'projects' => 0,
+                ];
+                $units[$id]['projects']++;
+            }
+            $units = array_values($units);
+            usort($units, static fn (array $a, array $b): int => strcmp((string) $a['name'], (string) $b['name']));
+
+            $chosen = null;
+            foreach ($units as $u) {
+                if ($u['id'] === $unit) {
+                    $chosen = $unit;
+                }
+            }
+            $projectIds = [];
+            foreach ($scope['projects'] as $pid => $p) {
+                if ($chosen === null || ($p['client_id'] ?? 'p:'.$pid) === $chosen) {
+                    $projectIds[] = (string) $pid;
+                }
+            }
+
+            $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
+            $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
+            $perf = $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false, 5);
+
+            return [
+                'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()],
+                'units' => $units,
+                'unit' => $chosen,
+                'can_money' => $money,
+                'currency' => $agg === null ? null : $agg->currencyBasis($from, $to)['currency'],
+                'trend' => $agg === null ? [] : $this->trend($agg, $from, $to, $money),
+                'content' => $projectIds === [] ? null : $this->content($projectIds, $from, $to, $money),
+            ] + array_intersect_key($perf, array_flip(['campaigns', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance', 'campaign_rows']));
+        });
+    }
+
+    /**
+     * The window day by day: spend (with the money key), impressions, clicks and conversions as the platforms reported them.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function trend(MetricsAggregator $agg, Carbon $from, Carbon $to, bool $money): array
+    {
+        return array_map(static fn (array $r): array => [
+            'date' => (string) $r['date'],
+            'spend' => $money ? (float) ($r['spend'] ?? 0) : null,
+            'impressions' => (int) ($r['impressions'] ?? 0),
+            'clicks' => (int) ($r['clicks'] ?? 0),
+            'conversions' => isset($r['conversions']) ? (float) $r['conversions'] : null,
+        ], $agg->timeseries($from, $to));
+    }
+
+    /**
+     * The leading and the weakest content of the scope, by the report's own ranker. Never fatal: a board without its
+     * content row is still a board, so a failure here reads as «nothing to show» (`null`), and is logged.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string, mixed>|null
+     */
+    private function content(array $projectIds, Carbon $from, Carbon $to, bool $money): ?array
+    {
+        try {
+            $built = app(ReportAds::class)->for('custom', $from, $to, ['project_ids' => $projectIds], 'executive_summary');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+        $lean = static fn (array $r): array => [
+            'id' => isset($r['id']) ? (string) $r['id'] : null,
+            'name' => $r['name'] ?? null,
+            'provider' => isset($r['provider']) ? AdPlatforms::canonical((string) $r['provider']) : null,
+            'preview' => $r['preview'] ?? null,
+            'spend' => $money ? ($r['spend'] ?? null) : null,
+            'impressions' => $r['impressions'] ?? null,
+            'clicks' => $r['clicks'] ?? null,
+            'conversions' => $r['conversions'] ?? null,
+            'ctr' => $r['ctr'] ?? null,
+            'cpa' => $money ? ($r['cpa'] ?? null) : null,
+            'roas' => $money ? ($r['roas'] ?? null) : null,
+        ];
+        $best = array_map($lean, array_slice((array) ($built['ads'] ?? []), 0, 6));
+        $bestIds = array_filter(array_column($best, 'id'));
+
+        return [
+            'best' => $best,
+            'worst' => array_values(array_filter(
+                array_map($lean, array_slice((array) ($built['worst'] ?? []), 0, 4)),
+                static fn (array $r): bool => $r['id'] === null || ! in_array($r['id'], $bestIds, true),
+            )),
+            'basis' => isset($built['basis']) && is_array($built['basis']) ? array_intersect_key($built['basis'], array_flip(['metric', 'label_ar', 'label_en', 'family'])) : null,
+            'in_scope' => (int) ($built['creatives_in_scope'] ?? 0),
+        ];
+    }
+
+    private function marketer(User $user, ?MetricsAggregator $agg, array $projectIds, Carbon $from, Carbon $to, Carbon $today, bool $money, bool $preferMine = true, int $limit = 3): array
     {
         $mineQuery = UnifiedCampaign::query()->whereIn('project_id', $projectIds)
             ->where(fn ($q) => $q->where('owner_id', $user->getKey())->orWhere('created_by', $user->getKey()));
@@ -537,12 +693,15 @@ final class RoleDashboardBuilder
                 : (float) $a['cost_per_result'] <=> (float) $b['cost_per_result']);
             $shape = static fn (array $r): array => [
                 'id' => (string) $r['campaign_id'], 'project_id' => $projectOf[(string) $r['campaign_id']] ?? null, 'name' => (string) $r['campaign_name'], 'family' => $top,
+                'platform' => AdPlatforms::canonical((string) ($r['provider'] ?? '')), 'spend' => (int) ($r['spend_withheld_rows'] ?? 0) === 0 ? (float) $r['spend'] : null,
                 'cost_per_result' => $r['cost_per_result'], 'cost_label' => $r['cost_per_result_label'] ?? null,
                 'result' => $r['result'], 'result_label' => $r['result_label'] ?? null, 'roas' => $sales ? ($r['roas'] ?? null) : null,
             ];
             if (count($ranked) >= 2) {
-                $out['best'] = array_map($shape, array_slice($ranked, 0, 3));
-                $out['worst'] = array_map($shape, array_slice(array_reverse($ranked), 0, 3));
+                // WATCH-BOARD-001 — never the same campaign on both lists: each takes at most half of what was ranked.
+                $take = min($limit, intdiv(count($ranked) + 1, 2));
+                $out['best'] = array_map($shape, array_slice($ranked, 0, $take));
+                $out['worst'] = array_map($shape, array_slice(array_reverse($ranked), 0, min($take, count($ranked) - $take)));
             }
             $out['rank_family'] = $top;
             $out['platforms'] = $this->platformRows($scoped, $families[$top]['rows'], $top, $from, $to);

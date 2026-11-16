@@ -11,6 +11,7 @@ import { ManagerView } from './ManagerView'
 import { MarketerView } from './MarketerView'
 import { PmView } from './PmView'
 import { useFitViewport } from './parts'
+import { WatchBoard } from './WatchBoard'
 
 /**
  * ROLE-DASHBOARD-001 — «الرئيسية»: one landing page per role, charts and numbers only.
@@ -23,8 +24,9 @@ import { useFitViewport } from './parts'
  * Which one shows is the SERVER's decision (`GET /me/dashboard`): the role, the sections and the clients the member may
  * reach. Only the workspace manager is offered the other three, to look at what each role will see.
  *
- * Layout, top to bottom: figures that open their pages → charts and comparisons → a strip of statuses. On a desktop the
- * whole page is one screen with no scroll; on a phone it is one column and scrolls vertically only.
+ * Layout, top to bottom: figures that open their pages → charts and comparisons → a strip of statuses → «لوحة المتابعة»
+ * (WATCH-BOARD-001: the best and weakest campaigns and content of every platform, per client) for whoever may open the
+ * campaigns. The role's own part fills at least one screen; the board follows below it and the page scrolls vertically.
  */
 const TITLES: Record<DashboardView, { ar: string; en: string }> = {
   manager: { ar: 'مدير', en: 'Manager' },
@@ -58,7 +60,7 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const d = q.data
 
   return (
-    <div ref={ref} data-testid="role-dashboard" data-view={d?.view} className="grid min-w-0 grid-cols-1 content-start gap-2 lg:grid-rows-[auto_auto_minmax(0,1fr)_auto_auto]">
+    <div ref={ref} data-testid="role-dashboard" data-view={d?.view} className="grid min-w-0 grid-cols-1 content-start gap-2">
       <PageIntro
         testid="role-dashboard-intro"
         title={ar ? HOME.ar : HOME.en}
@@ -88,6 +90,7 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
       {q.isError && <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل الرئيسية' : 'Could not load Home'} />}
       {d && <Body d={d} portal={portal} />}
+      {d?.can_watch === true && <WatchBoard portal={portal} days={days} />}
       {d?.can_money && <FinancialDisclaimer />}
     </div>
   )

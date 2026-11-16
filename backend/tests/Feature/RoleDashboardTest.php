@@ -106,11 +106,11 @@ final class RoleDashboardTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function dash(User $user, string $query = ''): array
+    private function dash(User $user, string $query = '', string $part = ''): array
     {
         Sanctum::actingAs($user);
 
-        return (array) $this->getJson('/api/v1/me/dashboard'.$query)->assertOk()->json('data');
+        return (array) $this->getJson('/api/v1/me/dashboard'.$part.$query)->assertOk()->json('data');
     }
 
     public function test_the_manager_sees_every_client_with_budget_reading_and_a_run_out_date_from_the_last_three_days(): void
@@ -226,9 +226,14 @@ final class RoleDashboardTest extends TestCase
         $a = $this->campaign($this->alpha, 1000, 400, 100);
         $b = $this->campaign($this->beta, 5000, 200, 50);
 
-        $d = $this->dash($this->member(WorkspaceRolePresets::OWNER, null));
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+        $page = $this->dash($owner);
+        $d = $this->dash($owner, '', '/performance');
 
-        $this->assertSame('manager', $d['view']);
+        $this->assertSame('manager', $page['view']);
+        // DASH-PERF-SPLIT-001 — the page is not held for the performance: it is read on its own.
+        $this->assertTrue($page['performance_deferred']);
+        $this->assertArrayNotHasKey('campaign_rows', $page);
         $this->assertArrayNotHasKey('mine', $d);
         $ids = array_column($d['campaign_rows'], 'id');
         sort($ids);
@@ -237,8 +242,8 @@ final class RoleDashboardTest extends TestCase
         $this->assertSame($expected, $ids);
         $this->assertArrayHasKey('platforms', $d);
         $this->assertArrayHasKey('best', $d);
-        // The counts stay the manager's own (every campaign), not the marketer reader's.
-        $this->assertSame(2, $d['campaigns']['total']);
+        // The counts stay the manager's own (every campaign), on the page.
+        $this->assertSame(2, $page['campaigns']['total']);
     }
 
     /** DASH-PERIOD-001 — a chosen window, its spend against the window just before it, over every campaign. */
@@ -249,7 +254,8 @@ final class RoleDashboardTest extends TestCase
         $this->campaign($this->beta, 5000, 200, 50);
         $owner = $this->member(WorkspaceRolePresets::OWNER, null);
 
-        $d = $this->dash($owner, '?days=7');
+        $this->assertSame(7, $this->dash($owner, '?days=7')['window']['days']);
+        $d = $this->dash($owner, '?days=7', '/performance');
 
         $this->assertSame(7, $d['window']['days']);
         $this->assertEqualsWithDelta(450, $d['performance']['spend'], 0.01);
@@ -258,6 +264,40 @@ final class RoleDashboardTest extends TestCase
 
         // A window the page does not offer falls back to thirty days.
         $this->assertSame(30, $this->dash($owner, '?days=11')['window']['days']);
+    }
+
+    /** WATCH-BOARD-001 — the follow-up board reads every reachable client, or one, and never one out of reach. */
+    public function test_the_watch_board_reads_one_client_and_never_one_out_of_reach(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $all = $this->dash($owner, '', '/watch');
+        $this->assertNull($all['unit']);
+        $this->assertSame(['Alpha', 'Beta'], array_column($all['units'], 'name'));
+        $this->assertCount(2, $all['campaign_rows']);
+        $this->assertNotEmpty($all['trend']);
+        $this->assertArrayHasKey('content', $all);
+
+        $one = $this->dash($owner, '?unit='.$this->alpha->id, '/watch');
+        $this->assertSame((string) $this->alpha->id, $one['unit']);
+        $this->assertSame([(string) $a->id], array_column($one['campaign_rows'], 'id'));
+        // Alpha alone: 400 twelve days ago and 3 × 100 since.
+        $this->assertEqualsWithDelta(700, $one['performance']['spend'] ?? 0, 0.01);
+
+        // A PM confined to Alpha asking for Beta reads his own reach, not Beta.
+        $pm = $this->member(WorkspaceRolePresets::PROJECT_MANAGER, WorkspaceRolePresets::all()[WorkspaceRolePresets::PROJECT_MANAGER]['permissions'], [(string) $this->alpha->id]);
+        $p = $this->dash($pm, '?unit='.$this->beta->id, '/watch');
+        $this->assertNull($p['unit']);
+        $this->assertSame(['Alpha'], array_column($p['units'], 'name'));
+        $this->assertNotContains((string) $b->id, array_column($p['campaign_rows'], 'id'));
+        $this->assertStringNotContainsString('Beta', json_encode($p));
+
+        // Finance opens no campaigns, so the board is not offered and not served.
+        $finance = $this->member(WorkspaceRolePresets::FINANCE, WorkspaceRolePresets::all()[WorkspaceRolePresets::FINANCE]['permissions']);
+        $this->assertFalse($this->dash($finance)['can_watch']);
+        $this->getJson('/api/v1/me/dashboard/watch')->assertForbidden();
     }
 
     public function test_another_tenants_figures_never_appear(): void
