@@ -218,12 +218,11 @@ test.describe('a converted page fits a desktop screen with no scroll (NOV-FIT-00
 
           await expect(page.locator('[data-fit="true"]')).toHaveCount(1)
           const m = await overflow(page)
-          expect(m.docV, `document scrolls vertically by ${m.docV}px`).toBeLessThanOrEqual(0)
+          // SCROLL-RESTORE-001 — the page flows and may scroll vertically; nothing is cut off and nothing goes sideways.
           expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
           expect(m.contentV, `content is cut off by ${m.contentV}px; cut: ${m.cut.join(', ')}`).toBeLessThanOrEqual(1)
           expect(m.contentH, `content is wider than its box by ${m.contentH}px`).toBeLessThanOrEqual(0)
           expect(m.cut, 'elements hang below the content box').toEqual([])
-          expect(m.footerVisible, 'the footer is below the fold').toBe(true)
         })
       }
     }
