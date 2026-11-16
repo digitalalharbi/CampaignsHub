@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchAgencyOverview } from './api'
 import { listAlertEvents, type AlertEvent } from '@/features/alerts/api'
@@ -56,6 +56,12 @@ function useOverview() {
     queryKey: ['agency', 'overview', range.from, range.to, compareRange?.from ?? null, compareRange?.to ?? null],
     queryFn: () => fetchAgencyOverview(range, compareRange),
     retry: false,
+    /*
+     * FILTERS-LIVE-001 — a new period keeps the figures on screen until the new ones land (no skeleton flash, and the
+     * period picker — which lives inside this block — is not torn down while it is open). The key holds no client, so
+     * this can never show one client's figures under another's name.
+     */
+    placeholderData: keepPreviousData,
   })
 
   return { ...query, period }

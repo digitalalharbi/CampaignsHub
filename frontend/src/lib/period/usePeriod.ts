@@ -37,7 +37,8 @@ export interface PeriodState {
   selection: Selection
   recent: Selection[]
   ctx: ResolveContext
-  setSelection: (next: Selection) => void
+  /** `remember: false` — a live preview while the picker is open: the page follows it, the «recently used» list does not. */
+  setSelection: (next: Selection, opts?: { remember?: boolean }) => void
   setPreset: (key: PresetKey) => void
   /** Old call sites that pass a day count: maps 7/14/28/30/90 onto the matching preset (which ends yesterday). */
   setDays: (days: number) => void
@@ -90,8 +91,9 @@ export function usePeriod(options: { earliest?: string | null; writeUrl?: boolea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromUrl?.key, fromUrl?.from, fromUrl?.to, fromUrl?.compare, fromUrl?.cfrom, fromUrl?.cto, uid])
 
-  const setSelection = useCallback((next: Selection) => {
-    const nextRecent = pushRecent(sessionRecent.get(uid) ?? stored?.recent ?? [], next)
+  const setSelection = useCallback((next: Selection, opts?: { remember?: boolean }) => {
+    const prevRecent = sessionRecent.get(uid) ?? stored?.recent ?? []
+    const nextRecent = opts?.remember === false ? prevRecent : pushRecent(prevRecent, next)
     session.set(uid, next)
     sessionRecent.set(uid, nextRecent)
     saveStored(userId, { selection: next, recent: nextRecent })
