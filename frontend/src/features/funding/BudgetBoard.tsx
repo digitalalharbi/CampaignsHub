@@ -180,7 +180,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
                 <span className={`block h-full rounded-full ${TONE_BAR[red ? 'danger' : st.tone]}`} style={{ width: `${Math.round(used * 100)}%` }} />
               </span>
-              <bdi dir="ltr" className="tnum text-xs font-extrabold text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
+              <bdi dir="ltr" className="tnum text-xs font-extrabold leading-none text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
               {credit && row.ceiling !== null && <span className="text-xs text-text-muted">{ar ? L.ceiling.ar : L.ceiling.en} <Money n={row.ceiling} currency="SAR" /></span>}
             </span>
           )}

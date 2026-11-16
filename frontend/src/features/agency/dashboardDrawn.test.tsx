@@ -41,7 +41,7 @@ describe('the agency dashboard draws its own composition', () => {
 
   it('divides the client book into its states against the total, not beside it', async () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     await screen.findByTestId('agency-intro')
     // 18 of 24 active, 3 onboarding, 2 needing attention — and 1 client in no named state at all.
@@ -51,7 +51,7 @@ describe('the agency dashboard draws its own composition', () => {
 
   it('says what the un-named remainder of the book is rather than leaving the bar short', async () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     await screen.findByTestId('agency-intro')
     expect(screen.getByTestId('client-mix-legend')).toHaveTextContent(/Other/i)
@@ -59,7 +59,7 @@ describe('the agency dashboard draws its own composition', () => {
 
   it('draws the campaign objectives through the shared chart layer', async () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     expect(await screen.findByTestId('agency-objective-chart')).toBeInTheDocument()
   })
@@ -68,7 +68,7 @@ describe('the agency dashboard draws its own composition', () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(
       dashboard({ campaigns: { total: 5, active: 5, paused: 0, by_objective: { '': 5 } } } as Partial<AgencyDashboard>),
     )
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     expect(await screen.findByTestId('agency-objective-chart')).toHaveTextContent(/Unspecified/i)
   })
@@ -79,7 +79,7 @@ describe('the agency dashboard draws its own composition', () => {
       row({ client_id: 'c2', client_name: 'Careful', pace: 0.6 }),
     ])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     expect(await screen.findByTestId('client-pace-row-c1')).toBeInTheDocument()
     expect(screen.getByTestId('client-pace-row-c2')).toBeInTheDocument()
@@ -92,7 +92,7 @@ describe('the agency dashboard draws its own composition', () => {
       row({ client_id: 'c2', client_name: 'US client', currency: 'USD', pace: 0.8 }),
     ])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     expect(await screen.findByTestId('client-pace-row-c1')).toBeInTheDocument()
     expect(screen.getByTestId('client-pace-row-c2')).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('the agency dashboard draws its own composition', () => {
       row({ client_id: 'c2', client_name: 'Mixed', currency: null, currencies: 2, pace: 1.9 }),
     ])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     await screen.findByTestId('client-pace-row-c1')
     expect(screen.queryByTestId('client-pace-row-c2')).toBeNull()
@@ -122,7 +122,7 @@ describe('the agency dashboard draws its own composition', () => {
       row({ client_id: 'c2', client_name: 'Unmeasured', pace: null, spent: null, unmeasured: 2 }),
     ])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     await screen.findByTestId('client-pace-row-c1')
     expect(screen.queryByTestId('client-pace-row-c2')).toBeNull()
@@ -138,7 +138,7 @@ describe('the agency dashboard draws its own composition', () => {
       row({ client_id: 'c2', client_name: 'No budget', pace: null, budget: null, projected: null }),
     ])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     await screen.findByTestId('client-pace-row-c1')
     expect(screen.queryByTestId('client-pace-row-c2')).toBeNull()
@@ -148,7 +148,7 @@ describe('the agency dashboard draws its own composition', () => {
   it('declines the pace chart entirely when no client has a pace, without claiming anything is on budget', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([row({ pace: null, budget: null })])
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     await screen.findByTestId('agency-intro')
     expect(screen.getByTestId('client-pace-empty')).toBeInTheDocument()
@@ -158,7 +158,7 @@ describe('the agency dashboard draws its own composition', () => {
   it('keeps the counts when the budget rung fails, because they are a different query', async () => {
     vi.mocked(fetchClientBudgets).mockRejectedValue(new Error('403'))
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(dashboard())
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     expect(await screen.findByTestId('client-mix-bar')).toBeInTheDocument()
   })

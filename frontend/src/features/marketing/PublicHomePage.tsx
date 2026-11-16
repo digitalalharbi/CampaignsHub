@@ -152,7 +152,7 @@ export function PublicHomePage() {
         ]}
         primaryAction={
           authed
-            ? { to: '/app/dashboard', label: c.nav.dashboard }
+            ? { to: '/app/home', label: c.nav.dashboard }
             : cta('hero', 'primary_cta', { label: c.nav.start, to: '/register' })
         }
       />

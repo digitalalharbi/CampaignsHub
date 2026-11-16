@@ -112,9 +112,17 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
 
   const Chevron = ar ? ChevronLeft : ChevronRight
 
+  const summaryLink = (portal === 'agency' || !nav || nav.includes('projects')) ? (
+    <Link to={`/${portal}/portfolio`} data-testid="overview-summary-link" className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary">
+      <Layers size={14} aria-hidden /> {t.summary}
+    </Link>
+  ) : null
+  // AGENCY-FIT-001 — the all-clients level is a fitted page: the summary link rides in its title row, and the wrapper hands it the screen.
+  const fitted = portal === 'agency' && clientId === null
+
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-2" data-testid="overview-dashboard">
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+    <div className={fitted ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'grid min-w-0 grid-cols-1 gap-2'} data-testid="overview-dashboard">
+      {!fitted && <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
         {portal === 'agency' && clientId !== null ? (
           <nav aria-label={t.trail} data-testid="overview-trail" className="flex min-w-0 items-center gap-1 text-sm font-semibold">
             <button type="button" onClick={back} className="text-brand-600 hover:text-brand-700">{t.all}</button>
@@ -124,14 +132,10 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
         ) : (
           <span />
         )}
-        {(portal === 'agency' || !nav || nav.includes('projects')) && (
-        <Link to={`/${portal}/portfolio`} data-testid="overview-summary-link" className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary">
-          <Layers size={14} aria-hidden /> {t.summary}
-        </Link>
-        )}
-      </div>
+        {summaryLink}
+      </div>}
 
-      {portal === 'agency' && clientId === null ? <AgencyDashboardPage onOpenClient={open} /> : settled ? <AnalyticsPage surface="dashboard" /> : <Skeleton className="h-64" />}
+      {portal === 'agency' && clientId === null ? <AgencyDashboardPage onOpenClient={open} extraActions={summaryLink} /> : settled ? <AnalyticsPage surface="dashboard" /> : <Skeleton className="h-64" />}
     </div>
   )
 }

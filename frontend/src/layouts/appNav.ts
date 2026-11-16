@@ -45,7 +45,7 @@ export const appNavGroups: readonly NavGroup[] = [
   {
     key: 'home',
     ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
-    leaves: [{ to: '/app/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard, ent: 'dashboard' }],
+    leaves: [{ to: '/app/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
   },
   {
     key: 'campaigns',
@@ -63,6 +63,8 @@ export const appNavGroups: readonly NavGroup[] = [
     key: 'results',
     ar: 'النتائج', en: 'Results', icon: TrendingUp,
     leaves: [
+      // AF1 — the full analytics board is no longer the landing; it stays one tap away, first among the results.
+      { to: '/app/dashboard', ar: 'لوحة التحليلات', en: 'Analytics board', icon: LayoutDashboard, ent: 'dashboard' },
       { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: TrendingUp, ent: 'analytics' },
       { to: '/app/reports', ar: 'التقارير', en: 'Reports', icon: BarChart3, ent: 'reports' },
       { to: '/app/forms', ar: 'النماذج', en: 'Forms', icon: ClipboardList, ent: 'campaigns' },

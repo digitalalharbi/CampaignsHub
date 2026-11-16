@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { FitPage } from '@/components/fit/FitPage'
+import { Pager } from '@/components/fit/Pager'
+import { useFitRows } from '@/components/fit/useFitRows'
 import { EmptyState, ErrorState, NoPermission } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
@@ -18,6 +20,9 @@ import { downloadBudgets, useBudget, useBudgets, useUndoBudget, type BudgetDetai
 import { L } from './labels'
 
 type Lang = { ar: string; en: string }
+/** One board row's height with its gap, in px — read with `useFitRows` so the count and the CSS cannot disagree. */
+const ROW_HEIGHT = 53
+
 type Toast = { projectId: string; entryId: string; message: Lang; undoable: boolean }
 
 /**
@@ -71,14 +76,28 @@ export function BudgetsPage() {
     [open, openDetail.data],
   )
 
+  /*
+   * AGENCY-FIT-001 — the board shows the projects that FIT the screen, a page at a time, instead of scrolling inside itself.
+   * A row is about 56px (two lines and its gap); the column header above it and the pager below it are outside the
+   * measured box. A phone (or a window shorter than the lock) is not locked: every row is drawn and the page flows.
+   */
+  const fit = useFitRows({ rowHeight: ROW_HEIGHT, reserve: 0, min: 2, max: 40, fallback: rows.length || 1 })
+  const perPage = fit.locked ? Math.max(1, fit.rows) : Math.max(1, rows.length)
+  const [page, setPage] = useState(1)
+  const pages = Math.max(1, Math.ceil(rows.length / perPage))
+  const current = Math.min(page, pages)
+  useEffect(() => { setPage(1) }, [showDeleted])
+  const shown = rows.slice((current - 1) * perPage, current * perPage)
+
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] min-w-0 flex-col gap-2" data-testid="budgets-page">
-      <div className="sticky top-0 z-10 rounded-[var(--radius-card)] border border-border bg-surface px-3 py-2" data-slideover-avoid>
-        <PageIntro
-          title={tx(showDeleted ? L.deleted : L.title)}
-          testid="budgets-intro"
-          meta={<TotalsStrip totals={data?.totals ?? null} ar={ar} />}
-          actions={
+    <FitPage
+      testid="budgets-page"
+      introTestid="budgets-intro"
+      slideOverAvoid
+      title={tx(showDeleted ? L.deleted : L.title)}
+      // One line: the four totals and the rate in use — the rest of the screen is for the board (eight projects fit 1280×720).
+      kpis={<div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-border bg-surface px-3 py-1.5"><TotalsStrip totals={data?.totals ?? null} ar={ar} /><FxRateBar /></div>}
+      actions={
             <>
               <ExportMenu onPick={exportFile} ar={ar} />
               {exportFailed && <span role="alert" className="text-xs font-semibold text-danger">{tx(L.exportFailed)}</span>}
@@ -92,31 +111,30 @@ export function BudgetsPage() {
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="budgets-add"><Plus className="h-4 w-4" aria-hidden /> {tx(L.add)}</Button>
               )}
             </>
-          }
-        />
-      </div>
-      <FxRateBar />
+      }
+    >
 
       {error ? (
         toApiError(error).status === 403 ? <NoPermission /> : <ErrorState error={error} onRetry={() => void refetch()} ar={ar} title={tx(L.title)} />
       ) : !isLoading && rows.length === 0 ? (
         <EmptyState title={tx(L.empty)} />
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
           <BoardHeader ar={ar} />
-          {/* 22rem = shell header, title + KPI strip, the FX rate bar (F/G/N4: source + «سعر قديم» chip), column header, note and footer;
-              at 20rem the merged page ran 29px past 1280×720 and the document scrolled (budgets-ledger.spec). */}
-          <ul className="flex min-w-0 flex-col gap-1 overflow-y-auto lg:max-h-[calc(100dvh-22rem)]" data-testid="budgets-list">
-            {rows.map((r) => (
-              <li key={r.project_id} className="min-w-0">
-                <BudgetBoardRow row={r} active={r.project_id === open} onOpen={() => choose(r.project_id)} ar={ar} />
-              </li>
-            ))}
-          </ul>
-        </>
+          <div ref={fit.ref as never} className="min-h-0 flex-1">
+            <ul className="flex min-w-0 flex-col gap-0.5" data-testid="budgets-list">
+              {shown.map((r) => (
+                <li key={r.project_id} className="min-w-0">
+                  <BudgetBoardRow row={r} active={r.project_id === open} onOpen={() => choose(r.project_id)} ar={ar} />
+                </li>
+              ))}
+            </ul>
+          </div>
+          {fit.locked && pages > 1 && <Pager testid="budgets-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} compact />}
+        </div>
       )}
 
-      <FinancialDisclaimer className="px-1" />
+      <FinancialDisclaimer className="shrink-0 px-1" />
 
       <BudgetDrawer
         projectId={open}
@@ -164,7 +182,7 @@ export function BudgetsPage() {
           onDismiss={() => setToast(null)}
         />
       )}
-    </div>
+    </FitPage>
   )
 }
 

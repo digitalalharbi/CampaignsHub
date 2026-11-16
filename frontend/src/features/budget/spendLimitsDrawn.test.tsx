@@ -71,7 +71,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
       reading({ id: 'hot', pace: 1.4, state: 'over' }),
       reading({ id: 'cool', pace: 0.6 }),
     ])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     expect(await screen.findByTestId('limit-pace-row-hot')).toBeInTheDocument()
     expect(screen.getByTestId('limit-pace-row-cool')).toBeInTheDocument()
@@ -80,7 +80,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
 
   it('puts the limit running hottest at the top, because that is the one to open', async () => {
     route([reading({ id: 'cool', pace: 0.6 }), reading({ id: 'hot', pace: 1.4, state: 'over' })])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     await screen.findByTestId('limit-pace-row-hot')
     const order = screen.getAllByTestId(/^limit-pace-row-/).map((n) => n.getAttribute('data-testid'))
@@ -92,7 +92,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
       reading({ id: 'sar', currency: 'SAR', pace: 1.2 }),
       reading({ id: 'usd', currency: 'USD', consumed_currency: 'USD', pace: 0.8 }),
     ])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     expect(await screen.findByTestId('limit-pace-row-sar')).toBeInTheDocument()
     expect(screen.getByTestId('limit-pace-row-usd')).toBeInTheDocument()
@@ -103,7 +103,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
       reading({ id: 'ok1' }),
       reading({ id: 'blind', pace: null, consumed: null, state: 'unknown', basis: 'currency_mismatch' }),
     ])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     await screen.findByTestId('limit-pace-row-ok1')
     expect(screen.queryByTestId('limit-pace-row-blind')).toBeNull()
@@ -112,7 +112,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
 
   it('declines the ranking entirely when no limit has a comparable pace', async () => {
     route([reading({ id: 'blind', pace: null, consumed: null, state: 'unknown' })])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     expect(await screen.findByTestId('limit-pace-empty')).toBeInTheDocument()
     expect(screen.queryByTestId('limit-pace-reference')).toBeNull()
@@ -123,7 +123,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
       reading({ id: 'a', state: 'ok' }), reading({ id: 'b', state: 'ok' }),
       reading({ id: 'c', state: 'approaching' }), reading({ id: 'd', state: 'over' }),
     ])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     expect(await screen.findByTestId('limit-states-segment-ok')).toHaveStyle({ width: '50%' })
     expect(screen.getByTestId('limit-states-segment-over')).toHaveStyle({ width: '25%' })
@@ -131,7 +131,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
 
   it('gives «not comparable» its own band rather than letting it read as fine', async () => {
     route([reading({ id: 'a', state: 'ok' }), reading({ id: 'b', state: 'unknown', pace: null })])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     const legend = await screen.findByTestId('limit-states-legend')
     expect(legend).toHaveTextContent(/Not comparable/i)
@@ -140,7 +140,7 @@ describe('the spend limits page draws how the workspace is tracking', () => {
 
   it('draws nothing at all when the workspace has no limits', async () => {
     route([])
-    renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    renderWithProviders(<SpendLimitsPage />, { route: '/app/spend-limits?tab=readings', locale: 'en' })
 
     await screen.findByTestId('spend-limits-intro')
     expect(screen.queryByTestId('limit-states-bar')).toBeNull()

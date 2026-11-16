@@ -11,7 +11,7 @@ function renderGate(route = '/admin') {
       <Route element={<RequirePlatformAdmin />}>
         <Route path="/admin" element={<p>console</p>} />
       </Route>
-      <Route path="/app/dashboard" element={<p>advertiser dashboard</p>} />
+      <Route path="/app/home" element={<p>advertiser dashboard</p>} />
     </Routes>,
     { route, locale: 'en' },
   )

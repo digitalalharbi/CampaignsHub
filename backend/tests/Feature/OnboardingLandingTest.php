@@ -91,7 +91,7 @@ final class OnboardingLandingTest extends TestCase
     {
         $user = $this->member($this->tenant('Settled', 'brand', onboarded: true), Portal::App, 'settled@t.test');
 
-        $this->assertSame('/app/dashboard', app(PortalResolver::class)->landingPathFor($user));
+        $this->assertSame('/app/home', app(PortalResolver::class)->landingPathFor($user));
     }
 
     /**

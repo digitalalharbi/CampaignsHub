@@ -362,13 +362,12 @@ export const router = createBrowserRouter(withErrorBoundary([
            * the advertiser portal simply never got one.
            */
           /*
-           * The landing stays the dashboard (CI-REPAIR, PR #1071). `/app` and `/agency` are where the server sends a person
-           * after sign-in, onboarding and an accepted invitation (`Portal::landingPath`), so redirecting them to `/home` made
-           * the role dashboard the landing — the flip builder E deferred on purpose ("flip three things together: the server's
-           * destination, the rail's Home leaf, and the assertions"; E-notes §Deferred). Until the Owner takes that decision
-           * the role dashboard is reached at its own address, `/…/home`.
+           * AF1 — the landing IS the role dashboard (Owner: «يظهر أول ما يدخل المستخدم»). `/app` and `/agency` are where
+           * the server sends a person after sign-in, onboarding and an accepted invitation, and `Portal::landingPath`
+           * now names `/…/home` itself; this redirect only keeps the bare address and old bookmarks working. The detailed
+           * board stays at `/…/dashboard`, one tap away in the rail («لوحة التحليلات»).
            */
-          { index: true, element: <Navigate to="/app/dashboard" replace /> },
+          { index: true, element: <Navigate to="/app/home" replace /> },
           // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
           { path: 'home', element: <RoleDashboardPage portal="app" /> },
           { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
@@ -624,8 +623,8 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
-            // The landing stays the dashboard until the Owner flips it (see the `/app` index above).
-            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
+            // The landing is the role dashboard (see the `/app` index above).
+            { index: true, element: <Navigate to="/agency/home" replace /> },
             { path: 'home', element: <RoleDashboardPage portal="agency" /> },
             { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },

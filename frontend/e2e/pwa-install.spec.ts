@@ -34,7 +34,7 @@ test.describe('the manifest and icons', () => {
     const res = await request.get('/manifest.webmanifest')
     expect(res.ok()).toBeTruthy()
     const m = await res.json()
-    expect(m).toMatchObject({ name: 'كمبينز هب', lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/dashboard' })
+    expect(m).toMatchObject({ name: 'كمبينز هب', lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/home' })
     expect(m.theme_color).toMatch(/^#[0-9a-f]{6}$/i)
 
     const seen = new Set<string>()
@@ -54,7 +54,7 @@ test.describe('the manifest and icons', () => {
   })
 
   test('opening the start URL signed out lands on the sign-in page', async ({ page }) => {
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/home')
 
     await expect(page).toHaveURL(/\/login/)
   })
@@ -63,20 +63,17 @@ test.describe('the manifest and icons', () => {
 test.describe('signed in', () => {
   test.use({ storageState: AUTH.owner })
 
-  test('the start URL opens the agency dashboard, and the role home is still reachable', async ({ page }) => {
-    await page.goto('/agency/dashboard')
-    await expect(page).toHaveURL(/\/agency\/dashboard/)
-
-    /*
-     * CI-REPAIR (PR #1071): `/agency` is the server-named landing, and the landing stays the dashboard until the Owner
-     * flips it (builder E's deferral) — so `/agency` reaches the dashboard, and the role home is reached at its own
-     * address. Both facts this test made are still asserted: the start URL is the dashboard, the role home exists.
-     */
-    await page.goto('/agency')
-    await expect(page).toHaveURL(/\/agency\/dashboard/)
+  test('the start URL opens the role home, the bare portal address lands there, and the analytics board is still reachable', async ({ page }) => {
+    // AF1: the role dashboard is the landing (the Owner's order), and the installed app's start URL is that landing.
     await page.goto('/agency/home')
     await expect(page).toHaveURL(/\/agency\/home/)
     await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
+
+    await page.goto('/agency')
+    await expect(page).toHaveURL(/\/agency\/home/)
+
+    await page.goto('/agency/dashboard')
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
   })
 
   test('the worker takes control, and its caches never hold an API or auth response', async ({ page }) => {

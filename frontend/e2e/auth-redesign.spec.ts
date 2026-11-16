@@ -300,5 +300,5 @@ test('signing in reaches the app, and a portal in the URL changes nothing', asyn
 
   await signIn(page, 'agency@campaignshub.io')
 
-  await expect(page).toHaveURL(/\/(dashboard|agency|onboarding)/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/(home|dashboard|agency|onboarding)/, { timeout: 15_000 })
 })
