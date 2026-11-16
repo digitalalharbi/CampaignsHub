@@ -1,3 +1,6 @@
+import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { TabStrip } from '@/components/fit/TabStrip'
 import { FxAmount } from '@/components/money/FxAmount'
 import { moneyExact } from '@/features/analytics/format'
 import { useEffect, useRef, useState } from 'react'
@@ -91,6 +94,11 @@ export function CampaignDetailPage() {
    * than navigated to.
    */
   const location = useLocation()
+  /* AF2/AF3 — under /agency the OVERVIEW tab fits the screen (three sub-tabs, the facts in a layer); every other tab is a long panel of its own and flows. */
+  const fit = location.pathname.startsWith('/agency')
+  const ar = locale === 'ar'
+  const [factsOpen, setFactsOpen] = useState(false)
+  const [ovSub, setOvSub] = useState<'performance' | 'details' | 'activity'>('performance')
   const fromState = (location.state as { from?: unknown } | null)?.from
   const cameFrom = typeof fromState === 'string' && /^\/[^/\\]/.test(fromState) ? fromState : null
   const [sp, setSp] = useSearchParams()
@@ -248,7 +256,7 @@ export function CampaignDetailPage() {
   )
 
   return (
-    <section className="space-y-4">
+    <AgencyFit className="space-y-4" testid="campaign-detail-fit" active={tab === 'overview' && ovSub !== 'details'}>
       {/*
         * CAMPAIGN-DRILL-001 — back to where the reader actually came from.
         *
@@ -314,7 +322,28 @@ export function CampaignDetailPage() {
 
         <CampaignLaunchSuccess outcome={launch} onDismiss={() => setLaunch(null)} />
 
-      {/* Header facts grid — campaign-scoped context. */}
+        {fit ? (
+          <>
+            <button type="button" onClick={() => setFactsOpen(true)} data-testid="campaign-facts-open" className="self-start rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover">{ar ? 'تفاصيل الحملة' : 'Campaign details'}</button>
+            <DetailPanel open={factsOpen} onClose={() => setFactsOpen(false)} title={c.client_display_name || c.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-facts">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border  text-sm sm:grid-cols-3 lg:grid-cols-4">
+          <HeaderFact label={t('period_label')}>
+            <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
+          </HeaderFact>
+          <HeaderFact label={t('budget_label')}>
+            {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
+          </HeaderFact>
+          <HeaderFact label={t('owner_label')}>{c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? <span className="tnum">#{c.owner_id}</span>) : '—'}</HeaderFact>
+          <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
+          <HeaderFact label={t('cmc_source_of_truth')}>{c.primary_conversion_purpose || '—'}</HeaderFact>
+          <HeaderFact label={t('linked_count')}><span className="tnum">{platforms.length}</span></HeaderFact>
+          <HeaderFact label={t('cmc_stage')}>{classSelect('stage', c.stage, STAGE_KEYS, (k) => stageLabel(k, locale))}</HeaderFact>
+          <HeaderFact label={t('cmc_performance')}>{classSelect('performance_label', c.performance_label, PERFORMANCE_KEYS, (k) => performanceLabel(k, locale))}</HeaderFact>
+          <HeaderFact label={t('cmc_priority')}>{classSelect('priority', c.priority, PRIORITY_KEYS, (k) => priorityLabel(k, locale))}</HeaderFact>
+        </div>
+            </DetailPanel>
+          </>
+        ) : (
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
           <HeaderFact label={t('period_label')}>
             <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
@@ -330,6 +359,7 @@ export function CampaignDetailPage() {
           <HeaderFact label={t('cmc_performance')}>{classSelect('performance_label', c.performance_label, PERFORMANCE_KEYS, (k) => performanceLabel(k, locale))}</HeaderFact>
           <HeaderFact label={t('cmc_priority')}>{classSelect('priority', c.priority, PRIORITY_KEYS, (k) => priorityLabel(k, locale))}</HeaderFact>
         </div>
+        )}
       </Card>
 
       {actionError && <Alert severity="danger" title={actionError} />}
@@ -343,6 +373,22 @@ export function CampaignDetailPage() {
             `flex-wrap` + `min-w-0`: the period picker (DATE-RANGE-001) is ~300px with its label, and beside the title at 390px it
             pushed the page 25px sideways (first-viewport-detail, CI PR #1071). It now drops under the title when both do not fit.
           */}
+          {fit && (
+            <TabStrip
+              label={ar ? 'أقسام النظرة العامة' : 'Overview sections'}
+              testid="campaign-overview-tabs"
+              active={ovSub}
+              onChange={(k) => setOvSub(k as 'performance' | 'details' | 'activity')}
+              items={[
+                { key: 'performance', label: ar ? 'الأداء' : 'Performance' },
+                { key: 'details', label: ar ? 'التفاصيل' : 'Details' },
+                { key: 'activity', label: ar ? 'النشاط' : 'Activity' },
+              ]}
+            />
+          )}
+          <FitPanel className={fit ? 'pt-2' : ''}>
+          {(!fit || ovSub === 'performance') && (
+          <>
           <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
             <CardTitle>{t('cmc_performance')}</CardTitle>
             <DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" />
@@ -352,6 +398,10 @@ export function CampaignDetailPage() {
             <CardTitle>الملخص التنفيذي</CardTitle>
             <div className="mt-2"><CampaignExecutiveSummary campaign={c} projectId={projectId} range={range} locale={locale} /></div>
           </div>
+          </>
+          )}
+          {(!fit || ovSub === 'details') && (
+          <>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardTitle>{t('tab_overview')}</CardTitle>
@@ -374,11 +424,19 @@ export function CampaignDetailPage() {
               <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
             </Card>
           </div>
+          {fit && <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />}
+          </>
+          )}
+          {(!fit || ovSub === 'activity') && (
+          <>
           {/* CMC-5 — recent activity timeline. */}
           <Card className="mt-4">
             <CardTitle>{t('tab_activity')}</CardTitle>
             <div className="mt-3"><CampaignActivityTab campaign={c} projectId={projectId} limit={6} /></div>
           </Card>
+          </>
+          )}
+          </FitPanel>
         </TabPanel>
       )}
 
@@ -499,11 +557,11 @@ export function CampaignDetailPage() {
         drill-down map (platforms, ad accounts, ad sets, ads, creatives, alerts, reports); it used to
         sit between the header and the tabs and put the performance tab at 768 px on a 1366×768 screen.
       */}
-      <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
+      {!(fit && tab === 'overview') && <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />}
 
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />
-    </section>
+    </AgencyFit>
   )
 }
 
