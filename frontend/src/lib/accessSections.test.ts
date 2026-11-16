@@ -37,6 +37,6 @@ describe('permissionOfPath', () => {
   it('gives every agency rail page except home a permission', () => {
     const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
     const open = leaves.filter((l) => permissionOfPath(l.to) === null).map((l) => l.to)
-    expect(open.sort()).toEqual(['/agency/dashboard', '/agency/team'])
+    expect(open.sort()).toEqual(['/agency/dashboard', '/agency/home', '/agency/team'])
   })
 })
