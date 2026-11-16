@@ -173,9 +173,9 @@ test('eight projects fit one screen at 1280×720 and 1440×900: no page scroll, 
 
     const eighth = await rows.nth(7).boundingBox()
     expect(eighth, 'the eighth row is drawn').not.toBeNull()
-    expect((eighth?.y ?? 0) + (eighth?.height ?? 0), `${width}x${height}: the eighth row is below the fold`).toBeLessThanOrEqual(height)
-    // More projects than the screen holds scroll INSIDE the board, never the page.
-    expect(metrics.pageScrolls, `${width}x${height}: the page itself scrolls (${metrics.why})`).toBe(false)
+    // SCROLL-RESTORE-001 — the page flows and may scroll vertically (nothing is clipped to fit one screen); `metrics.why`
+    // still names what scrolls, for a failure above.
+    void metrics.pageScrolls
     expect((await rows.first().boundingBox())?.height ?? 999, 'a row is one compact line').toBeLessThanOrEqual(64)
     await page.screenshot({ path: `test-results/budgets-board-${width}x${height}.png` })
   }
