@@ -1,3 +1,7 @@
+import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
+import { PagedTable } from '@/components/fit/PagedTable'
+import { PageIntro } from '@/components/ui/PageIntro'
+import { useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Receipt, X } from 'lucide-react'
@@ -54,6 +58,8 @@ export function InvoicesPage() {
   const c = COPY[locale]
   const [filter, setFilter] = useState<InvoiceStatus | 'all'>('all')
   const [selected, setSelected] = useState<Invoice | null>(null)
+  /* AF3 — under /agency the page fits the screen: the ledger pages itself to the rows that fit. */
+  const fit = useLocation().pathname.startsWith('/agency')
 
   // Fetch the full ledger once — summary cards + filters stay client-side.
   const q = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
@@ -84,11 +90,12 @@ export function InvoicesPage() {
   const filterLabel = (f: InvoiceStatus | 'all') => (f === 'all' ? c.all : invoiceStatusMeta(f, ar).label)
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-col gap-1">
+    <AgencyFit className="flex w-full flex-col gap-4" testid="invoices-fit">
+      {fit && <PageIntro title={c.title} purpose={c.subtitle} />}
+      {!fit && <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
-      </header>
+      </header>}
 
       <BillingTabs />
 
@@ -143,9 +150,9 @@ export function InvoicesPage() {
           <Receipt size={24} /><span className="text-sm">{c.none}</span>
         </div>
       ) : (
+        <FitPanel>
         <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-surface-hover text-xs text-text-secondary">
+          <PagedTable className="w-full min-w-[640px] text-sm" ar={ar} head={<thead className="bg-surface-hover text-xs text-text-secondary">
               <tr>
                 <th className="p-3 text-start font-semibold">{c.number}</th>
                 <th className="p-3 text-start font-semibold">{c.total}</th>
@@ -154,9 +161,7 @@ export function InvoicesPage() {
                 <th className="p-3 text-start font-semibold">{c.due}</th>
                 <th className="p-3 text-start font-semibold" />
               </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => {
+            </thead>} rows={invoices.map((inv) => {
                 const status = invoiceStatusMeta(inv.status, ar)
                 const outstanding = Math.max(0, Number(inv.total) - Number(inv.amount_paid))
                 return (
@@ -175,14 +180,13 @@ export function InvoicesPage() {
                     <td className="p-3 text-xs">{isPayable(inv) ? <span className="text-brand-600">•</span> : null}</td>
                   </tr>
                 )
-              })}
-            </tbody>
-          </table>
+              })} />
         </div>
+        </FitPanel>
       )}
 
       {selected ? <InvoiceDrawer invoice={selected} c={c} ar={ar} onClose={() => setSelected(null)} /> : null}
-    </div>
+    </AgencyFit>
   )
 }
 

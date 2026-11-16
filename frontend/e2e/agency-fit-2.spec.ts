@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, seededProject, selectProject } from './helpers'
+import { API_HEADERS, AUTH, seededProject, selectProject } from './helpers'
 
 /**
  * AF2 (NOV-FIT-001, second pass) — the operator pages that share an engine with `/app`, fitted to the screen on
@@ -18,15 +18,20 @@ const WIDTHS = [360, 390, 430, 768, 1024, 1366, 1920] as const
 const DESKTOPS = [[1366, 768], [1440, 900], [1920, 1080]] as const
 
 /** `tabs`: a TabStrip's test id and how many tabs it has — each is opened and measured. `flow`: tab indexes that are long documents and deliberately unlock the page (never sideways, never cut off). */
-interface Fitted { path: string; views?: string[]; tabs?: { testid?: string; selector?: string; count: number; flow?: number[] } }
+interface Fitted { path: string; /** The whole page is a long document that flows (never sideways, never cut off). */ flow?: boolean; views?: string[]; tabs?: { testid?: string; selector?: string; count: number; flow?: number[] } }
 const FITTED: Fitted[] = [
   { path: '/agency/campaigns', views: ['', '?view=table', '?view=cards'] },
   { path: '/agency/ad-groups', tabs: { testid: 'entity-tabs-ad_set', count: 3, flow: [2] } },
   { path: '/agency/ads', tabs: { testid: 'entity-tabs-ad', count: 2 } },
   { path: '/agency/recommendations', tabs: { testid: 'recommendations-tabs', count: 2 } },
+  { path: '/agency/campaigns/:project/:campaign', tabs: { testid: 'campaign-overview-tabs', count: 3, flow: [1] } },
+  { path: '/agency/campaigns/:project/:campaign', views: ['?tab=performance', '?tab=control', '?tab=budget', '?tab=creatives'], flow: true },
   { path: '/agency/forms', tabs: { testid: 'forms-tabs', count: 3, flow: [1, 2] } },
   { path: '/agency/agents', tabs: { selector: '[role="tablist"] [role="tab"]', count: 3, flow: [1, 2] } },
   { path: '/agency/billing', tabs: { testid: 'finance-tabs', count: 3 } },
+  { path: '/agency/billing/quotes' },
+  { path: '/agency/billing/invoices' },
+  { path: '/agency/billing/payments' },
   { path: '/agency/delivery' },
   { path: '/agency/messages' },
   { path: '/agency/automation', tabs: { selector: '[data-testid^="automation-tab-"]', count: 3 } },
@@ -74,13 +79,23 @@ async function inProject(page: Page, request: Parameters<typeof seededProject>[0
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
 }
 
+/** `:project` / `:campaign` in a path are the seeded project's id and its first campaign's. */
+async function resolve(request: Parameters<typeof seededProject>[0], path: string) {
+  if (!path.includes(':project')) return path
+  const project = await seededProject(request, 'متجر تجريبي — Demo')
+  const res = await request.get(`/api/v1/projects/${project}/campaigns?per_page=1`, { headers: API_HEADERS })
+  const campaign = ((await res.json()) as { data: Array<{ id: string }> }).data[0]!.id
+
+  return path.replace(':project', project).replace(':campaign', campaign)
+}
+
 async function openTab(page: Page, tabs: Fitted['tabs'], index: number) {
   if (!tabs) return
   await page.locator(tabs.selector ?? `[data-testid="${tabs.testid}"] [role="tab"]`).nth(index).click()
   await page.waitForTimeout(700)
 }
 
-for (const { path, views = [''], tabs } of FITTED) {
+for (const { path, views = [''], tabs, flow: pageFlow } of FITTED) {
   for (const [view, tabIndex] of views.flatMap((v) => (tabs ? Array.from({ length: tabs.count }, (_, i) => [v, i] as const) : [[v, 0] as const]))) {
     const url = path + view
     test.describe(`${url}${tabs ? ` · tab ${tabIndex + 1}` : ''}`, () => {
@@ -93,11 +108,11 @@ for (const { path, views = [''], tabs } of FITTED) {
             await page.addInitScript((l) => localStorage.setItem('campaign-hub-locale', l), locale)
             await page.setViewportSize({ width: w, height: h })
             await inProject(page, request)
-            await ready(page, url)
+            await ready(page, await resolve(request, url))
             await openTab(page, tabs, tabIndex)
 
             const m = await measure(page)
-            if (tabs?.flow?.includes(tabIndex)) {
+            if (pageFlow || tabs?.flow?.includes(tabIndex)) {
               /* A long document of its own: the page is unlocked and flows — it may scroll, never sideways, never cut off. */
               expect(m.locked, 'a flowing tab must unlock the page').toBe(0)
               expect(m.docH, `document scrolls sideways by ${m.docH}px`).toBeLessThanOrEqual(0)
@@ -121,7 +136,7 @@ for (const { path, views = [''], tabs } of FITTED) {
         test(`never scrolls sideways · ${w}px`, async ({ page, request }) => {
           await page.setViewportSize({ width: w, height: w < 768 ? 800 : 768 })
           await inProject(page, request)
-          await ready(page, url)
+          await ready(page, await resolve(request, url))
           await openTab(page, tabs, tabIndex)
           const m = await measure(page)
           expect(m.docH, `scrolls sideways by ${m.docH}px at ${w}px`).toBeLessThanOrEqual(0)

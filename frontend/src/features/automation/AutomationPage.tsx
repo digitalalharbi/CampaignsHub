@@ -1,7 +1,7 @@
 import { DetailPanel } from '@/components/fit/DetailPanel'
-import { AgencyFit, FitPanel, useMeasuredPage } from '@/components/fit/AgencyFit'
+import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
 import { FitPaged } from '@/components/fit/FitPaged'
-import { Pager } from '@/components/fit/Pager'
+import { PagedTable } from '@/components/fit/PagedTable'
 import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -314,26 +314,4 @@ const CHANGE_WORDS: Record<string, { ar: string; en: string }> = {
 
 function IconButton({ label, onClick, children, testid }: { label: string; onClick: () => void; children: React.ReactNode; testid: string }) {
   return <button type="button" title={label} aria-label={label} onClick={onClick} data-testid={testid} className="rounded p-1.5 text-text-secondary hover:bg-surface-hover hover:text-text-primary">{children}</button>
-}
-
-/**
- * AF2 — a plain table that pages itself to the screen on a fitted `/agency` page: as many rows as fit the panel, the
- * rest a page away. Everywhere else — a phone, a short window, `/app` — every row is drawn, as it always was.
- */
-function PagedTable({ head, rows, className, testid, ar }: { head: React.ReactNode; rows: React.ReactNode[]; className: string; testid?: string; ar: boolean }) {
-  const { ref, size } = useMeasuredPage(rows.length)
-  const [page, setPage] = useState(1)
-  const pages = size ? Math.max(1, Math.ceil(rows.length / size)) : 1
-  const current = Math.min(page, pages)
-  const shown = size ? rows.slice((current - 1) * size, current * size) : rows
-
-  return (
-    <div ref={ref}>
-      <table className={className} data-testid={testid}>
-        {head}
-        <tbody>{shown}</tbody>
-      </table>
-      {size !== undefined && pages > 1 && <Pager page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} testid={testid ? `${testid}-pager` : undefined} />}
-    </div>
-  )
 }

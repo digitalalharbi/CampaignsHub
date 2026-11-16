@@ -1,3 +1,6 @@
+import { useLocation } from 'react-router-dom'
+import { AgencyFit } from '@/components/fit/AgencyFit'
+import { PageIntro } from '@/components/ui/PageIntro'
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, ChevronUp, CreditCard, Play } from 'lucide-react'
@@ -109,12 +112,16 @@ export function PaymentsPage() {
     (a, b) => (b.roundtrips.at(-1)?.at ?? '').localeCompare(a.roundtrips.at(-1)?.at ?? ''),
   )
 
+  /* AF3 — under /agency the page fits the screen. */
+  const fit = useLocation().pathname.startsWith('/agency')
+
   return (
-    <div className="flex w-full flex-col gap-4">
-      <header className="flex flex-col gap-1">
+    <AgencyFit className="flex w-full flex-col gap-4" testid="payments-fit">
+      {fit && <PageIntro title={c.title} purpose={c.subtitle} />}
+      {!fit && <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{c.title}</h1>
         <p className="text-sm text-text-secondary">{c.subtitle}</p>
-      </header>
+      </header>}
 
       <BillingTabs />
 
@@ -122,9 +129,10 @@ export function PaymentsPage() {
         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" /> {c.honest}
       </p>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      {/* AF3 — fitted: the two panes take what is left and scroll inside their own boxes (a list of payment sessions grows with use). */}
+      <div className="fit-panel grid gap-5 md:grid-cols-2 md:grid-rows-[minmax(0,1fr)]">
         {/* Payable invoices — the surface you start a payment on. */}
-        <section className="flex flex-col gap-2">
+        <section data-fit-scroll className="flex min-h-0 flex-col gap-2 [[data-fit=true]_&]:overflow-y-auto">
           <h2 className="text-sm font-bold text-text-primary">{c.payable_title}</h2>
           {q.isLoading ? (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">{c.loading}</p>
@@ -170,7 +178,7 @@ export function PaymentsPage() {
         </section>
 
         {/* Sessions started this session, with an attempts drill-down. */}
-        <section className="flex flex-col gap-2">
+        <section data-fit-scroll className="flex min-h-0 flex-col gap-2 [[data-fit=true]_&]:overflow-y-auto">
           <h2 className="text-sm font-bold text-text-primary">{c.sessions_title}</h2>
           {sessionList.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-10 text-center text-text-secondary">
@@ -235,6 +243,6 @@ export function PaymentsPage() {
           )}
         </section>
       </div>
-    </div>
+    </AgencyFit>
   )
 }
