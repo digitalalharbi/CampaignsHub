@@ -2,6 +2,9 @@ import type { ReactNode } from 'react'
 import { StatGrid } from '@/components/ui/StatCard'
 import { PAGE_TITLE } from '@/styles/scale'
 import { RefreshCw } from 'lucide-react'
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
+import { FIT_TITLE } from '@/styles/scale'
 
 /**
  * What this page is for, said on the page — UX-IDENTITY-001.
@@ -61,6 +64,37 @@ export function PageIntro({
   meta?: ReactNode
   testid?: string
 }) {
+  const compact = useFitCompact()
+
+  /*
+   * AF2 — on a fitted `/agency` page the header is ONE row: the scope, the title, its badges, the freshness and the
+   * actions. The purpose sentence is not dropped — it is the info tooltip beside the title, and its accessible name.
+   * The figures follow in the compact card (`StatCard` reads the same context).
+   */
+  if (compact) {
+    return (
+      <header data-testid={testid} className="flex flex-col gap-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {eyebrow !== undefined && eyebrow !== '' && (
+              <span data-testid={testid ? `${testid}-eyebrow` : undefined} className="max-w-[16rem] truncate text-xs font-semibold text-text-muted">{eyebrow} ·</span>
+            )}
+            <h1 className={`${FIT_TITLE} text-text-primary`}>{title}</h1>
+            {badges}
+            {purpose && <InfoTip text={purpose} label={purpose} />}
+          </div>
+          {meta && <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{meta}</div>}
+          {actions && <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+        {kpis && (
+          <div data-testid={testid ? `${testid}-kpis` : undefined} className="min-w-0">
+            <StatGrid columns="grid-cols-2 md:grid-cols-4">{kpis}</StatGrid>
+          </div>
+        )}
+      </header>
+    )
+  }
+
   return (
     <header data-testid={testid} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">

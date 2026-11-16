@@ -38,6 +38,7 @@ export function useFitRows({
 }: { rowHeight?: number; reserve?: number; min?: number; max?: number; fallback?: number } = {}) {
   const locked = useFitLocked()
   const [rows, setRows] = useState(fallback)
+  const [measured, setMeasured] = useState(false)
   const node = useRef<HTMLElement | null>(null)
   const frame = useRef(0)
 
@@ -46,6 +47,7 @@ export function useFitRows({
     if (!el) return
     const next = Math.max(min, Math.min(max, Math.floor((el.clientHeight - reserve) / rowHeight)))
     setRows((current) => (current === next ? current : next))
+    setMeasured(true)
   }, [min, max, reserve, rowHeight])
 
   const ref = useCallback((el: HTMLElement | null) => {
@@ -70,7 +72,8 @@ export function useFitRows({
     return () => { observer.disconnect(); cancelAnimationFrame(frame.current) }
   }, [locked, measure, fallback])
 
-  return { ref, rows: locked ? rows : fallback, locked }
+  /* `measured`: the box has been read at least once — a caller that asks the server for `rows` waits for it. */
+  return { ref, rows: locked ? rows : fallback, locked, measured: locked ? measured : true }
 }
 
 /** `min-width: 768px` — the same `md` Tailwind uses, read in JS so only ONE of the two shapes is in the document. */
