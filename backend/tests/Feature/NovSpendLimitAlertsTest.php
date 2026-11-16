@@ -95,6 +95,8 @@ final class NovSpendLimitAlertsTest extends TestCase
 
     public function test_the_run_out_date_follows_the_last_three_days_not_the_whole_period(): void
     {
+        // Frozen at Riyadh midday mid-month: the fixtures' days and the read's «today» are the same Riyadh day at any hour.
+        $this->travelTo(Carbon::parse('2026-11-16 12:00:00', 'Asia/Riyadh')->utc());
         $project = $this->newProject('Palm');
         // 10 days ago: a big day; the last 3 full days: 100 a day. Limit 1,000, spent 1,000 - ... use a clean case.
         $limit = $this->makeLimit($project, 1_000, 'SAR');
