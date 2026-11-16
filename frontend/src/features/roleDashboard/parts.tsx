@@ -44,7 +44,10 @@ export function familyName(key: string, ar: boolean): string {
 }
 
 /**
- * On a desktop the dashboard is exactly one screen: no page scroll at all.
+ * On a desktop the dashboard fills at least one screen (DASH-PERF-SPLIT-001: at least, no longer exactly — with the
+ * performance panels a page held to one screen squeezed its rows into one another; now it grows and the page scrolls).
+ *
+ * Previously: exactly one screen, no page scroll at all.
  *
  * Measured, not assumed: the box starts where it sits and ends at the bottom of the window, and any overflow the shell adds
  * below it (its own bottom padding) is taken off again, so the document never scrolls whatever the shell around it does.
@@ -58,18 +61,18 @@ export function useFitViewport(): { ref: RefObject<HTMLDivElement | null>; heigh
     const el = ref.current
     if (!el) return
     if (window.innerWidth < 1024) {
-      el.style.height = ''
+      el.style.minHeight = ''
       setHeight(undefined)
 
       return
     }
-    el.style.height = ''
+    el.style.minHeight = ''
     const top = el.getBoundingClientRect().top + window.scrollY
     const base = Math.max(480, Math.floor(window.innerHeight - top))
-    el.style.height = `${base}px`
+    el.style.minHeight = `${base}px`
     const excess = document.documentElement.scrollHeight - document.documentElement.clientHeight
     const next = Math.max(480, base - Math.max(0, excess))
-    el.style.height = `${next}px`
+    el.style.minHeight = `${next}px`
     setHeight(next)
   }, [])
 
