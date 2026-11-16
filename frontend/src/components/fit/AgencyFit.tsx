@@ -15,6 +15,9 @@ import { useFitLocked } from './useFitRows'
  */
 const FitCompactContext = createContext(false)
 
+/** Lets a layer (a detail drawer) draw the page's FULL form again: it is not budgeted against the screen. */
+export const FitCompactProvider = FitCompactContext.Provider
+
 /** True inside an `/agency` page that wears the frame — `PageIntro` and `StatCard` draw their compact forms. */
 export function useFitCompact(): boolean {
   return useContext(FitCompactContext)
@@ -73,4 +76,41 @@ export function useBoxHeight(enabled?: boolean): { ref: (el: HTMLElement | null)
   }, [el, locked, compact])
 
   return { ref: (n) => { node.current = n; setEl(n) }, height: locked && compact ? h : null }
+}
+
+/**
+ * How many rows of a plain `<table>` fit between the table's top and the bottom of its `.fit-panel`, read from the
+ * rows as drawn (the tallest of the first twelve, so a wrapped cell cannot push the last row off the screen).
+ *
+ * `undefined` means «draw every row» — unlocked, outside a panel, or when everything already fits. The pager's line is
+ * kept back only when paging is actually needed.
+ */
+export function useMeasuredPage(rowCount: number): { ref: (el: HTMLElement | null) => void; size: number | undefined } {
+  const locked = useFitLocked()
+  const compact = useFitCompact()
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const [size, setSize] = useState<number | undefined>(undefined)
+  const on = locked && compact
+
+  useEffect(() => {
+    const panel = el?.closest<HTMLElement>('.fit-panel')
+    if (!on || !el || !panel) { setSize(undefined); return }
+    let frame = 0
+    const measure = () => {
+      const rows = [...el.querySelectorAll<HTMLElement>('tbody tr')]
+      const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
+      const rowH = Math.max(36, ...rows.slice(0, 12).map((r) => r.offsetHeight))
+      const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
+      const all = Math.max(1, Math.floor(avail / rowH))
+      const next = rowCount <= all ? undefined : Math.max(1, Math.floor((avail - 44) / rowH))
+      setSize((cur) => (cur === next ? cur : next))
+    }
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
+    ro.observe(panel)
+    measure()
+
+    return () => { ro.disconnect(); cancelAnimationFrame(frame) }
+  }, [on, el, rowCount])
+
+  return { ref: setEl, size }
 }

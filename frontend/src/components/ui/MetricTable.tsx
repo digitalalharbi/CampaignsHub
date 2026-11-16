@@ -240,9 +240,10 @@ export function MetricTable({
     if (!auto || !el || !panel) { setFitSize(undefined); return }
     let frame = 0
     const measure = () => {
-      const row = el.querySelector<HTMLElement>('tbody tr:not([aria-hidden])')
+      const rowEls = [...el.querySelectorAll<HTMLElement>('tbody tr:not([aria-hidden])')]
       const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
-      const rowH = row?.offsetHeight || 40
+      /* The tallest row seen, not the first: a wrapped name makes one row taller, and the page must hold the worst case. */
+      const rowH = Math.max(40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
       const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
       const all = Math.max(1, Math.floor(avail / rowH))
       const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - 34) / rowH))

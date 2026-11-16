@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { FitCompactProvider, useFitCompact } from '@/components/fit/AgencyFit'
+import { DetailPanel } from '@/components/fit/DetailPanel'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
@@ -26,6 +29,56 @@ export function FindingCard({ finding, projectId, ar, currency }: { finding: Fin
   const portalTo = usePortalPath()
   const f = finding
   const locale = ar ? 'ar' : 'en'
+  const compact = useFitCompact()
+  const [more, setMore] = useState(false)
+
+  /*
+   * AF2 — on a fitted `/agency` page a finding is one fixed-height card: severity, nature, the headline, who it is
+   * about, and the next action with its evidence link. The ring, the figures, the facts, the trend and the impact
+   * are the SAME card, whole, in the layer «Details» opens — nothing about a finding is dropped.
+   */
+  if (compact) {
+    return (
+      <>
+        <article
+          data-testid={`finding-${f.id}`}
+          data-severity={f.severity}
+          data-nature={f.nature}
+          className={`flex h-full min-w-0 flex-col justify-between gap-1 overflow-hidden rounded-xl border border-border border-s-4 bg-surface px-3 py-2 ${RAIL[f.severity]}`}
+        >
+          <header className="flex min-w-0 items-center gap-2">
+            <Badge tone={SEVERITY_TONE[f.severity]} data-testid="finding-severity">{severityLabel(f.severity, ar)}</Badge>
+            <Badge tone={NATURE_TONE[f.nature]} data-testid="finding-nature">{natureLabel(f.nature, ar)}</Badge>
+            <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary" title={headline(f.code, ar)}>{headline(f.code, ar)}</h3>
+          </header>
+          <p className="flex min-w-0 items-center gap-2 truncate text-xs text-text-secondary" data-testid="finding-subject">
+            {f.subject.platform && (
+              <span className="inline-flex shrink-0 items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: platformColor(f.subject.platform) }} aria-hidden />
+                {providerLabel(f.subject.platform, locale)}
+              </span>
+            )}
+            {f.subject.name && <span className="truncate font-semibold text-text-primary">{f.subject.name}</span>}
+          </p>
+          <footer className="flex min-w-0 items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-sm font-semibold text-text-primary" data-testid="finding-action" title={actionLabel(f.action, ar)}>{actionLabel(f.action, ar)}</p>
+            <span className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={() => setMore(true)} data-testid="finding-details" className="rounded-lg border border-border px-2 py-0.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover">{ar ? 'التفاصيل' : 'Details'}</button>
+              <Link to={portalTo(f.evidence.path)} data-testid="finding-evidence" className="inline-flex items-center gap-1 text-xs font-bold text-brand-600 underline-offset-2 hover:underline">
+                {evidenceLabel(f.evidence.target, ar)}
+                <ArrowRight size={13} className="rtl:rotate-180" aria-hidden />
+              </Link>
+            </span>
+          </footer>
+        </article>
+        <DetailPanel open={more} onClose={() => setMore(false)} title={headline(f.code, ar)} closeLabel={ar ? 'إغلاق' : 'Close'} testid={`finding-${f.id}-details`}>
+          <FitCompactProvider value={false}>
+            <FindingCard finding={f} projectId={projectId} ar={ar} currency={currency} />
+          </FitCompactProvider>
+        </DetailPanel>
+      </>
+    )
+  }
 
   return (
     <article

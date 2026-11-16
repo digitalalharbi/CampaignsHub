@@ -19,7 +19,7 @@ import { useUi } from '@/stores/ui'
  * the same filters as the table beneath — one data pipeline, not a second one. The strip states the
  * project's figures within the page's filters; the search box narrows rows, never the figures.
  */
-export function ManagementOverview({ projectId, range, filters, testid }: { projectId: string; range: Range; filters: MetricFilters; testid: string }) {
+export function ManagementOverview({ projectId, range, filters, testid, chartHeight }: { projectId: string; range: Range; filters: MetricFilters; testid: string; chartHeight?: number }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const s = useSummary(projectId, range, filters)
   const ts = useTimeseries(projectId, range, filters)
@@ -66,7 +66,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             <div data-testid={`${testid}-trend`}>
               <MetricLineChart
                 data={series.rows}
-                height={240}
+                height={chartHeight ?? 240}
                 currency={series.currency ?? reportingCurrency ?? ''}
                 rightAxisFor="conversions"
                 series={[
@@ -87,7 +87,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             </p>
           ) : (
             <div data-testid={`${testid}-share`}>
-              <PlatformDonutChart data={results} height={200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'تحويلات المنصة' : 'Platform conversions'} />
+              <PlatformDonutChart data={results} height={chartHeight ?? 200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'تحويلات المنصة' : 'Platform conversions'} />
             </div>
           )}
         </ChartCard>
