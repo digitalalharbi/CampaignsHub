@@ -22,6 +22,9 @@ import { useUi } from '@/stores/ui'
  * small-tablet width up; on a phone the same choice is the menu's scope switcher, because a wide control in a 360px bar
  * is what pushes the bar sideways.
  */
+/** How many clients the open list draws at once; the search reaches the rest. */
+const SHOWN = 40
+
 export function ClientScopeChip() {
   const ar = useUi((s) => s.locale) === 'ar'
   const current = useAgencyClient((s) => s.currentClientId)
@@ -148,7 +151,7 @@ export function ClientScopeChip() {
                 {ar ? 'كل العملاء' : 'All clients'}
               </Row>
             )}
-            {groups.map(({ client: c, projects: ps }) => (
+            {groups.slice(0, SHOWN).map(({ client: c, projects: ps }) => (
               <div key={c.id} className="border-t border-border/60 first:border-t-0">
                 <Row onClick={() => pickClient(String(c.id))} active={current === String(c.id) && currentProjectId === null} testid={`client-scope-client-${c.id}`} strong>
                   <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-surface-secondary text-xs font-extrabold text-text-secondary">{c.name.trim().charAt(0).toUpperCase()}</span>
@@ -162,6 +165,12 @@ export function ClientScopeChip() {
                 ))}
               </div>
             ))}
+            {/* SCALE-1000-001 — a thousand clients is a search, not a scroll: the list draws the first page and says so. */}
+            {groups.length > SHOWN && (
+              <p className="px-3 py-3 text-center text-xs text-text-muted" data-testid="client-scope-more">
+                {ar ? `يُعرض ${SHOWN} من ${groups.length} — اكتب للبحث` : `Showing ${SHOWN} of ${groups.length} — type to search`}
+              </p>
+            )}
             {groups.length === 0 && (
               <p className="px-3 py-6 text-center text-sm text-text-muted">{ar ? 'لا نتائج' : 'No results'}</p>
             )}
