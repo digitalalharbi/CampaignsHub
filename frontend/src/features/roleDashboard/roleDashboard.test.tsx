@@ -192,8 +192,10 @@ describe('the manager performance panels', () => {
     page(base({ can_watch: true }))
 
     const board = screen.getByTestId('watch-board')
-    expect(within(board).getByTestId('watch-unit-all')).toHaveAttribute('aria-checked', 'true')
-    expect(within(board).getByTestId('watch-unit-c2')).toHaveTextContent('Beta')
+    // One compact picker, «All clients» first, then every client in reach.
+    const picker = within(board).getByTestId('watch-unit-select') as HTMLSelectElement
+    expect(picker.value).toBe('')
+    expect([...picker.options].map((o) => o.textContent)).toEqual(['All clients', 'Alpha', 'Beta'])
     expect(screen.getByTestId('watch-kpi-results-value')).toHaveTextContent('155')
     expect(screen.getByTestId('watch-kpi-clicks-value')).toHaveTextContent('75')
     // Best and weakest, each opening its campaign, the platform named beside it.

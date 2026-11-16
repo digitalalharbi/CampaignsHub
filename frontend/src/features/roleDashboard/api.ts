@@ -102,6 +102,8 @@ export interface RoleDashboard {
   thresholds: { near: number }
   scope: { clients: number; projects: number; restricted: boolean }
   can_money: boolean
+  /** DASH-METRICS-CURRENCY-001 — the currency the platforms' figures are summed in (not the budgets' SAR); null when mixed. */
+  metrics_currency?: string | null
   /** WATCH-BOARD-001 — whether the follow-up board is offered (the member may open the campaigns). */
   can_watch?: boolean
   sections: string[]
@@ -129,7 +131,7 @@ export interface RoleDashboard {
 }
 
 /** DASH-PERF-SPLIT-001 — `GET /me/dashboard/performance`: the manager's performance panels, over every reachable campaign. */
-export type DashboardPerformance = Pick<RoleDashboard, 'window' | 'campaign_rows' | 'families' | 'rank_family' | 'best' | 'worst' | 'platforms' | 'performance'>
+export type DashboardPerformance = Pick<RoleDashboard, 'window' | 'metrics_currency' | 'campaign_rows' | 'families' | 'rank_family' | 'best' | 'worst' | 'platforms' | 'performance'>
 
 export interface PerformanceBlock {
   spend: number | null
@@ -145,6 +147,11 @@ export interface PerformanceBlock {
 }
 
 /** DASH-PERIOD-001 — the windows the page offers (the server answers 30 to anything else). */
+/** DASH-METRICS-CURRENCY-001 — the unit of a platform figure: the rows' own, or (from an older server) the budgets'. */
+export function metricsCurrency(d: Pick<RoleDashboard, 'metrics_currency' | 'money'>): string | null {
+  return d.metrics_currency !== undefined ? d.metrics_currency : (d.money?.currency ?? null)
+}
+
 export const DASHBOARD_WINDOWS = [7, 14, 30, 90] as const
 export type DashboardWindow = (typeof DASHBOARD_WINDOWS)[number]
 

@@ -116,6 +116,9 @@ final class RoleDashboardBuilder
         ];
 
         $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
+        // DASH-METRICS-CURRENCY-001 — what the platforms' figures (spend, cost, the daily line) are summed in: the reporting
+        // currency of the rows, never the budgets' SAR. Null when the rows hold none or more than one.
+        $out['metrics_currency'] = $agg === null ? null : $agg->currencyBasis($from, $to)['currency'];
 
         $pacing = $money && $agg !== null ? $agg->budgetPacing($from, $to, $today) : [];
         // ONE-BUDGET-001 — the approved budgets, never the 30-day window above; a project whose membership withholds money is left out.
@@ -493,7 +496,8 @@ final class RoleDashboardBuilder
             $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
             $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
 
-            return ['window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()]]
+            return ['window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $days, 'today' => $today->toDateString()],
+                'metrics_currency' => $agg === null ? null : $agg->currencyBasis($from, $to)['currency']]
                 + array_intersect_key(
                     $this->marketer($user, $agg, $projectIds, $from, $to, $today, $money, false),
                     array_flip(['campaign_rows', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance']),
@@ -686,8 +690,12 @@ final class RoleDashboardBuilder
 
         $top = array_key_first($families);
         if ($top !== null && $money) {
-            $ranked = array_values(array_filter($families[$top]['rows'], static fn (array $r): bool => ($r['result'] ?? null) !== null && (float) $r['result'] > 0 && ($r['cost_per_result'] ?? null) !== null));
             $sales = $top === 'sales';
+            // A sales campaign is ranked by its return: one with no return measured is not «the weakest», it is unranked.
+            $ranked = array_values(array_filter($families[$top]['rows'], static fn (array $r): bool => ($r['result'] ?? null) !== null && (float) $r['result'] > 0 && ($r['cost_per_result'] ?? null) !== null
+                // A campaign with no spend measured has no cost to rank: «التكلفة 0» is not the weakest, it is unranked.
+                && (float) $r['cost_per_result'] > 0
+                && (! $sales || ($r['roas'] ?? null) !== null)));
             usort($ranked, static fn (array $a, array $b): int => $sales
                 ? (float) ($b['roas'] ?? 0) <=> (float) ($a['roas'] ?? 0)
                 : (float) $a['cost_per_result'] <=> (float) $b['cost_per_result']);
