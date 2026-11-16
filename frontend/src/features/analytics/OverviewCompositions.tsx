@@ -523,22 +523,10 @@ export function AnalyticsOverview(d: OverviewData) {
   return (
     <div className="space-y-4" data-testid="analytics-overview" data-composition="analytics">
       {/*
-        WHERE the weakness is — read on the stages of the journey, never asserted without the
-        measurement behind it. First, because that is the question this surface exists to answer.
-        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
-        disagree about the account they describe.
+        ANALYTICS-VISUAL-FIRST-001 (owner: «احتاج جانب ابداعي وبياني بدون النصي») — the page opens on DRAWINGS: where the
+        money sits and the three rates the operator acts on. The reading of the journey follows them, and the figures
+        after that, as before.
       */}
-      <DiagnosticPanel
-        objective={d.objective}
-        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={s.data?.reported}
-        rowsInScope={s.data?.rows_in_scope}
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-        ar={ar}
-      />
-
       {/*
         Then WHERE THE MONEY SITS. «What moved» and «what carries the weight» are different
         questions, and a stable account can still hold most of its budget behind one platform.
@@ -565,6 +553,23 @@ export function AnalyticsOverview(d: OverviewData) {
       </div>
 
       {/*
+        WHERE the weakness is — read on the stages of the journey, never asserted without the
+        measurement behind it. First, because that is the question this surface exists to answer.
+        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
+        disagree about the account they describe.
+      */}
+      <DiagnosticPanel
+        objective={d.objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
+      />
+
+      {/*
         SURFACE-SEPARATION-001 — the store ledger reads here, where «why» is the question.
 
         It sat on the dashboard, which answers what is happening rather than what caused it. The Store
@@ -579,9 +584,6 @@ export function AnalyticsOverview(d: OverviewData) {
         a reader who is here is checking an argument.
       */}
       <section data-testid="analytics-evidence" className="space-y-4">
-        <h2 className="text-sm font-bold text-text-primary">
-          {ar ? 'الأرقام التي بُني عليها ما سبق' : 'The figures the reading above was drawn from'}
-        </h2>
 
         {!comparable && s.data && (
           <p
