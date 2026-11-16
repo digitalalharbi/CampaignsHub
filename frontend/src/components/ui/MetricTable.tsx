@@ -233,17 +233,21 @@ export function MetricTable({
   const locked = useFitLocked()
   const wrap = useRef<HTMLDivElement>(null)
   const [fitSize, setFitSize] = useState<number | undefined>(undefined)
+  const seen = useRef(0)
   const auto = fitCompact && locked && pageSize === undefined
   useEffect(() => {
     const el = wrap.current
     const panel = el?.closest<HTMLElement>('.fit-panel')
     if (!auto || !el || !panel) { setFitSize(undefined); return }
     let frame = 0
+    seen.current = 0
     const measure = () => {
       const rowEls = [...el.querySelectorAll<HTMLElement>('tbody tr:not([aria-hidden])')]
       const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
       /* The tallest row seen, not the first: a wrapped name makes one row taller, and the page must hold the worst case. */
-      const rowH = Math.max(40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
+      /* Never smaller than the tallest row seen so far: with fewer rows drawn the columns re-flow (WebKit most), and a page sized from the first reading would then overhang. */
+      seen.current = Math.max(seen.current, 40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
+      const rowH = seen.current
       const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
       const all = Math.max(1, Math.floor(avail / rowH))
       const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - 34) / rowH))
@@ -251,6 +255,7 @@ export function MetricTable({
     }
     const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
     ro.observe(panel)
+    ro.observe(el)
     measure()
 
     return () => { ro.disconnect(); cancelAnimationFrame(frame) }

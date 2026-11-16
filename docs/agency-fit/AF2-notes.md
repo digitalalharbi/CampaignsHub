@@ -54,3 +54,17 @@ pane that scrolls inside its own box by nature; the fit spec does not count what
 * `/agency/projects/*`, the launch wizard and the project chooser (the «pick a project» state) were not touched.
 * Firefox cannot launch on this Mac; reasoned instead: no functional `setSearchParams` was added (tab state is `useState`),
   no `AudioContext`, and the only new focus trap is the existing `DetailPanel`/`useFocusTrap`.
+
+## Verification (this tree)
+
+* `tsc -b` clean; full `vitest` 775 files / 5,365 tests pass; `oxlint` warnings only.
+* chromium: `agency-fit-2.spec.ts` (every converted page, every tab/view, 7 widths, ar+en at 1366x768 / 1440x900 / 1920x1080);
+  existing specs touching the pages: campaigns (14 files, 44), entity/drilldown/responsive/table-alignment/first-viewport sweeps
+  (301), agents/forms-hub/expansion/simplification/verify-100/cross-product (312) — all pass.
+* webkit: fit spec at 1366x768 + 360/1024/1920 for every page, entity-workspace, campaigns-at-scale — pass (after one real
+  fix: WebKit re-flows table columns when fewer rows are drawn, so a page size sized from the first reading overhung by up
+  to 52px; the measuring now never goes below the tallest row seen).
+* Firefox cannot launch on this machine; see above.
+* Incident: a stray `git stash; git stash pop` (shared stash list, see CLAUDE.md) applied another session's WIP into this
+  worktree as conflicts; reverted at once with `git reset --hard HEAD` (nothing of this branch was uncommitted) and the foreign
+  stash entry was left untouched in the list.

@@ -90,16 +90,19 @@ export function useMeasuredPage(rowCount: number): { ref: (el: HTMLElement | nul
   const compact = useFitCompact()
   const [el, setEl] = useState<HTMLElement | null>(null)
   const [size, setSize] = useState<number | undefined>(undefined)
+  const seen = useRef(0)
   const on = locked && compact
 
   useEffect(() => {
     const panel = el?.closest<HTMLElement>('.fit-panel')
     if (!on || !el || !panel) { setSize(undefined); return }
     let frame = 0
+    seen.current = 0
     const measure = () => {
       const rows = [...el.querySelectorAll<HTMLElement>('tbody tr')]
       const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
-      const rowH = Math.max(36, ...rows.slice(0, 12).map((r) => r.offsetHeight))
+      seen.current = Math.max(seen.current, 36, ...rows.slice(0, 12).map((r) => r.offsetHeight))
+      const rowH = seen.current
       const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
       const all = Math.max(1, Math.floor(avail / rowH))
       const next = rowCount <= all ? undefined : Math.max(1, Math.floor((avail - 44) / rowH))
@@ -107,6 +110,7 @@ export function useMeasuredPage(rowCount: number): { ref: (el: HTMLElement | nul
     }
     const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
     ro.observe(panel)
+    ro.observe(el)
     measure()
 
     return () => { ro.disconnect(); cancelAnimationFrame(frame) }
