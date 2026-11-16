@@ -66,6 +66,15 @@ jobs:
             UUID='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
             LIVE="${RACCOUNT}"; ARCH="${RFROM}"
             echo "== RELEASE-VERIFY $(date -u +%FT%TZ) mode=${HOURS}"
+            if [ "${HOURS}" = "mail-dry" ] || [ "${HOURS}" = "mail-send" ]; then
+              # MAIL-TEST-SEND-001: the Owner asked (2026-11-16) for the gallery test messages to be sent to ONE external mailbox he named.
+              # Fixture data only; the command masks the address; any address-looking text in its output is masked again here.
+              MAILRE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+              if ! [[ "${RACCOUNT}" =~ $MAILRE ]]; then echo "invalid address input"; exit 1; fi
+              FLAG=""; [ "${HOURS}" = "mail-send" ] && FLAG="--send"
+              $DC exec -T backend php artisan mail:send-gallery "${RACCOUNT}" $FLAG 2>&1 | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/***@***/g'
+              echo "== done"; exit 0
+            fi
             if [ "${HOURS}" = "apply-core" ]; then
               # APPLY-CORE: the Owner-approved post-deploy steps. Each is reversible or additive; none deletes. Ids masked in the output.
               echo "## A1. close false data-arrival alerts (--apply; reversible with --undo)"
