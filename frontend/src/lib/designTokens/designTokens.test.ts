@@ -8,7 +8,7 @@ describe('design tokens (UI + email share one module)', () => {
 
   it('resolves platforms, series and the calm statuses', () => {
     expect(platformHex('meta')).toBe('#1877f2')
-    expect(platformHex('google_ads', 'dark')).toBe('#c084fc')
+    expect(platformHex('google_ads', 'dark')).toBe('#f28b82')
     expect(seriesHex()[0]).toBe(tokenColor('brand-600'))
     expect(statusColors('on_track').color).toBe('#0d8a6f')
   })
