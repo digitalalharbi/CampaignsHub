@@ -21,7 +21,7 @@ import { L } from './labels'
 
 type Lang = { ar: string; en: string }
 /** One board row's height with its gap, in px — read with `useFitRows` so the count and the CSS cannot disagree. */
-const ROW_HEIGHT = 58
+const ROW_HEIGHT = 53
 
 type Toast = { projectId: string; entryId: string; message: Lang; undoable: boolean }
 
@@ -95,8 +95,8 @@ export function BudgetsPage() {
       introTestid="budgets-intro"
       slideOverAvoid
       title={tx(showDeleted ? L.deleted : L.title)}
-      kpis={<div className="rounded-xl border border-border bg-surface px-3 py-2"><TotalsStrip totals={data?.totals ?? null} ar={ar} /></div>}
-      toolbar={<FxRateBar />}
+      // One line: the four totals and the rate in use — the rest of the screen is for the board (eight projects fit 1280×720).
+      kpis={<div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-border bg-surface px-3 py-1.5"><TotalsStrip totals={data?.totals ?? null} ar={ar} /><FxRateBar /></div>}
       actions={
             <>
               <ExportMenu onPick={exportFile} ar={ar} />
@@ -122,7 +122,7 @@ export function BudgetsPage() {
         <div className="flex min-h-0 flex-1 flex-col gap-1">
           <BoardHeader ar={ar} />
           <div ref={fit.ref as never} className="min-h-0 flex-1">
-            <ul className="flex min-w-0 flex-col gap-1" data-testid="budgets-list">
+            <ul className="flex min-w-0 flex-col gap-0.5" data-testid="budgets-list">
               {shown.map((r) => (
                 <li key={r.project_id} className="min-w-0">
                   <BudgetBoardRow row={r} active={r.project_id === open} onOpen={() => choose(r.project_id)} ar={ar} />
@@ -130,7 +130,7 @@ export function BudgetsPage() {
               ))}
             </ul>
           </div>
-          {fit.locked && <Pager testid="budgets-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} hideWhenSingle />}
+          {fit.locked && pages > 1 && <Pager testid="budgets-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} compact />}
         </div>
       )}
 
