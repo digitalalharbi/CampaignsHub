@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useFitCompact } from '@/components/fit/AgencyFit'
-import { useFitLocked } from '@/components/fit/useFitRows'
+import { roomBelow, useFitLocked } from '@/components/fit/useFitRows'
 import { readMetricValue } from '@/lib/metricValue'
 import { orderRows } from '@/lib/tableSort'
 
@@ -248,9 +248,17 @@ export function MetricTable({
       /* Never smaller than the tallest row seen so far: with fewer rows drawn the columns re-flow (WebKit most), and a page sized from the first reading would then overhang. */
       seen.current = Math.max(seen.current, 40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
       const rowH = seen.current
-      const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
+      /*
+        The room the rows may use: down to the panel's bottom, less the head and less whatever the panel draws below this
+        table (the card's padding and border, a note) — `roomBelow`. The pager lives inside `wrap`, so its line is kept
+        back separately: as drawn when it is drawn, at least 34px.
+      */
+      const wrapRect = el.getBoundingClientRect()
+      const tableBottom = el.querySelector('table')?.getBoundingClientRect().bottom ?? wrapRect.bottom
+      const pagerH = Math.max(34, Math.ceil(wrapRect.bottom - tableBottom))
+      const avail = panel.getBoundingClientRect().bottom - wrapRect.top - head - roomBelow(el, panel)
       const all = Math.max(1, Math.floor(avail / rowH))
-      const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - 34) / rowH))
+      const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - pagerH) / rowH))
       setFitSize((cur) => (cur === next ? cur : next))
     }
     const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })

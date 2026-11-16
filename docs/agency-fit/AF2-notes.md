@@ -68,3 +68,25 @@ pane that scrolls inside its own box by nature; the fit spec does not count what
 * Incident: a stray `git stash; git stash pop` (shared stash list, see CLAUDE.md) applied another session's WIP into this
   worktree as conflicts; reverted at once with `git reset --hard HEAD` (nothing of this branch was uncommitted) and the foreign
   stash entry was left untouched in the list.
+
+## CI repair — run 43810966817
+
+* **`/agency/ads · tab 1 · fits 1366×768 · ar` (chromium + firefox): `DIV:7, SECTION:7` below the content box.** Root cause:
+  the paged table kept back only the pager's line (34px in `MetricTable`, 44px in `useMeasuredPage`); the card around the
+  table (its bottom padding and border) was paid for by the slack of shorter rows. Locally the first row is 64px and the
+  rest 84px, so four rows at the 84px worst case left room; with Linux CI fonts every row sets at 84px and the card hung
+  7px out. Reproduced here by forcing a wider fallback font (`DejaVu Sans`, Verdana) on the page: `DIV.space-y-4:6,
+  SECTION:6`. Fix: `roomBelow(el, panel)` (`components/fit/useFitRows.ts`) measures what the panel draws below the table as
+  laid out now; `MetricTable` subtracts it and keeps back the pager as drawn (≥ 34px); `useMeasuredPage` subtracts it and
+  keeps back 44px only while no pager is drawn yet. Every desktop case of `agency-fit-2.spec.ts` (all ten pages, every
+  tab/view, 1366×768 / 1440×900 / 1920×1080, ar + en: 150 tests) passes with the wide fallback font forced; no spec change.
+* **firefox `campaign-write-control` «the same truth in English»: no `campaign-card` in 20 s.** Not root-caused. The spec
+  drives `/app/campaigns` (advertiser), where this PR's fit code is off (`fit = pathname.startsWith('/agency')`; the
+  list query is enabled without `listFit.measured`; no layout measurement gates the cards). The same spec failed once
+  on Firefox in #1071 (the Arabic case) and then passed. Needs the CI error-context snapshot (artifact) to see whether
+  the view switch or the list is what is missing; not downloaded here.
+* Evidence after the fix: with the wide font forced, every desktop case 150/150 (chromium). Real fonts: chromium
+  `agency-fit-2` 312/312 (whole spec, before the helper moved file), then chromium 156/156 and webkit 157/157 on
+  agency-fit-2 (ads, ad-groups, campaigns, automation; webkit desktop sizes), entity-workspace, campaigns-at-scale,
+  campaign-write-control. Vitest 199 files / 1342 tests (components, automation, campaigns, analytics); `tsc -b` clean;
+  oxlint: no new warning (`roomBelow` lives in `useFitRows.ts`, not beside the components).

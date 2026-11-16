@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useInRouterContext, useLocation } from 'react-router-dom'
 import { useFitLock } from '@/layouts/fitContext'
 import { FIT_GAP } from '@/styles/scale'
-import { useFitLocked } from './useFitRows'
+import { roomBelow, useFitLocked } from './useFitRows'
 
 /**
  * AF2 (NOV-FIT-001, second pass) — the frame a page SHARED with `/app` wears, on `/agency` only.
@@ -91,6 +91,8 @@ export function useMeasuredPage(rowCount: number): { ref: (el: HTMLElement | nul
   const [el, setEl] = useState<HTMLElement | null>(null)
   const [size, setSize] = useState<number | undefined>(undefined)
   const seen = useRef(0)
+  /* Whether a pager is drawn below the table now — then it is already inside `roomBelow`, and no line is kept back twice. */
+  const paging = useRef(false)
   const on = locked && compact
 
   useEffect(() => {
@@ -103,9 +105,11 @@ export function useMeasuredPage(rowCount: number): { ref: (el: HTMLElement | nul
       const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
       seen.current = Math.max(seen.current, 36, ...rows.slice(0, 12).map((r) => r.offsetHeight))
       const rowH = seen.current
-      const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head
+      /* Everything below the table already drawn (the pager too, once paging) is room the rows cannot use. */
+      const avail = panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - head - roomBelow(el, panel)
       const all = Math.max(1, Math.floor(avail / rowH))
-      const next = rowCount <= all ? undefined : Math.max(1, Math.floor((avail - 44) / rowH))
+      const next = rowCount <= all ? undefined : Math.max(1, Math.floor((avail - (paging.current ? 0 : 44)) / rowH))
+      paging.current = next !== undefined
       setSize((cur) => (cur === next ? cur : next))
     }
     const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
