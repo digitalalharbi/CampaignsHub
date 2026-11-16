@@ -18,8 +18,8 @@
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;">
             @forelse ($shown as $r)
                 @php($fill = match ($r['tone']) { 'bad' => '#c0392b', 'watch' => '#e0a23a', 'ok' => '#0d8a6f', default => '#9ccfc0' })
-                <tr data-block="budget-row" data-project="{{ $r['id'] }}" data-band="{{ $r['band'] ?? 'none' }}">
-                    <td width="34%" style="padding:3px 0; font-size:12px; font-weight:700; color:#0b1a16; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $r['url'] }}" style="color:#0b1a16; text-decoration:none;">{{ \Illuminate\Support\Str::limit($r['name'], 16, '…') }}</a></td>
+                <tr data-block="budget-row" data-project="{{ $r['id'] }}" data-band="{{ $r['band'] ?? 'none' }}" style="font-size:12px; line-height:20px;">
+                    <td width="34%" style="padding:3px 0; font-weight:700; color:#0b1a16; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $r['url'] }}" style="color:#0b1a16; text-decoration:none;">{{ \Illuminate\Support\Str::limit($r['name'], 16, '…') }}</a></td>
                     <td dir="ltr" style="padding:3px 4px;">
                         @if ($r['state'] === 'ok')
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e6e2d6; border-radius:4px;"><tr>
@@ -30,8 +30,8 @@
                             <span style="font-size:11px; color:#8b9a97;">{{ $dir === 'rtl' ? 'لا بيانات' : 'No data' }}</span>
                         @endif
                     </td>
-                    <td width="26%" style="padding:3px 0; font-size:12px; font-weight:800; color:{{ $r['over'] ? '#b91c1c' : '#0a6b57' }}; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $r['state'] === 'ok' ? $r['remaining'] : '' }}</td>
-                    <td width="22" align="center" style="padding:3px 0 3px 4px;"><span title="{{ $r['band_label'] }}" style="display:inline-block; width:18px; height:18px; line-height:18px; border-radius:5px; text-align:center; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$r['tone']] }}; color:{{ $S::INK[$r['tone']] }};">{{ $S::GLYPH[$r['tone']] }}</span></td>
+                    <td width="26%" style="padding:3px 0; font-weight:800; color:{{ $r['over'] ? '#b91c1c' : '#0a6b57' }}; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $r['state'] === 'ok' ? $r['remaining'] : '' }}</td>
+                    <td width="22" style="padding:3px 0 3px 4px;"><table role="presentation" width="18" cellpadding="0" cellspacing="0" border="0" style="width:18px;"><tr><td width="18" height="18" align="center" bgcolor="{{ $S::CELL[$r['tone']] }}" title="{{ $r['band_label'] }}" style="width:18px; height:18px; line-height:18px; border-radius:5px; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$r['tone']] }}; color:{{ $S::INK[$r['tone']] }}; mso-line-height-rule:exactly;">{{ $S::GLYPH[$r['tone']] }}</td></tr></table></td>
                 </tr>
                 @if ($r['state'] !== 'ok' || ($r['outside_line'] ?? '') !== '')
                     {{-- Why there is no figure, or which campaigns the figure leaves out — the reason the data gives. --}}
