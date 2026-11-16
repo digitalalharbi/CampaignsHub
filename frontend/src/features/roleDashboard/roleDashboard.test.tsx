@@ -7,6 +7,8 @@ const state: { data: RoleDashboard | null } = { data: null }
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   useRoleDashboard: () => ({ data: state.data, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+  // DASH-PERF-SPLIT-001 — the panels' own request answers with the same fixture.
+  useDashboardPerformance: () => ({ data: state.data, isLoading: false, isError: false }),
 }))
 vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }) }))
 
