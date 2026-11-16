@@ -182,7 +182,8 @@
    * them are monochrome, which is why they are tokens rather than constants — see the dark block.
    */
   --platform-meta: #1877f2;
-  --platform-google: #9333ea;
+  /* GOOGLE-RED-001 (owner) — Google is its own red, as on every ad platform, not purple. */
+  --platform-google: #ea4335;
   --platform-tiktok: #000000;
   --platform-snapchat: #f7b500;
   --platform-x: #64748b;
@@ -294,7 +295,7 @@
   --platform-tiktok: #f1f5f9;
   --platform-x: #94a3b8;
   --platform-openai: #2dd4bf;
-  --platform-google: #c084fc;
+  --platform-google: #f28b82;
   --platform-linkedin: #818cf8;
 
   --shadow-small: 0 1px 2px rgba(0, 0, 0, 0.3);
