@@ -4,7 +4,7 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { Delta } from '@/components/ui/Delta'
 import { days } from '@/lib/counted'
-import type { CampaignRow, PlatformRow, RoleDashboard } from './api'
+import { metricsCurrency, type CampaignRow, type PlatformRow, type RoleDashboard } from './api'
 import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 
 /*
@@ -176,7 +176,7 @@ export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' |
   const t = f.ar ? T.ar : T.en
   const p = d.performance ?? null
   if (p === null) return null
-  const cur = d.money?.currency ?? null
+  const cur = metricsCurrency(d)
   const resultLabel = p.result_label?.[f.ar ? 'ar' : 'en'] ?? t.results
   const costLabel = p.cost_label?.[f.ar ? 'ar' : 'en'] ?? t.avgCost
 
