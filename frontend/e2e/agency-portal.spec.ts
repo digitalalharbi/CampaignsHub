@@ -31,7 +31,7 @@ test.describe('the agency portal', () => {
    * regression in the drill-down, and a test that cannot tell the two apart reports the wrong one.
    */
   test('a client budget names the projects the money is in', async ({ page }) => {
-    await page.goto('/agency')
+    await page.goto('/agency/dashboard?tab=budgets')
 
     const table = page.getByTestId('client-budgets')
     if (await table.count() === 0) test.skip(true, 'no client carries a budget in this dataset')

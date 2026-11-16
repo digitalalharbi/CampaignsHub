@@ -16,8 +16,12 @@ import { InfoTip } from './InfoTip'
  * or a detail panel.
  */
 export function FitPage({
-  title, info, actions, kpis, toolbar, children, testid, introTestid, fit = true,
+  title, info, actions, kpis, toolbar, children, testid, introTestid, fit = true, slideOverAvoid = false, dir,
 }: {
+  /** Direction of the whole page, for a page that sets its own (the integrations centre does). */
+  dir?: 'ltr' | 'rtl'
+  /** The header stays clickable under a side panel that slides over the page (`SlideOver` starts below it). */
+  slideOverAvoid?: boolean
   /** `false` lets the page flow — for a tab whose content is a long form of its own and cannot be budgeted. */
   fit?: boolean
   title: string
@@ -33,8 +37,8 @@ export function FitPage({
   useFitLock(fit)
 
   return (
-    <section data-testid={testid} className={`flex min-h-0 flex-1 flex-col ${FIT_GAP}`}>
-      <header data-testid={introTestid ?? (testid ? `${testid}-header` : undefined)} className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <section data-testid={testid} dir={dir} className={`flex min-h-0 flex-1 flex-col ${FIT_GAP}`}>
+      <header data-testid={introTestid ?? (testid ? `${testid}-header` : undefined)} data-slideover-avoid={slideOverAvoid ? '' : undefined} className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className={`${FIT_TITLE} min-w-0 truncate text-text-primary`}>{title}</h1>
         {info && <InfoTip text={info} label={info} />}
         {actions && <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div>}

@@ -38,7 +38,7 @@ describe('the agency dashboard carries the client budget rung', () => {
 
   it('lists each client against its committed budget', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([row({}), row({ client_id: 'c2', client_name: 'Small', budget: 5_000, pace: 0.4 })])
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     const section = await screen.findByTestId('client-budgets')
     expect(section).toHaveTextContent('Big Spender')
@@ -56,7 +56,7 @@ describe('the agency dashboard carries the client budget rung', () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([
       row({ budget: null, spent: null, remaining: null, projected: null, pace: null, currency: null, currencies: 2 }),
     ])
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     const section = await screen.findByTestId('client-budgets')
     expect(section).toHaveTextContent('Big Spender')
@@ -66,7 +66,7 @@ describe('the agency dashboard carries the client budget rung', () => {
   /** What the total left out is said where the total is read — no silent caps. */
   it('counts what it excluded', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([row({ excluded: 2 })])
-    renderWithProviders(<AgencyDashboardPage />, { locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
 
     expect(await screen.findByTestId('client-budgets')).toHaveTextContent(/2 excluded/i)
   })

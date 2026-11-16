@@ -71,7 +71,43 @@ function Door({ to, children }: { to: string; children: ReactNode }) {
   return <Link to={to} className="block transition-colors [&>*]:hover:border-brand-400">{children}</Link>
 }
 
-export function AgencyHeadline({ ar }: { ar: boolean }) {
+/**
+ * The window row: the period picker, how fresh the figures are, and what they are compared with — said ONCE for all the
+ * cards under it. Its own component so the fitted dashboard can seat it in the toolbar of both tabs that read the period.
+ */
+export function AgencyPeriodBar({ ar }: { ar: boolean }) {
+  const overview = useOverview()
+  const d = overview.data
+  const current = (d?.current ?? undefined) as MoneyTotals | undefined
+  const previous = (d?.previous ?? undefined) as MoneyTotals | undefined
+  const currency = d?.currency ?? null
+  const comparable = current !== undefined && previous !== undefined && comparableWindows({ current, previous })
+
+  if (overview.isLoading || overview.isError || !d) return <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary"><DateRangePicker budgetHint testId="agency-period-picker" /></div>
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+      <DateRangePicker budgetHint testId="agency-period-picker" />
+      <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
+      {/*
+        The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
+        which on a half-width phone card in English was wider than the card and scrolled the page
+        sideways (responsive-sweep, chromium, ltr). One line here says it for all four.
+      */}
+      {comparable && (
+        <span data-testid="agency-compared-with">
+          {ar ? 'مقارنةً بـ ' : 'Compared with '}
+          <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
+        </span>
+      )}
+      {currency === null && current !== undefined && (
+        <span data-testid="agency-currency-note">{ar ? 'الأرقام بلا عملة واحدة — لا تُجمع عبر العملات.' : 'No single currency — figures are not summed across currencies.'}</span>
+      )}
+    </div>
+  )
+}
+
+export function AgencyHeadline({ ar, bar = true }: { ar: boolean; /** The period row — the fitted dashboard seats it in its own toolbar and passes `false`. */ bar?: boolean }) {
   const overview = useOverview()
   const locale = ar ? 'ar' : 'en'
 
@@ -121,24 +157,7 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
 
   return (
     <section data-testid="agency-headline" className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
-        <DateRangePicker budgetHint testId="agency-period-picker" />
-        <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
-        {/*
-          The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
-          which on a half-width phone card in English was wider than the card and scrolled the page
-          sideways (responsive-sweep, chromium, ltr). One line here says it for all four.
-        */}
-        {comparable && (
-          <span data-testid="agency-compared-with">
-            {ar ? 'مقارنةً بـ ' : 'Compared with '}
-            <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
-          </span>
-        )}
-        {currency === null && current !== undefined && (
-          <span data-testid="agency-currency-note">{ar ? 'الأرقام بلا عملة واحدة — لا تُجمع عبر العملات.' : 'No single currency — figures are not summed across currencies.'}</span>
-        )}
-      </div>
+      {bar && <AgencyPeriodBar ar={ar} />}
 
       {current === undefined ? (
         <p data-testid="agency-headline-empty" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
