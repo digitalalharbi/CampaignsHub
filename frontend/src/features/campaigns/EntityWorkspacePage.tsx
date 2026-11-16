@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { AgencyFit, FitPanel, useBoxHeight } from '@/components/fit/AgencyFit'
 import { TabStrip } from '@/components/fit/TabStrip'
 import { CampaignViewsBar } from './CampaignViewsBar'
+import { LevelTabs } from './LevelTabs'
 import type { SavedView } from '@/features/dashboard/savedViews'
 import { useQuery } from '@tanstack/react-query'
 import { Columns3 } from 'lucide-react'
@@ -105,6 +106,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
   if (!currentProjectId) {
     return (
       <div className="space-y-6">
+        <LevelTabs />
         <PageIntro title={title} purpose={purpose} />
         <ProjectChooser purpose="analytics" />
       </div>
@@ -120,6 +122,8 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
 
   return (
     <AgencyFit className="space-y-4" testid={`entity-workspace-${level}`} active={tab !== 'drivers'}>
+      {/* CAMPAIGN-LEVELS-001 — الحملات · المجموعات · الإعلانات, one strip, the query carried along. */}
+      <LevelTabs />
       <PageIntro title={title} purpose={purpose} />
 
       <FilterBar
