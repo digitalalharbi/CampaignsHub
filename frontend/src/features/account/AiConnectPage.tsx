@@ -72,7 +72,7 @@ const TROUBLE: { ar: [string, string]; en: [string, string] }[] = [
 /** The whole guide as Markdown — every app with its snippet — for «انسخ الدليل». */
 function guideMarkdown(url: string, token: string, ar: boolean): string {
   const lines = [
-    ar ? '# ربط CampaignsHub بالذكاء الاصطناعي (MCP)' : '# Connect CampaignsHub to AI (MCP)',
+    ar ? '# ربط CampaignsHub عبر MCP' : '# Connect CampaignsHub over MCP',
     '',
     `${ar ? 'عنوان الخادم' : 'Server URL'}: ${url}`,
     '',
@@ -90,7 +90,7 @@ function guideMarkdown(url: string, token: string, ar: boolean): string {
 }
 
 /**
- * MCP-SERVER-001 — «ربط الذكاء الاصطناعي»: connect Claude, Gemini or ChatGPT to CampaignsHub over MCP.
+ * MCP-SERVER-001 — «ربط MCP»: connect Claude, Gemini or ChatGPT to CampaignsHub over MCP.
  *
  * The person creates a named token (shown ONCE), picks their app and copies a ready snippet. The connected assistant acts as
  * this person — their workspace, clients and permissions — reads freely, and can only PROPOSE a change for approval here.
@@ -119,7 +119,7 @@ export function AiConnectPage() {
   return (
     <div className="space-y-4" data-testid="ai-connect">
       <header>
-        <h1 className="flex items-center gap-2 font-heading text-2xl font-bold text-text-primary"><Plug size={22} aria-hidden /> {tx('ربط الذكاء الاصطناعي', 'Connect AI')}</h1>
+        <h1 className="flex items-center gap-2 font-heading text-2xl font-bold text-text-primary"><Plug size={22} aria-hidden /> {tx('ربط MCP', 'MCP')}</h1>
         <p className="mt-1 text-sm text-text-secondary">
           {tx('اربط Claude أو Gemini أو ChatGPT بكامبينز هب، واسأله عن حملاتك مباشرة. يقرأ بصلاحياتك أنت فقط، ولا يغيّر أي حملة: أي تغيير يصلك هنا كاقتراح تعتمده أو ترفضه.',
             'Connect Claude, Gemini or ChatGPT to CampaignsHub and ask about your campaigns directly. It reads with your permissions only and never changes a campaign: any change arrives here as a proposal you approve or reject.')}
