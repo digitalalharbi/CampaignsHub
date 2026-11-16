@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
+import type { CreativePreview } from '@/features/content/api'
 import type { FxConversion, FxSpendNote } from '@/lib/money/fx'
 
 /**
@@ -57,6 +58,9 @@ export interface RankedCampaign {
   project_id: string | null
   name: string
   family: string
+  /** WATCH-BOARD-001 — the platform it ran on and its spend in the window (null without the money key). */
+  platform?: string
+  spend?: number | null
   cost_per_result: number | null
   cost_label: Words | null
   result: number | null
@@ -98,6 +102,8 @@ export interface RoleDashboard {
   thresholds: { near: number }
   scope: { clients: number; projects: number; restricted: boolean }
   can_money: boolean
+  /** WATCH-BOARD-001 — whether the follow-up board is offered (the member may open the campaigns). */
+  can_watch?: boolean
   sections: string[]
   /** PROJECT-LIFECYCLE-001 §7 — the budgets page's budget (SAR); `budget_fx`/`spent_fx` = the same converted by the engine; `fx` = exclusions + old rates. */
   money: (BudgetReading & { rows: number; budget_fx?: FxConversion | null; spent_fx?: FxConversion | null; fx?: FxSpendNote }) | null
@@ -169,6 +175,60 @@ export function useRoleDashboard(view: DashboardView | null, days: DashboardWind
     staleTime: 30_000,
     refetchInterval: 120_000,
     refetchOnWindowFocus: true,
+    retry: false,
+  })
+}
+
+/** WATCH-BOARD-001 — one content of the board: the ad as it ran, and the figures it is ranked on. */
+export interface WatchContent {
+  id: string | null
+  name: string | null
+  provider: string | null
+  preview: CreativePreview | null
+  spend: number | null
+  impressions: number | null
+  clicks: number | null
+  conversions: number | null
+  ctr: number | null
+  cpa: number | null
+  roas: number | null
+}
+
+export interface WatchUnit { id: string; kind: 'client' | 'project'; name: string; projects: number }
+
+/** WATCH-BOARD-001 — `GET /me/dashboard/watch`: the follow-up board over the member's reach, or one client of it. */
+export interface WatchBoard {
+  window: RoleDashboard['window']
+  units: WatchUnit[]
+  unit: string | null
+  can_money: boolean
+  currency: string | null
+  trend: { date: string; spend: number | null; impressions: number; clicks: number; conversions: number | null }[]
+  content: { best: WatchContent[]; worst: WatchContent[]; basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null; in_scope: number } | null
+  campaigns?: CampaignCounts
+  campaign_rows?: CampaignRow[]
+  families?: { family: string; campaigns: number; spend: number | null }[]
+  rank_family?: string
+  best?: RankedCampaign[]
+  worst?: RankedCampaign[]
+  platforms?: PlatformRow[]
+  performance?: PerformanceBlock | null
+}
+
+export function useWatchBoard(days: DashboardWindow, unit: string | null, enabled = true) {
+  const params = new URLSearchParams()
+  if (days !== 30) params.set('days', String(days))
+  if (unit) params.set('unit', unit)
+  const qs = params.toString()
+
+  return useQuery({
+    queryKey: ['me', 'dashboard', 'watch', days, unit],
+    queryFn: () => getData<WatchBoard>(qs ? `/me/dashboard/watch?${qs}` : '/me/dashboard/watch'),
+    enabled,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    // Another client or window keeps the board on screen, dimmed, until the new figures land.
+    placeholderData: keepPreviousData,
     retry: false,
   })
 }
