@@ -91,4 +91,13 @@ export const FIT_PAGER_HEIGHT = 44
  * flows and scrolls vertically like any other, because a locked page on a small screen would cut content off.
  * `index.css` carries the same query; `fitMedia.test.ts` fails if the two drift apart.
  */
-export const FIT_LOCK_QUERY = '(min-width: 1280px) and (min-height: 640px)'
+/*
+ * SCROLL-RESTORE-001 (owner: «النظام لا ينزل للأسفل، جزء من البيانات مفقود بسبب قاعدة عدم النزول») — the lock is OFF.
+ * A page pinned to one screen paged its tables to what fitted and clipped what it could not page, so on a laptop a
+ * table showed a few rows and the rest read as missing. Every page now flows and scrolls vertically (never sideways);
+ * tables draw their full page with the pager below. The machinery stays (a query no screen matches) so a single page
+ * can be locked again deliberately, but nothing is pinned by default.
+ *
+ * Was: '(min-width: 1280px) and (min-height: 640px)'.
+ */
+export const FIT_LOCK_QUERY = '(min-width: 100000px)'
