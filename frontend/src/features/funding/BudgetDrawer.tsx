@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { MetricLineChart, CHART_SERIES } from '@/features/analytics/charts'
 import { providerLabel } from '@/features/campaigns/labels'
 import { SlideOver } from './SlideOver'
-import { ModeBadges, PeriodChip, PlatformSplit, Ring, Sar } from './BudgetBoard'
+import { ModeBadges, PeriodChip, PlatformSplit, Sar } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
 import { BudgetLimits } from './BudgetLimits'
@@ -41,6 +41,7 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
       onClose={onClose}
       closeLabel={tx(L.close)}
       testid="budget-drawer"
+      center
       title={
         data && st ? (
           <div className="flex min-w-0 flex-col gap-0.5">
@@ -56,6 +57,9 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
     >
       {!data ? <div className="min-h-[12rem]" aria-busy /> : (
         <div className="flex min-w-0 flex-col gap-3" data-testid="budget-panel">
+          {/* BUDGET-DRAWER-FIT-001 — Owner 2026-11-17: the panel was taller than the screen. From a laptop width it is two columns: the figures, limits and actions on one side, the chart and the platform split on the other; the long records follow underneath. */}
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2 lg:items-start">
+          <div className="flex min-w-0 flex-col gap-3">
           {data.payment_mode === 'credit' ? (
             <div className="flex flex-col gap-1.5" data-testid="credit-figures">
               <div className="grid grid-cols-2 gap-2">
@@ -73,14 +77,27 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-3" data-testid="direct-figures">
-              {data.used_ratio !== null && <Ring ratio={Math.min(1, data.used_ratio)} tone={data.status === 'over' ? 'danger' : st?.tone ?? 'neutral'} size={44} />}
-              <div className="grid flex-1 grid-cols-3 gap-2">
-                <Fig label={L.approved} ar={ar}><Sar n={data.approved} ar={ar} /></Fig>
-                <Fig label={L.spent} ar={ar}><Sar n={data.spent} ar={ar} /></Fig>
-                <Fig label={L.remaining} ar={ar}>
-                  <span data-testid="budget-remaining"><Sar n={data.remaining} ar={ar} className={data.remaining !== null && data.remaining < 0 ? 'text-danger' : ''} /></span>
-                </Fig>
+            <div className="flex flex-col gap-2" data-testid="direct-figures">
+              {/* BUDGET-POPUP-001 — Owner 2026-11-17: the REMAINING is the line the accountant follows; the budget and the spend are the setting and the check, so they sit small beside it. */}
+              <div className="flex items-end justify-between gap-3">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-xs font-bold text-text-secondary">{tx(L.remaining)}</span>
+                  <span className="text-3xl font-extrabold leading-tight" data-testid="budget-remaining">
+                    <Sar n={data.remaining} ar={ar} className={data.remaining !== null && data.remaining < 0 ? 'text-danger' : ''} />
+                  </span>
+                </div>
+                {data.approved ? data.remaining !== null && (
+                  <bdi dir="ltr" className="tnum text-sm font-extrabold text-text-secondary">{Math.max(0, Math.round((data.remaining / data.approved) * 100))}%</bdi>
+                ) : null}
+              </div>
+              {data.approved ? data.remaining !== null && (
+                <span className="h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden data-testid="remaining-line">
+                  <span className={`block h-full rounded-full ${TONE_BAR[data.status === 'over' ? 'danger' : st?.tone === 'warning' ? 'warning' : 'success']}`} style={{ width: `${Math.max(0, Math.min(100, Math.round((data.remaining / data.approved) * 100)))}%` }} />
+                </span>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+                <span>{tx(L.approved)} <b className="tnum font-bold text-text-secondary"><Sar n={data.approved} ar={ar} /></b></span>
+                <span>{tx(L.spent)} <b className="tnum font-bold text-text-secondary"><Sar n={data.spent} ar={ar} /></b></span>
               </div>
             </div>
           )}
@@ -103,11 +120,13 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
             </div>
           )}
 
+          </div>
+          <div className="flex min-w-0 flex-col gap-3">
           {data.payment_mode === 'direct' && data.series.length > 1 && (
             <div className="min-w-0" data-testid="budget-chart">
               <MetricLineChart
                 data={data.series.map((p) => ({ date: p.date, remaining: p.remaining, approved: p.approved }))}
-                height={120}
+                height={104}
                 series={[
                   { key: 'remaining', name: tx(L.remaining), color: CHART_SERIES[0], kind: 'money' },
                   { key: 'approved', name: tx(L.approved), color: CHART_SERIES[3], kind: 'money' },
@@ -133,6 +152,9 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
               </ul>
             </div>
           )}
+
+          </div>
+          </div>
 
           {data.payment_mode === 'credit' && data.invoice_months.length > 0 && <InvoiceMonths data={data} ar={ar} />}
 
