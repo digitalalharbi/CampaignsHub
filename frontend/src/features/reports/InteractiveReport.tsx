@@ -11,7 +11,7 @@ import { StoreAnalyticsBlock, type StoreAnalyticsPayload } from './StoreAnalytic
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
@@ -504,6 +504,27 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
     return visible
   }, [data])
   const cur = slides[i]
+  const next = () => setI((v) => Math.min(slides.length - 1, v + 1))
+  const prev = () => setI((v) => Math.max(0, v - 1))
+  const touchX = useRef<number | null>(null)
+
+  /*
+   * REPORT-DECK-NAV-001 — Owner 2026-11-17: a client opened the saved report and never noticed it had more pages. The deck now
+   * says so without a word: a progress strip with one segment per page, a filled «next» button under the page and beside it,
+   * the keyboard's arrows, and a swipe on a phone. In this RTL deck the next page is to the LEFT.
+   */
+  useEffect(() => {
+    if (mode !== 'deck') return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (e.key === 'ArrowLeft') setI((v) => Math.min(slides.length - 1, v + 1))
+      if (e.key === 'ArrowRight') setI((v) => Math.max(0, v - 1))
+    }
+    document.addEventListener('keydown', onKey)
+
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mode, slides.length])
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
   // Short performance note repeated quietly under each slide (footer), except the cover.
@@ -535,7 +556,54 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       </div>
       <SnapshotAge data={data} />
       {mode === 'deck' ? (
-        <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}{cur && footer(cur)}</div>
+        <div className="relative" data-testid="deck">
+          <div className="mb-3 flex gap-1" role="tablist" aria-label={ar ? 'الصفحات' : 'Pages'} data-testid="deck-progress">
+            {slides.map((s, k) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={k === i}
+                aria-label={`${k + 1}`}
+                onClick={() => setI(k)}
+                className={`h-1.5 flex-1 rounded-full transition-colors ${k === i ? 'bg-brand-500' : k < i ? 'bg-brand-300' : 'bg-surface-secondary hover:bg-border'}`}
+              />
+            ))}
+          </div>
+          <div
+            className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6"
+            onTouchStart={(e) => { touchX.current = e.touches[0]?.clientX ?? null }}
+            onTouchEnd={(e) => {
+              const x = e.changedTouches[0]?.clientX
+              const from = touchX.current
+              touchX.current = null
+              if (from === null || x === undefined || Math.abs(x - from) < 60) return
+              if (x > from) next()
+              else prev()
+            }}
+          >
+            {cur && render(cur)}{cur && footer(cur)}
+          </div>
+          {i > 0 && (
+            <button type="button" data-testid="deck-side-prev" aria-label={ar ? 'السابق' : 'Previous'} onClick={prev} className="absolute -right-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-primary shadow-[var(--shadow-small)] hover:bg-surface-hover sm:flex">
+              <ChevronRight size={22} />
+            </button>
+          )}
+          {i < slides.length - 1 && (
+            <button type="button" data-testid="deck-side-next" aria-label={ar ? 'التالي' : 'Next'} onClick={next} className="absolute -left-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 text-white shadow-[var(--shadow-small)] hover:bg-brand-700 sm:flex">
+              <ChevronLeft size={22} />
+            </button>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-2" data-testid="deck-nav">
+            <button type="button" data-testid="deck-prev" aria-label={ar ? 'السابق' : 'Previous'} onClick={prev} disabled={i === 0} className="flex h-11 w-14 items-center justify-center rounded-xl border border-border text-text-primary hover:bg-surface-hover disabled:opacity-30">
+              <ChevronRight size={20} />
+            </button>
+            <span className="tnum text-sm font-bold text-text-secondary">{i + 1} / {slides.length}</span>
+            <button type="button" data-testid="deck-next" aria-label={ar ? 'التالي' : 'Next'} onClick={next} disabled={i === slides.length - 1} className="flex h-11 w-20 items-center justify-center rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-30">
+              <ChevronLeft size={22} />
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}{footer(s)}</div>)}</div>
       )}
