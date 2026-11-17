@@ -77,16 +77,15 @@ final class WorkspaceRolePresets
         return [
             self::OWNER => ['ar' => 'مدير المساحة', 'en' => 'Workspace manager', 'permissions' => null],
 
+            /*
+             * PM-READ-ONLY-001 — «إدارة المشاريع اطلاع فقط»: a project manager reads what is left of the budget, the content and its
+             * analysis, the performance and the analytics of the clients chosen for them. Nothing here creates, launches, pauses,
+             * edits, approves, sends or assigns; those keys moved to the workspace manager and the media buyer, who hold them already.
+             */
             self::PROJECT_MANAGER => ['ar' => 'مدير مشروع', 'en' => 'Project manager', 'permissions' => [
                 ...self::BASE, ...$read,
-                'clients.update', 'clients.view_analytics', 'clients.view_reports', 'clients.create_reports', 'clients.share_reports',
-                'campaigns.create', 'campaigns.update', 'campaigns.launch', 'campaigns.pause',
-                'content.view', 'content.create', 'content.update', 'content.approve', 'content.reject',
-                'reports.create', 'reports.export', 'reports.share',
-                'leads.view', 'budget.view', 'alerts.view',
-                'requests.view', 'requests.update', 'requests.change_status', 'requests.comment_client', 'requests.comment_internal',
-                'tasks.view', 'tasks.create', 'tasks.update',
-                'messaging.view', 'messaging.manage',
+                'clients.view_analytics', 'clients.view_reports',
+                'content.view', 'budget.view', 'alerts.view',
             ]],
 
             /*

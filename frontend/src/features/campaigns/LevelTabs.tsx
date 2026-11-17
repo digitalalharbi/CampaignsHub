@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Image as ImageIcon, Layers, Megaphone } from 'lucide-react'
+import { Building2, Image as ImageIcon, Layers, Megaphone } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 
@@ -15,6 +15,7 @@ import { useUi } from '@/stores/ui'
  * scrollable sideways inside itself on a phone rather than pushing the page sideways.
  */
 const LEVELS = [
+  { key: 'accounts', path: '/accounts', ar: 'الحسابات', en: 'Accounts', Icon: Building2 },
   { key: 'campaigns', path: '/campaigns', ar: 'الحملات', en: 'Campaigns', Icon: Megaphone },
   { key: 'ad-groups', path: '/ad-groups', ar: 'المجموعات', en: 'Ad groups', Icon: Layers },
   { key: 'ads', path: '/ads', ar: 'الإعلانات', en: 'Ads', Icon: ImageIcon },
