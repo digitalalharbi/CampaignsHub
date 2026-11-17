@@ -90,9 +90,10 @@ export function useSectionAllowed(): (to: string) => boolean {
   const q = useMyAccess()
   const sections = q.data?.sections
   const user = useAuth((s) => s.user)
+  // NAV-OWNER-001 — the workspace owner sees every section of their own workspace, whatever their role row holds.
   return (to: string) => {
     const perm = permissionOfPath(to)
-    if (perm !== null && user && !user.is_platform_admin && !user.permissions.includes(perm)) return false
+    if (perm !== null && user && !user.is_platform_admin && !q.data?.is_owner && !user.permissions.includes(perm)) return false
     if (!sections) return true
     const section = sectionOfPath(to)
     return section === null || sections.includes(section)
