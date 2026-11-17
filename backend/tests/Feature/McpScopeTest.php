@@ -57,7 +57,7 @@ final class McpScopeTest extends TestCase
     }
 
     /** @param array<string, mixed> $arguments */
-    private function call(User $user, string $tool, array $arguments = [])
+    private function mcp(User $user, string $tool, array $arguments = [])
     {
         $token = $user->createToken('mcp:Claude', ['mcp'])->plainTextToken;
         $this->app['auth']->forgetGuards();
@@ -73,11 +73,11 @@ final class McpScopeTest extends TestCase
         $buyer = $this->member([ProjectCapability::MONEY_VIEW]);
 
         foreach (['list_campaigns', 'get_store_sales', 'compare_targets'] as $tool) {
-            $text = (string) $this->call($buyer, $tool)->json('result.content.0.text');
+            $text = (string) $this->mcp($buyer, $tool)->json('result.content.0.text');
             $this->assertDoesNotMatchRegularExpression('/"(spend|revenue|roas|cpa|cpc|cpm|budget|daily_budget)"/', $text, "{$tool} leaked a money key over MCP");
         }
 
-        $this->call($buyer, 'propose_change', [
+        $this->mcp($buyer, 'propose_change', [
             'provider' => 'meta', 'target_external_id' => '1', 'action' => 'set_daily_budget', 'daily_budget' => 100, 'reason' => 'x',
         ])->assertJsonPath('result.isError', true);
     }
@@ -86,7 +86,7 @@ final class McpScopeTest extends TestCase
     {
         $peer = $this->member([]);
 
-        $text = (string) $this->call($peer, 'get_store_sales', ['days' => 30])->assertJsonPath('result.isError', false)->json('result.content.0.text');
+        $text = (string) $this->mcp($peer, 'get_store_sales', ['days' => 30])->assertJsonPath('result.isError', false)->json('result.content.0.text');
         $this->assertStringContainsString('"has_store":false', $text);
         $this->assertStringContainsString('"spend"', $text, 'a member who may see money gets the spend beside the (empty) store');
     }
