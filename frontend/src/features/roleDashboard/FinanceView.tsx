@@ -27,7 +27,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const cur = m?.currency ?? null
   const inv = d.invoices ?? null
   const near = d.thresholds.near
-  const extra = d as RoleDashboard & FinanceExtras
+  const extra = d as Omit<RoleDashboard, 'platforms'> & FinanceExtras
   const platforms = extra.platforms ?? []
   const limits = extra.spend_limits ?? []
   const bars = useBoxHeight(120)
