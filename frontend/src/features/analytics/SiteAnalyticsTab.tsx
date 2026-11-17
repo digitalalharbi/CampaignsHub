@@ -148,7 +148,7 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
       ) : (
         <div data-testid={testId} className="min-w-0">
           <MetricTable
-            head={ar ? ['', 'الجلسات', 'التفاعل', 'المشتريات', 'التحويل', 'الإيراد'] : ['', 'Sessions', 'Engagement', 'Purchases', 'Conversion', 'Revenue']}
+            head={ar ? ['', 'الجلسات', 'التفاعل', 'الطلبات', 'التحويل', 'الإيراد'] : ['', 'Sessions', 'Engagement', 'Purchases', 'Conversion', 'Revenue']}
             rows={table.rows.map((r) => [
               <span key="n" className="block max-w-[16rem] truncate font-semibold text-text-primary" dir="auto" title={name(r)}>
                 {name(r)}{sub && sub(r) ? <span className="block truncate text-[11px] font-normal text-text-muted" dir="ltr">{sub(r)}</span> : null}
@@ -176,9 +176,9 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
 function SiteSkeleton({ ar }: { ar: boolean }) {
   return (
     <div data-testid="site-skeleton" aria-busy="true" aria-label={ar ? 'جارٍ تحميل تحليلات الموقع' : 'Loading site analytics'} className="space-y-4">
-      <KpiRowSkeleton idPrefix="site-kpi" columns="grid-cols-2 lg:grid-cols-4" labels={ar ? ['الجلسات', 'معدل التفاعل', 'المشتريات', 'الإيراد'] : ['Sessions', 'Engagement rate', 'Purchases', 'Revenue']} />
+      <KpiRowSkeleton idPrefix="site-kpi" columns="grid-cols-2 lg:grid-cols-4" labels={ar ? ['الجلسات', 'معدل التفاعل', 'الطلبات', 'الإيراد'] : ['Sessions', 'Engagement rate', 'Purchases', 'Revenue']} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والمشتريات يوميًا' : 'Sessions and purchases by day'}>
+        <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والطلبات يوميًا' : 'Sessions and purchases by day'}>
           <ChartBodySkeleton height={240} testid="site-trend-skeleton" />
         </ChartCard>
         <ChartCard title={ar ? 'قمع التسوق' : 'Shopping funnel'}>

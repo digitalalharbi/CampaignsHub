@@ -316,7 +316,7 @@ export const SPECS: Record<string, Spec> = {
     label: { ar: 'متوسط قيمة الطلب', en: 'Average order value' },
     format: money,
     derived: true,
-    hint: { ar: 'الإيراد ÷ عدد المشتريات.', en: 'Revenue ÷ purchases.' },
+    hint: { ar: 'الإيراد ÷ عدد الطلبات.', en: 'Revenue ÷ purchases.' },
   },
   installs: {
     label: { ar: 'التحميلات', en: 'Installs' },
