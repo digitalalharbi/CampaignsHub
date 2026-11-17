@@ -130,7 +130,7 @@ export function Kpi({ label, value, hint, to, testId, status, children }: {
       to={to}
       data-testid={testId}
       data-status={s ?? undefined}
-      className="group relative flex min-w-0 flex-col justify-between gap-1 overflow-hidden rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      className="group relative flex min-w-0 flex-col justify-start gap-1 lg:justify-between overflow-hidden rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
     >
       {s && <span aria-hidden className="absolute inset-y-0 start-0 w-1" style={{ background: STATUS_COLOR[s] }} />}
       <span className="flex items-center justify-between gap-2 text-xs font-semibold text-text-secondary">
