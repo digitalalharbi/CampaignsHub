@@ -222,20 +222,20 @@ function SpendLimitsFit({ projectId, locale, ar, limits, counts, suggestedCurren
         <FreshnessChip freshness={l.freshness} testid={`spend-limit-${l.id}-freshness`} />
       </span>
     ) },
-    { key: 'period', header: ar ? 'الفترة' : 'Period', width: '9.5rem', cell: (l) => <span dir="ltr" title={`${l.period.from} → ${l.period.to}`} className="tnum text-xs text-text-muted">{shortDay(l.period.from)} → {shortDay(l.period.to)}</span> },
-    { key: 'amount', header: ar ? 'الحد' : 'Amount', width: '8rem', align: 'end', cell: (l) => (
+    { key: 'period', header: ar ? 'الفترة' : 'Period', width: '8.5rem', cell: (l) => <span dir="ltr" title={`${l.period.from} → ${l.period.to}`} className="tnum text-xs text-text-muted">{shortDay(l.period.from)} → {shortDay(l.period.to)}</span> },
+    { key: 'amount', header: ar ? 'الحد' : 'Amount', width: '6.5rem', align: 'end', cell: (l) => (
       <span data-testid={`spend-limit-${l.id}-amount`} title={moneyExact(l.amount, l.currency ?? null)} className="tnum font-bold" dir="ltr">{money(l.amount, l.currency)}</span>
     ) },
-    { key: 'consumed', header: ar ? 'الإنفاق' : 'Consumed', width: '8rem', align: 'end', cell: (l) => (
+    { key: 'consumed', header: ar ? 'الإنفاق' : 'Consumed', width: '6.5rem', align: 'end', cell: (l) => (
       <span data-testid={`spend-limit-${l.id}-consumed`} className="tnum" dir="ltr" title={l.consumed === null ? undefined : moneyExact(l.consumed, l.consumed_currency ?? l.currency ?? null)}>
         {l.consumed === null ? '—' : money(l.consumed, l.consumed_currency ?? l.currency)}
       </span>
     ) },
-    { key: 'remaining', header: ar ? 'المتبقي' : 'Remaining', width: '8rem', align: 'end', cell: (l) => (
+    { key: 'remaining', header: ar ? 'المتبقي' : 'Remaining', width: '6.5rem', align: 'end', cell: (l) => (
       <span className={`tnum ${l.remaining !== null && l.remaining < 0 ? 'font-bold text-danger' : ''}`} dir="ltr">{l.remaining === null ? '—' : money(l.remaining, l.currency)}</span>
     ) },
-    { key: 'used', header: ar ? 'نسبة الإنفاق' : 'Used', width: '6rem', align: 'end', cell: (l) => <span data-testid={`spend-limit-${l.id}-utilisation`} className="tnum font-bold" dir="ltr">{pct(l)}</span> },
-    { key: 'pace', header: ar ? 'السرعة' : 'Pace', width: '5.5rem', align: 'end', cell: (l) => <span className="tnum" dir="ltr">{l.pace === null ? '—' : `${num(l.pace * 100)}%`}</span> },
+    { key: 'used', header: ar ? 'نسبة الإنفاق' : 'Used', width: '5.5rem', align: 'end', cell: (l) => <span data-testid={`spend-limit-${l.id}-utilisation`} className="tnum font-bold" dir="ltr">{pct(l)}</span> },
+    { key: 'pace', header: ar ? 'السرعة' : 'Pace', width: '4.5rem', align: 'end', cell: (l) => <span className="tnum" dir="ltr">{l.pace === null ? '—' : `${num(l.pace * 100)}%`}</span> },
     { key: 'act', header: '', width: '8.5rem', align: 'end', cell: (l) => <RowActions limit={l} ar={ar} pending={remove.isPending} onDetails={() => setDetail(l.id)} onEdit={() => setEditing(l)} onRemove={() => remove.mutate(l.id)} /> },
   ]
 
