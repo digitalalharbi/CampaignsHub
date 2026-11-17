@@ -275,7 +275,8 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
   const keys = [...selected, ...extras].slice(0, 8)
   /* REPORT-COMPACT-001 — the small cards fill their row: the delivery rates (CPM, CPC, CTR, frequency) join them when the period has them. */
-  const fill = ['ctr', 'cpm', 'cpc', 'frequency'].filter((k) => !keys.includes(k) && (chosenInSetup || !SPEND_DERIVED.has(k)))
+  // A link whose operator chose its metrics shows ONLY those: an unchosen rate (and never a cost-per-click standing in for a hidden result) stays off.
+  const fill = ['ctr', 'cpm', 'cpc', 'frequency'].filter((k) => !keys.includes(k) && (chosenInSetup ? payload.metrics?.includes(k) === true : !SPEND_DERIVED.has(k)))
   const card = (key: string) => {
     const meta = reader.meta[key]
     if (!meta) return null
