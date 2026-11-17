@@ -29,6 +29,8 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->text('redirect_uri');
             $table->string('code_challenge', 128);
+            // MCP-SCOPE-001 — the workspace the person was in when they pressed «سماح»; the token answers from it alone.
+            $table->uuid('membership_id')->nullable();
             $table->timestamp('expires_at');
             $table->timestamp('used_at')->nullable();
             $table->timestamps();
@@ -40,6 +42,7 @@ return new class extends Migration
             $table->string('client_id', 64)->index();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->unsignedBigInteger('access_token_id')->nullable()->index();
+            $table->uuid('membership_id')->nullable();
             $table->timestamp('expires_at');
             $table->timestamp('revoked_at')->nullable();
             $table->timestamps();
