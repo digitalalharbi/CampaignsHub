@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
@@ -20,8 +20,13 @@ import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readM
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 import { ReportFooter, reportStamp } from './reportFooter'
-import { DateRangeField } from '@/components/ui/DateRangeField'
 import { LiveDeliveryNote } from './live/LiveDeliveryNote'
+
+/*
+ * REPORT-DATE-PICKER-001 — the picker (calendar, presets, typed fields) is loaded when the period bar renders, not with the
+ * route: it pulled the /r/ closure 11.8 KB over PUBLIC_REPORT_BUDGET_BYTES. The fallback is the same-size button, so nothing shifts.
+ */
+const DateRangeField = lazy(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -246,7 +251,9 @@ export function LiveSharedReport({
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {!fixed && (payload.period.kind ?? 'custom') === 'custom' && (
             <div className="min-w-[14rem]">
-              <DateRangeField from={custom?.from ?? payload.period.from} to={custom?.to ?? payload.period.to} onChange={(from, to) => setCustom({ from, to })} testId="live-range-picker" />
+              <Suspense fallback={<div className="min-h-11 w-full rounded-xl border border-border-strong bg-surface sm:min-h-10" aria-hidden />}>
+                <DateRangeField from={custom?.from ?? payload.period.from} to={custom?.to ?? payload.period.to} onChange={(from, to) => setCustom({ from, to })} testId="live-range-picker" />
+              </Suspense>
             </div>
           )}
           {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
