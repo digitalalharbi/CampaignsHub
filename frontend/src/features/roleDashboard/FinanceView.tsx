@@ -7,9 +7,18 @@ import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './
 import { fmtDate } from '@/lib/datetime'
 
 const T = {
-  ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', owed: 'المستحق', overdue: 'متأخرة', exhaust: 'قرب النفاد', runOut: 'موعد النفاد', invoices: 'الفواتير', nothing: 'لا توجد بيانات', inDays: 'يوم', of: 'من الميزانية', pct: 'نسبة الإنفاق', collected: 'محصّل', invoiced: 'مُصدَر', over: 'تجاوزت', near: 'قريبة', due: 'تستحق خلال أسبوع', now: 'نفدت', noRate: 'لا يوجد إنفاق حديث', mixed: 'عملات متعددة' },
-  en: { budget: 'Budget', spend: 'Spend', remaining: 'Remaining', owed: 'Owed', overdue: 'Overdue', exhaust: 'Near limit', runOut: 'Run-out date', invoices: 'Invoices', nothing: 'No data', inDays: 'd', of: 'of budget', pct: 'Spend ratio', collected: 'Collected', invoiced: 'Invoiced', over: 'Over', near: 'Near', due: 'Due this week', now: 'Exhausted', noRate: 'No recent spend', mixed: 'Mixed currencies' },
+  ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', owed: 'المستحق', overdue: 'متأخرة', exhaust: 'قرب النفاد', runOut: 'موعد النفاد', invoices: 'الفواتير', nothing: 'لا توجد بيانات', inDays: 'يوم', of: 'من الميزانية', pct: 'نسبة الإنفاق', collected: 'محصّل', invoiced: 'مُصدَر', over: 'تجاوزت', near: 'قريبة', due: 'تستحق خلال أسبوع', now: 'نفدت', noRate: 'لا يوجد إنفاق حديث', mixed: 'عملات متعددة', platforms: 'توزيع المنصات', limits: 'حدود الإنفاق' },
+  en: { budget: 'Budget', spend: 'Spend', remaining: 'Remaining', owed: 'Owed', overdue: 'Overdue', exhaust: 'Near limit', runOut: 'Run-out date', invoices: 'Invoices', nothing: 'No data', inDays: 'd', of: 'of budget', pct: 'Spend ratio', collected: 'Collected', invoiced: 'Invoiced', over: 'Over', near: 'Near', due: 'Due this week', now: 'Exhausted', noRate: 'No recent spend', mixed: 'Mixed currencies', platforms: 'Platform split', limits: 'Spend limits' },
 }
+
+/** FINANCE-DASH-001 — what the finance view adds: the spend per platform and the spend limits. */
+interface FinanceExtras {
+  metrics_currency?: string | null
+  platforms?: { provider: string; spend: number; share: number | null }[]
+  spend_limits?: { id: string; project: string | null; amount: number; currency: string; remaining: number | null; utilisation: number | null; ends_on: string }[]
+}
+
+const PLATFORM: Record<string, string> = { meta: 'Meta', snapchat: 'Snapchat', tiktok: 'TikTok', google: 'Google', x: 'X', linkedin: 'LinkedIn' }
 
 export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
   const f = useFmt()
@@ -18,6 +27,9 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const cur = m?.currency ?? null
   const inv = d.invoices ?? null
   const near = d.thresholds.near
+  const extra = d as Omit<RoleDashboard, 'platforms'> & FinanceExtras
+  const platforms = extra.platforms ?? []
+  const limits = extra.spend_limits ?? []
   const bars = useBoxHeight(120)
   const invBars = useBoxHeight(120)
 
@@ -77,6 +89,47 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
               <RankingBarChart height={invBars.height} currency={inv.currency ?? ''} data={invData} bars={[{ key: 'v', name: t.invoices, kind: 'money' }]} rowColor={(row) => invColor[String(row.label)]} />
             )}
           </div>
+        </Panel>
+      </div>
+
+      {/* FINANCE-DASH-001 — the spend across the platforms, and every spend limit with what is left of it. */}
+      <div className="grid gap-3 lg:grid-cols-2" data-testid="dash-finance-split">
+        <Panel title={t.platforms} to={`/${portal}/budgets`} testId="dash-panel-platforms" className="min-h-[200px]">
+          {platforms.length === 0 ? <Nothing label={t.nothing} /> : (
+            <ul className="space-y-2.5">
+              {platforms.map((p) => (
+                <li key={p.provider} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-semibold text-text-primary" dir="ltr">{PLATFORM[p.provider] ?? p.provider}</span>
+                    <span className="tnum text-text-secondary">{f.money(p.spend, extra.metrics_currency ?? null)}{p.share !== null ? ` · ${f.pct(p.share)}` : ''}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round((p.share ?? 0) * 100)}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel title={t.limits} to={`/${portal}/spend-limits`} testId="dash-panel-limits" className="min-h-[200px]">
+          {limits.length === 0 ? <Nothing label={t.nothing} /> : (
+            <ul className="space-y-2.5">
+              {limits.map((l) => {
+                const s = budgetStatus(l.utilisation, near)
+                return (
+                  <li key={l.id} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="min-w-0 truncate font-semibold text-text-primary">{l.project ?? '—'}</span>
+                      <span className="tnum shrink-0 text-text-secondary">{t.remaining} {f.money(l.remaining, l.currency)} / {f.money(l.amount, l.currency)}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((l.utilisation ?? 0) * 100))}%`, background: STATUS_COLOR[s] }} />
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </Panel>
       </div>
 

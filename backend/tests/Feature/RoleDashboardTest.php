@@ -194,6 +194,12 @@ final class RoleDashboardTest extends TestCase
         $this->assertSame(1, $d['invoices']['overdue_count']);
         $this->assertArrayNotHasKey('campaign_rows', $d);
         $this->assertArrayNotHasKey('tasks', $d);
+        // FINANCE-DASH-001 — the spend split across the platforms and the spend limits ride with the finance view.
+        $this->assertIsArray($d['platforms']);
+        $this->assertIsArray($d['spend_limits']);
+        if ($d['platforms'] !== []) {
+            $this->assertEqualsWithDelta(1.0, array_sum(array_map(static fn (array $p): float => (float) $p['share'], $d['platforms'])), 0.01);
+        }
     }
 
     public function test_the_marketer_reads_his_own_campaigns_by_objective_and_no_money_without_the_key(): void
