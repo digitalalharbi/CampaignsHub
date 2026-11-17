@@ -78,7 +78,8 @@ export const MOBILE_TAB_BAR_HEIGHT = '4rem'
  * height the footer's last pixel abuts the bar's first, which reads as the content running under it
  * and measured as a 1px overlap once sub-pixel rounding was applied.
  */
-export const MOBILE_TAB_BAR_CLEARANCE = 'pb-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] md:pb-0'
+// MOBILE-APP-002 — the bar floats 0.5rem above the screen's edge now, so the clearance carries that too.
+export const MOBILE_TAB_BAR_CLEARANCE = 'pb-[calc(4rem+env(safe-area-inset-bottom)+1.5rem)] md:pb-0'
 
 export function MobileTabBar({
   tabs,
@@ -124,32 +125,38 @@ export function MobileTabBar({
             * `max-h-[78dvh]` with its own scroll keeps a long portal (the agency's has eighteen
             * sections) usable without the sheet growing past the screen.
             */}
+          {/*
+            * MOBILE-APP-002 — the sheet reads like an app's «all services»: a grab handle, then each group as a grid of
+            * tiles (a tinted icon over its name), three to a row — the way a banking app lays out its services — rather
+            * than a website's list of links. Every destination the rail offers is still here, in the rail's groups.
+            */}
           <div
             id={sheetId}
             data-testid="mobile-more-sheet"
-            className="absolute inset-x-0 bottom-0 flex max-h-[78dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-[var(--shadow-large)]"
+            className="absolute inset-x-0 bottom-0 flex max-h-[82dvh] flex-col rounded-t-[28px] border-t border-border bg-surface shadow-[var(--shadow-large)]"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-              <span className="font-heading text-sm font-extrabold text-text-primary">{ar ? 'كل الأقسام' : 'All sections'}</span>
+            <div className="flex shrink-0 justify-center pt-2" aria-hidden><span className="h-1 w-10 rounded-full bg-border" /></div>
+            <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-1">
+              <span className="font-heading text-base font-extrabold text-text-primary">{ar ? 'كل الأقسام' : 'All sections'}</span>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label={ar ? 'إغلاق' : 'Close'}
-                className="flex h-11 w-11 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-secondary text-text-muted hover:bg-surface-hover"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
               {moreHeader && <div className="mb-3">{moreHeader}</div>}
               {moreGroups.filter((g) => g.items.length > 0).map((group) => (
-                <div key={group.key} className="mb-4 last:mb-0">
-                  <p className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-text-muted">
+                <section key={group.key} className="mb-4 last:mb-0">
+                  <p className="px-1 pb-2 text-xs font-bold text-text-muted">
                     {ar ? group.ar : group.en}
                   </p>
-                  <div className="grid gap-0.5">
+                  <div className="grid grid-cols-3 gap-2">
                     {group.items.map((item) => (
                       <NavLink
                         key={item.to}
@@ -157,39 +164,45 @@ export function MobileTabBar({
                         end={item.end}
                         onClick={() => setOpen(false)}
                         className={({ isActive }) =>
-                          `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors ${
+                          `flex min-h-[84px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center text-xs font-bold transition-colors active:scale-[0.98] ${
                             isActive
-                              ? 'bg-[var(--brand-background)] text-brand-600'
-                              : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                              ? 'border-brand-600/40 bg-[var(--brand-background)] text-brand-600'
+                              : 'border-border bg-surface-secondary/60 text-text-primary hover:bg-surface-hover'
                           }`
                         }
                       >
-                        <item.icon size={18} className="shrink-0" />
-                        <span className="truncate">{ar ? item.ar : item.en}</span>
+                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--brand-background)] text-brand-600">
+                          <item.icon size={18} className="shrink-0" />
+                        </span>
+                        <span className="line-clamp-2 w-full leading-tight">{ar ? item.ar : item.en}</span>
                       </NavLink>
                     ))}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           </div>
         </div>
       )}
 
+      {/*
+        MOBILE-APP-002 — a floating bar, the way a banking app sits its tabs: inset from the edges, rounded, glass over
+        the page, the current tab a filled pill. Same tabs, same targets (each over 44px); only its shape changed.
+      */}
       <nav
         data-testid="mobile-tab-bar"
         aria-label={ar ? 'التنقل الرئيسي' : 'Primary navigation'}
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 backdrop-blur-md md:hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="fixed inset-x-3 z-50 overflow-hidden rounded-[22px] border border-border bg-surface/90 shadow-[var(--shadow-large)] backdrop-blur-xl md:hidden"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
       >
-        <div className="mx-auto flex items-stretch" style={{ height: MOBILE_TAB_BAR_HEIGHT }}>
+        <div className="mx-auto flex items-stretch px-1" style={{ height: MOBILE_TAB_BAR_HEIGHT }}>
           {tabs.map((tab) => (
             <NavLink
               key={tab.to}
               to={tab.to}
               end={tab.end}
               className={({ isActive }) =>
-                `flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold transition-colors ${
+                `flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-xs font-bold transition-colors ${
                   isActive ? 'text-brand-600' : 'text-text-muted'
                 }`
               }
@@ -197,7 +210,7 @@ export function MobileTabBar({
               {({ isActive }) => (
                 <>
                   {/* The active pill, not a colour change alone — a phone is read at a glance. */}
-                  <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${isActive ? 'bg-[var(--brand-background)]' : ''}`}>
+                  <span className={`flex h-8 w-12 items-center justify-center rounded-2xl transition-colors ${isActive ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]' : ''}`}>
                     <tab.icon size={19} />
                   </span>
                   <span className="w-full truncate text-center leading-none">{ar ? tab.ar : tab.en}</span>
@@ -213,11 +226,11 @@ export function MobileTabBar({
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-controls={sheetId}
-              className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold transition-colors ${
+              className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-xs font-bold transition-colors ${
                 open ? 'text-brand-600' : 'text-text-muted'
               }`}
             >
-              <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${open ? 'bg-[var(--brand-background)]' : ''}`}>
+              <span className={`flex h-8 w-12 items-center justify-center rounded-2xl transition-colors ${open ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]' : ''}`}>
                 <MoreHorizontal size={19} />
               </span>
               <span className="w-full truncate text-center leading-none">{ar ? 'المزيد' : 'More'}</span>

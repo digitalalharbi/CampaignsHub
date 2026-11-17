@@ -33,10 +33,11 @@
  */
 
 /** The figure a surface leads with — a dashboard hero, a single headline number. */
-export const METRIC_VALUE = 'tnum text-[28px] font-extrabold leading-none tracking-tight sm:text-[32px]'
+// MOBILE-DENSITY-001 — a phone is a smaller screen, not a narrower desktop: every step is one smaller below `sm`.
+export const METRIC_VALUE = 'tnum text-xl font-extrabold leading-none tracking-tight sm:text-2xl lg:text-[32px]'
 
 /** The figure inside a grid of cards, where eight of them share a row. */
-export const METRIC_VALUE_DENSE = 'tnum text-2xl font-extrabold leading-none tracking-tight sm:text-[26px]'
+export const METRIC_VALUE_DENSE = 'tnum text-lg font-extrabold leading-none tracking-tight sm:text-xl lg:text-[26px]'
 
 /** The name of the figure. One step above caption text, because it names rather than annotates. */
 export const METRIC_LABEL = 'text-xs font-semibold leading-tight'
@@ -45,16 +46,16 @@ export const METRIC_LABEL = 'text-xs font-semibold leading-tight'
 export const METRIC_HINT = 'text-xs leading-snug'
 
 /** A card's padding, phone first. */
-export const CARD_PAD = 'p-4 sm:p-5'
+export const CARD_PAD = 'p-3 sm:p-4 lg:p-5'
 
 /** A card inside a dense grid, where the row's rhythm matters more than each card's air. */
-export const CARD_PAD_DENSE = 'p-3.5 sm:p-4'
+export const CARD_PAD_DENSE = 'p-2.5 sm:p-3.5 lg:p-4'
 
 /** The gap between cards in a KPI row — the same on every surface, which is the point. */
-export const CARD_GAP = 'gap-3 sm:gap-4'
+export const CARD_GAP = 'gap-2 sm:gap-3 lg:gap-4'
 
 /** A page's own title. */
-export const PAGE_TITLE = 'text-2xl font-extrabold tracking-tight sm:text-[28px]'
+export const PAGE_TITLE = 'text-xl font-extrabold tracking-tight sm:text-2xl lg:text-[28px]'
 
 /*
  * NOV-FIT-001 — the rhythm of a page that has to fit the screen.
