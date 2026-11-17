@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, Hourglass, Play, ScanSearch, Zap } from 'lucide-react'
+import { ArrowUpRight, Clock, Hourglass, Play, ScanSearch, Zap } from 'lucide-react'
 import { Delta } from '@/components/ui/Delta'
-import { campaigns } from '@/lib/counted'
+import { campaigns, days, hours, minutes } from '@/lib/counted'
 import { platformLabel } from '@/lib/platforms'
 import { decideAlert, getAttentionBoard, type AlertPriority, type AttentionItem, type CellStatus } from './api'
 import { CELL_LABEL, CELL_MARK, CELL_TONE, PRIORITY_TONE, pick } from './decisionCopy'
@@ -48,6 +48,8 @@ export function AttentionBoard({ locale, projectId, onOpen }: { locale: 'ar' | '
   const platformsInList = [...new Set(board.needs_decision.flatMap((i) => i.platforms))]
   const items = board.needs_decision.filter((i) => (prio === null || i.priority === prio) && (platform === null || i.platforms.includes(platform)))
   const shown = showAllItems ? items : items.slice(0, LIST_SHOWN)
+  // OPS-CARD-001 — how fresh each campaign's figures are: the newest day any of its platforms reported.
+  const lastData = new Map(board.rows.map((r) => [r.campaign_id, Object.values(r.cells).map((c) => c.last_data).reduce<string | null>((max, d) => (d && (max === null || d > max) ? d : max), null)]))
 
   return (
     <section data-testid="alert-board" className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:p-4">
@@ -91,7 +93,7 @@ export function AttentionBoard({ locale, projectId, onOpen }: { locale: 'ar' | '
         <p data-testid="alert-board-empty" className="rounded-xl bg-success/10 px-3 py-2 text-sm font-semibold text-success">✓ {t.none}</p>
       ) : (
         <ol data-testid="alert-board-list" className="flex flex-col gap-1.5">
-          {shown.map((i) => <BoardItem key={i.id} i={i} ar={ar} t={t} onOpen={onOpen} />)}
+          {shown.map((i) => <BoardItem key={i.id} i={i} ar={ar} t={t} onOpen={onOpen} lastData={i.campaign_id ? lastData.get(i.campaign_id) ?? null : null} />)}
         </ol>
       )}
       {items.length > LIST_SHOWN && (
@@ -150,13 +152,45 @@ export function AttentionBoard({ locale, projectId, onOpen }: { locale: 'ar' | '
   )
 }
 
-function BoardItem({ i, ar, t, onOpen }: { i: AttentionItem; ar: boolean; t: (typeof T)['ar']; onOpen: (id: string) => void }) {
+/** «قبل 3 ساعات» from a date or timestamp; null when there is none. */
+function freshness(at: string | null, ar: boolean): string | null {
+  if (!at) return null
+  const ms = Date.now() - new Date(at.length === 10 ? `${at}T00:00:00` : at).getTime()
+  if (!Number.isFinite(ms)) return null
+  const loc = ar ? 'ar' : 'en'
+  const m = Math.max(1, Math.round(ms / 60_000))
+  const span = m < 60 ? minutes(m, loc) : m < 48 * 60 ? hours(Math.round(m / 60), loc) : days(Math.round(m / 1440), loc)
+
+  // «قبل ساعتين», not «قبل ساعتان»: after a preposition the dual takes its genitive ending.
+  return ar ? `آخر بيانات قبل ${span.replace(/ان$/, 'ين')}` : `Data from ${span} ago`
+}
+
+/**
+ * OPS-CARD-001 — the cause as a picture: the figure before, the figure now, and where the rule's line sits.
+ * Drawn only when the server measured both; nothing is estimated.
+ */
+function EvidenceBars({ before, now, threshold, id, ar }: { before: number; now: number; threshold: number | null; id: string; ar: boolean }) {
+  const max = Math.max(before, now, threshold ?? 0) || 1
+  const pct = (v: number) => `${Math.max(4, Math.round((Math.abs(v) / max) * 100))}%`
+
+  return (
+    <span data-testid={`alert-bars-${id}`} role="img" aria-label={ar ? `قبل ${before} والآن ${now}` : `Before ${before}, now ${now}`}
+      className="relative flex w-24 shrink-0 flex-col gap-0.5 sm:w-28">
+      <span className="h-1.5 rounded-full bg-[var(--border-strong)]" style={{ width: pct(before) }} />
+      <span className={`h-1.5 rounded-full ${now > before ? 'bg-danger' : 'bg-brand-600'}`} style={{ width: pct(now) }} />
+      {threshold !== null && threshold > 0 && threshold <= max && <span aria-hidden className="absolute -inset-y-0.5 w-0.5 rounded bg-warning" style={{ insetInlineStart: pct(threshold) }} />}
+    </span>
+  )
+}
+
+function BoardItem({ i, ar, t, onOpen, lastData }: { i: AttentionItem; ar: boolean; t: (typeof T)['ar']; onOpen: (id: string) => void; lastData: string | null }) {
   const qc = useQueryClient()
   const start = useMutation({
     mutationFn: () => decideAlert(i.id, { status: 'in_progress' }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['alert-attention'] }); void qc.invalidateQueries({ queryKey: ['alert-events'] }) },
   })
   const e = i.evidence
+  const fresh = freshness(lastData, ar)
   const AutoIcon = i.automation.state === 'done_automatically' ? Zap : i.automation.state === 'awaiting_approval' ? Hourglass : null
 
   return (
@@ -165,15 +199,23 @@ function BoardItem({ i, ar, t, onOpen }: { i: AttentionItem; ar: boolean; t: (ty
       <div className="flex flex-wrap items-center gap-1.5">
         <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${PRIORITY_TONE[i.priority]}`}>{i.priority}</span>
         <span className="min-w-0 flex-1 truncate font-semibold text-text-primary" title={pick(i.problem, ar)}>{pick(i.problem, ar)}</span>
+        {!i.insufficient && e.before !== null && e.now !== null && <EvidenceBars before={e.before} now={e.now} threshold={e.threshold_unit === '%' ? null : e.threshold} id={i.id} ar={ar} />}
         {!i.insufficient && e.before !== null && e.now !== null && e.metric && <Delta metric={e.metric} current={e.now} previous={e.before} ar={ar} />}
         {i.insufficient && <span data-testid={`alert-board-thin-${i.id}`} title={ar ? 'بيانات غير كافية' : 'Insufficient data'} className="rounded-full bg-surface-hover px-2 py-0.5 text-xs font-bold text-text-muted">{ar ? 'بيانات ناقصة' : 'Thin data'}</span>}
       </div>
+      {!i.insufficient && (i.numbers || i.impact) && (
+        <p data-testid={`alert-board-why-${i.id}`} className="flex min-w-0 flex-wrap gap-x-2 text-xs text-text-secondary">
+          {i.numbers && <span className="tnum truncate">{pick(i.numbers, ar)}</span>}
+          {i.impact && <span className="truncate text-text-muted">· {pick(i.impact, ar)}</span>}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <span className="max-w-[55%] truncate rounded-full bg-surface-hover px-2 py-0.5 font-semibold text-text-secondary">{i.campaign_name ?? i.platforms.map((p) => platformLabel(p, ar)).join('، ')}</span>
         {i.campaign_name && i.platforms.map((p) => <span key={p} className="rounded-full bg-surface-hover px-2 py-0.5 text-text-secondary">{platformLabel(p, ar).slice(0, 7)}</span>)}
         <span data-testid={`alert-auto-${i.id}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-bold ${AUTO_TONE[i.automation.state]}`}>
           {AutoIcon && <AutoIcon size={12} aria-hidden />}{t.auto[i.automation.state]}
         </span>
+        {fresh && <span data-testid={`alert-fresh-${i.id}`} className="inline-flex items-center gap-1 text-text-muted"><Clock size={12} aria-hidden />{fresh}</span>}
         <span title={i.owner?.name || t.unowned} className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500/15 px-1 font-bold text-brand-700">{i.owner?.name ? i.owner.name.slice(0, 1) : '–'}</span>
         <span className="ms-auto flex items-center gap-1">
           {i.decision_status === 'new' && (
