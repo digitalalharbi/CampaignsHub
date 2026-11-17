@@ -117,9 +117,9 @@ export const agencyNavGroups: readonly NavGroup[] = [
     key: 'finance',
     ar: 'المالية', en: 'Finance', icon: Wallet,
     leaves: [
-      // FIN-LOOP-001 — the approved budgets (money the client put in); the monitoring lines are «حدود الإنفاق» (style guide).
+      // FIN-LOOP-001 / ONE-BUDGET-UI-001 — the approved budget IS the project's spend limit: its alert steps and finer limits
+      // live in the budget's panel, so «حدود الإنفاق» is no longer a second rail entry (it still answers, see agencyFoldedLeaves).
       { to: '/agency/budgets', ar: 'الميزانيات', en: 'Budgets', icon: PiggyBank },
-      { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
       { to: '/agency/billing', ar: 'الفواتير', en: 'Invoices', icon: Receipt },
     ],
   },
@@ -153,6 +153,8 @@ export const agencySettingsGroup: NavGroup = {
 export const agencyFoldedLeaves: readonly NavLeaf[] = [
   { to: '/agency/launch', ar: 'حملة جديدة', en: 'Launch', icon: Rocket },
   { to: '/agency/portfolio', ar: 'ملخص المشاريع', en: 'Portfolio', icon: Layers },
+  // ONE-BUDGET-UI-001 — opened from a budget's panel («حدود أدق»).
+  { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
 ]
 export const agencyFoldedPaths: readonly string[] = agencyFoldedLeaves.map((l) => l.to)
 

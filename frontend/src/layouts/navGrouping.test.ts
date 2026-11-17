@@ -149,7 +149,7 @@ describe('no section is lost — moved is not the same as deleted', () => {
   })
 
   it('names exactly what left the rail (NAV-HOME-PLANS-001)', () => {
-    expect([...agencyFoldedPaths].sort()).toEqual(['/agency/launch', '/agency/portfolio'])
+    expect([...agencyFoldedPaths].sort()).toEqual(['/agency/launch', '/agency/portfolio', '/agency/spend-limits'])
     expect([...appFoldedPaths].sort()).toEqual(['/app/launch', '/app/portfolio'])
   })
 

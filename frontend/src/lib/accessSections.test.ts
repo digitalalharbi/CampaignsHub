@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { agencyNavGroups, agencySettingsGroup } from '@/layouts/agencyNav'
+import { agencyFoldedLeaves, agencyNavGroups, agencySettingsGroup } from '@/layouts/agencyNav'
 import { permissionOfPath, sectionOfPath } from './accessSections'
 
 /** ACCESS-SECTIONS-001 — every one of the seven sections has a rail entry the member's sections can hide. */
 describe('sectionOfPath', () => {
   it('maps the agency rail onto the seven sections and leaves everything else alone', () => {
-    const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
+    // ONE-BUDGET-UI-001 — «حدود الإنفاق» left the rail for the budget's panel; its address (a folded leaf) keeps its section.
+    const leaves = [...[...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves), ...agencyFoldedLeaves]
     const mapped = new Set(leaves.map((l) => sectionOfPath(l.to)).filter((s): s is string => s !== null))
     expect([...mapped].sort()).toEqual(['budgets', 'campaigns', 'integrations', 'invoices', 'reports', 'spend_limits', 'team'])
     expect(sectionOfPath('/agency/dashboard')).toBeNull()

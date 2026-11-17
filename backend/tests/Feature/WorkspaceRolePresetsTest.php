@@ -119,6 +119,18 @@ final class WorkspaceRolePresetsTest extends TestCase
         $this->assertNotContains(ProjectCapability::CAMPAIGNS_VIEW, $abilities);
         $this->assertNotContains(ProjectCapability::CAMPAIGNS_MANAGE, $abilities);
         $this->assertFalse($finance->hasPermission('settings.manage'));
+        // FINANCE-ADDS-BUDGET-001 — finance adds and renews budgets (the funding API's own key).
+        $this->assertTrue($finance->hasPermission('funding.manage'));
+    }
+
+    /** FINANCE-ADDS-BUDGET-001 — «إدارة المشاريع اطلاع فقط»: a project manager reads the budgets and never changes them. */
+    public function test_a_project_manager_reads_the_budgets_but_never_changes_them(): void
+    {
+        $pm = WorkspaceRolePresets::defaults(WorkspaceRolePresets::PROJECT_MANAGER);
+
+        $this->assertContains('budget.view', $pm);
+        $this->assertNotContains('budget.manage', $pm);
+        $this->assertNotContains('funding.manage', $pm);
     }
 
     public function test_a_project_manager_reaches_only_the_clients_chosen_for_them(): void
