@@ -107,7 +107,7 @@ final class PlatformAiKeyController extends Controller
                     'provider' => $p,
                     'configured' => $configured,
                     'key' => $configured ? $row?->maskedKey() : null,
-                    'enabled' => (bool) ($row?->enabled ?? false),
+                    'enabled' => (bool) ($row->enabled ?? false),
                     'updated_at' => $row?->updated_at?->toIso8601String(),
                 ];
             }, PlatformAiKey::ORDER),
