@@ -557,7 +557,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       */}
       <PageIntro
         testid={`${surface}-intro`}
-        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        title={surface === 'dashboard' ? (ar ? 'الرئيسية' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
         /*
           SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
 
