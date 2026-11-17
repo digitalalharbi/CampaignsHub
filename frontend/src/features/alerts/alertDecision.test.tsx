@@ -40,6 +40,11 @@ describe('the exception-first board', () => {
     expect(row).toHaveAttribute('data-priority', 'P1')
     expect(row).toHaveTextContent('تكلفة النتيجة ارتفعت')
     expect(row).toHaveTextContent('راجع المحتوى')
+    // OPS-CARD-001 — the cause as a picture, the numbers and the impact in words, and how old the figures are.
+    expect(screen.getByTestId('alert-bars-e1')).toHaveAttribute('aria-label', 'قبل 30 والآن 50')
+    expect(screen.getByTestId('alert-board-why-e1')).toHaveTextContent('قبل 30 ← الآن 50')
+    expect(screen.getByTestId('alert-board-why-e1')).toHaveTextContent('تدفع أكثر لكل نتيجة')
+    expect(screen.getByTestId('alert-fresh-e1')).toHaveTextContent('آخر بيانات قبل')
     expect(screen.getByTestId('board-cell-c1-meta')).toHaveAttribute('data-status', 'problem')
     expect(screen.getByTestId('board-cell-c1-tiktok')).toHaveAttribute('aria-label', expect.stringContaining('لا بيانات'))
     expect(screen.getByTestId('board-cell-c1-tiktok').className).not.toMatch(/success/)
@@ -64,6 +69,8 @@ describe('the exception-first board', () => {
 
     expect(await screen.findByTestId('alert-board-thin-e1')).toHaveAttribute('title', 'بيانات غير كافية')
     expect(screen.queryByText('راجع المحتوى')).toBeNull()
+    expect(screen.queryByTestId('alert-bars-e1')).toBeNull()
+    expect(screen.queryByTestId('alert-board-why-e1')).toBeNull()
   })
 
   it('filters by priority and platform', async () => {
