@@ -181,7 +181,7 @@ export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' |
   const costLabel = p.cost_label?.[f.ar ? 'ar' : 'en'] ?? t.avgCost
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="dash-window-kpis">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:first-child:nth-last-child(odd)]:col-span-2 sm:[&>*:first-child:nth-last-child(odd)]:col-span-1" data-testid="dash-window-kpis">
       {d.can_money && (
         <Kpi testId="dash-kpi-window-spend" to={`/${portal}/analytics`} label={`${t.windowSpend} · ${days(d.window.days, f.ar ? 'ar' : 'en')}`} value={f.money(p.spend, cur)}>
           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
