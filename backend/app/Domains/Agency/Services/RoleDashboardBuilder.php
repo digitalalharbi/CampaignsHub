@@ -17,9 +17,11 @@ use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
+use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
+use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportAds;
@@ -152,6 +154,10 @@ final class RoleDashboardBuilder
 
         if ($view === 'finance') {
             $out['invoices'] = $user->hasPermission('billing.view') ? $this->invoices($user, $today) : null;
+            // FINANCE-DASH-001 — the money and only the money: how the spend splits across the platforms, and the spend limits.
+            $visible = $money ? $this->fundingReach->moneyVisible($user, array_map('strval', $projectIds)) : [];
+            $out['platforms'] = $visible !== [] ? $this->platformSplit($visible, $from, $to) : [];
+            $out['spend_limits'] = $visible !== [] ? $this->spendLimits($visible, $today) : [];
         }
 
         if ($view === 'marketer') {
@@ -159,6 +165,54 @@ final class RoleDashboardBuilder
         }
 
         return $out;
+    }
+
+    /**
+     * FINANCE-DASH-001 — the window's spend per platform and its share of the whole, over the projects whose money this
+     * person may see.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<array{provider: string, spend: float, share: float|null}>
+     */
+    private function platformSplit(array $projectIds, Carbon $from, Carbon $to): array
+    {
+        $rows = array_map(static fn ($r): array => (array) $r, app(MetricsAggregator::class)->forProjects($projectIds)->byProvider($from, $to));
+        $total = array_sum(array_map(static fn (array $r): float => (float) ($r['spend'] ?? 0), $rows));
+
+        return array_values(array_map(static fn (array $r): array => [
+            'provider' => (string) ($r['provider'] ?? ''),
+            'spend' => round((float) ($r['spend'] ?? 0), 2),
+            'share' => $total > 0 ? round((float) ($r['spend'] ?? 0) / $total, 4) : null,
+        ], $rows));
+    }
+
+    /**
+     * FINANCE-DASH-001 — every active spend limit on those projects, read the way the spend-limits page reads it.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<array<string, mixed>>
+     */
+    private function spendLimits(array $projectIds, Carbon $today): array
+    {
+        $governor = app(SpendLimitGovernor::class);
+        $names = Project::query()->whereIn('id', $projectIds)->pluck('name', 'id');
+
+        return SpendLimit::query()->whereIn('project_id', $projectIds)->where('active', true)
+            ->orderBy('ends_on')->limit(20)->get()
+            ->map(function (SpendLimit $limit) use ($governor, $today, $names): array {
+                $read = $governor->read($limit, $today);
+
+                return [
+                    'id' => (string) $limit->getKey(),
+                    'project' => $names[$limit->project_id] ?? null,
+                    'amount' => $limit->amount,
+                    'currency' => $limit->currency,
+                    'consumed' => $read['consumed'],
+                    'remaining' => $read['remaining'],
+                    'utilisation' => $read['utilisation'],
+                    'ends_on' => $limit->ends_on->toDateString(),
+                ];
+            })->values()->all();
     }
 
     private function defaultView(User $user, ?string $slug, bool $isOwner): string
