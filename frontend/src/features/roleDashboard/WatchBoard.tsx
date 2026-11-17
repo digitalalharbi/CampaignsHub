@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
 import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPoster } from '@/features/content/AdPoster'
+import { PlatformMark } from '@/components/brand/PlatformMark'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
 import { campaigns as countedCampaigns, days as countedDays } from '@/lib/counted'
@@ -88,9 +89,11 @@ function RankList({ rows, tone, portal, f, testId }: { rows: RankedCampaign[]; t
                   <span aria-hidden className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary">
                     <span className="block h-full rounded-full" style={{ width: `${Math.max(4, Math.round(((r.result ?? 0) / max) * 100))}%`, background: platformColor(platform) }} />
                   </span>
-                  <span className="inline-flex shrink-0 items-center gap-1 text-xs text-text-muted">
-                    <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: platformColor(platform) }} />
-                    {platformLabel(platform, f.ar)} · <span className="tnum font-semibold text-text-secondary">{f.short(r.result)}</span>
+                  {/* PLATFORM-MARK-ONLY-001 — the platform's own mark, its name for a screen reader and on hover: room for the figure. */}
+                  <span className="inline-flex shrink-0 items-center gap-1 text-xs text-text-muted" title={platformLabel(platform, f.ar)}>
+                    <PlatformMark platform={platform} size={14} />
+                    <span className="sr-only">{platformLabel(platform, f.ar)}</span>
+                    <span className="tnum font-semibold text-text-secondary">{f.short(r.result)}</span>
                   </span>
                 </span>
               </span>
@@ -113,9 +116,9 @@ function ContentTile({ c, f, currency, tone }: { c: WatchContent; f: Fmt; curren
     <figure data-testid={`watch-content-${tone}`} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
       <div className="relative">
         <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="aspect-square h-auto w-full" />
-        <span className="absolute start-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-surface/90 px-2 py-0.5 text-xs font-semibold text-text-primary shadow-[var(--shadow-small)]">
-          <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: platformColor(provider) }} />
-          {platformLabel(provider, f.ar)}
+        <span title={platformLabel(provider, f.ar)} className="absolute start-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-surface/90 shadow-[var(--shadow-small)]">
+          <PlatformMark platform={provider} size={14} />
+          <span className="sr-only">{platformLabel(provider, f.ar)}</span>
         </span>
       </div>
       <figcaption className="flex min-w-0 flex-col gap-1 p-2">
