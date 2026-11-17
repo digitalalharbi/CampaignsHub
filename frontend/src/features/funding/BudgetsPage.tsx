@@ -8,6 +8,7 @@ import { useFitRows } from '@/components/fit/useFitRows'
 import { EmptyState, ErrorState, NoPermission } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { useAgencyClient } from '@/stores/agencyClient'
 import { AddBudgetDialog } from './AddBudgetDialog'
 import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
@@ -39,7 +40,10 @@ export function BudgetsPage() {
   const tx = (v: Lang) => (ar ? v.ar : v.en)
   const [params, setParams] = useSearchParams()
   const [showDeleted, setShowDeleted] = useState(false)
-  const { data, isLoading, error, refetch } = useBudgets(showDeleted)
+  // CLIENT-SCOPE-001 — the client chosen at the top of the agency portal narrows this board too (agency only).
+  const inAgency = useLocation().pathname.startsWith('/agency')
+  const scopedClient = useAgencyClient((s) => s.currentClientId)
+  const { data, isLoading, error, refetch } = useBudgets(showDeleted, inAgency ? scopedClient : null)
   const rows = data?.rows ?? []
   const open = params.get('project')
   const canManage = data?.canManage === true
