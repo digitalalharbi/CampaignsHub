@@ -109,7 +109,9 @@ final class McpOAuthTest extends TestCase
             ->assertOk()->json('result.content.0.text');
         $this->assertStringContainsString((string) $this->project->id, (string) $text);
 
-        // The code is single-use.
+        // The code is single-use. (The connector's own Bearer is dropped first: on /token it would be refused, MCP-SCOPE-001.)
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
         $this->post('/api/v1/mcp/oauth/token', [
             'grant_type' => 'authorization_code', 'code' => $code, 'code_verifier' => $verifier,
             'client_id' => $clientId, 'redirect_uri' => self::REDIRECT,
