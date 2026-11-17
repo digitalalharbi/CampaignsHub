@@ -32,6 +32,7 @@ export function useLivePayload({
   token,
   secret,
   days,
+  range = null,
   providers,
   enabled = true,
   failedMessage,
@@ -41,6 +42,8 @@ export function useLivePayload({
   secret?: string
   /** Null on a FIXED report: no rolling window is asked for, and the server answers with the saved dates. */
   days: number | null
+  /** REPORT-DATE-PICKER-001 — a range chosen in the system's period picker; it wins over `days`. */
+  range?: { from: string; to: string } | null
   providers: string[]
   enabled?: boolean
   failedMessage: string
@@ -56,6 +59,8 @@ export function useLivePayload({
   /** LIVE-LOAD-RETRY-001 — whether figures were ever shown; only a first load retries. */
   const shown = useRef(false)
   const key = providers.join(',')
+  const rangeFrom = range?.from ?? null
+  const rangeTo = range?.to ?? null
 
   const run = useCallback(async () => {
     const ticket = ++latest.current
@@ -77,7 +82,7 @@ export function useLivePayload({
       }
       try {
         const res = await fetchLiveShared(token, {
-          ...(days === null ? {} : { from: isoDaysAgo(days), to: new Date().toISOString().slice(0, 10) }),
+          ...(rangeFrom !== null && rangeTo !== null ? { from: rangeFrom, to: rangeTo } : days === null ? {} : { from: isoDaysAgo(days), to: new Date().toISOString().slice(0, 10) }),
           providers: key === '' ? [] : key.split(','),
           campaigns: [],
           password: secret,
@@ -102,7 +107,7 @@ export function useLivePayload({
     setLoad((prev) => (prev.state === 'ready'
       ? { ...prev, refreshing: false, refreshError: message }
       : { state: 'failed', message, status }))
-  }, [token, secret, days, key, failedMessage])
+  }, [token, secret, days, rangeFrom, rangeTo, key, failedMessage])
 
   useEffect(() => {
     if (enabled) void run()
