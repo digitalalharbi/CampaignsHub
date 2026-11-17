@@ -186,6 +186,7 @@ export function MetricTable({
   values,
   exact,
   initialSort,
+  footer,
   pageSize,
   testId,
 }: {
@@ -215,6 +216,12 @@ export function MetricTable({
   exact?: (string | null)[][]
   /** Column index to sort by on first render, and its direction. */
   initialSort?: { column: number; dir: 'asc' | 'desc' }
+  /**
+   * CAMPAIGN-LEVELS-003 — one totals row under the columns it totals, as every ads manager draws it. Positional like
+   * `rows`; a cell the caller cannot total honestly is passed as `—`, never as a sum of what happened to be readable.
+   * It never sorts and is never counted as a row.
+   */
+  footer?: ReactNode[]
 }) {
   const [sort, setSort] = useState<{ column: number; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
 
@@ -328,6 +335,15 @@ export function MetricTable({
             <tr key={`pad-${i}`} aria-hidden className="border-b border-border last:border-0"><td colSpan={head.length} className="py-2.5">&nbsp;</td></tr>
           ))}
         </tbody>
+        {footer && (
+          <tfoot data-testid={testId ? `${testId}-total` : undefined}>
+            <tr className="border-t-2 border-border font-bold text-text-primary">
+              {footer.map((cell, j) => (j === 0
+                ? <th key={j} scope="row" className="py-2.5 text-start">{cell}</th>
+                : <td key={j} className="tnum py-2.5 text-center">{cell}</td>))}
+            </tr>
+          </tfoot>
+        )}
       </table>
       {size !== undefined && pages > 1 && (
         <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-muted" data-testid={testId ? `${testId}-pager` : 'metric-table-pager'}>
