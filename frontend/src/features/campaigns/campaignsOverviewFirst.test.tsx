@@ -37,15 +37,13 @@ describe('the campaigns workspace', () => {
   })
   afterEach(() => signOut())
 
-  it('opens on the overview, not on the card grid', async () => {
+  it('opens on the management table, the overview one click away', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
 
-    /* The portfolio's own blocks, which only the overview draws. */
-    expect(await screen.findByTestId('campaigns-bands')).toBeInTheDocument()
-
-    /* And the mode button for Overview is the one that reads as chosen. */
-    expect(screen.getByTestId('view-overview')).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'false')
+    /* CAMPAIGNS-TABLE-FIRST-001 — the table is the landing; the overview is the first mode beside it. */
+    expect(await screen.findByTestId('view-table')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('view-overview')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('campaigns-bands')).not.toBeInTheDocument()
   })
 
   /**
@@ -56,6 +54,7 @@ describe('the campaigns workspace', () => {
    */
   it('offers the modes in the order the work is done in', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
 
     await screen.findByTestId('campaigns-bands')
 
@@ -73,6 +72,7 @@ describe('the campaigns workspace', () => {
    */
   it('classifies the portfolio into the five bands, zeroes included', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
 
     const strip = within(await screen.findByTestId('campaigns-bands'))
 
@@ -86,6 +86,7 @@ describe('the campaigns workspace', () => {
 
   it('says it in Arabic too', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
 
     const strip = within(await screen.findByTestId('campaigns-bands'))
 
@@ -150,6 +151,7 @@ describe('the campaigns workspace', () => {
   /** With nothing chosen the list keeps the relevance ranking — «no sort» is not a column. */
   it('sends no sort at all until a header is clicked', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
 
     await screen.findByTestId('campaigns-bands')
 
