@@ -51,8 +51,9 @@ describe('with no project chosen', () => {
 })
 
 describe('the agency rail', () => {
-  it('carries recommendations; spend limits are reached from the budget (ONE-BUDGET-UI-001)', () => {
-    expect(agencyNavLeafPaths).toContain('/agency/recommendations')
+  it('reaches recommendations from the operations tabs and spend limits from the budget (OPS-TABS-001, ONE-BUDGET-UI-001)', () => {
+    expect(agencyNavLeafPaths).not.toContain('/agency/recommendations')
+    expect(agencyFoldedPaths).toContain('/agency/recommendations')
     expect(agencyNavLeafPaths).not.toContain('/agency/spend-limits')
     expect(agencyFoldedPaths).toContain('/agency/spend-limits')
   })
