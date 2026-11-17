@@ -11,6 +11,7 @@ import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
 const LoginPage = lazyPage(() => import('@/features/auth/LoginPage'), 'LoginPage')
+const McpConsentPage = lazyPage(() => import('@/features/auth/McpConsentPage'), 'McpConsentPage')
 const RegisterPage = lazyPage(() => import('@/features/auth/RegisterPage'), 'RegisterPage')
 const AccountStatusPage = lazyPage(() => import('@/features/signup/AccountStatusPage'), 'AccountStatusPage')
 const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPasswordPage'), 'ForgotPasswordPage')
@@ -332,6 +333,7 @@ export const router = createBrowserRouter(withErrorBoundary([
       // ADR 0002: the portal/workspace switcher, for users who belong to more than one. Outside the
       // AppShell because it is the screen that decides WHICH shell the user is about to enter.
       { path: 'switch', element: <WorkspaceSwitcherPage /> },
+      { path: 'oauth/mcp', element: <McpConsentPage /> },
       {
         element: <OnboardingGate />,
         children: [{
