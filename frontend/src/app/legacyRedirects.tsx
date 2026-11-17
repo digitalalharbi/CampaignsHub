@@ -112,6 +112,7 @@ const MOVED_TO_APP = [
   'account/security',
   'account/preferences',
   'account/notifications',
+  'account/ai',
   'leads',
   'opportunities',
   // Sections that existed at the root before the move but were missed the first time round, so a

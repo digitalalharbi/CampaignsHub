@@ -25,6 +25,11 @@ final class SnapchatMcpReadOnlyGuardTest extends TestCase
             if (! $file->isFile() || $file->getExtension() !== 'php') {
                 continue;
             }
+            // MCP-SERVER-001 — issuing and revoking a person's own MCP access token (Sanctum `createToken`,
+            // `delete`) writes nothing to any ad platform; the MCP tools themselves stay read-only.
+            if (str_ends_with($file->getPathname(), 'Agents/Http/Controllers/McpTokenController.php')) {
+                continue;
+            }
             $source = (string) file_get_contents($file->getPathname());
             // A write through MCP would have to name both; naming MCP beside a write verb is what is refused.
             if (preg_match('/\bmcp\b/i', $source) === 1 && preg_match('/\b(create|update|pause|publish|write|patch|delete)[A-Za-z]*\s*\(/i', $source) === 1) {

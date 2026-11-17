@@ -7,6 +7,8 @@ use App\Domains\Accounts\Http\Controllers\RegistrationController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardPerformanceController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardWatchController;
+use App\Domains\Agents\Http\Controllers\McpController;
+use App\Domains\Agents\Http\Controllers\McpTokenController;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
@@ -197,6 +199,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
 });
 
 // The signed-in user's own account (self-only; no user id is ever accepted from the client).
+/*
+ * MCP-SERVER-001 — CampaignsHub as an MCP server (Streamable HTTP, JSON-RPC). Authenticated by the person's own token and
+ * resolved to their workspace like any other request; the controller refuses any project they cannot see.
+ */
+Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+    Route::post('/mcp', [McpController::class, 'handle'])->middleware('throttle:120,1')->name('mcp');
+    Route::get('/mcp', [McpController::class, 'stream'])->name('mcp.stream');
+});
+
 Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(function (): void {
     Route::get('/', [MeController::class, 'show'])->name('show');
     // ACCESS-SECTIONS-001 — the signed-in member's effective role, sections and clients, from the one resolver.
@@ -207,6 +218,10 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
     Route::get('/dashboard/performance', RoleDashboardPerformanceController::class)->middleware('portal:app,agency')->name('dashboard.performance');
     // WATCH-BOARD-001 — the follow-up board: best and weakest campaigns and content of every platform, per client.
     Route::get('/dashboard/watch', RoleDashboardWatchController::class)->middleware('portal:app,agency')->name('dashboard.watch');
+    // MCP-SERVER-001 — the person's own tokens for connecting Claude, Gemini or ChatGPT; each shown once, listed and revocable.
+    Route::get('/mcp-tokens', [McpTokenController::class, 'index'])->name('mcp-tokens.index');
+    Route::post('/mcp-tokens', [McpTokenController::class, 'store'])->middleware('throttle:10,1')->name('mcp-tokens.store');
+    Route::delete('/mcp-tokens/{id}', [McpTokenController::class, 'destroy'])->name('mcp-tokens.destroy');
     Route::patch('/profile', [MeController::class, 'updateProfile'])->name('profile.update');
     Route::get('/sessions', [MeController::class, 'sessions'])->name('sessions');
 
