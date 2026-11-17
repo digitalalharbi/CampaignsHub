@@ -8,7 +8,9 @@ use App\Domains\Agency\Http\Controllers\RoleDashboardController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardPerformanceController;
 use App\Domains\Agency\Http\Controllers\RoleDashboardWatchController;
 use App\Domains\Agents\Http\Controllers\McpController;
+use App\Domains\Agents\Http\Controllers\McpOAuthController;
 use App\Domains\Agents\Http\Controllers\McpTokenController;
+use App\Domains\Agents\Http\Middleware\McpAuthChallenge;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
@@ -203,9 +205,24 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
  * MCP-SERVER-001 — CampaignsHub as an MCP server (Streamable HTTP, JSON-RPC). Authenticated by the person's own token and
  * resolved to their workspace like any other request; the controller refuses any project they cannot see.
  */
-Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
+Route::middleware([McpAuthChallenge::class, 'auth:sanctum', 'tenant'])->group(function (): void {
     Route::post('/mcp', [McpController::class, 'handle'])->middleware('throttle:120,1')->name('mcp');
     Route::get('/mcp', [McpController::class, 'stream'])->name('mcp.stream');
+});
+
+/*
+ * MCP-OAUTH-001 — «Add custom connector» in Claude or ChatGPT: discovery, self-registration, sign-in and tokens. The edge maps
+ * mcp.campaignshub.io's /.well-known/*, /register, /authorize and /token onto these. Public by design (they ARE the sign-in);
+ * only `approve` needs the signed-in person, and it is their press of «سماح».
+ */
+Route::prefix('mcp/oauth')->name('mcp.oauth.')->group(function (): void {
+    Route::get('/protected-resource', [McpOAuthController::class, 'protectedResource'])->middleware('throttle:120,1')->name('protected-resource');
+    Route::get('/metadata', [McpOAuthController::class, 'metadata'])->middleware('throttle:120,1')->name('metadata');
+    Route::post('/register', [McpOAuthController::class, 'register'])->middleware('throttle:20,1')->name('register');
+    Route::get('/authorize', [McpOAuthController::class, 'authorizeRequest'])->middleware('throttle:60,1')->name('authorize');
+    Route::post('/token', [McpOAuthController::class, 'token'])->middleware('throttle:60,1')->name('token');
+    Route::get('/clients/{clientId}', [McpOAuthController::class, 'show'])->middleware('throttle:60,1')->name('client');
+    Route::post('/approve', [McpOAuthController::class, 'approve'])->middleware(['auth:sanctum', 'tenant', 'throttle:20,1'])->name('approve');
 });
 
 Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(function (): void {
