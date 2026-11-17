@@ -106,6 +106,26 @@ final class DigestsCadenceBudgetsTest extends TestCase
 
     // ── 1. Cadence ───────────────────────────────────────────────────────────
 
+    /** FINANCE-DIGEST-001 — a reader who opens budgets and nothing else receives the spend summary, never the performance digest. */
+    public function test_a_finance_reader_receives_the_spend_summary_not_the_performance_digest(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => 'finance-cad-'.uniqid()]);
+        $role->givePermissionTo('projects.view', 'projects.view.all', 'clients.view', 'clients.view_all', 'budget.view', 'budget.manage');
+        $finance = User::create(['name' => 'Fin', 'email' => 'fin-'.uniqid().'@cad.test', 'password' => 'secret123']);
+        Membership::create(['tenant_id' => $this->tenant->id, 'user_id' => $finance->id, 'portal' => 'agency', 'status' => 'active']);
+        $finance->assignRole($role);
+        app(TenantContext::class)->forget();
+
+        $result = app(DigestDispatcher::class)->sendDaily($finance, (string) $this->tenant->id, Carbon::parse('2026-11-16'), 'ar', 'agency', null, true);
+
+        $this->assertSame('sent', $result);
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Domains\Notifications\Mail\SpendSummaryMail::class);
+        \Illuminate\Support\Facades\Mail::assertNotSent(\App\Domains\Notifications\Mail\DailyDigestMail::class);
+        \Illuminate\Support\Facades\Mail::assertNotSent(\App\Domains\Notifications\Mail\OperationalDigestMail::class);
+    }
+
     public function test_the_digest_sweep_is_pinned_to_riyadh(): void
     {
         $events = array_values(array_filter(app(Schedule::class)->events(), static fn ($e): bool => str_contains((string) $e->command, 'notifications:send-digests')));
