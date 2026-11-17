@@ -278,6 +278,47 @@ final class MetricsTest extends TestCase
     }
 
     /**
+     * FUNNEL-ALIGNED-001 — a step rate is read on the platforms that report both of its stages.
+     *
+     * Karam Alnakhil, 2026-11-17: checkout came from one platform and purchases from several, so the
+     * funnel read «363 checkouts → 675 purchases». Each total is true; their ratio described which
+     * platform sends which event. The totals stay; the rate now compares like with like.
+     */
+    public function test_a_step_rate_is_measured_on_the_platforms_that_report_both_stages(): void
+    {
+        $snap = ['provider' => 'snapchat', 'acct' => 'acc-snap', 'camp' => 'ext-snap'];
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'add_to_cart', 50, '2026-06-01'),
+            $this->metric($this->projectA->id, 'checkout', 20, '2026-06-01'),
+            $this->metric($this->projectA->id, 'purchases', 10, '2026-06-01'),
+            // Snapchat reports baskets and purchases but never checkout.
+            $this->metric($this->projectA->id, 'add_to_cart', 200, '2026-06-01', $snap),
+            $this->metric($this->projectA->id, 'purchases', 90, '2026-06-01', $snap),
+        ]);
+
+        $stages = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data'))->keyBy('stage');
+
+        // The totals are unchanged: one number on every surface.
+        $this->assertSame(20.0, (float) $stages['checkout']['count']);
+        $this->assertSame(100.0, (float) $stages['purchases']['count']);
+
+        // Checkout is measured against Meta's own baskets (20/50), not all baskets (20/250).
+        $this->assertEqualsWithDelta(0.4, (float) $stages['checkout']['step_rate'], 0.0001);
+        $this->assertSame(['meta'], $stages['checkout']['providers']);
+        $this->assertTrue($stages['checkout']['rate_partial'] === false);
+
+        // Purchases against checkout: only Meta reports both — 10/20, not 100/20 (500%).
+        $this->assertEqualsWithDelta(0.5, (float) $stages['purchases']['step_rate'], 0.0001);
+        $this->assertFalse($stages['purchases']['exceeds_previous']);
+        $this->assertSame(['meta'], $stages['purchases']['rate_providers']);
+        $this->assertSame(['meta', 'snapchat'], $stages['purchases']['providers']);
+        $this->assertTrue($stages['purchases']['rate_partial']);
+    }
+
+    /**
      * ANALYTICS-COMPARE-001 — «— —» meant two different things and said neither.
      *
      * A delta is null when a metric did not move off a base of zero AND when there is no previous
