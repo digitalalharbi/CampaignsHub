@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
@@ -21,6 +21,12 @@ import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
 import { ReportFooter, reportStamp } from './reportFooter'
 import { LiveDeliveryNote } from './live/LiveDeliveryNote'
+
+/*
+ * REPORT-DATE-PICKER-001 — the picker (calendar, presets, typed fields) is loaded when the period bar renders, not with the
+ * route: it pulled the /r/ closure 11.8 KB over PUBLIC_REPORT_BUDGET_BYTES. The fallback is the same-size button, so nothing shifts.
+ */
+const DateRangeField = lazy(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -111,6 +117,9 @@ export function LiveSharedReport({
   const fixed = periodMode === 'fixed'
   const [rollingDays, setDays] = useState(30)
   const days = fixed ? null : rollingDays
+  /* REPORT-DATE-PICKER-001 — Owner 2026-11-17: the report's period is chosen in the system's own picker (presets, calendar, typed dates). */
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null)
+  const range = fixed ? null : custom
   /*
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by. The chips
    * belong to the summary and the dashboard; the platform and content modes choose one platform
@@ -126,6 +135,7 @@ export function LiveSharedReport({
     token,
     secret: password,
     days,
+    range,
     providers: ownsPlatformChoice(firstMode) ? [] : providers,
     failedMessage,
     refreshEveryMs: 5 * 60_000,
@@ -159,6 +169,7 @@ export function LiveSharedReport({
     token,
     secret: password,
     days,
+    range,
     providers: platform ? [platform] : [],
     enabled: platform !== null,
     failedMessage,
@@ -237,7 +248,14 @@ export function LiveSharedReport({
       )}
 
       <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-surface p-2 sm:gap-2 sm:p-3">
-        <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+          {!fixed && (payload.period.kind ?? 'custom') === 'custom' && (
+            <div className="min-w-[14rem]">
+              <Suspense fallback={<div className="min-h-11 w-full rounded-xl border border-border-strong bg-surface sm:min-h-10" aria-hidden />}>
+                <DateRangeField from={custom?.from ?? payload.period.from} to={custom?.to ?? payload.period.to} onChange={(from, to) => setCustom({ from, to })} testId="live-range-picker" />
+              </Suspense>
+            </div>
+          )}
           {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
               {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
@@ -256,9 +274,9 @@ export function LiveSharedReport({
               key={r.days}
               type="button"
               data-testid={`live-range-${r.days}`}
-              onClick={() => setDays(r.days)}
+              onClick={() => { setCustom(null); setDays(r.days) }}
               className={`rounded-xl px-2.5 py-1 text-xs font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
-                rollingDays === r.days
+                custom === null && rollingDays === r.days
                   ? 'bg-brand-600 text-white'
                   : 'border border-border text-text-secondary hover:bg-surface-hover'
               }`}
@@ -278,14 +296,14 @@ export function LiveSharedReport({
                 aria-pressed={providers.includes(p)}
                 onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
                 title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-semibold transition-colors sm:h-9 sm:w-9 ${
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border text-xs font-semibold transition-colors sm:h-11 sm:w-11 ${
                   providers.includes(p)
                     ? 'border-transparent text-white'
                     : 'border-border text-text-secondary hover:bg-surface-hover'
                 }`}
                 style={providers.includes(p) ? { background: platformColor(p) } : undefined}
               >
-                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={18} logoOnly />
+                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={24} logoOnly />
               </button>
             ))}
           </div>
