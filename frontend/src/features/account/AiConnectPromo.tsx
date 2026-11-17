@@ -23,7 +23,9 @@ export function AiConnectPromo() {
   const { pathname } = useLocation()
   const [hidden, setHidden] = useState(dismissed)
 
-  if (hidden || pathname.endsWith('/account/ai')) return null
+  // A browser under automation (the e2e gate) never sees it: a fixed card in the corner would sit on the very buttons
+  // the journeys press, and a test of the product is not an audience for its announcement.
+  if (hidden || pathname.endsWith('/account/ai') || (typeof navigator !== 'undefined' && navigator.webdriver)) return null
 
   const close = () => {
     try { window.localStorage.setItem(KEY, '1') } catch { /* the card simply returns next visit */ }
