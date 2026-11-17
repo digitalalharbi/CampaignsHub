@@ -6,12 +6,13 @@ import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
-import { FlaskConical, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Bot, FlaskConical, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import {
   deleteRule, dryRunRule, getCatalog, getSummary, listActions, listChanges, listRules, runRuleNow, toggleRule,
-  type AutomationRule, type DryRunResult,
+  type AutomationRule, type DryRunResult, type RuleInput,
 } from './api'
 import { RuleBuilder } from './RuleBuilder'
+import { agentDraft, availableAgents } from './readyAgents'
 import { LEVEL_WORDS, MODE_WORDS, RESULT_WORDS, STATUS_WORDS, actionWord, conditionsSentence, readingText, statusWord } from './ruleCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Num } from '@/components/ui/Num'
@@ -46,6 +47,7 @@ export function AutomationPage() {
   /* AF2 — under /agency the page fits the screen: tables page themselves and a dry run opens in a layer. */
   const fit = useLocation().pathname.startsWith('/agency')
   const [editing, setEditing] = useState<AutomationRule | null | 'new'>(null)
+  const [draft, setDraft] = useState<RuleInput | null>(null)
   const [filter, setFilter] = useState<'all' | 'on' | 'off'>('all')
   const [q, setQ] = useState('')
   const [dry, setDry] = useState<{ rule: AutomationRule; results: DryRunResult[] } | null>(null)
@@ -111,8 +113,24 @@ export function AutomationPage() {
 
       {tab === 'rules' && (
         <>
+          {/* OPS-READY-AGENTS-001 — ready agents: a filled-in rule, one tap away, in «توصية» mode until a person saves it. */}
+          {canManage && catalog.data && availableAgents(catalog.data).length > 0 && (
+            <section data-testid="automation-agents" className="space-y-1.5">
+              <h2 className="flex items-center gap-1.5 text-sm font-bold text-text-primary"><Bot size={15} aria-hidden />{ar ? 'وكلاء جاهزون' : 'Ready agents'}</h2>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {availableAgents(catalog.data).map((a) => (
+                  <button key={a.key} type="button" data-testid={`automation-agent-${a.key}`} onClick={() => { setDraft(agentDraft(a, ar)); setEditing('new') }}
+                    className="flex w-60 shrink-0 flex-col items-start gap-1 rounded-xl border border-border bg-surface p-3 text-start transition-colors hover:border-brand-500 focus-visible:outline-2 focus-visible:outline-brand-500">
+                    <span className="text-sm font-semibold text-text-primary">{ar ? a.ar : a.en}</span>
+                    <span className="line-clamp-2 text-xs text-text-secondary">{ar ? a.descAr : a.descEn}</span>
+                    <span className="mt-auto text-xs font-bold text-brand-700">{ar ? 'جهّز القاعدة' : 'Set it up'}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            {canManage && <Button size="sm" onClick={() => setEditing('new')} disabled={!catalog.data} data-testid="automation-new"><Plus size={14} /> {ar ? 'قاعدة جديدة' : 'Create new rule'}</Button>}
+            {canManage && <Button size="sm" onClick={() => { setDraft(null); setEditing('new') }} disabled={!catalog.data} data-testid="automation-new"><Plus size={14} /> {ar ? 'قاعدة جديدة' : 'Create new rule'}</Button>}
             <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label={ar ? 'تصفية' : 'Filter'} className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" data-testid="automation-filter">
               <option value="all">{ar ? 'كل القواعد' : 'All rules'}</option>
               <option value="on">{ar ? 'المفعّلة' : 'On'}</option>
@@ -298,7 +316,7 @@ export function AutomationPage() {
 
       </FitPanel>
       {editing !== null && catalog.data && (
-        <RuleBuilder projectId={p} catalog={catalog.data} rule={editing === 'new' ? null : editing} ar={ar} onClose={() => setEditing(null)} />
+        <RuleBuilder projectId={p} catalog={catalog.data} rule={editing === 'new' ? null : editing} draft={editing === 'new' ? draft : null} ar={ar} onClose={() => { setEditing(null); setDraft(null) }} />
       )}
     </AgencyFit>
   )
