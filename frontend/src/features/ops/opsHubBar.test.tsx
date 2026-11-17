@@ -55,11 +55,28 @@ describe('the operations bar', () => {
 
   it('asks for a project instead of showing a zero for project-scoped figures', async () => {
     signInWith(['tasks.view', 'campaigns.view'])
-    renderWithProviders(<OpsHubBar />, { locale: 'ar' })
+    renderWithProviders(<OpsHubBar />, { locale: 'ar', route: '/agency/agents/approvals' })
 
     await waitFor(() => expect(screen.getByTestId('ops-hub-approvals')).toHaveTextContent('اختر مشروعًا'))
     expect(screen.queryByTestId('ops-hub-approvals-value')).toBeNull()
     expect(listProposals).not.toHaveBeenCalled()
+  })
+
+  it('opens three tabs and puts recommendations and approvals under «التنبيهات», agents under «الأتمتة» (OPS-TABS-001)', async () => {
+    signInWith(['tasks.view', 'alerts.view', 'campaigns.view'])
+    useProject.setState({ currentProjectId: 'p1' } as never)
+    const { unmount } = renderWithProviders(<OpsHubBar />, { locale: 'ar', route: '/agency/recommendations' })
+
+    expect(await screen.findByTestId('ops-hub-alerts')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('ops-hub-recommendations')).toHaveAttribute('href', '/agency/recommendations')
+    expect(screen.getByTestId('ops-hub-approvals')).toHaveAttribute('href', '/agency/agents/approvals')
+    expect(screen.queryByTestId('ops-hub-agents')).toBeNull()
+    unmount()
+
+    renderWithProviders(<OpsHubBar />, { locale: 'ar', route: '/agency/agents' })
+    expect(await screen.findByTestId('ops-hub-automation')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('ops-hub-agents')).toHaveAttribute('href', '/agency/agents')
+    expect(screen.queryByTestId('ops-hub-recommendations')).toBeNull()
   })
 
   it('draws nothing for a reader who can open only one of the four', () => {
