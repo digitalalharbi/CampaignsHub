@@ -86,6 +86,22 @@ describe('CampaignsPage', () => {
     expect(screen.queryByText(/Nothing needs attention/i)).toBeNull()
   })
 
+  it('opens one campaign\u2019s figures in a side panel from its table row, and the full campaign from there (CAMPAIGNS-PEEK-001)', async () => {
+    signInWith(['campaigns.view'])
+    renderWithProviders(<CampaignsPage />, { locale: 'en' })
+
+    fireEvent.click(await screen.findByTestId('view-table'))
+    const row = (await screen.findAllByTestId('campaign-row'))[0]
+    fireEvent.click(row.querySelectorAll('td')[2])
+
+    const panel = await screen.findByTestId('campaign-peek')
+    expect(panel).toHaveTextContent('National Day')
+    expect(screen.getByTestId('campaign-peek-spend')).toBeInTheDocument()
+    expect(screen.getByTestId('campaign-peek-budget')).toBeInTheDocument()
+    expect(screen.queryByTestId('campaign-peek-linked')).toBeNull()
+    expect(screen.getByTestId('campaign-peek-open')).toHaveTextContent('Open the campaign')
+  })
+
   it('filters by taxonomy chips without leaving the list', async () => {
     signInWith(['campaigns.view'])
     renderWithProviders(<CampaignsPage />)
