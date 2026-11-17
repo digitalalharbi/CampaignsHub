@@ -148,12 +148,11 @@ final class ReportShareController extends Controller
              * «closed», so a link cannot acquire a section by omission.
              */
               /*
-             * REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is OFF on a new client link
-             * unless the Owner switched it on. It is the agency's own working view (it invites a question
-             * about last week the client was never promised an answer to), so a link that did not ask for
-             * it does not carry it. Links created before this keep what they were stored with.
+             * REPORT-BEFORE-AFTER-001 — Owner 2026-11-17: «أضف مقارنات قبل وبعد». A new link carries the comparison with the
+             * previous period unless the operator switches it off (it replaces REPORT-CLIENT-NO-DELTAS-001's default of off). Links
+             * created before this keep what they were stored with; the switch stays on the link's edit dialog.
              */
-              'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
+              'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => true])->toArray(),
               'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
           ];
 
