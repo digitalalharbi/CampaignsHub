@@ -13,6 +13,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -123,6 +124,7 @@ final class McpOAuthTest extends TestCase
             ->assertStatus(400);
 
         // The connection is listed under «ربط MCP» by the app's name, and revocable there.
+        $this->flushHeaders();
         $this->app['auth']->forgetGuards();
         $names = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/me/mcp-tokens')->assertOk()->json('data.tokens'))->pluck('name')->all();
         $this->assertSame(['Claude'], $names);
@@ -144,5 +146,78 @@ final class McpOAuthTest extends TestCase
         ])->assertStatus(422);
         $this->postJson('/api/v1/mcp/oauth/register', ['client_name' => 'X', 'redirect_uris' => ['http://evil.example/cb']])
             ->assertStatus(400)->assertJsonPath('error', 'invalid_redirect_uri');
+    }
+
+    /** @return array{access_token: string} */
+    private function connect(): array
+    {
+        $clientId = $this->register();
+        [$code, $verifier] = $this->approve($clientId);
+
+        return $this->post('/api/v1/mcp/oauth/token', [
+            'grant_type' => 'authorization_code', 'code' => $code, 'code_verifier' => $verifier,
+            'client_id' => $clientId, 'redirect_uri' => self::REDIRECT,
+        ])->assertOk()->json();
+    }
+
+    public function test_a_connector_token_opens_the_mcp_door_and_no_other(): void
+    {
+        $tokens = $this->connect();
+        $this->app['auth']->forgetGuards();
+
+        // MCP-SCOPE-001 — the same token on the REST API is refused, read or write.
+        $this->withHeader('Authorization', 'Bearer '.$tokens['access_token'])->getJson('/api/v1/me/mcp-tokens')->assertForbidden();
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$tokens['access_token'])->getJson('/api/v1/projects')->assertForbidden();
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$tokens['access_token'])
+            ->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])->assertOk();
+    }
+
+    public function test_a_connection_answers_from_the_workspace_it_was_approved_in_only(): void
+    {
+        $other = Tenant::create(['name' => 'B', 'slug' => 'b', 'status' => 'active', 'account_type' => 'agency']);
+        $this->holdingTenant((string) $other->id);
+        $role = Role::create(['tenant_id' => $other->id, 'name' => 'Tenant Owner', 'slug' => 'tenant-owner', 'is_system' => true]);
+        $role->givePermissionTo(...Permission::pluck('key')->all());
+        $this->grantMembership($this->owner, $other, Portal::Agency, 'member');
+        $this->owner->roles()->syncWithoutDetaching([$role->id]);
+        $client = ClientWorkspace::create(['tenant_id' => $other->id, 'name' => 'Other Client', 'slug' => 'other', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
+        $foreign = Project::create(['tenant_id' => $other->id, 'client_workspace_id' => $client->id, 'name' => 'Other', 'status' => 'active']);
+        $this->holdingTenant((string) $this->tenant->id);
+
+        $default = fn (string $tenantId) => DB::table('memberships')->where('user_id', $this->owner->id)
+            ->update(['is_default' => DB::raw("CASE WHEN tenant_id = '{$tenantId}' THEN true ELSE false END")]);
+
+        // Approved while working in A…
+        $default((string) $this->tenant->id);
+        $tokens = $this->connect();
+
+        // …then the person makes B their default. The connection still answers from A, and never shows B.
+        $default((string) $other->id);
+        $this->app['auth']->forgetGuards();
+        $text = (string) $this->withHeader('Authorization', 'Bearer '.$tokens['access_token'])
+            ->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => 'list_projects', 'arguments' => []]])
+            ->assertOk()->json('result.content.0.text');
+        $this->assertStringContainsString((string) $this->project->id, $text);
+        $this->assertStringNotContainsString((string) $foreign->id, $text);
+
+        // Asking for B's project by id is refused too.
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$tokens['access_token'])
+            ->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/call', 'params' => ['name' => 'list_campaigns', 'arguments' => ['project_id' => (string) $foreign->id]]])
+            ->assertOk()->assertJsonPath('result.isError', true);
+    }
+
+    public function test_platform_staff_cannot_approve_a_connector(): void
+    {
+        $clientId = $this->register();
+        $staff = User::create(['name' => 's', 'email' => 's@oauth.test', 'password' => 'secret123', 'email_verified_at' => now()]);
+        $staff->forceFill(['is_platform_admin' => true])->save();
+
+        $this->actingAs($staff, 'sanctum')->postJson('/api/v1/mcp/oauth/approve', [
+            'client_id' => $clientId, 'redirect_uri' => self::REDIRECT, 'code_challenge' => $this->challenge(str_repeat('v', 64)),
+            'code_challenge_method' => 'S256',
+        ])->assertForbidden();
     }
 }
