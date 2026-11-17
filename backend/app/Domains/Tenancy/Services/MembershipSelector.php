@@ -64,6 +64,12 @@ final class MembershipSelector
         return $membership;
     }
 
+    /** MCP-SCOPE-001 — the membership a connector token is pinned to, re-verified every request exactly as a switch is. */
+    public function own(User $user, string $membershipId): ?Membership
+    {
+        return $this->held($user, $membershipId);
+    }
+
     /**
      * This person's own active membership by this id, provided it can still be worked in (WORKSPACE-SWITCH-001).
      *
