@@ -8,6 +8,7 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -118,7 +119,7 @@ final class McpOAuthController extends Controller
             return redirect()->away($this->withQuery($redirect, ['error' => 'invalid_request', 'error_description' => 'code with PKCE S256 is required', 'state' => $request->query('state')]));
         }
 
-        return redirect()->away(rtrim((string) config('brand.frontend_url'), '/').'/oauth/mcp?'.http_build_query($request->query()));
+        return redirect()->away(Frontend::url('/oauth/mcp').'?'.http_build_query($request->query()));
     }
 
     /** GET /api/v1/mcp/oauth/clients/{clientId} — the name the consent page shows. */
