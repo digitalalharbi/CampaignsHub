@@ -24,6 +24,17 @@ export const REPORT_NOTE_MORE = {
   en: 'Each measurement source — the advertising platforms, the store or website, influencers and every other channel — has its own way of counting and its own update timing, so a figure differs from one source to another and results are read as a whole. Results are also affected by the nature of the product and its pricing, offers and discounts, content quality, customer behaviour, the level of competition and platform costs, and figures may change once data processing completes. The indicators are therefore not a guarantee of future results.',
 } as const
 
+/** REPORT-FRESHNESS-DATE-001 — the footer's date: held at the oldest platform confirmation while any platform is not confirmed fresh. */
+const NOT_FRESH = new Set(['delayed', 'stale', 'failed', 'unknown'])
+
+export function reportStamp(summary: { oldest_success_at: string | null; worst_status: string; generated_at: string } | null | undefined): string | null {
+  if (!summary) return null
+  const oldest = summary.oldest_success_at
+  if (NOT_FRESH.has(summary.worst_status) && oldest && Date.parse(oldest) < Date.parse(summary.generated_at)) return oldest
+
+  return summary.generated_at
+}
+
 const MORE_LABEL = { ar: { more: 'معرفة المزيد', less: 'إخفاء' }, en: { more: 'Learn more', less: 'Hide' } } as const
 
 export interface ReportFooterFacts {
