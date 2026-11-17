@@ -274,6 +274,8 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     // NASEL 2026-10-29 — no revenue reported anywhere (a lead purchase carries value 0): no revenue and no ROAS card.
     .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
   const keys = [...selected, ...extras].slice(0, 8)
+  /* REPORT-COMPACT-001 — the small cards fill their row: the delivery rates (CPM, CPC, CTR, frequency) join them when the period has them. */
+  const fill = ['ctr', 'cpm', 'cpc', 'frequency'].filter((k) => !keys.includes(k) && (chosenInSetup || !SPEND_DERIVED.has(k)))
   const card = (key: string) => {
     const meta = reader.meta[key]
     if (!meta) return null
@@ -309,8 +311,8 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
       */}
       {keys.length > 4 && (
         /* REPORT-COMPACT-001 — Owner 2026-11-17: «بطاقات صغيرة جنب الكبيرة» — the rest are small cards, not a line of text. */
-        <dl className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6" data-testid="exec-kpis-secondary">
-          {keys.slice(4).map(compact)}
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2" data-testid="exec-kpis-secondary">
+          {[...keys.slice(4), ...fill].slice(0, 8).map(compact)}
         </dl>
       )}
     </div>
