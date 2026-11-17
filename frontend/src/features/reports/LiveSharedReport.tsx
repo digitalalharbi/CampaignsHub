@@ -249,7 +249,8 @@ export function LiveSharedReport({
         </nav>
       )}
 
-      <div className="grid gap-2 rounded-2xl border border-border bg-surface p-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-3" data-testid="live-controls">
+      {/* REPORT-MOBILE-APP-003 — a grid item is `min-width: auto`: the platform chips' scroll row would widen the track past a 375px screen. */}
+      <div className="grid gap-2 rounded-2xl border border-border bg-surface p-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-3 [&>*]:min-w-0" data-testid="live-controls">
         <div className="flex min-w-0 items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {!fixed && (payload.period.kind ?? 'custom') === 'custom' && (
             <div className="w-full sm:min-w-[14rem]">
