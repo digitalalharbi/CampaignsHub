@@ -41,11 +41,11 @@ final class MemberNotices
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? "أهلًا بك في {$tenant->name}" : "Welcome to {$tenant->name}",
                 detail: $ar
-                    ? "انضممت بدور «{$roleName}». تابع الحملات والتقارير من لوحة التحكم."
+                    ? "انضممت بدور «{$roleName}». تابع الحملات والتقارير من الرئيسية."
                     : "You joined as «{$roleName}». Follow campaigns and reports from the dashboard.",
                 context: (string) $tenant->name,
                 lang: $this->lang($user), recipientName: (string) $user->name,
-                path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                path: '/app/dashboard', action: $ar ? 'فتح الرئيسية' : 'Open the dashboard',
                 why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         );
