@@ -57,6 +57,8 @@ final class OperationalDigestMail extends Mailable
         /** The click-counted footprint link (UTM) of the © line, or the removal of the footprint (branding.remove_platform_footprint). */
         public readonly ?string $footprintUrl = null,
         public readonly bool $hideFootprint = false,
+        /** PM-DIGEST-READONLY-001 — a reader who only reads: performance and what is left, with no decision list, button, follow-up or connections block. */
+        public readonly bool $readOnly = false,
     ) {}
 
     private function cadence(bool $ar): string
@@ -75,7 +77,7 @@ final class OperationalDigestMail extends Mailable
         $title = DigestSchedule::title($this->scope === 'project' ? 'project' : 'portfolio', $this->kind, $ar);
         $tail = $this->scope === 'project'
             ? ($this->model['status']['label'] ?? '')
-            : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج قرار" : 'ما فيه شيء يحتاج قرار') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need a decision" : 'nothing needs a decision'));
+            : ($this->readOnly ? '' : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج قرار" : 'ما فيه شيء يحتاج قرار') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need a decision" : 'nothing needs a decision')));
 
         return new Envelope(subject: MailSubject::of(trim(($name !== '' ? "{$name} — " : '').$title.($tail !== '' ? ": {$tail}" : '')), $ar));
     }
@@ -106,6 +108,7 @@ final class OperationalDigestMail extends Mailable
             'hideFootprint' => $this->hideFootprint,
             'slot' => view($project ? 'mail.digest.project' : 'mail.digest.portfolio', [
                 'external' => $this->external,
+                'readOnly' => $this->readOnly,
                 'privacyLine' => $this->privacyLine,
                 'm' => $m,
                 'kind' => $this->kind,
