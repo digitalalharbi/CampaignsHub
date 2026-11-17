@@ -11,8 +11,12 @@ import { useFocusTrap } from '@/lib/useFocusTrap'
  * details are long, which is a layer scrolling, not the page.
  */
 export function DetailPanel({
-  open, onClose, title, children, footer, closeLabel, testid,
-}: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; closeLabel: string; testid?: string }) {
+  open, onClose, title, children, footer, closeLabel, testid, variant = 'side',
+}: {
+  open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; closeLabel: string; testid?: string
+  /** CAMPAIGN-MODAL-001 — `center`: from tablet width up, a window in the middle of the page (up to 80% of it), not a side drawer. */
+  variant?: 'side' | 'center'
+}) {
   const panel = useRef<HTMLDivElement>(null)
   useFocusTrap(panel, open)
 
@@ -29,7 +33,7 @@ export function DetailPanel({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60]" data-testid={testid}>
+    <div className={variant === 'center' ? 'fixed inset-0 z-[60] md:flex md:items-center md:justify-center md:p-6' : 'fixed inset-0 z-[60]'} data-testid={testid}>
       <div className="absolute inset-0 bg-black/40 motion-safe:animate-[fadeIn_var(--motion-panel)_var(--motion-ease)_both]" onClick={onClose} data-testid={testid ? `${testid}-backdrop` : undefined} />
       <div
         ref={panel}
@@ -38,7 +42,9 @@ export function DetailPanel({
         aria-label={title}
         tabIndex={-1}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-        className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-[20px] border border-border bg-surface shadow-[var(--shadow-large)] md:inset-y-0 md:end-0 md:start-auto md:max-h-none md:w-[440px] md:rounded-none md:border-y-0 md:border-e-0"
+        className={variant === 'center'
+          ? 'absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-[20px] border border-border bg-surface shadow-[var(--shadow-large)] md:relative md:inset-auto md:bottom-auto md:max-h-[80dvh] md:w-[80vw] md:max-w-6xl md:rounded-2xl'
+          : 'absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-[20px] border border-border bg-surface shadow-[var(--shadow-large)] md:inset-y-0 md:end-0 md:start-auto md:max-h-none md:w-[440px] md:rounded-none md:border-y-0 md:border-e-0'}
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <h2 className="min-w-0 truncate font-heading text-base font-extrabold text-text-primary">{title}</h2>
