@@ -22,9 +22,9 @@ const input = 'w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 t
  * the mode, the schedule and the safeguards. The project (and so the client) is the page's; a scope can
  * only name that project's own objects, and the server re-checks it.
  */
-export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { projectId: string; catalog: Catalog; rule: AutomationRule | null; ar: boolean; onClose: () => void }) {
+export function RuleBuilder({ projectId, catalog, rule, draft = null, ar, onClose }: { projectId: string; catalog: Catalog; rule: AutomationRule | null; /** OPS-READY-AGENTS-001 — a ready agent's rule to start from. */ draft?: RuleInput | null; ar: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const [f, setF] = useState<RuleInput>(() => (rule ? { ...EMPTY, ...rule, scope: rule.scope ?? {} } : EMPTY))
+  const [f, setF] = useState<RuleInput>(() => (rule ? { ...EMPTY, ...rule, scope: rule.scope ?? {} } : draft ?? EMPTY))
   const targets = useQuery({ queryKey: ['automation-targets', projectId], queryFn: () => getTargets(projectId), retry: false })
   const support = useQuery({ queryKey: ['automation-metric-support', projectId], queryFn: () => getMetricSupport(projectId), retry: false })
   const save = useMutation({

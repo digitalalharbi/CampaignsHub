@@ -130,6 +130,24 @@ describe('the automated rules page', () => {
     expect(within(builder).queryByTestId('rule-condition-support-1')).toBeNull()
   })
 
+  it('opens a ready agent as a filled-in rule in «recommend» mode, and offers only what the catalogue can run (OPS-READY-AGENTS-001)', async () => {
+    vi.mocked(saveRule).mockResolvedValue({ ...rule, id: 'r3' })
+    renderWithProviders(<AutomationPage />, { locale: 'en' })
+
+    const agent = await screen.findByTestId('automation-agent-high_cpa')
+    // «Stop the waste» needs `conversions`, which this catalogue does not offer: it is not shown.
+    expect(screen.queryByTestId('automation-agent-waste_stop')).toBeNull()
+    fireEvent.click(agent)
+    const builder = await screen.findByTestId('rule-builder')
+    expect(within(builder).getByTestId('rule-name')).toHaveValue('High cost per result')
+    fireEvent.click(within(builder).getByTestId('rule-save'))
+
+    await waitFor(() => expect(saveRule).toHaveBeenCalledWith('proj', expect.objectContaining({
+      name: 'High cost per result', mode: 'recommend', action: { type: 'budget_decrease', percent: 20 },
+      conditions: [{ metric: 'cpa', operator: 'gt', value: 100, window_days: 7 }, { metric: 'spend', operator: 'gt', value: 200, window_days: 7 }],
+    }), undefined))
+  })
+
   it('builds a rule with scope, AND/OR conditions, a budget action and a mode', async () => {
     vi.mocked(saveRule).mockResolvedValue({ ...rule, id: 'r2' })
     renderWithProviders(<AutomationPage />, { locale: 'en' })
