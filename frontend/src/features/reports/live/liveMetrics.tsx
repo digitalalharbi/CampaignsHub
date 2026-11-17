@@ -147,7 +147,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
      */
     add_to_cart: { ar: 'الإضافات للسلة', en: 'Add to cart', format: (_t, p, _m, count) => count(stageCount(p, 'add_to_cart')) },
     checkout: { ar: 'بدء الدفع', en: 'Checkout', format: (_t, p, _m, count) => count(stageCount(p, 'checkout')) },
-    purchases: { ar: 'المشتريات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
+    purchases: { ar: 'الطلبات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
     roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
     // NASEL 2026-10-29 — Results and their cost as the link DEFINED them (`results`), never the platform's generic conversion.
