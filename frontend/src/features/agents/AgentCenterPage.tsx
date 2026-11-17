@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { AgencyFit, FitPanel } from '@/components/fit/AgencyFit'
 import { Gauge, MessagesSquare, Settings2 } from 'lucide-react'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { Tabs } from '@/components/ui/Tabs'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { listProjects } from '@/features/projects/api'
@@ -56,6 +57,8 @@ export function AgentCenterPage() {
     return (
       <div className="space-y-6">
         <PageIntro title={title} purpose={purpose} />
+        {/* OPS-TABS-001 — the agents open under the operations tab «الأتمتة». */}
+        <OpsHubBar />
         <ProjectChooser purpose="recommendations" />
       </div>
     )
@@ -86,6 +89,7 @@ export function AgentCenterPage() {
           </span>
         )}
       />
+      <OpsHubBar />
 
       <Tabs
         items={[
