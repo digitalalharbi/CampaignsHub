@@ -25,8 +25,7 @@ import { CampaignViewsBar } from './CampaignViewsBar'
 import { BulkCampaignActions } from './BulkCampaignActions'
 import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
 import type { SavedView } from '@/features/dashboard/savedViews'
-import { Columns3, Download } from 'lucide-react'
-import { downloadTableCsv } from '@/lib/tableCsv'
+import { Columns3 } from 'lucide-react'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -49,6 +48,7 @@ import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
 import { useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
+import { DetailPanel } from '@/components/fit/DetailPanel'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -198,6 +198,8 @@ export function CampaignsPage() {
   const [status, setStatus] = useUrlState('status', '')
   const [objective, setObjective] = useUrlState('objective', '')
   const [search, setSearch] = useState('')
+  // CAMPAIGNS-PEEK-001 — the campaign whose figures are open in the side panel, without leaving the table.
+  const [peekId, setPeekId] = useState<string | null>(null)
   /*
    * CAMPAIGNS-TABLE-COMPARISON-001 — the chosen column travels to the SERVER.
    *
@@ -751,6 +753,28 @@ export function CampaignsPage() {
    * CAMPAIGN-VIEWS-001 — the chip narrows the list to its band; the counts above stay over the
    * whole set, so the strip keeps saying what the project holds while the table shows the band.
    */
+  /*
+   * CAMPAIGNS-PEEK-001 — one campaign's figure for a column, shared by the table row and the analysis panel so the two
+   * can never show different numbers for the same campaign.
+   */
+  const campaignCell = (c: UnifiedCampaign, m: Record<string, unknown> | undefined, key: string) => {
+    const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
+    switch (col.kind) {
+      case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
+      case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+      case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+      case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
+      // FX-APPLY-001 — the budget in the display currency through FxEngine, «محوّل» + the rate in its tooltip.
+      case 'budget': return c.total_budget === null ? <span className="text-text-muted">—</span> : <FxAmount c={c.budget_fx} ar={ar} testId="campaign-budget-cell" />
+      case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
+      case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
+      default: {
+        const spec = SPECS[key]
+        return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
+      }
+    }
+  }
+
   const shownCampaigns = useMemo(
     () => (band === '' ? orderedCampaigns : orderedCampaigns.filter((c) => campaignBand(c, range.to) === band)),
     [orderedCampaigns, band, range.to],
@@ -1550,12 +1574,6 @@ export function CampaignsPage() {
                     className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400">
                     <Columns3 size={14} aria-hidden /> {ar ? 'الأعمدة' : 'Columns'}
                   </button>
-                  {/* CAMPAIGNS-DOWNLOAD-001 — the table as shown (its columns, filter and order) to a CSV file. */}
-                  <button type="button" data-testid="campaigns-download" disabled={shownCampaigns.length === 0}
-                    onClick={() => { const t = document.querySelector<HTMLTableElement>('[data-testid="campaigns-table"]'); if (t) downloadTableCsv(t, `campaigns-${range.from}-${range.to}`) }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400 disabled:opacity-40">
-                    <Download size={14} aria-hidden /> {ar ? 'تنزيل' : 'Download'}
-                  </button>
                 </div>
                 {choosingColumns && (
                   <fieldset className="flex flex-wrap gap-2" data-testid="campaigns-columns">
@@ -1600,25 +1618,10 @@ export function CampaignsPage() {
                 <tbody>
                   {shownCampaigns.map((c) => {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-                    const cell = (key: string) => {
-                      const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
-                      switch (col.kind) {
-                        case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
-                        case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
-                        // FX-APPLY-001 — the budget in the display currency through FxEngine, «محوّل» + the rate in its tooltip.
-                        case 'budget': return c.total_budget === null ? <span className="text-text-muted">—</span> : <FxAmount c={c.budget_fx} ar={ar} testId="campaign-budget-cell" />
-                        case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
-                        case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
-                        default: {
-                          const spec = SPECS[key]
-                          return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
-                        }
-                      }
-                    }
+                    const cell = (key: string) => campaignCell(c, m, key)
                     return (
-                      <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
+                      <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover"
+                        onClick={(e) => { if (!(e.target as HTMLElement).closest('a, button, input, label')) setPeekId(c.id) }}>
                         <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
                         <td className="p-3 font-semibold" data-testid="campaign-row-name">
                           <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
@@ -1672,6 +1675,36 @@ export function CampaignsPage() {
           </span>
         </nav>
       )}
+
+      {(() => {
+        /*
+         * CAMPAIGNS-PEEK-001 — the analysis panel: every figure of one campaign, read by the same function as its row,
+         * one tap from the table and one more to the full campaign. Nothing here is fetched again.
+         */
+        const pc = peekId ? shownCampaigns.find((x) => x.id === peekId) : undefined
+        if (!pc) return null
+        const pm = metricsByCampaign.get(pc.id) as Record<string, unknown> | undefined
+
+        return (
+          <DetailPanel open onClose={() => setPeekId(null)} title={pc.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-peek"
+            footer={<button type="button" data-testid="campaign-peek-open" onClick={() => navigate(`/campaigns/${projectId}/${pc.id}`)} className="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">{ar ? 'افتح الحملة' : 'Open the campaign'}</button>}>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge tone={campaignStatusTone(pc.status)}>{campaignStatusLabel(pc.status, locale)}</Badge>
+                <span className="text-text-secondary">{objectiveLabel(pc.objective, locale)}</span>
+              </div>
+              <dl className="grid grid-cols-2 gap-2">
+                {CAMPAIGN_COLUMNS.filter((col) => col.kind !== 'linked').map((col) => (
+                  <div key={col.key} className="min-w-0 rounded-xl border border-border bg-surface-secondary p-2.5" data-testid={`campaign-peek-${col.key}`}>
+                    <dt className="truncate text-xs text-text-secondary">{columnLabel(col, locale)}</dt>
+                    <dd className="mt-0.5 truncate text-base font-bold text-text-primary">{campaignCell(pc, pm, col.key) ?? '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </DetailPanel>
+        )
+      })()}
 
       <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
       {launching && !canCreate && (
