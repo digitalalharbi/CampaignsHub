@@ -9,6 +9,7 @@ import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { withMark } from '@/lib/money/mark'
+import { ReportAdDeepFigures } from './ReportAdDeepFigures'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -257,6 +258,9 @@ export function ReportAdDetail({
             {ad.reason}
           </p>
         )}
+
+        {/* REPORT-CONTENT-DEEP-001 — the content's whole path: extra figures, the viewer journey, the video retention. */}
+        <ReportAdDeepFigures ad={ad} currency={currency} ar={ar} />
 
         {children}
       </div>
