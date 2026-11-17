@@ -64,7 +64,7 @@ const FIRST_READ_EN = 'Use CampaignsHub: list my projects, then summarise the fi
 /** TROUBLE — the five ways a connection fails, in the system's words: the sign, then what to do. */
 const TROUBLE: { ar: [string, string]; en: [string, string] }[] = [
   { ar: ['رفض الدخول (401)', 'الرمز خاطئ أو أُلغي. أنشئ رمزًا جديدًا وضعه في الإعداد.'], en: ['Refused (401)', 'The token is wrong or revoked. Create a new one and put it in the setup.'] },
-  { ar: ['الخادم مربوط ولا تظهر أدوات', 'أعد تشغيل التطبيق بعد حفظ الإعداد، وتأكد أن العنوان ينتهي بـ ‎/api/v1/mcp.'], en: ['Connected, but no tools', 'Restart the app after saving the setup, and check the URL ends with /api/v1/mcp.'] },
+  { ar: ['الخادم مربوط ولا تظهر أدوات', 'أعد تشغيل التطبيق بعد حفظ الإعداد، وتأكد أن العنوان مطابق لعنوان الخادم في الخطوة 2.'], en: ['Connected, but no tools', 'Restart the app after saving the setup, and check the URL matches the server address in step 2.'] },
   { ar: ['مشروع لا يظهر أو يُرفض', 'الرمز يعمل بصلاحياتك أنت؛ اطلب من مدير المساحة إضافتك للعميل أو المشروع.'], en: ['A project is missing or refused', 'The token works with your permissions; ask the workspace manager to add you to that client or project.'] },
   { ar: ['مساحة عمل غير المقصودة', 'الرمز يتبع مساحة العمل الافتراضية لحسابك؛ أنشئه وأنت داخل المساحة المطلوبة.'], en: ['The wrong workspace', 'A token follows your default workspace; create it while you are in the workspace you want.'] },
   { ar: ['Claude Desktop لا يشغّل الخادم', 'ثبّت Node.js أولًا، ثم أعد تشغيل Claude.'], en: ['Claude Desktop does not start the server', 'Install Node.js first, then restart Claude.'] },
@@ -100,7 +100,8 @@ export function AiConnectPage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const tx = (a: string, e: string) => (ar ? a : e)
   const qc = useQueryClient()
-  const url = `${window.location.origin}/api/v1/mcp`
+  // MCP-DOMAIN-001 — production has its own address (mcp.campaignshub.io → /api/v1/mcp at the edge); any other host keeps the API path.
+  const url = window.location.hostname.endsWith('campaignshub.io') ? 'https://mcp.campaignshub.io' : `${window.location.origin}/api/v1/mcp`
   const [app, setApp] = useState<App>('claude_code')
   const [name, setName] = useState('')
   const [fresh, setFresh] = useState<string | null>(null)
