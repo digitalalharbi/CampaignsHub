@@ -111,6 +111,29 @@ const T = {
 const t = (key: keyof typeof T, ar: boolean) => (ar ? T[key].ar : T[key].en)
 
 /**
+ * METRIC-GRID-FIT-001 — the columns follow the number of cards, so no row ends with one card beside empty space.
+ *
+ * Four cards in three columns left the fourth alone on its own row (the Owner's «معدل النقر» card on Analytics), and
+ * an odd count on a phone left the last card beside a hole. Each count gets columns that divide it; where none can
+ * (an odd count on two columns), the FIRST card takes the whole row, so the gap closes at the top rather than
+ * leaving a lone card at the bottom. Literal class names, so the stylesheet keeps every one of them.
+ */
+function cardColumns(n: number): string {
+  switch (n) {
+    case 1: return 'grid-cols-1'
+    case 2: return 'grid-cols-2'
+    case 3: return 'grid-cols-2 sm:grid-cols-3 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1'
+    case 4: return 'grid-cols-2 lg:grid-cols-4'
+    case 5: return 'grid-cols-2 lg:grid-cols-5 [&>*:first-child]:col-span-2 lg:[&>*:first-child]:col-span-1'
+    case 6: return 'grid-cols-2 lg:grid-cols-3'
+    case 8: return 'grid-cols-2 lg:grid-cols-4'
+    default: return n % 2 === 1
+      ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 [&>*:first-child]:col-span-2 lg:[&>*:first-child]:col-span-1'
+      : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+  }
+}
+
+/**
  * A definition, on hover and on focus.
  *
  * Not the native `title` attribute: it never appears on a touch screen and never appears for a
@@ -545,7 +568,7 @@ export function MetricStrip({
         </div>
       )}
 
-      <div className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}>
+      <div className={`grid ${CARD_GAP} ${cardColumns(primary.length)}`} data-testid={`${id}-metrics-grid`}>
         {primary.map((item, index) => (
           <MetricCard key={`${item.key}-${index}`} item={item} ar={ar} labelControl={labelControl?.(index)} />
         ))}
@@ -567,7 +590,7 @@ export function MetricStrip({
           {expanded && (
             <div
               data-testid={`${id}-metrics-secondary`}
-              className={`grid grid-cols-2 ${CARD_GAP} lg:grid-cols-3 xl:grid-cols-4`}
+              className={`grid ${CARD_GAP} ${cardColumns(secondary.length)}`}
             >
               {secondary.map((item) => (
                 <MetricCard key={item.key} item={item} ar={ar} />
