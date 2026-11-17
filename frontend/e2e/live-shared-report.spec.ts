@@ -84,6 +84,7 @@ test.describe('a client opens their live report', () => {
 
     await page.getByTestId('live-range-picker-button').click()
     await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
 
     await expect
       .poll(async () => headline.innerText(), { timeout: 20000 })
