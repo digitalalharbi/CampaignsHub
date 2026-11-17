@@ -11,6 +11,7 @@ import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
 import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { HeroSection } from './HeroSection'
+import { PublicAiPromo } from './PublicAiPromo'
 import { PublicAiSection } from './PublicAiSection'
 import { journeyTo } from './journeys'
 import { PublicHeader } from './PublicHeader'
@@ -325,6 +326,7 @@ export function PublicHomePage() {
 
       {/* AI-CONNECT-EASY-001 — «حلّل بالشات»: Claude or ChatGPT on the merchant's ads and store, in one conversation. */}
       <PublicAiSection ar={locale === 'ar'} />
+      <PublicAiPromo ar={locale === 'ar'} />
 
       {/* Key features — one balanced grid */}
       {on('features') && (
