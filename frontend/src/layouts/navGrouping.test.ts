@@ -149,7 +149,8 @@ describe('no section is lost — moved is not the same as deleted', () => {
   })
 
   it('names exactly what left the rail (NAV-HOME-PLANS-001)', () => {
-    expect([...agencyFoldedPaths].sort()).toEqual(['/agency/launch', '/agency/portfolio', '/agency/spend-limits'])
+    // OPS-TABS-001 — recommendations, approvals and the agents open from the operations tabs.
+    expect([...agencyFoldedPaths].sort()).toEqual(['/agency/agents', '/agency/agents/approvals', '/agency/launch', '/agency/portfolio', '/agency/recommendations', '/agency/spend-limits'])
     expect([...appFoldedPaths].sort()).toEqual(['/app/launch', '/app/portfolio'])
   })
 

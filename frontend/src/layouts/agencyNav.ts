@@ -126,13 +126,12 @@ export const agencyNavGroups: readonly NavGroup[] = [
   {
     key: 'operations',
     ar: 'العمليات', en: 'Operations', icon: ListChecks,
+    // OPS-TABS-001 (Owner, 2026-11-17) — three entries, not six: recommendations and approvals open under «التنبيهات»,
+    // the agents under «الأتمتة» (see OpsHubBar); their addresses still answer (agencyFoldedLeaves).
     leaves: [
-      { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
       { to: '/agency/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing },
-      { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
-      { to: '/agency/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck },
+      { to: '/agency/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks },
       { to: '/agency/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow },
-      { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, end: true },
     ],
   },
 ]
@@ -155,6 +154,10 @@ export const agencyFoldedLeaves: readonly NavLeaf[] = [
   { to: '/agency/portfolio', ar: 'ملخص المشاريع', en: 'Portfolio', icon: Layers },
   // ONE-BUDGET-UI-001 — opened from a budget's panel («حدود أدق»).
   { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
+  // OPS-TABS-001 — opened from the operations tabs.
+  { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+  { to: '/agency/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck },
+  { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, end: true },
 ]
 export const agencyFoldedPaths: readonly string[] = agencyFoldedLeaves.map((l) => l.to)
 
