@@ -10,7 +10,7 @@ use App\Domains\Campaigns\Support\DrawableImage;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\ReportIdentity;
-use Illuminate\Support\Carbon;
+use App\Domains\Reports\Support\ReportPeriod;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
@@ -268,13 +268,10 @@ final class ShareCardRenderer
         return null;
     }
 
+    /** SHARE-CARD-ROLLING-001 — a rolling link names its window and that it moves; only a fixed link states dates. */
     private function period(Report $report): ?string
     {
-        if ($report->period_start === null || $report->period_end === null) {
-            return null;
-        }
-
-        return Carbon::parse($report->period_start)->toDateString().' — '.Carbon::parse($report->period_end)->toDateString();
+        return ReportPeriod::cardLabelOfReport($report, $report->reportLocale());
     }
 
     /** @param array<string,mixed> $card */
