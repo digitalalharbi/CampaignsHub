@@ -25,7 +25,8 @@ import { CampaignViewsBar } from './CampaignViewsBar'
 import { BulkCampaignActions } from './BulkCampaignActions'
 import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
 import type { SavedView } from '@/features/dashboard/savedViews'
-import { Columns3 } from 'lucide-react'
+import { Columns3, Download } from 'lucide-react'
+import { downloadTableCsv } from '@/lib/tableCsv'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -1573,6 +1574,12 @@ export function CampaignsPage() {
                   <button type="button" onClick={() => setChoosingColumns((v) => !v)} aria-expanded={choosingColumns} data-testid="campaigns-columns-toggle"
                     className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400">
                     <Columns3 size={14} aria-hidden /> {ar ? 'الأعمدة' : 'Columns'}
+                  </button>
+                  {/* CAMPAIGNS-DOWNLOAD-001 — the table as shown (its columns, filter and order) to a CSV file. */}
+                  <button type="button" data-testid="campaigns-download" disabled={shownCampaigns.length === 0}
+                    onClick={() => { const t = document.querySelector<HTMLTableElement>('[data-testid="campaigns-table"]'); if (t) downloadTableCsv(t, `campaigns-${range.from}-${range.to}`) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400 disabled:opacity-40">
+                    <Download size={14} aria-hidden /> {ar ? 'تنزيل' : 'Download'}
                   </button>
                 </div>
                 {choosingColumns && (
