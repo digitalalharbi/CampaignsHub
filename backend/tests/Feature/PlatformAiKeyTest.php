@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Domains\AI\Models\PlatformAiKey;
 use App\Domains\Agents\Engine\ModelClientFactory;
+use App\Domains\AI\Models\PlatformAiKey;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
