@@ -113,7 +113,7 @@ export function BoardHeader({ ar }: { ar: boolean }) {
   const h = (v: { ar: string; en: string }) => <span className="truncate text-xs font-bold text-text-muted">{ar ? v.ar : v.en}</span>
 
   return (
-    <div className="hidden min-w-0 grid-cols-[minmax(0,1.5fr)_8.5rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] gap-x-3 px-2.5 leading-none lg:grid" data-testid="board-header">
+    <div className="hidden min-w-0 grid-cols-[minmax(0,1.5fr)_10.25rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] gap-x-3 px-2.5 leading-none lg:grid" data-testid="board-header">
       {h({ ar: 'العميل · المشروع', en: 'Client · project' })}{h(L.period)}{h({ ar: 'الأرقام', en: 'Figures' })}{h(L.platforms)}{h({ ar: 'الحالة', en: 'Status' })}
     </div>
   )
@@ -140,7 +140,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       onClick={onOpen}
       aria-current={active}
       data-testid={`budget-row-${row.project_id}`}
-      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition lg:grid-cols-[minmax(0,1.5fr)_8.5rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
+      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition lg:grid-cols-[minmax(0,1.5fr)_10.25rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span

@@ -32,7 +32,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5" data-testid="dash-kpis">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 [&>*:first-child:nth-last-child(odd)]:col-span-2 lg:[&>*:first-child:nth-last-child(odd)]:col-span-1" data-testid="dash-kpis">
         <Kpi testId="dash-kpi-budget" to={`/${portal}/budgets`} label={t.budget} value={f.money(m?.budget, cur)} />
         <Kpi testId="dash-kpi-spend" to={`/${portal}/budgets`} label={t.spend} value={f.money(m?.spent, cur)} hint={ratio === null ? undefined : `${f.pct(ratio)} ${t.of}`} status={m ? budgetStatus(ratio, near) : undefined} />
         <Kpi testId="dash-kpi-remaining" to={`/${portal}/budgets`} label={t.remaining} value={f.money(m?.remaining, cur)} />

@@ -57,7 +57,7 @@ export function MarketerView({ d, portal }: { d: RoleDashboard; portal: 'agency'
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5" data-testid="dash-kpis">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 [&>*:first-child:nth-last-child(odd)]:col-span-2 lg:[&>*:first-child:nth-last-child(odd)]:col-span-1" data-testid="dash-kpis">
         <Kpi testId="dash-kpi-campaigns" to={`/${portal}/campaigns`} label={d.mine ? t.mine : t.reach} value={f.count(camps?.total)} hint={camps ? `${t.active} ${f.count(camps.active)}` : undefined} />
         {m && <Kpi testId="dash-kpi-spend" to={`/${portal}/analytics`} label={t.spend} value={f.money(rows.reduce((a, r) => a + (r.spend ?? 0), 0) || null, cur)} />}
         <Kpi testId="dash-kpi-results" to={`/${portal}/analytics`} label={resultLabel} value={results > 0 ? f.short(results) : '—'} hint={family ? `${t.objective}: ${familyName(family, f.ar)}` : undefined} />
