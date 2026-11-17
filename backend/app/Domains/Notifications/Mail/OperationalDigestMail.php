@@ -79,7 +79,17 @@ final class OperationalDigestMail extends Mailable
             ? ($this->model['status']['label'] ?? '')
             : ($this->readOnly ? '' : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج قرار" : 'ما فيه شيء يحتاج قرار') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need a decision" : 'nothing needs a decision')));
 
-        return new Envelope(subject: MailSubject::of(trim(($name !== '' ? "{$name} — " : '').$title.($tail !== '' ? ": {$tail}" : '')), $ar));
+        /*
+         * DIGEST-SUBJECT-LIVE-001 — Owner 2026-11-17: the daily mail is a LIVE follow-up, not an evaluation. A verdict in its subject
+         * («مشكلة», «تحتاج قرار») could be quoted as proof of a shortfall, and the performance reports are the weekly and monthly ones
+         * (every 7–14 days to monthly). So the daily subject names the project and says what the mail is; the verdict stays out of it.
+         */
+        $line = $title.($name !== '' ? " — {$name}" : '');
+        $line .= $this->kind === 'daily'
+            ? ' · '.($ar ? 'متابعة لحظية' : 'Live follow-up')
+            : ($tail !== '' ? ": {$tail}" : '');
+
+        return new Envelope(subject: MailSubject::of(trim($line), $ar));
     }
 
     public function content(): Content
