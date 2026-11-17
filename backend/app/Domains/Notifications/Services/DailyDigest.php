@@ -17,6 +17,7 @@ use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Integrations\Measurement\Ga4DigestBlock;
 use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -34,7 +35,6 @@ use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Models\User;
 use App\Support\AdPlatforms;
-use App\Domains\Funding\Services\ProjectBudgetReader;
 use Illuminate\Support\Carbon;
 
 /**
