@@ -14,7 +14,7 @@ export const ELEMENT_GROUPS: ElementGroup[] = [
     e('tile.sessions', 'الزيارات', 'Sessions', false), e('tile.users_daily_sum', 'المستخدمون', 'Users', false), e('tile.new_users', 'الجدد', 'New', false),
     e('tile.bounce_rate', 'الارتداد', 'Bounce', false), e('tile.engagement_rate', 'التفاعل', 'Engagement', false), e('tile.avg_session_seconds', 'المدة', 'Duration', false),
     e('tile.add_to_carts', 'الإضافة', 'Carts', false), e('tile.checkouts', 'الدفع', 'Checkouts', false),
-    e('tile.transactions', 'المشتريات', 'Purchases', true), e('tile.revenue', 'المبيعات', 'Sales', true), e('tile.aov', 'السلة', 'Basket', true), e('tile.conversion_rate', 'التحويل', 'Conversion', true),
+    e('tile.transactions', 'الطلبات', 'Purchases', true), e('tile.revenue', 'المبيعات', 'Sales', true), e('tile.aov', 'السلة', 'Basket', true), e('tile.conversion_rate', 'التحويل', 'Conversion', true),
   ] },
   { key: 'charts', label: { ar: 'الرسوم', en: 'Charts' }, items: [
     e('chart.series.visits', 'خط الزيارات', 'Visits line', false), e('chart.series.sales', 'خط المبيعات', 'Sales line', true),

@@ -740,7 +740,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
 
 /** REPORT-CARD-OBJECTIVE-001 — the count each objective is judged on, read from the ad's own reported figure. */
 const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> = {
-  sales: { key: 'purchases', ar: 'المشتريات', en: 'Purchases' },
+  sales: { key: 'purchases', ar: 'الطلبات', en: 'Purchases' },
   leads: { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
   traffic: { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
   app: { key: 'installs', ar: 'التثبيتات', en: 'Installs' },

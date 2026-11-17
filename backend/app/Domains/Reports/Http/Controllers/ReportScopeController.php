@@ -517,7 +517,7 @@ final class ReportScopeController extends Controller
         ['key' => 'cpm', 'ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
         ['key' => 'conversions', 'ar' => 'النتائج', 'en' => 'Results'],
         ['key' => 'add_to_cart', 'ar' => 'الإضافات للسلة', 'en' => 'Add to cart'],
-        ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases'],
+        ['key' => 'purchases', 'ar' => 'الطلبات', 'en' => 'Purchases'],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue'],
         ['key' => 'roas', 'ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
         ['key' => 'cpa', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],

@@ -30,7 +30,7 @@ export const KPI_LABEL: Record<string, L> = {
   bounce_rate: { ar: 'الارتداد', en: 'Bounce' },
   engagement_rate: { ar: 'التفاعل', en: 'Engagement' },
   avg_session_seconds: { ar: 'المدة', en: 'Duration' },
-  transactions: { ar: 'المشتريات', en: 'Purchases' },
+  transactions: { ar: 'الطلبات', en: 'Purchases' },
   revenue: { ar: 'المبيعات', en: 'Sales' },
   aov: { ar: 'السلة', en: 'Basket' },
   conversion_rate: { ar: 'التحويل', en: 'Conversion' },

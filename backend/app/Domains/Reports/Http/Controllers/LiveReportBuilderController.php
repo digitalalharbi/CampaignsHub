@@ -390,7 +390,7 @@ final class LiveReportBuilderController extends Controller
         ['key' => 'results', 'ar' => 'النتائج', 'en' => 'Results'],
         ['key' => 'cost_per_result', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],
         ['key' => 'add_to_cart', 'ar' => 'الإضافات للسلة', 'en' => 'Add to cart'],
-        ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases'],
+        ['key' => 'purchases', 'ar' => 'الطلبات', 'en' => 'Purchases'],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue'],
         ['key' => 'roas', 'ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
     ];

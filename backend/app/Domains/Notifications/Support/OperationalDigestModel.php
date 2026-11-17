@@ -32,7 +32,7 @@ final class OperationalDigestModel
     /** @var array<string, array{0: string, 1: string, 2: string, 3?: bool}> key → [ar, en, kind, lowerIsBetter] */
     private const FIG = [
         'spend' => ['الإنفاق', 'Spend', 'money'],
-        'purchases' => ['المشتريات', 'Purchases', 'count'],
+        'purchases' => ['الطلبات', 'Purchases', 'count'],
         'revenue' => ['الإيرادات', 'Revenue', 'money'],
         'roas' => ['العائد على الإنفاق', 'ROAS', 'ratio'],
         'leads' => ['العملاء المحتملون', 'Leads', 'count'],
