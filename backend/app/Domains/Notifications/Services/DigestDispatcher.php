@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailFailure;
@@ -303,6 +304,16 @@ final class DigestDispatcher
             if ($onlyProject !== null) {
                 $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
             }
+            /*
+             * FINANCE-DIGEST-001 — Owner 2026-11-17: «المحاسب يحتاج تفاصيل الميزانيات لا الأداء».
+             *
+             * A reader who may open the budgets of every project in scope and neither its analytics nor its campaigns is the finance
+             * role. The performance digest is not for them: it carried operational blocks, links back into the product and spend in the
+             * reporting currency. They receive the spend summary instead — the approved budgets, in their own currency, no links.
+             */
+            if ($onlyProject === null && $this->readsBudgetsOnly($user, $projectIds)) {
+                return $this->sendBudgetsOnly($user, $tenantId, $kind, $from, $to, $locale, $ledgerKind, $ledgerKey, $scope, $projectIds);
+            }
             // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
             // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
             if ($audience === 'agency' && ProjectCapability::exists('money.view')) {
@@ -408,6 +419,44 @@ final class DigestDispatcher
         } finally {
             $this->tenants->forget();
         }
+    }
+
+    /** @param list<string> $projectIds */
+    private function readsBudgetsOnly(User $user, array $projectIds): bool
+    {
+        if ($projectIds === []) {
+            return false;
+        }
+        foreach ($projectIds as $projectId) {
+            $id = (string) $projectId;
+            if (! $this->abilities->allows($user, $id, ProjectCapability::BUDGET_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::ANALYTICS_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::CAMPAIGNS_VIEW)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param list<string> $projectIds */
+    private function sendBudgetsOnly(User $user, string $tenantId, string $kind, Carbon $from, Carbon $to, string $locale, string $ledgerKind, string $ledgerKey, ?string $scope, array $projectIds): string
+    {
+        if (! $this->providers->isConfigured('email')) {
+            return $this->finish($user, $ledgerKind, $ledgerKey, 'awaiting_credentials', 'no_email_provider');
+        }
+        $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope, reserve: (int) config('mail.alert_reserve_per_tenant', 200));
+        if ($refusal !== null) {
+            return $this->finish($user, $ledgerKind, $ledgerKey, $refusal, $refusal);
+        }
+
+        // The daily window carries the day before for comparison; the spend summary reports the one day.
+        $start = $kind === 'daily' ? $to->copy()->startOfDay() : $from;
+        $data = app(ProjectSpendSummary::class)->build($tenantId, array_map('strval', $projectIds), $start, $to, Carbon::today('Asia/Riyadh'));
+        $mail = new SpendSummaryMail($data, $locale, $kind, recipientName: (string) $user->name);
+        $sent = Mail::to($user->email)->send($mail->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
+
+        return $this->finish($user, $ledgerKind, $ledgerKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
     }
 
     /**
