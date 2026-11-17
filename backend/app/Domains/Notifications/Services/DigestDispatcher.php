@@ -387,7 +387,7 @@ final class DigestDispatcher
              * payload, so the scope, the permissions and the figures were already decided above.
              */
             $mailable = $audience === 'agency' && (bool) config('mail.operational_digests')
-                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind, $onlyProject !== null)
+                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind, $onlyProject !== null, $this->readsPerformanceOnly($user, $projectIds))
                 : new DailyDigestMail(
                     $digest,
                     $locale,
@@ -439,6 +439,29 @@ final class DigestDispatcher
         return true;
     }
 
+    /**
+     * PM-DIGEST-READONLY-001 — Owner 2026-11-17: the project manager's summary is performance and what is left, nothing operational.
+     * A reader who may read the analytics of every project in scope and may run none of its campaigns gets the same digest with the
+     * decision list, the buttons back into the product, the follow-up and the connections block removed.
+     *
+     * @param  list<string>  $projectIds
+     */
+    private function readsPerformanceOnly(User $user, array $projectIds): bool
+    {
+        if ($projectIds === []) {
+            return false;
+        }
+        foreach ($projectIds as $projectId) {
+            $id = (string) $projectId;
+            if (! $this->abilities->allows($user, $id, ProjectCapability::ANALYTICS_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::CAMPAIGNS_MANAGE)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** @param list<string> $projectIds */
     private function sendBudgetsOnly(User $user, string $tenantId, string $kind, Carbon $from, Carbon $to, string $locale, string $ledgerKind, string $ledgerKey, ?string $scope, array $projectIds): string
     {
@@ -462,15 +485,15 @@ final class DigestDispatcher
     /**
      * @param  array<string,mixed>  $digest  the payload of `DailyDigest::buildRange()`
      */
-    private function operationalMail(array $digest, string $locale, string $name, string $kind, bool $perProject = false): OperationalDigestMail
+    private function operationalMail(array $digest, string $locale, string $name, string $kind, bool $perProject = false, bool $readOnly = false): OperationalDigestMail
     {
         $projects = array_values((array) ($digest['projects'] ?? []));
 
         if (count($projects) === 1 || ($perProject && $projects !== [])) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 1), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest, $kind, $locale));
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 1), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest, $kind, $locale), readOnly: $readOnly);
         }
 
-        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest, $kind, $locale));
+        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest, $kind, $locale), readOnly: $readOnly);
     }
 
     /** The twelve hex characters that name a project inside a ledger period key (the column is 24 wide). */
