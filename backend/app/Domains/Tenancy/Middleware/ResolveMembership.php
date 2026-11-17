@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Tenancy\Middleware;
 
+use App\Domains\Agents\Http\Middleware\ConfineMcpTokens;
 use App\Domains\Platform\Support\SupportAccess;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -73,9 +74,14 @@ final class ResolveMembership
         }
 
         // The last of the three only ever carries a refusal: see `endedReviewMembership`.
-        $membership = $this->selector->selected($request, $user)
-            ?? $this->resolver->resolve($user)
-            ?? $this->resolver->endedReviewMembership($user);
+        // MCP-SCOPE-001 — a connector token approved in one workspace answers from that workspace and no other. A pin that no
+        // longer names a usable membership of this person resolves to nothing, and nothing is the fail-closed branch below.
+        $pinned = ConfineMcpTokens::pinnedMembership($user);
+        $membership = $pinned !== null
+            ? $this->selector->own($user, $pinned)
+            : ($this->selector->selected($request, $user)
+                ?? $this->resolver->resolve($user)
+                ?? $this->resolver->endedReviewMembership($user));
 
         if ($membership !== null) {
             // A tab drawn for one workspace must not be answered from another (ENSURE-PORTAL-SESSION-001).
