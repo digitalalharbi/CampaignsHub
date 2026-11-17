@@ -11,6 +11,7 @@ use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
+use App\Domains\Agents\Http\Middleware\ConfineMcpTokens;
 use App\Domains\Alerts\Console\EvaluateAlerts;
 use App\Domains\Alerts\Console\ReevaluateDataArrivalAlerts;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
@@ -366,6 +367,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // TWO-STEP-001 — a session for a person with a second step on must have passed it.
             EnsureTwoFactorPassed::class,
             EnsureAccountActive::class,
+            // MCP-SCOPE-001 — a connector token (Claude, ChatGPT…) opens /api/v1/mcp and nothing else.
+            ConfineMcpTokens::class,
             // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
             WithholdMoneyForMember::class,
             // ACCESS-SECTIONS-001 — a section switched off for this member answers 403 on every one of its routes.
@@ -465,6 +468,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 $e instanceof AuthenticationException && EstablishSession::pending($request) !== null => ApiResponse::error(
                     __('auth.two_factor_required'), null, ['two_factor_required' => true], 401,
                 ),
+                // MCP-OAUTH-001 — a refused MCP call names where to sign in: that header is how Claude and ChatGPT start «سماح».
+                // Here and not in a route middleware, because `auth:sanctum` is sorted ahead of any middleware and throws.
+                $e instanceof AuthenticationException && $request->is('api/v1/mcp') => ApiResponse::error(
+                    __('api.unauthenticated'), status: 401,
+                )->header('WWW-Authenticate', 'Bearer resource_metadata="'.rtrim((string) config('services.mcp.url', 'https://mcp.campaignshub.io'), '/').'/.well-known/oauth-protected-resource"'),
                 $e instanceof AuthenticationException => ApiResponse::error(
                     __('api.unauthenticated'), status: 401,
                 ),

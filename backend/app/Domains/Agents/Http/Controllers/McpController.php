@@ -7,6 +7,7 @@ namespace App\Domains\Agents\Http\Controllers;
 use App\Domains\Agents\Engine\AgentToolbox;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
+use App\Domains\Projects\Middleware\WithholdMoneyForMember;
 use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -29,7 +30,7 @@ final class McpController extends Controller
     private const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
     /** The in-app assistant's tools that are offered over MCP. */
-    private const TOOLS = ['list_campaigns', 'get_history', 'compare_targets', 'list_creatives', 'get_rules', 'list_automation_rules', 'propose_change'];
+    private const TOOLS = ['list_campaigns', 'get_history', 'compare_targets', 'get_store_sales', 'list_creatives', 'get_rules', 'list_automation_rules', 'propose_change'];
 
     public function __construct(private readonly AgentToolbox $toolbox, private readonly ProjectAbilities $abilities) {}
 
@@ -140,9 +141,19 @@ final class McpController extends Controller
         }
 
         unset($arguments['project_id']);
+        // MCP-SCOPE-001 — a membership that withholds money on this project gets the answer without it, exactly as the app does.
+        $money = $this->abilities->allows($user, (string) $project->getKey(), ProjectCapability::MONEY_VIEW);
+        if (! $money && $name === 'propose_change' && ($arguments['action'] ?? null) === 'set_daily_budget') {
+            return $this->text(['error' => 'Budgets are withheld for this person on this project.'], true);
+        }
         $out = $this->toolbox->call($project, $user, 'assistant', self::TOOLS, $name, $arguments);
+        $text = $out['content'];
+        if (! $money) {
+            $decoded = json_decode($text, true);
+            $text = is_array($decoded) ? (string) json_encode(WithholdMoneyForMember::strip($decoded), JSON_UNESCAPED_UNICODE) : $text;
+        }
 
-        return ['content' => [['type' => 'text', 'text' => $out['content']]], 'isError' => ! $out['ok']];
+        return ['content' => [['type' => 'text', 'text' => $text]], 'isError' => ! $out['ok']];
     }
 
     /**

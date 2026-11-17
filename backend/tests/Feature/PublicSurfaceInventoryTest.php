@@ -103,6 +103,15 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/requests/track/{token}/files/{file}',
         'GET api/v1/salla/enter',
         'GET api/v1/salla/open',
+        // MCP-OAUTH-001 — «Add custom connector» in Claude or ChatGPT: discovery, self-registration, the hand-off to the
+        // consent page and the code/refresh exchange ARE the sign-in, so they answer before anyone is signed in. The one
+        // step that grants anything, «سماح» (POST mcp/oauth/approve), stays behind auth:sanctum + tenant.
+        'GET api/v1/mcp/oauth/authorize',
+        'GET api/v1/mcp/oauth/clients/{clientId}',
+        'GET api/v1/mcp/oauth/metadata',
+        'GET api/v1/mcp/oauth/protected-resource',
+        'POST api/v1/mcp/oauth/register',
+        'POST api/v1/mcp/oauth/token',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         'GET api/v1/webhooks/{kind}/{provider}',
         'GET api/v1/auth/two-factor',

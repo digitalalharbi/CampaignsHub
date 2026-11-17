@@ -30,6 +30,7 @@ import { SidebarNav } from './SidebarNav'
 import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
 import { PortalFrame } from './PortalFrame'
+import { AiConnectPromo } from '@/features/account/AiConnectPromo'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
@@ -291,6 +292,8 @@ export function AgencyShell() {
       }
     >
       <Outlet />
+      {/* AI-CONNECT-EASY-001 — the corner card that says Claude and ChatGPT can now read this workspace. */}
+      <AiConnectPromo />
     </PortalFrame>
   )
 }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy, KeyRound, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { AiConnectHero } from './AiConnectHero'
 import { deleteData, getData, postData } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
@@ -50,7 +51,7 @@ const WHERE: Record<App, { ar: string; en: string }> = {
   claude_code: { ar: 'نفّذ الأمر في الطرفية (Terminal).', en: 'Run the command in your terminal.' },
   claude_desktop: { ar: 'أضفه في ملف claude_desktop_config.json من الإعدادات ← Developer ← Edit Config، ثم أعد تشغيل Claude. يحتاج Node.js.', en: 'Add it to claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude. Needs Node.js.' },
   gemini: { ar: 'أضفه في الملف ‎~/.gemini/settings.json ثم أعد تشغيل Gemini CLI.', en: 'Add it to ~/.gemini/settings.json, then restart Gemini CLI.' },
-  openai: { ar: 'استخدمه ضمن أدوات طلب Responses في منصة OpenAI للمطورين. الإضافة كموصل داخل تطبيق ChatGPT نفسه تحتاج تسجيل دخول OAuth، وهي المرحلة القادمة.', en: 'Use it in the tools of a Responses request on the OpenAI platform. Adding it as a connector inside the ChatGPT app needs OAuth sign-in — the next phase.' },
+  openai: { ar: 'استخدمه ضمن أدوات طلب Responses في منصة OpenAI للمطورين. ولإضافته داخل تطبيق ChatGPT نفسه استخدم «اربط ChatGPT» أعلى الصفحة: رابط وتسجيل دخول بدون رمز.', en: 'Use it in the tools of a Responses request on the OpenAI platform. To add it inside the ChatGPT app itself, use «Connect ChatGPT» at the top of this page: one link and a sign-in, no token.' },
   codex: { ar: 'ضع الرمز في متغير بيئة، ثم أضف الخادم في ملف ‎~/.codex/config.toml وأعد تشغيل Codex.', en: 'Put the token in an environment variable, add the server to ~/.codex/config.toml and restart Codex.' },
   cursor: { ar: 'أضفه في ‎~/.cursor/mcp.json (لكل المشاريع) أو ‎.cursor/mcp.json داخل المشروع، ثم فعّله من Settings ← MCP.', en: 'Add it to ~/.cursor/mcp.json (all projects) or .cursor/mcp.json in a project, then enable it under Settings → MCP.' },
   vscode: { ar: 'أضفه في ‎.vscode/mcp.json داخل المشروع، ثم شغّله من وضع Agent في Copilot Chat.', en: 'Add it to .vscode/mcp.json in the project, then start it from Agent mode in Copilot Chat.' },
@@ -125,6 +126,10 @@ export function AiConnectPage() {
         purpose={tx('اربط Claude أو Gemini أو ChatGPT بكامبينز هب، واسأله عن حملاتك مباشرة. يقرأ بصلاحياتك أنت فقط، ولا يغيّر أي حملة: أي تغيير يصلك هنا كاقتراح تعتمده أو ترفضه.',
             'Connect Claude, Gemini or ChatGPT to CampaignsHub and ask about your campaigns directly. It reads with your permissions only and never changes a campaign: any change arrives here as a proposal you approve or reject.')}
       />
+
+      {/* AI-CONNECT-EASY-001 — everyone starts here: one link, «سماح», done. The token route below is for developers. */}
+      <AiConnectHero />
+      <p className="pt-2 text-xs font-bold text-text-muted">{tx('للمطورين: الربط برمز (Claude Code وCursor وغيرها)', 'For developers: connect with a token (Claude Code, Cursor and more)')}</p>
 
       <Step n={1} title={tx('رمز الوصول', 'Access token')}>
         <div className="flex flex-wrap items-center gap-2">

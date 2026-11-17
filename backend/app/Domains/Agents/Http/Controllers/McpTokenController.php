@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Agents\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -39,7 +40,9 @@ final class McpTokenController extends Controller
         $data = $request->validate(['name' => ['required', 'string', 'min:2', 'max:60']]);
         abort_if($user->tokens()->where('name', 'like', self::PREFIX.'%')->count() >= self::MAX, 422, 'too_many_tokens');
 
-        $token = $user->createToken(self::PREFIX.trim($data['name']), ['mcp']);
+        // MCP-SCOPE-001 — pinned to the workspace it was made in; it answers from that workspace alone.
+        $membership = app(MembershipContext::class)->membership()?->getKey();
+        $token = $user->createToken(self::PREFIX.trim($data['name']), $membership === null ? ['mcp'] : ['mcp', 'membership:'.$membership]);
         $this->audit->log(action: 'mcp.token.created', entityType: PersonalAccessToken::class, entityId: (string) $token->accessToken->getKey(), after: ['name' => trim($data['name'])]);
 
         return ApiResponse::success(['token' => $token->plainTextToken, 'tokens' => $this->list($user)], 'Created.', status: 201);
