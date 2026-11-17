@@ -452,7 +452,7 @@ final class ReportObservations
         $labels = [
             'reach' => 'الوصول', 'frequency' => 'التكرار', 'video_views' => 'مشاهدات الفيديو',
             'landing_page_views' => 'زيارات صفحة الهبوط', 'engagements' => 'التفاعلات',
-            'purchases' => 'المشتريات', 'revenue' => 'الإيرادات',
+            'purchases' => 'الطلبات', 'revenue' => 'الإيرادات',
         ];
 
         $missing = [];
