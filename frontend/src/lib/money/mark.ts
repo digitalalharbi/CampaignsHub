@@ -9,7 +9,22 @@
  */
 const MARKS: Record<string, string> = { SAR: 'ر.س', USD: '$', EUR: '€' }
 
-export const currencyMark = (currency: string): string => MARKS[currency.trim().toUpperCase()] ?? currency.trim().toUpperCase()
+/*
+ * REPORT-CURRENCY-CODE-001 — Owner 2026-11-17: the shared report (/r/) names its currency by its code — USD, SAR, EUR —
+ * beside every figure. Only that page switches it on (`PublicReport`), before any figure renders, and switches it off when it
+ * leaves; every other screen keeps the short mark above.
+ */
+let codeMarks = false
+
+export const setCodeMarks = (on: boolean): void => {
+  codeMarks = on
+}
+
+export const currencyMark = (currency: string): string => {
+  const code = currency.trim().toUpperCase()
+
+  return codeMarks ? code : MARKS[code] ?? code
+}
 
 /** The plain chip words for a figure that has no exchange rate. */
 export const NO_RATE_LABEL = { ar: 'بدون سعر صرف', en: 'No FX rate' } as const
