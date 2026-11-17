@@ -468,6 +468,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 $e instanceof AuthenticationException && EstablishSession::pending($request) !== null => ApiResponse::error(
                     __('auth.two_factor_required'), null, ['two_factor_required' => true], 401,
                 ),
+                // MCP-OAUTH-001 — a refused MCP call names where to sign in: that header is how Claude and ChatGPT start «سماح».
+                // Here and not in a route middleware, because `auth:sanctum` is sorted ahead of any middleware and throws.
+                $e instanceof AuthenticationException && $request->is('api/v1/mcp') => ApiResponse::error(
+                    __('api.unauthenticated'), status: 401,
+                )->header('WWW-Authenticate', 'Bearer resource_metadata="'.rtrim((string) config('services.mcp.url', 'https://mcp.campaignshub.io'), '/').'/.well-known/oauth-protected-resource"'),
                 $e instanceof AuthenticationException => ApiResponse::error(
                     __('api.unauthenticated'), status: 401,
                 ),
