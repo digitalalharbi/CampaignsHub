@@ -426,7 +426,7 @@ final class ObjectiveReportAnalyticsTest extends TestCase
         ]), 'sales');
 
         $this->assertSame(['spend', 'purchases', 'revenue', 'cpa', 'roas'], array_column($block['kpis'], 'key'));
-        $this->assertSame('المشتريات', $this->kpi($block, 'purchases')['label_ar']);
+        $this->assertSame('الطلبات', $this->kpi($block, 'purchases')['label_ar']);
         $this->assertSame(20.0, $this->kpi($block, 'purchases')['value']);
         // Meta's spend over Meta's purchases — Snapchat's conversions are not purchases.
         $this->assertSame(50.0, $this->kpi($block, 'cpa')['value']);
