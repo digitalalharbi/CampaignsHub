@@ -687,7 +687,7 @@ export interface LivePayload {
    * the client's own report could not tell a conversion rate from a ratio between two stages that do
    * not nest. It is optional because an older cached payload will not carry it.
    */
-  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>
+  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean; drop_off?: number | null; providers?: string[]; rate_providers?: string[]; rate_partial?: boolean }>
   /**
    * RESULT-STAGE-TRUTH-001 — the stage counts, independent of the funnel SECTION.
    *
