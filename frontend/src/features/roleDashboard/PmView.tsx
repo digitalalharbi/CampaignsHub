@@ -49,7 +49,7 @@ export function PmView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'ap
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5" data-testid="dash-kpis">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 [&>*:first-child:nth-last-child(odd)]:col-span-2 lg:[&>*:first-child:nth-last-child(odd)]:col-span-1" data-testid="dash-kpis">
         <Kpi testId="dash-kpi-clients" to={portal === 'agency' ? '/agency/clients' : `/${portal}/budgets`} label={t.clients} value={f.count(d.scope.clients)} />
         <Kpi testId="dash-kpi-active" to={`/${portal}/campaigns`} label={t.active} value={f.count(camps?.active)} hint={camps ? `${f.count(camps.total)} ${t.open === 'open' ? 'total' : 'إجمالي'}` : undefined} />
         <Kpi testId="dash-kpi-spend" to={`/${portal}/budgets`} label={t.spend} value={f.money(m?.spent, cur)} hint={ratio === null ? undefined : `${f.pct(ratio)} ${t.of}`} status={m ? budgetStatus(ratio, near) : undefined} />
