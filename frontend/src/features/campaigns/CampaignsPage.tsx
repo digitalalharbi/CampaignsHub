@@ -1693,7 +1693,7 @@ export function CampaignsPage() {
         const pm = metricsByCampaign.get(pc.id) as Record<string, unknown> | undefined
 
         return (
-          <DetailPanel open onClose={() => setPeekId(null)} title={pc.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-peek"
+          <DetailPanel open onClose={() => setPeekId(null)} title={pc.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-peek" variant="center"
             footer={<button type="button" data-testid="campaign-peek-open" onClick={() => navigate(`/campaigns/${projectId}/${pc.id}`)} className="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">{ar ? 'افتح الحملة' : 'Open the campaign'}</button>}>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
