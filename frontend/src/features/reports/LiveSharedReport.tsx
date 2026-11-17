@@ -213,7 +213,7 @@ export function LiveSharedReport({
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone: a grid item's `min-width`
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
-    <div className="grid gap-3 pb-[calc(5.25rem+env(safe-area-inset-bottom))] sm:gap-4 sm:pb-0 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
+    <div className="grid gap-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:gap-4 sm:pb-0 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
         <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="fixed inset-x-0 bottom-0 z-30 grid gap-1 border-t border-border bg-surface/95 px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:static sm:rounded-2xl sm:border sm:p-1 sm:backdrop-blur-none" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
           {offeredHere.map((m) => {
@@ -228,7 +228,7 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-semibold transition-colors active:scale-95 sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
+                className={`flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-xs font-semibold transition-colors active:scale-95 sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >
@@ -261,7 +261,7 @@ export function LiveSharedReport({
               type="button"
               data-testid={`live-range-${r.days}`}
               onClick={() => setDays(r.days)}
-              className={`min-h-10 shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors active:scale-95 sm:min-h-0 sm:px-3 ${
+              className={`min-h-11 min-w-11 shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors active:scale-95 sm:min-h-0 sm:px-3 ${
                 rollingDays === r.days
                   ? 'bg-brand-600 text-white'
                   : 'border border-border text-text-secondary hover:bg-surface-hover'
@@ -282,7 +282,7 @@ export function LiveSharedReport({
                 aria-pressed={providers.includes(p)}
                 onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
                 title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
-                className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold transition-colors active:scale-95 sm:h-9 sm:w-9 ${
+                className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold transition-colors active:scale-95 sm:h-9 sm:w-9 ${
                   providers.includes(p)
                     ? 'border-transparent text-white'
                     : 'border-border text-text-secondary hover:bg-surface-hover'
@@ -300,7 +300,7 @@ export function LiveSharedReport({
             type="button"
             data-testid="live-refresh"
             onClick={main.reload}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover sm:min-h-0"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:min-h-0"
           >
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} aria-hidden />
             <span className="sr-only sm:not-sr-only">{ar ? 'تحديث' : 'Refresh'}</span>
