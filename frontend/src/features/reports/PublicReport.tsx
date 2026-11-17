@@ -14,6 +14,7 @@ import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
 import { ReportWatermark } from './ReportWatermark'
+import { setCodeMarks } from '@/lib/money/mark'
 
 /*
  * PERF-RECOVERY-001 — the live link loads only what the live dashboard draws.
@@ -69,6 +70,9 @@ interface Shared {
 /** Client-facing report at /reports/share/:token — no app chrome, token-gated, optional password. */
 export function PublicReport() {
   const { token = '' } = useParams()
+  // REPORT-CURRENCY-CODE-001 — the shared report names its currency by code (USD, SAR), set before any figure renders.
+  setCodeMarks(true)
+  useEffect(() => () => setCodeMarks(false), [])
   const { locale } = useUi()
   const [state, setState] = useState<'loading' | 'password' | 'ready' | 'error'>('loading')
   const [report, setReport] = useState<Shared | null>(null)
