@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Agents\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Tenancy\Context\MembershipContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -35,7 +36,7 @@ final class McpOAuthController extends Controller
 
     private const PREFIX = 'mcp:';
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly MembershipContext $memberships) {}
 
     /** GET /.well-known/oauth-protected-resource (served at /api/v1/mcp/oauth/protected-resource) */
     public function protectedResource(): JsonResponse
@@ -134,6 +135,10 @@ final class McpOAuthController extends Controller
     {
         $user = $request->user();
         abort_unless($user instanceof User, 401);
+        // MCP-SCOPE-001 — platform staff run across every tenant; a connector never gets that reach.
+        abort_if($user->is_platform_admin, 403, 'platform_staff');
+        $membership = $this->memberships->membership();
+        abort_if($membership === null, 403, 'no_workspace');
         $data = $request->validate([
             'client_id' => ['required', 'string', 'max:64'],
             'redirect_uri' => ['required', 'string', 'max:2000'],
@@ -151,6 +156,7 @@ final class McpOAuthController extends Controller
             'user_id' => $user->getKey(),
             'redirect_uri' => $data['redirect_uri'],
             'code_challenge' => $data['code_challenge'],
+            'membership_id' => $membership->getKey(),
             'expires_at' => now()->addMinutes(self::CODE_TTL_MINUTES),
             'created_at' => now(),
             'updated_at' => now(),
@@ -189,7 +195,7 @@ final class McpOAuthController extends Controller
             return $this->oauthError('invalid_grant', 'The person is gone.');
         }
 
-        return $this->issue($user, (string) $row->client_id);
+        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id);
     }
 
     private function refresh(Request $request): JsonResponse
@@ -208,21 +214,24 @@ final class McpOAuthController extends Controller
             return $this->oauthError('invalid_grant', 'The person is gone.');
         }
 
-        return $this->issue($user, (string) $row->client_id);
+        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id);
     }
 
-    private function issue(User $user, string $clientId): JsonResponse
+    private function issue(User $user, string $clientId, ?string $membershipId): JsonResponse
     {
         $name = ($this->client($clientId) ?? ['name' => 'MCP client'])['name'];
         // Expired connections are cleared so they never crowd the person's list in «ربط MCP».
         $user->tokens()->where('name', 'like', self::PREFIX.'%')->whereNotNull('expires_at')->where('expires_at', '<', now())->delete();
-        $access = $user->createToken(self::PREFIX.$name, ['mcp'], now()->addDays(self::ACCESS_TTL_DAYS));
+        // Pinned to the approved workspace (MCP-SCOPE-001): ResolveMembership answers this token from it and from nothing else.
+        $abilities = $membershipId === null ? ['mcp'] : ['mcp', 'membership:'.$membershipId];
+        $access = $user->createToken(self::PREFIX.$name, $abilities, now()->addDays(self::ACCESS_TTL_DAYS));
         $refresh = Str::random(64);
         DB::table('mcp_oauth_refresh_tokens')->insert([
             'token_hash' => hash('sha256', $refresh),
             'client_id' => $clientId,
             'user_id' => $user->getKey(),
             'access_token_id' => $access->accessToken->getKey(),
+            'membership_id' => $membershipId,
             'expires_at' => now()->addDays(self::REFRESH_TTL_DAYS),
             'created_at' => now(),
             'updated_at' => now(),
