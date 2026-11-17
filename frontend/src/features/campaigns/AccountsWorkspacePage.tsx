@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useUrlState } from '@/features/analytics/filterUrlState'
 import { LevelTabs } from './LevelTabs'
 import { providerLabel } from './labels'
 import { useAccounts, useSummary, type AccountRow } from '@/features/analytics/api'
@@ -24,7 +25,8 @@ export function AccountsWorkspacePage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const { currentProjectId } = useProject()
   const { range } = usePeriod()
-  const [platform, setPlatform] = useState('all')
+  // CAMPAIGN-LEVELS-003 — the platform travels in the address, to the levels below.
+  const [platform, setPlatform] = useUrlState('platform', 'all')
   const [search, setSearch] = useState('')
 
   const accounts = useAccounts(currentProjectId, range)
