@@ -579,11 +579,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           The analysis surface keeps its sentence. It is opened deliberately, to ask why, and what
           it offers is genuinely not obvious from its title.
         */
-        purpose={surface === 'dashboard'
-          ? undefined
-          : ar
-            ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
-            : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        /*
+          ANALYTICS-VISUAL-FIRST-001 (owner: «عدم ترك مساحة فارغة بالاعلى … تظهر البيانات بمجرد الدخول كرسوم») — the
+          analysis drops its sentence too: the title, the filters, then the drawings. Was: «استكشاف تفصيلي للأداء…».
+        */
+        purpose={undefined}
         /*
           «Open Analytics for the reason» was a band of its own under the header. It is an action
           this page offers, so it sits where this header puts actions — on the title's line.
@@ -613,9 +613,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </>
         }
       />
-      <FinancialDisclaimer />
-
-
       {/* Declared once and placed by surface: in line on the analysis bar, folded on the dashboard. */}
       <FilterBar
         id={surface}
@@ -815,6 +812,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         </>
       )}
 
+      {/* ANALYTICS-VISUAL-FIRST-001 — the accounting note closes the page, beside the performance note, instead of opening it. */}
+      <FinancialDisclaimer />
       <LivePerformanceNotice variant="compact" />
     </div>
   )
