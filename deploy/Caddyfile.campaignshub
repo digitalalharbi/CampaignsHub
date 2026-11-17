@@ -9,3 +9,9 @@ www.campaignshub.io {
 api.campaignshub.io {
     reverse_proxy campaignshub-backend:8000
 }
+
+# MCP-DOMAIN-001 — the MCP server's own address; its root is the Streamable HTTP endpoint.
+mcp.campaignshub.io {
+    rewrite / /api/v1/mcp
+    reverse_proxy campaignshub-backend:8000
+}
