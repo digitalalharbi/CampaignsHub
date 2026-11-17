@@ -271,6 +271,8 @@ export function AgencyShell() {
 
           <div className="ms-auto flex min-w-0 items-center gap-1.5">
             <UsageMeterChip />
+            {/* AI-CONNECT-EASY-001 — folded into the top bar beside the bell; it unfolds on a press. */}
+            <AiConnectPromo />
             <NotificationCenter />
             <button
               onClick={toggleLocale}
@@ -292,8 +294,6 @@ export function AgencyShell() {
       }
     >
       <Outlet />
-      {/* AI-CONNECT-EASY-001 — the corner card that says Claude and ChatGPT can now read this workspace. */}
-      <AiConnectPromo />
     </PortalFrame>
   )
 }
