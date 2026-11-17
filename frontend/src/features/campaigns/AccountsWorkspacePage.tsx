@@ -6,6 +6,7 @@ import { compact, moneyFromTotals } from '@/features/analytics/format'
 import { usePeriod } from '@/lib/period/usePeriod'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
+import { MetricTable } from '@/components/ui/MetricTable'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
@@ -106,37 +107,26 @@ export function AccountsWorkspacePage() {
             ))}
           </ul>
 
-          <div className="hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
-            <table className="w-full text-sm" data-testid="accounts-table">
-              <thead className="border-b border-border text-start text-xs text-text-secondary">
-                <tr>
-                  <th scope="col" className="px-3 py-2 text-start font-bold">{L('الحساب', 'Account')}</th>
-                  <th scope="col" className="px-3 py-2 text-start font-bold">{L('المنصة', 'Platform')}</th>
-                  <th scope="col" className="px-3 py-2 text-end font-bold">{L('الإنفاق', 'Spend')}</th>
-                  <th scope="col" className="px-3 py-2 text-end font-bold">{L('مرات الظهور', 'Impressions')}</th>
-                  <th scope="col" className="px-3 py-2 text-end font-bold">{L('النقرات', 'Clicks')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={`${r.provider}:${r.account_id ?? ''}`} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2.5 font-bold text-text-primary">{r.account_name ?? L('حساب محذوف', 'Removed account')}</td>
-                    <td className="px-3 py-2.5 text-text-secondary">{providerLabel(r.provider, ar ? 'ar' : 'en')}</td>
-                    <td className="px-3 py-2.5 text-end tabular-nums" title={spendOf(r).note ?? undefined}>{spendOf(r).text}</td>
-                    <td className="px-3 py-2.5 text-end tabular-nums">{compact(r.impressions)}</td>
-                    <td className="px-3 py-2.5 text-end tabular-nums">{compact(r.clicks)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-border bg-surface-hover/40 font-bold">
-                <tr data-testid="accounts-total">
-                  <td className="px-3 py-2.5" colSpan={2}>{L('الإجمالي', 'Total')}</td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">{total?.text ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">{compact(sum('impressions'))}</td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">{compact(sum('clicks'))}</td>
-                </tr>
-              </tfoot>
-            </table>
+          <div className="hidden space-y-2 md:block" data-testid="accounts-table">
+            <MetricTable
+              head={[L('الحساب', 'Account'), L('المنصة', 'Platform'), L('الإنفاق', 'Spend'), L('مرات الظهور', 'Impressions'), L('النقرات', 'Clicks')]}
+              rows={rows.map((r) => [
+                <span key="n" className="font-bold text-text-primary">{r.account_name ?? L('حساب محذوف', 'Removed account')}</span>,
+                providerLabel(r.provider, ar ? 'ar' : 'en'),
+                <span key="s" title={spendOf(r).note ?? undefined}>{spendOf(r).text}</span>,
+                compact(r.impressions),
+                compact(r.clicks),
+              ])}
+              values={rows.map((r) => [r.account_name ?? '', providerLabel(r.provider, ar ? 'ar' : 'en'), r.spend ?? null, r.impressions ?? null, r.clicks ?? null])}
+              initialSort={{ column: 2, dir: 'desc' }}
+              testId="accounts-metric-table"
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-hover/40 px-3 py-2 text-sm font-bold" data-testid="accounts-total">
+              <span>{L('الإجمالي', 'Total')}</span>
+              <span className="tabular-nums">{total?.text ?? '—'}</span>
+              <span className="tabular-nums">{compact(sum('impressions'))} {L('ظهور', 'impr.')}</span>
+              <span className="tabular-nums">{compact(sum('clicks'))} {L('نقرة', 'clicks')}</span>
+            </div>
           </div>
         </>
       )}
