@@ -34,6 +34,7 @@ use App\Domains\Reports\Services\ReportTemplateEngine;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Models\User;
 use App\Support\AdPlatforms;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use Illuminate\Support\Carbon;
 
 /**
@@ -188,7 +189,7 @@ final class DailyDigest
         $blocks = [];
         foreach ($projects as $project) {
             $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
-            $block['budget_month'] = $this->monthBudget(array_values($pacing->get((string) $project->id, collect())->all()), $to);
+            $block['budget_month'] = $this->monthBudget(array_values($pacing->get((string) $project->id, collect())->all()), $to, (string) $project->id);
             // GA4-DIGEST-001 — one compact GA4 line; the reader's own capability decides whether sales are in it.
             $block['ga4'] = app(Ga4DigestBlock::class)->forProject($user, $tenantId, (string) $project->id, $from, $to);
             $block['project_id'] = (string) $project->id;
@@ -521,8 +522,18 @@ final class DailyDigest
      * @param  list<array<string,mixed>>  $rows  this project's rows of the one `budgetPacing()` read over the month
      * @return array<string,mixed>
      */
-    private function monthBudget(array $rows, Carbon $to): array
+    private function monthBudget(array $rows, Carbon $to, ?string $projectId = null): array
     {
+        /*
+         * BUDGET-APPROVED-SAR-001 — Owner 2026-11-17: the budgets were written in dollars while the project's budget is in riyals.
+         * A project that has an APPROVED budget (the finance loop, always SAR, spend converted once at ingest) reads from it: the one
+         * budget finance recorded, never a roll-up of the platforms' own campaign budgets in the account's currency. A project
+         * without one keeps the campaign roll-up below.
+         */
+        if ($projectId !== null && ($approved = $this->approvedBudget($projectId, $to)) !== null) {
+            return $approved;
+        }
+
         $from = $to->copy()->startOfMonth()->startOfDay();
         $roll = app(ClientBudgetRollup::class)->of($rows);
         $elapsed = min(1.0, ((int) round($from->diffInDays($to->copy()->startOfDay())) + 1) / max(1, $from->daysInMonth));
@@ -545,6 +556,44 @@ final class DailyDigest
             'elapsed' => round($elapsed, 4),
             'outside' => count($outside),
             'outside_reasons' => array_count_values(array_map(static fn (array $r): string => (string) ($r['pacing_basis'] ?? 'unknown'), $outside)),
+        ];
+    }
+
+    /**
+     * The project's approved budget in the roll-up's own shape, or null when it has none (or no balance to read).
+     *
+     * @return array<string,mixed>|null
+     */
+    private function approvedBudget(string $projectId, Carbon $to): ?array
+    {
+        $r = app(ProjectBudgetReader::class)->forProject($projectId, $to->copy()->startOfDay());
+        if (($r['has_budget'] ?? false) !== true || ! is_numeric($r['approved'] ?? null) || (float) $r['approved'] <= 0) {
+            return null;
+        }
+        $approved = (float) $r['approved'];
+        $projected = is_numeric($r['projected'] ?? null) ? (float) $r['projected'] : null;
+        $start = ! empty($r['period_start']) ? Carbon::parse((string) $r['period_start'])->startOfDay() : $to->copy()->startOfMonth()->startOfDay();
+        $end = ! empty($r['period_end']) ? Carbon::parse((string) $r['period_end'])->startOfDay() : $to->copy()->endOfMonth()->startOfDay();
+        $total = max(1, (int) round($start->diffInDays($end)) + 1);
+        $elapsed = min(1.0, max(0.0, ((int) round($start->diffInDays($to->copy()->startOfDay())) + 1) / $total));
+
+        return [
+            'budget' => $approved,
+            'spent' => is_numeric($r['spent'] ?? null) ? (float) $r['spent'] : null,
+            'remaining' => is_numeric($r['remaining'] ?? null) ? (float) $r['remaining'] : null,
+            'projected' => $projected,
+            'pace' => $projected !== null ? round($projected / $approved, 4) : null,
+            'currency' => 'SAR',
+            'currencies' => 1,
+            'excluded' => 0,
+            'unmeasured' => 0,
+            'campaigns' => 0,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'outside' => 0,
+            'outside_reasons' => [],
         ];
     }
 
