@@ -425,7 +425,7 @@ describe('the period of a live report', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" periodMode="fixed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    expect(screen.getByTestId('live-period-fixed')).toHaveTextContent('2026-08-01 → 2026-08-26')
+    expect(screen.getByTestId('live-period-fixed')).toHaveTextContent('1 Aug – 26 Aug 2026')
     for (const days of [7, 30, 90]) expect(screen.queryByTestId(`live-range-${days}`)).not.toBeInTheDocument()
 
     const asked = vi.mocked(fetchLiveShared).mock.calls[0][1]
