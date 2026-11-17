@@ -96,7 +96,7 @@ export const ContentTile = memo(function ContentTile({
           component and means exactly «this surface fills». The asset is one click away in the
           viewer, which still contains — §12's line, and the one this change would be wrong to cross.
       */}
-        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" fit="cover" forClient provider={content.provider ?? null} />
+        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-28 w-full sm:h-36" testid="live-content-poster" fit="cover" forClient provider={content.provider ?? null} />
         {rank !== undefined && (
           <span className="tnum absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
             <Num>{`#${rank}`}</Num>
@@ -104,7 +104,8 @@ export const ContentTile = memo(function ContentTile({
         )}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-text-primary" title={content.name ?? undefined}>{content.name ?? '—'}</div>
+        {/* REPORT-COMPACT-001 — `dir="auto"`: a Latin ad name in an Arabic page was cut from the wrong end. */}
+        <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={content.name ?? undefined}>{content.name ?? '—'}</div>
         {provider && (
           <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
             <ProviderName provider={provider} locale={locale === 'ar' ? 'ar' : 'en'} size={16} />
