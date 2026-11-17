@@ -24,7 +24,7 @@ final class InternalMailsUnchangedTest extends TestCase
             [$key, $locale] = explode('.', (string) $name);
             $html = (string) preg_replace('/© \d{4}/', '© YEAR', (string) MailGallery::render($key, $locale));
             if (md5($html) !== $hash) {
-                $changed[] = $name;
+                $changed[] = $name.'='.md5($html);
             }
         }
         $this->assertSame([], $changed, 'these approved templates changed: '.implode(', ', $changed));
