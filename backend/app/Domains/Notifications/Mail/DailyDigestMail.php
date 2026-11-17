@@ -1164,7 +1164,7 @@ final class DailyDigestMail extends Mailable
             'by_path' => 'حسب المسار التسويقي',
             'best' => 'الأفضل',
             'worst' => 'الأضعف',
-            'open_dashboard' => 'افتح لوحة التحكم',
+            'open_dashboard' => 'افتح الرئيسية',
             'footer_note' => 'وصلتك لأنك اخترت '.$this->rhythmName(true).'. يمكنك تغيير المشاريع أو التوقيت أو إيقافها من تفضيلات الإشعارات.',
             'manage_preferences' => 'إعدادات الإشعارات',
             'privacy' => 'الخصوصية',
