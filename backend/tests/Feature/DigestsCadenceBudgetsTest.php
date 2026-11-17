@@ -16,6 +16,7 @@ use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Models\AppNotification;
+use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Notifications\Services\MailSendGate;
@@ -114,6 +115,10 @@ final class DigestsCadenceBudgetsTest extends TestCase
     public function test_a_finance_reader_receives_the_spend_summary_not_the_performance_digest(): void
     {
         Mail::fake();
+        config([
+            'mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'operator-login',
+            'providers.channels.email' => LaravelMailProvider::class,
+        ]);
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => 'finance-cad-'.uniqid()]);
         $role->givePermissionTo('projects.view', 'projects.view.all', 'clients.view', 'clients.view_all', 'budget.view', 'budget.manage');
