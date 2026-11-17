@@ -158,11 +158,15 @@ export interface BudgetTotals {
 export type BudgetLedgerResult = { entry_id: string } & BudgetRow
 
 /** `deleted` reads the deleted budgets instead (the «المحذوفة» view): hidden by default, never removed. */
-export function useBudgets(deleted = false) {
+/** CLIENT-SCOPE-001 — `client` narrows the board and its totals to one client (the agency portal's top filter). */
+export function useBudgets(deleted = false, client: string | null = null) {
   return useQuery({
-    queryKey: ['funding', { deleted }],
+    queryKey: ['funding', { deleted, client }],
     queryFn: async () => {
-      const env = await getEnvelope<BudgetRow[]>(deleted ? '/funding?deleted=1' : '/funding')
+      const q = new URLSearchParams()
+      if (deleted) q.set('deleted', '1')
+      if (client) q.set('client', client)
+      const env = await getEnvelope<BudgetRow[]>(q.toString() === '' ? '/funding' : `/funding?${q.toString()}`)
       const meta = (env.meta ?? {}) as { totals?: BudgetTotals; can_manage?: boolean; deleted_count?: number }
       return { rows: env.data, totals: meta.totals ?? null, canManage: meta.can_manage === true, deletedCount: meta.deleted_count ?? 0 }
     },
