@@ -211,7 +211,7 @@ export function LiveSharedReport({
      */
     <div className="grid gap-3 sm:gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
-        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid gap-1 rounded-2xl border border-border bg-surface p-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
+        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-border bg-surface p-1 sm:grid sm:overflow-visible" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
           {offeredHere.map((m) => {
             const Icon = MODE_ICONS[m]
             const selected = m === mode
@@ -224,7 +224,7 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
+                className={`flex min-h-11 min-w-[94px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold transition-colors sm:min-h-0 sm:min-w-0 sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >
