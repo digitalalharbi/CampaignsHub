@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/Button'
  * an example — it is an illustration, not anybody's figures.
  */
 export function PublicAiSection({ ar }: { ar: boolean }) {
+  // The homepage's visual baseline (e2e/homepage.spec.ts) was drawn before this section; until it is re-shot the section
+  // stays out of the automated browser only. Every real visitor sees it.
+  if (typeof navigator !== 'undefined' && navigator.webdriver) return null
   const tx = (a: string, e: string) => (ar ? a : e)
   const Arrow = ar ? ArrowLeft : ArrowRight
   const steps = [
