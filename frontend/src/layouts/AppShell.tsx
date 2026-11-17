@@ -23,6 +23,7 @@ import { SidebarNav } from './SidebarNav'
 import { appAllGroups, appNavGroups, appSettingsGroup } from './appNav'
 import { PortalFrame } from './PortalFrame'
 import { OpsPanel } from './OpsPanel'
+import { AiConnectPromo } from '@/features/account/AiConnectPromo'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
@@ -287,6 +288,8 @@ export function AppShell() {
       }
     >
       <Outlet />
+      {/* AI-CONNECT-EASY-001 — the corner card that says Claude and ChatGPT can now read this workspace. */}
+      <AiConnectPromo />
     </PortalFrame>
   )
 }
