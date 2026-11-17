@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
@@ -180,6 +181,8 @@ export function RecommendationsPage() {
     return (
       <div className="space-y-6">
         <PageIntro title={t.title} purpose={t.purpose} />
+        {/* OPS-TABS-001 — recommendations open under the operations tab «التنبيهات». */}
+        <OpsHubBar />
         {/* PROJECT-FIRST-VISIT-001 — the choice is on the page, not behind the switcher. */}
         <ProjectChooser purpose="recommendations" />
       </div>
@@ -216,6 +219,7 @@ export function RecommendationsPage() {
           )
           : undefined}
       />
+      <OpsHubBar />
       <div className={fit ? 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1' : 'contents'}>
       <FinancialDisclaimer />
       {/* AGENTS-APPROVAL-GATEWAY-001 — the requests agents and colleagues have put forward, one press away. */}
