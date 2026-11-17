@@ -11,7 +11,6 @@ import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
-import { DataFreshnessAlert } from './DataFreshnessAlert'
 import { withMark } from '@/lib/money/mark'
 
 /*
@@ -487,8 +486,8 @@ export function FreshnessStrip({
   // REPORT-WEBSITE-TAB-001 — the website is not an excluded ad platform: it has its own tab and its own empty state.
   const excluded = freshness.filter((f) => f.state === 'awaiting_credentials' && isAdPlatform(f.provider))
 
-  // REPORT-FOOTER-FRESHNESS-001 — the report's one time is in its footer; here, only a sentence, and only when figures are late.
-  const stamp = <DataFreshnessAlert freshness={freshness} ar={ar} />
+  // REPORT-FRESHNESS-DATE-001 — no banner over the figures: a late platform holds the footer's date back instead (`reportStamp`).
+  const stamp = null
 
   if (excluded.length === 0) return stamp
 

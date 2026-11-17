@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { isAdPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
+import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
@@ -18,7 +19,7 @@ import { useLiveMetricReader } from './live/liveMetrics'
 import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
-import { ReportFooter } from './reportFooter'
+import { ReportFooter, reportStamp } from './reportFooter'
 import { LiveDeliveryNote } from './live/LiveDeliveryNote'
 
 /**
@@ -208,7 +209,7 @@ export function LiveSharedReport({
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone: a grid item's `min-width`
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
-    <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
+    <div className="grid gap-3 sm:gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
         <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid gap-1 rounded-2xl border border-border bg-surface p-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
           {offeredHere.map((m) => {
@@ -223,7 +224,7 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-3.5 sm:text-sm ${
+                className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >
@@ -235,7 +236,7 @@ export function LiveSharedReport({
         </nav>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-surface p-2 sm:gap-2 sm:p-3">
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
@@ -256,7 +257,7 @@ export function LiveSharedReport({
               type="button"
               data-testid={`live-range-${r.days}`}
               onClick={() => setDays(r.days)}
-              className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
+              className={`rounded-xl px-2.5 py-1 text-xs font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
                 rollingDays === r.days
                   ? 'bg-brand-600 text-white'
                   : 'border border-border text-text-secondary hover:bg-surface-hover'
@@ -276,14 +277,15 @@ export function LiveSharedReport({
                 data-testid={`live-platform-${p}`}
                 aria-pressed={providers.includes(p)}
                 onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
-                className={`inline-flex items-center rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-semibold transition-colors sm:h-9 sm:w-9 ${
                   providers.includes(p)
                     ? 'border-transparent text-white'
                     : 'border-border text-text-secondary hover:bg-surface-hover'
                 }`}
                 style={providers.includes(p) ? { background: platformColor(p) } : undefined}
               >
-                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={16} />
+                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={18} logoOnly />
               </button>
             ))}
           </div>
@@ -297,7 +299,7 @@ export function LiveSharedReport({
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
           >
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} aria-hidden />
-            {ar ? 'تحديث' : 'Refresh'}
+            <span className="sr-only sm:not-sr-only">{ar ? 'تحديث' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -364,8 +366,12 @@ export function LiveSharedReport({
       <ReportFooter
         locale={ar ? 'ar' : 'en'}
         facts={{
-          // The server's own computation moment; the reader's clock only when an older payload does not carry it.
-          updatedAt: payload.freshness_summary?.generated_at ?? computedAt.toISOString(),
+          /*
+           * REPORT-FRESHNESS-DATE-001 — Owner 2026-11-17: «إذا كان هناك تأخر لا تحدّث التاريخ بالأسفل». When a platform's figures are
+           * not confirmed fresh, the report's one date is the oldest platform confirmation, never the moment it was recomputed; the
+           * warning banner above the figures is gone, so this date is the only claim and it is a true one.
+           */
+          updatedAt: reportStamp(payload.freshness_summary) ?? computedAt.toISOString(),
           period: payload.period,
           currency: unit || null,
           timezone: 'Asia/Riyadh',
