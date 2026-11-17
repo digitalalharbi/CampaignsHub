@@ -31,6 +31,9 @@ export const AUTONOMY: Record<AgentAutonomy, Pair> = {
 const REASONS: Record<string, Pair> = {
   no_ai_credential: { ar: 'لا يوجد مفتاح ذكاء اصطناعي فعّال. أضفه من الإعدادات.', en: 'No active AI key. Add one in Settings.' },
   ai_token_limit_reached: { ar: 'بلغ المفتاح حدّه الشهري.', en: "The key reached its monthly limit." },
+  // AI-PLATFORM-KEY-001 — this person's monthly replies on the platform key.
+  ai_monthly_limit_reached: { ar: 'وصلت حدّك الشهري من ردود المساعد. يتجدد أول الشهر، أو ارفع الحد من الاشتراك.', en: 'You reached your monthly assistant limit. It renews on the 1st, or raise it from your subscription.' },
+  ai_routine_needs_own_key: { ar: 'تشغيل الوكلاء المجدول يحتاج مفتاحًا خاصًا بالمساحة.', en: 'Scheduled agent runs need the workspace’s own key.' },
   daily_token_cap_reached: { ar: 'وصلت حدّك اليومي. يتجدد بعد منتصف الليل بتوقيت الرياض.', en: 'You reached your daily limit. It resets after midnight Riyadh time.' },
   thread_too_long: { ar: 'المحادثة طويلة جدًا. ابدأ محادثة جديدة.', en: 'This conversation is too long. Start a new one.' },
   model_not_configured: { ar: 'لم يُحدَّد نموذج لهذا المفتاح.', en: 'No model is set for this key.' },
