@@ -200,7 +200,7 @@ export async function probeSession(): Promise<{ user: AuthUser | null; unreachab
 }
 
 /** Only the server's own "not authenticated" counts. 401 and 403 are answers; everything else is noise. */
-function isDefinitelyGuest(error: unknown): boolean {
+export function isDefinitelyGuest(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status
 
   return status === 401 || status === 403
