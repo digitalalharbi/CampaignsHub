@@ -65,8 +65,9 @@ import { CampaignControlPanel } from './CampaignControlPanel'
 import { useProject } from '@/stores/project'
 
 const TAB_KEYS = [
-  'overview', 'control', 'performance', 'platforms', 'structure', 'creatives', 'audience', 'events', 'budget',
-  'funnel', 'sync', 'notes', 'alerts', 'reports', 'activity', 'settings',
+  // OWNER 2026-11-19 — the reading tabs first (what happened, where, with which content, for whom), the operating ones last.
+  'overview', 'platforms', 'creatives', 'audience', 'funnel', 'budget', 'performance', 'alerts', 'reports', 'activity',
+  'structure', 'events', 'control', 'sync', 'notes', 'settings',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
@@ -352,7 +353,13 @@ export function CampaignDetailPage() {
             <CardTitle>الملخص التنفيذي</CardTitle>
             <div className="mt-2"><CampaignExecutiveSummary campaign={c} projectId={projectId} range={range} locale={locale} /></div>
           </div>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* The same charts the Performance tab draws — daily line, platform donut, best and worst day — read here first. */}
+          <div className="my-4" data-testid="campaign-overview-charts">
+            <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
+          </div>
+          <details className="mt-4 rounded-2xl border border-border bg-surface p-4" data-testid="campaign-facts">
+            <summary className="cursor-pointer select-none text-sm font-semibold text-text-secondary">{locale === 'ar' ? 'بيانات الحملة' : 'Campaign facts'}</summary>
+          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardTitle>{t('tab_overview')}</CardTitle>
               <div className="mt-2">
@@ -374,6 +381,7 @@ export function CampaignDetailPage() {
               <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
             </Card>
           </div>
+          </details>
           {/* CMC-5 — recent activity timeline. */}
           <Card className="mt-4">
             <CardTitle>{t('tab_activity')}</CardTitle>

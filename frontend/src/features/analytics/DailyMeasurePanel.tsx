@@ -1,3 +1,4 @@
+import { days as countedDays } from '@/lib/counted'
 import { useMemo, useState } from 'react'
 import { ProviderName } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
@@ -115,7 +116,7 @@ export function DailyMeasurePanel({ projectId, range, filters, ar }: { projectId
             const perDay = data.map((row) => ({ date: String(row.date), v: visible.reduce((a, p) => a + (Number(row[p]) || 0), 0) }))
             const peak = perDay.reduce((best, d) => (d.v > best.v ? d : best), perDay[0] ?? { date: '', v: 0 })
             return [
-              { k: 'total', label: ar ? `إجمالي ${active.ar}` : `Total ${active.en.toLowerCase()}`, value: compact(total), hint: ar ? `${perDay.length} يوم` : `${perDay.length} days` },
+              { k: 'total', label: ar ? `إجمالي ${active.ar}` : `Total ${active.en.toLowerCase()}`, value: compact(total), hint: countedDays(perDay.length, ar ? 'ar' : 'en') },
               { k: 'avg', label: ar ? 'المتوسط اليومي' : 'Daily average', value: compact(perDay.length ? total / perDay.length : 0), hint: undefined },
               { k: 'peak', label: ar ? 'أعلى يوم' : 'Peak day', value: compact(peak.v), hint: peak.date },
             ].map((t) => <StatCard key={t.k} testid={`analytics-daily-${t.k}`} label={t.label} value={t.value} hint={t.hint} />)

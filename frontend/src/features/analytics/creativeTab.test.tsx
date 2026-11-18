@@ -58,6 +58,7 @@ async function openCreative() {
    * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
    * asserts are unchanged; only the word a reader clicks is.
    */
+  fireEvent.click(await screen.findByRole('button', { name: 'Content' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 }
 
@@ -125,6 +126,7 @@ describe('the ad tab and the filter bar', () => {
    * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
    * asserts are unchanged; only the word a reader clicks is.
    */
+  fireEvent.click(await screen.findByRole('button', { name: 'Content' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 
     await waitFor(() => expect(requested.some((u) => u.includes('/creatives'))).toBe(true))

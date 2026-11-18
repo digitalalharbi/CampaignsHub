@@ -140,11 +140,11 @@ export function CampaignVisualDeck({ rows, currency, windowEnd, ar }: { rows: Ca
 
   return (
     <DeckGrid testid="campaign-visual-deck">
-      <ChartCard title={ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'} subtitle={ar ? 'لمن اشتُريت الميزانية' : 'What the budget was bought for'}>
+      <ChartCard title={ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'} subtitle={ar ? 'كيف توزّعت الميزانية على الأهداف' : 'What the budget was bought for'}>
         {declined > 0
           ? <Declined testid="deck-objective-declined" text={declinedText(declined, ar)} />
           : byObjective.length === 0
-            ? <Declined testid="deck-objective-empty" text={ar ? 'لا إنفاق في هذه الفترة.' : 'No spend in this period.'} />
+            ? <Declined testid="deck-objective-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <PlatformDonutChart colorBy="series" currency={currency ?? ''} data={byObjective.map(([name, value]) => ({ name, value }))} centerLabel={ar ? 'الأهداف' : 'Objectives'} centerValue={String(byObjective.length)} height={240} />}
       </ChartCard>
 
@@ -152,7 +152,7 @@ export function CampaignVisualDeck({ rows, currency, windowEnd, ar }: { rows: Ca
         {declined > 0
           ? <Declined testid="deck-platform-declined" text={declinedText(declined, ar)} />
           : byPlatform.length === 0
-            ? <Declined testid="deck-platform-empty" text={ar ? 'لا إنفاق في هذه الفترة.' : 'No spend in this period.'} />
+            ? <Declined testid="deck-platform-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <PlatformDonutChart currency={currency ?? ''} data={byPlatform.map(([key, value]) => ({ key, name: providerLabel(key, lang), value }))} centerLabel={ar ? 'المنصات' : 'Platforms'} centerValue={String(byPlatform.length)} height={240} />}
       </ChartCard>
 
@@ -179,7 +179,7 @@ export function CampaignVisualDeck({ rows, currency, windowEnd, ar }: { rows: Ca
       >
         {(() => {
           const pts = chosen ? families.out.get(chosen) ?? [] : []
-          if (pts.length === 0) return <Declined testid="deck-cost-empty" text={ar ? 'لا حملة تحمل إنفاقًا ونتيجة معًا في هذه الفترة.' : 'No campaign has both spend and a result in this period.'} />
+          if (pts.length === 0) return <Declined testid="deck-cost-empty" text={ar ? 'لا توجد حملة لها إنفاق ونتيجة معًا في هذه الفترة.' : 'No campaign has both spend and a result in this period.'} />
           /* The objective's own average: total spend over total results, not a mean of ratios. */
           const avg = pts.reduce((s, p) => s + p.spend, 0) / pts.reduce((s, p) => s + p.spend / p.costPer, 0)
           return (
@@ -231,7 +231,7 @@ export function AccountVisualDeck({ rows, currency, ar }: { rows: AccountRow[]; 
         {declined > 0
           ? <Declined testid="deck-account-declined" text={declinedText(declined, ar)} />
           : share.length === 0
-            ? <Declined testid="deck-account-empty" text={ar ? 'لا إنفاق في هذه الفترة.' : 'No spend in this period.'} />
+            ? <Declined testid="deck-account-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <PlatformDonutChart colorBy="series" currency={currency ?? ''} data={share} centerLabel={ar ? 'الحسابات' : 'Accounts'} centerValue={String(share.length)} height={240} />}
       </ChartCard>
       <ChartCard title={ar ? 'نسبة النقر لكل حساب' : 'Click-through rate per account'} subtitle={ar ? 'الخط المتقطع: متوسط كل الحسابات' : 'Dashed line: all accounts together'}>
@@ -246,7 +246,7 @@ export function AccountVisualDeck({ rows, currency, ar }: { rows: AccountRow[]; 
             toneFor={(v) => (v >= (clk / imp) * 1.05 ? 'success' : v >= (clk / imp) * 0.95 ? 'warning' : 'danger')}
             rows={ctrRows.map((r, i) => ({ id: `${r.account_id ?? 'x'}-${i}`, label: name(r), value: r.ctr as number }))}
           />
-        ) : <Declined testid="deck-account-ctr-empty" text={ar ? 'لا ظهور في هذه الفترة.' : 'No impressions in this period.'} />}
+        ) : <Declined testid="deck-account-ctr-empty" text={ar ? 'لا توجد ظهورات في هذه الفترة.' : 'No impressions in this period.'} />}
       </ChartCard>
       {declined === 0 && impAll > 0 && (
         <ChartCard className="lg:col-span-2" title={ar ? 'تكلفة الألف ظهور (CPM)' : 'Cost per thousand impressions (CPM)'} subtitle={ar ? 'الأقصر أرخص وصولًا' : 'Shorter is cheaper reach'}>
@@ -291,7 +291,7 @@ export function EntityVisualDeck({ rows, currency, level, ar }: { rows: EntityRo
         {declined > 0
           ? <Declined testid="deck-entity-declined" text={declinedText(declined, ar)} />
           : top.length === 0
-            ? <Declined testid="deck-entity-empty" text={ar ? 'لا إنفاق في هذه الفترة.' : 'No spend in this period.'} />
+            ? <Declined testid="deck-entity-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <RankingBarChart horizontal colorByPlatform currency={currency ?? ''} data={top} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} height={Math.max(180, top.length * 34)} />}
       </ChartCard>
       <ChartCard title={ar ? `نسبة النقر في ${noun}` : `Click-through rate across ${noun}`} subtitle={ar ? 'الأكثر ظهورًا (ألف ظهور فأكثر) مقابل المتوسط' : 'The most seen (1,000+ impressions) against the average'}>
@@ -305,7 +305,7 @@ export function EntityVisualDeck({ rows, currency, level, ar }: { rows: EntityRo
             toneFor={(v) => (v >= (clk / imp) * 1.05 ? 'success' : v >= (clk / imp) * 0.95 ? 'warning' : 'danger')}
             rows={ctrRows.map((r) => ({ id: r.entity_id, label: label(r), value: r.ctr as number }))}
           />
-        ) : <Declined testid="deck-entity-ctr-empty" text={ar ? 'لا صف بظهور كافٍ للمقارنة.' : 'No row has enough impressions to compare.'} />}
+        ) : <Declined testid="deck-entity-ctr-empty" text={ar ? 'لا توجد بيانات ظهور كافية للمقارنة.' : 'No row has enough impressions to compare.'} />}
       </ChartCard>
     </DeckGrid>
   )
@@ -327,9 +327,9 @@ export function BudgetVisualDeck({ platforms, campaigns, ar }: { platforms: Plat
 
   return (
     <DeckGrid testid="budget-visual-deck">
-      <ChartCard title={ar ? 'استهلاك ميزانية كل منصة' : 'Budget consumed per platform'} subtitle={ar ? 'لون الحلقة من سرعة الصرف: أحمر يتجاوز الخطة' : 'Ring colour follows pace: red overruns the plan'}>
+      <ChartCard title={ar ? 'صرف ميزانية كل منصة' : 'Budget consumed per platform'} subtitle={ar ? 'لون الحلقة من سرعة الصرف: أحمر يتجاوز الخطة' : 'Ring colour follows pace: red overruns the plan'}>
         {rings.length === 0
-          ? <Declined testid="deck-budget-rings-empty" text={ar ? 'لا منصة لها ميزانية قابلة للمقارنة بإنفاقها.' : 'No platform has a budget comparable with its spend.'} />
+          ? <Declined testid="deck-budget-rings-empty" text={ar ? 'لا توجد منصة ميزانيتها قابلة للمقارنة بإنفاقها.' : 'No platform has a budget comparable with its spend.'} />
           : (
             <div className="flex flex-wrap items-start justify-center gap-6">
               {rings.map((p) => (

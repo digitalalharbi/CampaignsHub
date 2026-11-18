@@ -83,6 +83,7 @@ function route(rows: unknown[]) {
 
 async function openQuality() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Quality & sources' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Data quality/i }))
 }
 
@@ -203,6 +204,7 @@ describe('the data quality tab answers the operator’s questions', () => {
     route(FRESHNESS)
 
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Quality & sources' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Data quality/i }))
 
     expect(await screen.findByTestId('freshness-scope')).toHaveTextContent(/whole project/i)

@@ -3,9 +3,9 @@ import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
-import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, ArrowLeftRight, BarChart3, Eye, Filter, Globe, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, RadioTower, ShieldCheck, ShoppingBag, Target, Users, Wallet, Boxes, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Eye, Filter, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -65,6 +65,7 @@ import {
 import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
+import { ContentWhy } from './ContentWhy'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
@@ -275,13 +276,32 @@ const TAB_GROUPS = [
  */
 type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
 
-const TAB_ICONS: Record<string, LucideIcon> = {
-  performance: LayoutDashboard, objective: Target, budget: Wallet, platforms: Layers, audience: Users, accounts: Boxes,
-  campaigns: Megaphone, ad_sets: BarChart3, ads: Activity, creative: ImageIcon, funnel: Filter, store: ShoppingBag,
-  site: Globe, quality: ShieldCheck, live: RadioTower,
-}
-
 const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
+
+/*
+ * ANALYTICS-SECTIONS-001 — fifteen tabs became six sections, for a reader who wants to understand,
+ * not operate. Every old tab id still opens: `?tab=budget` lands on the section that now holds it,
+ * and each member keeps its own panel, stacked under a plain heading in the order a reader asks.
+ */
+const SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
+  { id: 'performance', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, members: ['performance', 'objective', 'budget'] },
+  { id: 'platforms', ar: 'المنصات والجمهور', en: 'Platforms & audience', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
+  { id: 'campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, members: ['campaigns', 'ad_sets', 'ads'] },
+  { id: 'creative', ar: 'المحتوى', en: 'Content', icon: ImageIcon, members: ['creative'] },
+  { id: 'funnel', ar: 'النتائج والتحويل', en: 'Conversions', icon: Filter, members: ['funnel', 'store', 'site'] },
+  { id: 'quality', ar: 'الجودة والمصادر', en: 'Quality & sources', icon: ShieldCheck, members: ['quality', 'live'] },
+]
+const MEMBER_TITLE: Record<string, { ar: string; en: string }> = {
+  objective: { ar: 'الأداء حسب الهدف', en: 'Performance by objective' },
+  budget: { ar: 'الميزانية', en: 'Budget' },
+  audience: { ar: 'الجمهور', en: 'Audience' },
+  accounts: { ar: 'الحسابات', en: 'Accounts' },
+  ad_sets: { ar: 'المجموعات', en: 'Ad groups' },
+  ads: { ar: 'الإعلانات', en: 'Ads' },
+  store: { ar: 'المتجر', en: 'Store' },
+  site: { ar: 'الموقع', en: 'Website' },
+  live: { ar: 'حالة المصادر', en: 'Source status' },
+}
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -363,17 +383,26 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * twelve. It is not ignored — ignoring it would answer a bookmark for «budget» with the KPI strip
    * and no explanation — it is CARRIED to the surface that has that tab.
    */
-  const isAnalysis = surface === 'analytics'
+  const isAnalysis = surface === 'analytics' || surface === 'dashboard'
   /*
    * WIDGET-REGISTRY-001 — the «Insights» tab exists only for a project where at least one widget is shown (an advanced
    * module switched on, or a core widget chosen in Settings → Widgets). Everyone else keeps exactly the tabs they had.
    */
   const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
   const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
-  const tabGroups = hasWidgetTab
-    ? TAB_GROUPS.map((g) => (g.key === 'conversion' ? { ...g, tabs: [...g.tabs, { id: 'links', ar: 'رؤى إضافية', en: 'Insights' }] } : g))
-    : TAB_GROUPS
   const tab = isAnalysis ? urlTab : 'performance'
+  const sections = hasWidgetTab ? [...SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : SECTIONS
+  const sectionOf = (t: string) => sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
+  const section = sectionOf(tab)
+  // A section pill (`s_*`, and the default) stacks its members; an old single-tab link still opens only that panel.
+  const stacked = isAnalysis && tab.startsWith('s_')
+  const has = (id: string) => (stacked ? section.members.includes(id) : tab === id)
+  const sub = (id: string, children: ReactNode) => (
+    <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
+      {MEMBER_TITLE[id] && <h2 className="text-lg font-bold text-text-primary">{ar ? MEMBER_TITLE[id].ar : MEMBER_TITLE[id].en}</h2>}
+      {children}
+    </section>
+  )
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*
@@ -580,7 +609,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       */}
       <PageIntro
         testid={`${surface}-intro`}
-        title={surface === 'dashboard' ? (ar ? 'الرئيسية' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        title={ar ? 'التحليلات' : 'Analytics'}
         /*
           SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
 
@@ -765,32 +794,45 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         className="flex snap-x snap-mandatory items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
         {/* ANALYTICS-REPORT-LAYOUT-001 — the same pill bar the live report uses for its views: an icon, a word, the chosen one filled. */}
-        {tabGroups.map((group, index) => (
-          <div key={group.key} className="flex items-center">
-            {index > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
-            <div className="flex items-center gap-0.5">
-              {group.tabs.map((t) => {
-                const Icon = TAB_ICONS[t.id]
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors active:scale-95 ${
-                      tab === t.id ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-                    }`}
-                  >
-                    {Icon && <Icon size={15} className="shrink-0" aria-hidden />}
-                    {ar ? t.ar : t.en}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
+        {sections.map((t) => {
+          const Icon = t.icon
+          const on = section.id === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setTab(t.members[0])}
+              className={`inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition-colors active:scale-95 ${
+                on ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+              }`}
+            >
+              <Icon size={15} className="shrink-0" aria-hidden />
+              {ar ? t.ar : t.en}
+            </button>
+          )
+        })}
       </div>
+      )}
+      {isAnalysis && (
+        <div role="tablist" aria-label={ar ? 'عروض القسم' : 'Section views'} data-testid="analytics-views" className="-mt-2 flex flex-wrap items-center gap-1.5">
+          {section.members.length > 1 && (
+            <button type="button" role="tab" aria-selected={stacked} onClick={() => setTab(`s_${section.id}`)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${stacked ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}>
+              {ar ? 'الكل' : 'All'}
+            </button>
+          )}
+          {section.members.map((id) => {
+            const meta = TABS.find((x) => x.id === id)
+            const on = section.members.length === 1 ? true : !stacked && tab === id
+            return meta ? (
+              <button key={id} type="button" role="tab" aria-selected={on} onClick={() => setTab(id)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${on ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}>
+                {ar ? meta.ar : meta.en}
+              </button>
+            ) : null
+          })}
+        </div>
       )}
 
       {/*
@@ -821,22 +863,22 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             <AdvertiserSourcesStrip projectId={currentProjectId} />
           </div>
         )}
-        {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
-        {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'audience' && <AudiencePanel projectId={currentProjectId} range={range} />}
-        {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
-        {tab === 'ads' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />}
-        {tab === 'creative' && <CreativeTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'objective' && <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'funnel' && <FunnelTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'store' && <StoreFunnelTab projectId={currentProjectId} range={range} />}
-        {tab === 'site' && <SiteAnalyticsTab projectId={currentProjectId} range={range} />}
-        {tab === 'budget' && <BudgetTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'quality' && <QualityTab projectId={currentProjectId} range={range} filters={filters} />}
-        {tab === 'live' && <LiveOperatingTab projectId={currentProjectId} />}
-        {tab === 'links' && hasWidgetTab && <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />}
+        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
+        {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
+        {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
+        {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
+        {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
+        {has('site') && sub('site', <SiteAnalyticsTab projectId={currentProjectId} range={range} />)}
+        {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
+        {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
         </>
       )}
 
@@ -3079,6 +3121,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               : 'No content was reported under the selected ad or ad set in this period. That is not «no content» for the project.'}
           </p>
         )}
+        {!q.isLoading && !q.isError && <ContentWhy rows={rows} ar={ar} onOpen={setOpenCreative} />}
         {/*
           ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
           Numeric columns were `text-start`, so under RTL the figures and their headings sat against
